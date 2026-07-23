@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test } from './fixtures.js';
 
 // Tests run serially against one shared server (see playwright.config.ts) and
 // build on each other's state where noted. The server runs with --ai-test, so

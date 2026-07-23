@@ -28,5 +28,11 @@ export default defineConfig({
     url: `http://127.0.0.1:${PORT}/healthz`,
     reuseExistingServer: false,
     timeout: 60_000,
+    // When E2E_COVERAGE=1 (scripts/test-all.sh), the server process writes V8
+    // coverage on exit; scripts/merge-coverage.mjs converts it with c8.
+    env:
+      process.env.E2E_COVERAGE === '1'
+        ? { NODE_V8_COVERAGE: path.join(process.cwd(), '.coverage-tmp/server') }
+        : {},
   },
 });

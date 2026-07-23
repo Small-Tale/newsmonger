@@ -61,9 +61,15 @@ pub fn run() {
                         if !navigated {
                             if let Some(idx) = line.find(READY_MARKER) {
                                 let url = line[idx + READY_MARKER.len()..].trim().to_string();
-                                if let Ok(parsed) = url.parse() {
-                                    let _ = window.navigate(parsed);
-                                    navigated = true;
+                                match url.parse() {
+                                    Ok(parsed) => match window.navigate(parsed) {
+                                        Ok(()) => {
+                                            eprintln!("[shell] navigated to {url}");
+                                            navigated = true;
+                                        }
+                                        Err(e) => eprintln!("[shell] navigate failed: {e}"),
+                                    },
+                                    Err(e) => eprintln!("[shell] bad server url {url:?}: {e}"),
                                 }
                             }
                         }

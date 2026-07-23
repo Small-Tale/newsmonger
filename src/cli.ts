@@ -1,3 +1,5 @@
+import v8 from 'node:v8';
+
 import { ClaudeNewsService } from './ai/claude.js';
 import { MockNewsService } from './ai/mock.js';
 import type { NewsService } from './ai/types.js';
@@ -37,9 +39,18 @@ async function main(): Promise<void> {
   const stopScheduler = startScheduler(runner);
   if (options.open) openInBrowser(url);
 
+  // Under E2E coverage collection the test runner may kill us without letting
+  // the exit hook flush V8 coverage — flush it ourselves periodically.
+  if ((process.env['NODE_V8_COVERAGE'] ?? '') !== '') {
+    setInterval(() => {
+      v8.takeCoverage();
+    }, 2000).unref();
+  }
+
   const shutdown = (): void => {
     stopScheduler();
     server.close();
+    if ((process.env['NODE_V8_COVERAGE'] ?? '') !== '') v8.takeCoverage();
     process.exit(0);
   };
   process.on('SIGINT', shutdown);

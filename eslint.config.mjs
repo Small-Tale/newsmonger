@@ -7,7 +7,7 @@ import tseslint from "typescript-eslint";
 
 export default tseslint.config(
   {
-    ignores: ["dist/**", "node_modules/**", "src-tauri/**", "playwright-report/**", "test-results/**", "coverage/**"],
+    ignores: ["dist/**", "node_modules/**", "src-tauri/**", "playwright-report/**", "test-results/**", "coverage/**", "scripts/**"],
   },
   eslint.configs.recommended,
   ...tseslint.configs.strictTypeChecked,
