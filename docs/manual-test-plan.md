@@ -10,6 +10,18 @@ Features that can't be reliably automated (yet). Remove entries as automated cov
 4. Add a very obscure topic — expect a successful check with no items ("Nothing found yet" only if no other topic has items).
 5. Unset the key and check — expect the run to fail and the warning banner to name the topic with an auth error.
 
+## Real OpenAI checks (needs `OPENAI_API_KEY`)
+
+1. `npm run dev --provider openai` (or set provider to OpenAI in Settings) with a valid key; add a topic with active coverage.
+2. Check — expect live items with real source links (the Responses API `web_search` tool). Confirm the default model (`gpt-5`) is available to the account, or set `--model`.
+3. Point `OPENAI_BASE_URL` / `--endpoint` at an OpenAI-compatible gateway and confirm it still works.
+
+## Real Ollama checks (needs a local Ollama with a pulled model)
+
+1. `ollama pull llama3.2` (or similar); `npm run dev --provider ollama`.
+2. Check a topic — expect a "not live-searched" badge (NEWS-10) and items summarized from the model's knowledge. Confirm dedup on a second check.
+3. Verified during development against `codestral:latest` (returned parseable JSON); `gpt-oss:20b` failed to load on the dev box (surfaced as a clear 500 with the server message).
+
 ## Tauri desktop shell (needs Rust toolchain)
 
 1. `npm run tauri:dev` — window shows the loading spinner, then the app once the server prints its readiness line.

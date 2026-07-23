@@ -17,9 +17,13 @@ News checks run through a pluggable provider abstraction so you can choose which
 | Provider | `searchesWeb` | Config | Status |
 |---|---|---|---|
 | `anthropic` | ✅ | `ANTHROPIC_API_KEY`; default model `claude-opus-4-8` | **Shipped** |
-| `openai` | ✅ (native web search) | `OPENAI_API_KEY`, `OPENAI_BASE_URL` | Planned (NEWS-8) |
+| `openai` | ✅ (native web search) | `OPENAI_API_KEY`, `OPENAI_BASE_URL`; default model `gpt-5` | **Shipped** (live path needs a key to verify) |
 | `ollama` | ❌ (local model, no browsing) | `NEWS_OLLAMA_HOST`/`NEWS_OLLAMA_ENDPOINT` (default `http://localhost:11434/v1`; a bare host gets `/v1` appended), `NEWS_OLLAMA_MODEL` | **Shipped** |
 | `mock` | ❌ | none (`--ai-test` / `--provider mock`) | **Shipped** (tests / offline) |
+
+### OpenAI
+
+Uses the **Responses API** with the hosted `web_search` tool (`client.responses.create({ model, instructions: system, input: prompt, tools: [{type:'web_search'}] })`, reading `output_text`), so results are live — the OpenAI analog of Anthropic's `web_search_20260209`. Result parsing reuses the shared fenced-JSON `parseNewsResult` (same robust path as Anthropic; a strict `json_schema` output was left as a possible enhancement to avoid schema-vs-hosted-tool friction). `OPENAI_BASE_URL` (or `--endpoint`) targets an OpenAI-compatible gateway. Default model `gpt-5`, overridable via setting/`--model`. **The live request path needs a real key to verify** — see `docs/manual-test-plan.md`.
 
 ### Ollama (local models)
 

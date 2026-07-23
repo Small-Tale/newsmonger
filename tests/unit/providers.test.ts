@@ -55,6 +55,14 @@ describe('resolveProvider', () => {
     ).rejects.toThrow(/ANTHROPIC_API_KEY/);
   });
 
+  it('resolves the real openai factory (searchesWeb true)', async () => {
+    const { FACTORIES } = await import('../../src/ai/providers/index.js');
+    const p = FACTORIES.openai({ provider: 'openai', model: 'gpt-x', endpoint: '' });
+    expect(p.name).toBe('openai');
+    expect(p.searchesWeb).toBe(true);
+    expect(p.model).toBe('gpt-x');
+  });
+
   it('resolves the real ollama factory (searchesWeb false)', async () => {
     // Uses the default FACTORIES; ollama isAvailable() will fail fast (no server),
     // but constructing + selecting it explicitly should work and never search web.

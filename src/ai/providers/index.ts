@@ -2,10 +2,12 @@ import type { ConcreteProviderName, NewsProvider, ProviderName } from '../types.
 import { createAnthropicProvider } from './anthropic.js';
 import { createMockProvider } from './mock.js';
 import { createOllamaProvider } from './ollama.js';
+import { createOpenAIProvider } from './openai.js';
 
 export { createAnthropicProvider } from './anthropic.js';
 export { createMockProvider } from './mock.js';
 export { createOllamaProvider } from './ollama.js';
+export { createOpenAIProvider } from './openai.js';
 
 /** Resolved provider settings (from the persisted `Settings`, seeded by CLI/env). */
 export interface ResolveConfig {
@@ -25,9 +27,11 @@ export type ProviderFactory = (cfg: ResolveConfig) => NewsProvider;
  */
 export const FACTORIES: Record<ConcreteProviderName, ProviderFactory> = {
   anthropic: (c) => createAnthropicProvider({ model: c.model !== '' ? c.model : undefined }),
-  openai: () => {
-    throw new Error('the OpenAI provider is not wired up yet (tracked in NEWS-8)');
-  },
+  openai: (c) =>
+    createOpenAIProvider({
+      model: c.model !== '' ? c.model : undefined,
+      baseURL: c.endpoint !== '' ? c.endpoint : process.env['OPENAI_BASE_URL'],
+    }),
   ollama: (c) =>
     createOllamaProvider({
       endpoint: c.endpoint !== '' ? c.endpoint : undefined,
