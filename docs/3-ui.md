@@ -15,7 +15,7 @@ A single-page kerfjs app served by the Node server; the same UI runs in the brow
 
 Two rendering rules this UI depends on — regression-tested by the E2E suite:
 
-- Keep `each()` containers structurally stable: never conditionally swap a keyed-list container with another element (empty-state messages render *alongside* the list, not instead of it).
-- Keep sibling structure ahead of keyed lists stable: conditional elements (banners) live inside an always-present container so their appearance doesn't shift unkeyed siblings, which kerf matches positionally.
+- Keep sibling structure around keyed lists stable: conditional elements (banners) live inside an always-present container (`#banners`). **This works around a confirmed kerfjs 2.0.0 bug (kerf KF-377)**: removing a conditional sibling rendered before a keyed `each()` list permanently empties the list (verified in a minimal standalone repro attached to that ticket).
+- Keep `each()` containers structurally stable: empty-state messages render *alongside* the list, not instead of it. The pure container swap (`<p>` ↔ `<ul>{each(...)}</ul>`) tested OK in isolation on 2.0.0, so this one is defensive convention rather than a confirmed trigger — but the app's original failures involved the combination, and the stable shape is regression-covered here and flagged for a pinning test in KF-377.
 
 See also: [1 — Topics and Scheduling](1-topics-and-scheduling.md), [5 — Desktop App](5-desktop-app.md).
