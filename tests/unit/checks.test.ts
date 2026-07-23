@@ -1,15 +1,12 @@
 import { describe, expect, it } from 'vitest';
 
 import { createMockProvider } from '../../src/ai/providers/index.js';
-import { createFakeSearchProvider } from '../../src/ai/search/index.js';
-import type { SearchResult } from '../../src/ai/search/types.js';
 import type { FoundNewsItem } from '../../src/ai/types.js';
 import { CheckRunner, isDue } from '../../src/checks.js';
 import { Store } from '../../src/db/store.js';
 import { asResolver, fakeProvider } from '../helpers/provider.js';
 import { tmpDataDir } from '../helpers/tmp.js';
 
-const CANDIDATE: SearchResult = { title: 'New reactor milestone', url: 'https://a.com/reactor', snippet: 's', publishedAt: '2026-07-23' };
 
 const HOUR = 3_600_000;
 
@@ -169,87 +166,10 @@ describe('CheckRunner', () => {
     expect(service.calls.map((c) => c.topicName).sort()).toEqual(['A', 'B']);
   });
 
-  it('grounds a non-searching provider on search results and marks the run grounded', async () => {
-    const store = new Store(tmpDataDir());
-    const provider = createMockProvider(); // searchesWeb false, has summarize()
-    const search = createFakeSearchProvider([CANDIDATE]);
-    const runner = new CheckRunner(store, asResolver(provider, search));
-    const topic = store.addTopic('Fusion');
 
-    const added = await runner.checkTopic(topic.id);
-    expect(added).toBe(1); // one candidate → one item
-    // Grounded path used summarize(), not the offline checkTopic().
-    expect(provider.summarizeCalls).toHaveLength(1);
-    expect(provider.calls).toHaveLength(0);
-    expect(search.calls[0]).toEqual({ topic: 'Fusion', sinceIso: null, maxResults: 8 });
-    const run = store.listRuns().at(0);
-    expect(run?.grounded).toBe(true);
-    expect(store.listItems(topic.id)[0]?.sources[0]?.url).toBe('https://a.com/reactor');
-  });
 
-  it('a web-searching provider ignores the search backend (native path, not grounded)', async () => {
-    const store = new Store(tmpDataDir());
-    const provider = fakeProvider(() => Promise.resolve([{ title: 'T', summary: 'S', sources: [] }]), {
-      name: 'anthropic',
-      searchesWeb: true,
-    });
-    const search = createFakeSearchProvider([CANDIDATE]);
-    const runner = new CheckRunner(store, asResolver(provider, search));
-    const topic = store.addTopic('AI');
 
-    await runner.checkTopic(topic.id);
-    expect(search.calls).toHaveLength(0); // native path — search backend untouched
-    expect(store.listRuns().at(0)?.grounded).toBe(false);
-  });
 
-  it('falls back to the offline path when no search backend is configured', async () => {
-    const store = new Store(tmpDataDir());
-    const provider = createMockProvider();
-    const runner = new CheckRunner(store, asResolver(provider, null));
-    const topic = store.addTopic('Fusion');
-
-    await runner.checkTopic(topic.id);
-    expect(provider.calls).toHaveLength(1); // offline checkTopic()
-    expect(provider.summarizeCalls).toHaveLength(0);
-    expect(store.listRuns().at(0)?.grounded).toBe(false);
-  });
-
-  it('a grounded run dedups against items from a prior offline run', async () => {
-    const store = new Store(tmpDataDir());
-    const provider = createMockProvider();
-    const topic = store.addTopic('Fusion');
-
-    // Offline run first — two mock stories.
-    const offline = new CheckRunner(store, asResolver(provider, null));
-    await offline.checkTopic(topic.id);
-    expect(store.listItems(topic.id)).toHaveLength(2);
-
-    // Grounded run whose candidate URL matches one existing dedupe key → deduped.
-    const existingUrl = store.listItems(topic.id)[0]?.sources[0]?.url ?? '';
-    const search = createFakeSearchProvider([
-      { title: 'dup', url: existingUrl, snippet: 's', publishedAt: null },
-      CANDIDATE,
-    ]);
-    const grounded = new CheckRunner(store, asResolver(provider, search));
-    const added = await grounded.checkTopic(topic.id);
-    expect(added).toBe(1); // only the genuinely-new candidate survives dedup
-  });
-
-  it('records a failed run when the search backend errors', async () => {
-    const store = new Store(tmpDataDir());
-    const provider = createMockProvider();
-    const search = createFakeSearchProvider();
-    search.search = () => Promise.reject(new Error('Tavily returned 401'));
-    const runner = new CheckRunner(store, asResolver(provider, search));
-    const topic = store.addTopic('Fusion');
-
-    const added = await runner.checkTopic(topic.id);
-    expect(added).toBe(0);
-    const run = store.listRuns().at(0);
-    expect(run?.status).toBe('failed');
-    expect(run?.error).toMatch(/Tavily returned 401/);
-    expect(run?.grounded).toBe(true); // it took the grounded branch before failing
-  });
 
   it('pause -> unpause sequence: checks resume after unpausing', async () => {
     const store = new Store(tmpDataDir());

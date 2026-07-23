@@ -1,4 +1,3 @@
-import type { SearchProviderName } from '../ai/search/types.js';
 import type { ProviderName } from '../ai/types.js';
 import { ProvidersRespSchema, StateRespSchema } from '../api/schemas.js';
 import { appStore } from './stores.js';
@@ -73,7 +72,6 @@ export async function updateProviderSettings(patch: {
   provider?: ProviderName;
   model?: string;
   endpoint?: string;
-  searchProvider?: SearchProviderName;
 }): Promise<void> {
   await withRefresh(() => request('/api/settings', { method: 'PATCH', body: JSON.stringify(patch) }));
   await refreshProviders();

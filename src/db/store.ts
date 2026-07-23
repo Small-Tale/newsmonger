@@ -140,7 +140,6 @@ export class Store {
       newItems: 0,
       error: null,
       provider: null,
-      grounded: false,
     };
     this.data.runs.push(run);
     if (this.data.runs.length > MAX_RUNS_KEPT) {
@@ -157,7 +156,6 @@ export class Store {
       newItems: number;
       error?: string;
       provider?: string | null;
-      grounded?: boolean;
     },
   ): void {
     const run = this.data.runs.find((r) => r.id === runId);
@@ -167,7 +165,6 @@ export class Store {
     run.newItems = result.newItems;
     run.error = result.error ?? null;
     if (result.provider !== undefined) run.provider = result.provider;
-    if (result.grounded !== undefined) run.grounded = result.grounded;
     this.save();
   }
 }

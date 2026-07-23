@@ -27,13 +27,12 @@ describe('parseArgs', () => {
       provider: null,
       model: null,
       endpoint: null,
-      searchProvider: null,
     });
   });
 
   it('parses all flags', () => {
     const opts = parseArgs(
-      ['--port', '5000', '--data-dir', '/tmp/x', '--no-open', '--strict-port', '--ai-test', '--provider', 'ollama', '--model', 'llama3.2', '--endpoint', 'http://h:1234/v1'],
+      ['--port', '5000', '--data-dir', '/tmp/x', '--no-open', '--strict-port', '--ai-test', '--provider', 'openai', '--model', 'gpt-x', '--endpoint', 'http://h:1234/v1'],
       {},
     );
     expect(opts.port).toBe(5000);
@@ -41,8 +40,8 @@ describe('parseArgs', () => {
     expect(opts.open).toBe(false);
     expect(opts.strictPort).toBe(true);
     expect(opts.aiTest).toBe(true);
-    expect(opts.provider).toBe('ollama');
-    expect(opts.model).toBe('llama3.2');
+    expect(opts.provider).toBe('openai');
+    expect(opts.model).toBe('gpt-x');
     expect(opts.endpoint).toBe('http://h:1234/v1');
   });
 
@@ -58,11 +57,6 @@ describe('parseArgs', () => {
     expect(() => parseArgs([], { NEWS_PROVIDER: 'grok' })).toThrow(/--provider must be one of/);
   });
 
-  it('parses the search provider from flag and env, and rejects invalid ones', () => {
-    expect(parseArgs(['--search-provider', 'tavily'], {}).searchProvider).toBe('tavily');
-    expect(parseArgs([], { NEWS_SEARCH_PROVIDER: 'tavily' }).searchProvider).toBe('tavily');
-    expect(() => parseArgs(['--search-provider', 'google'], {})).toThrow(/--search-provider must be one of/);
-  });
 
   it('rejects bad ports', () => {
     expect(() => parseArgs(['--port', 'abc'], {})).toThrow(/--port/);

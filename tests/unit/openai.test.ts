@@ -5,9 +5,8 @@ import { createOpenAIProvider, DEFAULT_OPENAI_MODEL } from '../../src/ai/provide
 const NEWS = '```json\n{"items":[{"title":"T","summary":"S","sources":[{"title":"Src","url":"https://a.com/x"}]}]}\n```';
 
 describe('createOpenAIProvider', () => {
-  it('declares web search and a default model', () => {
+  it('has the expected name and default model', () => {
     const p = createOpenAIProvider({ runner: { run: () => Promise.resolve('') }, hasApiKey: () => true });
-    expect(p.searchesWeb).toBe(true);
     expect(p.name).toBe('openai');
     expect(p.model).toBe(DEFAULT_OPENAI_MODEL);
   });

@@ -7,12 +7,10 @@ import type { ConcreteProviderName, NewsProvider } from '../../src/ai/types.js';
 import { fakeProvider } from '../helpers/provider.js';
 
 function factoriesWith(available: Partial<Record<ConcreteProviderName, boolean>>) {
-  const make = (name: ConcreteProviderName): NewsProvider =>
-    fakeProvider(() => Promise.resolve([]), { name, searchesWeb: name !== 'ollama' && name !== 'mock' });
+  const make = (name: ConcreteProviderName): NewsProvider => fakeProvider(() => Promise.resolve([]), { name });
   return {
     anthropic: () => ({ ...make('anthropic'), isAvailable: () => Promise.resolve(available.anthropic ?? false) }),
     openai: () => ({ ...make('openai'), isAvailable: () => Promise.resolve(available.openai ?? false) }),
-    ollama: () => ({ ...make('ollama'), isAvailable: () => Promise.resolve(available.ollama ?? false) }),
     mock: () => make('mock'),
   };
 }
@@ -34,10 +32,10 @@ describe('resolveProvider', () => {
     expect(p.name).toBe('openai');
   });
 
-  it('auto never selects a non-web-searching provider, and throws when none available', async () => {
+  it('auto throws an actionable error when nothing is available', async () => {
     await expect(
-      resolveProvider({ provider: 'auto', model: '', endpoint: '' }, factoriesWith({ ollama: true })),
-    ).rejects.toThrow(/No web-searching AI provider/);
+      resolveProvider({ provider: 'auto', model: '', endpoint: '' }, factoriesWith({})),
+    ).rejects.toThrow(/No AI provider is available/);
   });
 
   it('auto only tries web-searching providers', () => {
@@ -55,23 +53,13 @@ describe('resolveProvider', () => {
     ).rejects.toThrow(/ANTHROPIC_API_KEY/);
   });
 
-  it('resolves the real openai factory (searchesWeb true)', async () => {
+  it('resolves the real openai factory', async () => {
     const { FACTORIES } = await import('../../src/ai/providers/index.js');
     const p = FACTORIES.openai({ provider: 'openai', model: 'gpt-x', endpoint: '' });
     expect(p.name).toBe('openai');
-    expect(p.searchesWeb).toBe(true);
     expect(p.model).toBe('gpt-x');
   });
 
-  it('resolves the real ollama factory (searchesWeb false)', async () => {
-    // Uses the default FACTORIES; ollama isAvailable() will fail fast (no server),
-    // but constructing + selecting it explicitly should work and never search web.
-    const { FACTORIES } = await import('../../src/ai/providers/index.js');
-    const p = FACTORIES.ollama({ provider: 'ollama', model: 'llama3.2', endpoint: 'http://localhost:11434/v1' });
-    expect(p.name).toBe('ollama');
-    expect(p.searchesWeb).toBe(false);
-    expect(p.model).toBe('llama3.2');
-  });
 
   it('a factory that throws (unimplemented provider) is skipped by auto', async () => {
     const factories = {
@@ -86,10 +74,8 @@ describe('resolveProvider', () => {
 });
 
 describe('createMockProvider', () => {
-  it('is available and does not search the web', async () => {
-    const p = createMockProvider();
-    expect(p.searchesWeb).toBe(false);
-    expect(await p.isAvailable()).toBe(true);
+  it('is always available', async () => {
+    expect(await createMockProvider().isAvailable()).toBe(true);
   });
 
   it('returns two deterministic stories and records calls', async () => {
@@ -101,9 +87,8 @@ describe('createMockProvider', () => {
 });
 
 describe('createAnthropicProvider', () => {
-  it('declares web search and reports availability from the key check', async () => {
+  it('reports availability from the key check', async () => {
     const withKey = createAnthropicProvider({ runner: { run: () => Promise.resolve('') }, hasApiKey: () => true });
-    expect(withKey.searchesWeb).toBe(true);
     expect(withKey.model).toBe('claude-opus-4-8');
     expect(await withKey.isAvailable()).toBe(true);
 

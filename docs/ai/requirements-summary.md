@@ -18,13 +18,10 @@ Header/interval/check-all, topics panel with actions + confirm-delete, newest-fi
 
 Flags, usage errors, readiness line (`running at ` — synced with Tauri shell), clean shutdown, localhost-only Hono server with port fallback, zod-validated API, atomic single-file JSON store with corrupt-file recovery.
 
-## [6 — AI Providers](../6-providers.md) — Partial
+## [6 — AI Providers](../6-providers.md) — Shipped
 
-Pluggable provider abstraction (`NewsProvider` + `searchesWeb` capability), `PROVIDERS`/`AUTO_ORDER`/`resolveProvider`, provider/model/endpoint as persisted settings seeded by CLI/env, provider recorded per `CheckRun`. **Shipped**: the abstraction, `anthropic`, `openai` (Responses API + hosted web search; live path needs a key to verify), `ollama` (OpenAI-compatible local models, `searchesWeb:false`), and `mock`. UI provider selector + "not live-searched" badge (NEWS-10) **shipped**.
+Pluggable provider abstraction (`NewsProvider`), `FACTORIES`/`AUTO_ORDER`/`resolveProvider`, provider/model/endpoint as persisted settings seeded by CLI/env, provider recorded per `CheckRun`. **Shipped**: the abstraction, `anthropic`, `openai` (Responses API + hosted web search; live path needs a key to verify), and `mock` (test-only), plus the UI provider selector. **Scope decision (NEWS-18)**: only platforms that do their own web search are supported — Ollama/local providers and the whole search-grounding layer were removed as unnecessary complexity.
 
-## [7 — Search Grounding](../7-search-grounding.md) — Shipped
-
-Decouples search from summarization so non-browsing providers (Ollama) do live news: `SearchProvider` + Tavily (NEWS-13), the three-branch grounded pipeline + `searchProvider` setting + `CheckRun.grounded` (NEWS-14), and the "Ground with search" UI picker with auto badge-suppression (NEWS-15). Follow-ups: Brave impl (stub), the docs/7 open questions.
 
 ## [5 — Desktop App (Tauri)](../5-desktop-app.md) — Partial
 

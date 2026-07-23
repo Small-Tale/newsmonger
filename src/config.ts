@@ -1,8 +1,6 @@
 import os from 'node:os';
 import path from 'node:path';
 
-import type { SearchProviderName } from './ai/search/types.js';
-import { SEARCH_PROVIDER_NAMES } from './ai/search/types.js';
 import type { ProviderName } from './ai/types.js';
 import { PROVIDER_NAMES } from './ai/types.js';
 
@@ -18,8 +16,6 @@ export interface CliOptions {
   model: string | null;
   /** Endpoint to seed into settings at startup; null = leave as-is. */
   endpoint: string | null;
-  /** Search provider to seed into settings at startup; null = leave as-is. */
-  searchProvider: SearchProviderName | null;
 }
 
 /** Resolve the data directory: `--data-dir` flag, then NEWS_DATA_DIR, then `~/.news`. */
@@ -34,17 +30,12 @@ function parseProvider(value: string): ProviderName {
   throw new Error(`--provider must be one of: ${PROVIDER_NAMES.join(', ')}`);
 }
 
-function parseSearchProvider(value: string): SearchProviderName {
-  if ((SEARCH_PROVIDER_NAMES as readonly string[]).includes(value)) return value as SearchProviderName;
-  throw new Error(`--search-provider must be one of: ${SEARCH_PROVIDER_NAMES.join(', ')}`);
-}
 
 /** Parse CLI arguments. Throws on unknown flags or missing flag values. */
 export function parseArgs(argv: string[], env: NodeJS.ProcessEnv = process.env): CliOptions {
   const envProvider = env['NEWS_PROVIDER'];
   const envModel = env['NEWS_MODEL'];
   const envEndpoint = env['NEWS_ENDPOINT'];
-  const envSearch = env['NEWS_SEARCH_PROVIDER'];
   const options: CliOptions = {
     port: null,
     dataDir: defaultDataDir(env),
@@ -54,7 +45,6 @@ export function parseArgs(argv: string[], env: NodeJS.ProcessEnv = process.env):
     provider: envProvider !== undefined && envProvider !== '' ? parseProvider(envProvider) : null,
     model: envModel !== undefined && envModel !== '' ? envModel : null,
     endpoint: envEndpoint !== undefined && envEndpoint !== '' ? envEndpoint : null,
-    searchProvider: envSearch !== undefined && envSearch !== '' ? parseSearchProvider(envSearch) : null,
   };
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
@@ -88,12 +78,6 @@ export function parseArgs(argv: string[], env: NodeJS.ProcessEnv = process.env):
         const value = argv.at(++i);
         if (value === undefined) throw new Error('--endpoint requires a value');
         options.endpoint = value;
-        break;
-      }
-      case '--search-provider': {
-        const value = argv.at(++i);
-        if (value === undefined) throw new Error('--search-provider requires a value');
-        options.searchProvider = parseSearchProvider(value);
         break;
       }
       case '--no-open':

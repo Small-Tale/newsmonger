@@ -4,7 +4,6 @@ import type { Hono } from 'hono';
 import type { z } from 'zod';
 
 import { probeProviders } from '../ai/providers/index.js';
-import { providerSearchesWeb } from '../ai/types.js';
 import type { ProvidersResp, StateResp } from '../api/schemas.js';
 import {
   CheckReqSchema,
@@ -36,21 +35,18 @@ export function registerApi(app: Hono<AppEnv>): void {
       settings,
       runs: store.listRuns(20),
       checking: runner.checking(),
-      // Effective: the LLM browses, or a search backend grounds it on live results.
-      searchesWeb: providerSearchesWeb(settings.provider) || settings.searchProvider !== 'none',
     };
     return c.json(state);
   });
 
-  // Providers + availability, for the settings picker. Probes each provider
-  // (Ollama hits its /models endpoint), so it's a separate on-demand call —
-  // NOT part of the 4s /api/state poll.
+  // Providers + availability, for the settings picker. Probing is cheap today
+  // (key presence), but kept out of the 4s /api/state poll on purpose.
   app.get('/api/providers', async (c) => {
     const { model, endpoint } = c.get('store').getSettings();
     const probed = await probeProviders({ model, endpoint });
     const resp: ProvidersResp = {
       providers: [
-        { name: 'auto', label: 'Auto', searchesWeb: true, endpointConfigurable: false, available: null },
+        { name: 'auto', label: 'Auto', endpointConfigurable: false, available: null },
         ...probed.map((p) => ({ ...p, available: p.available })),
       ],
     };

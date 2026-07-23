@@ -2,12 +2,10 @@ import type { ConcreteProviderName, NewsProvider, ProviderName } from '../types.
 import { PROVIDER_INFO } from '../types.js';
 import { createAnthropicProvider } from './anthropic.js';
 import { createMockProvider } from './mock.js';
-import { createOllamaProvider } from './ollama.js';
 import { createOpenAIProvider } from './openai.js';
 
 export { createAnthropicProvider } from './anthropic.js';
 export { createMockProvider } from './mock.js';
-export { createOllamaProvider } from './ollama.js';
 export { createOpenAIProvider } from './openai.js';
 
 /** Resolved provider settings (from the persisted `Settings`, seeded by CLI/env). */
@@ -15,17 +13,13 @@ export interface ResolveConfig {
   provider: ProviderName;
   /** Model id; '' means "use the provider's default". */
   model: string;
-  /** Base URL for endpoint-based providers (Ollama / OpenAI-compatible); '' = default. */
+  /** Base URL override (OpenAI-compatible endpoints); '' = default. */
   endpoint: string;
 }
 
 export type ProviderFactory = (cfg: ResolveConfig) => NewsProvider;
 
-/**
- * How each concrete provider is constructed from resolved settings. Providers
- * not yet implemented throw an actionable error when selected (their own
- * tickets wire them in).
- */
+/** How each concrete provider is constructed from resolved settings. */
 export const FACTORIES: Record<ConcreteProviderName, ProviderFactory> = {
   anthropic: (c) => createAnthropicProvider({ model: c.model !== '' ? c.model : undefined }),
   openai: (c) =>
@@ -33,18 +27,10 @@ export const FACTORIES: Record<ConcreteProviderName, ProviderFactory> = {
       model: c.model !== '' ? c.model : undefined,
       baseURL: c.endpoint !== '' ? c.endpoint : process.env['OPENAI_BASE_URL'],
     }),
-  ollama: (c) =>
-    createOllamaProvider({
-      endpoint: c.endpoint !== '' ? c.endpoint : undefined,
-      model: c.model !== '' ? c.model : undefined,
-    }),
   mock: () => createMockProvider(),
 };
 
-/**
- * Order `auto` tries, most-preferred first. Only web-searching providers —
- * `auto` never selects a provider that answers from training data alone.
- */
+/** Order `auto` tries, most-preferred first. `mock` is opt-in only. */
 export const AUTO_ORDER: ConcreteProviderName[] = ['anthropic', 'openai'];
 
 /** Message shown when an explicitly-requested provider isn't usable. */
@@ -54,8 +40,6 @@ export function unavailableMessage(provider: NewsProvider): string {
       return 'Anthropic is not available — set ANTHROPIC_API_KEY.';
     case 'openai':
       return 'OpenAI is not available — set OPENAI_API_KEY.';
-    case 'ollama':
-      return 'Ollama is not reachable — is it running, and have you pulled a model?';
     case 'mock':
       return 'The mock provider is unavailable (this should not happen).';
   }
@@ -63,7 +47,7 @@ export function unavailableMessage(provider: NewsProvider): string {
 
 /**
  * Resolve the active provider from settings. For `auto`, returns the first
- * available web-searching provider; otherwise returns the named provider if
+ * available provider in `AUTO_ORDER`; otherwise returns the named provider if
  * available. Throws an actionable error when nothing usable is found.
  */
 export async function resolveProvider(
@@ -76,12 +60,12 @@ export async function resolveProvider(
       try {
         provider = factories[name]({ ...cfg, provider: name });
       } catch {
-        continue; // not implemented / not constructable — skip
+        continue; // not constructable — skip
       }
       if (await provider.isAvailable()) return provider;
     }
     throw new Error(
-      'No web-searching AI provider is available. Set ANTHROPIC_API_KEY (or OPENAI_API_KEY), or choose a provider explicitly.',
+      'No AI provider is available. Set ANTHROPIC_API_KEY (or OPENAI_API_KEY), or choose a provider explicitly.',
     );
   }
   const provider = factories[cfg.provider](cfg);
@@ -93,8 +77,8 @@ export async function resolveProvider(
 export async function probeProviders(
   cfg: Pick<ResolveConfig, 'model' | 'endpoint'>,
   factories: Record<ConcreteProviderName, ProviderFactory> = FACTORIES,
-): Promise<{ name: ConcreteProviderName; searchesWeb: boolean; endpointConfigurable: boolean; label: string; available: boolean }[]> {
-  const names: ConcreteProviderName[] = ['anthropic', 'openai', 'ollama', 'mock'];
+): Promise<{ name: ConcreteProviderName; endpointConfigurable: boolean; label: string; available: boolean }[]> {
+  const names: ConcreteProviderName[] = ['anthropic', 'openai', 'mock'];
   return Promise.all(
     names.map(async (name) => {
       const info = PROVIDER_INFO[name];
@@ -104,7 +88,7 @@ export async function probeProviders(
       } catch {
         available = false;
       }
-      return { name, searchesWeb: info.searchesWeb, endpointConfigurable: info.endpointConfigurable, label: info.label, available };
+      return { name, endpointConfigurable: info.endpointConfigurable, label: info.label, available };
     }),
   );
 }

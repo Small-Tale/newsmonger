@@ -17,7 +17,6 @@ describe('Store', () => {
       provider: 'auto',
       model: '',
       endpoint: '',
-      searchProvider: 'none',
     });
   });
 
@@ -117,14 +116,14 @@ describe('Store', () => {
   it('persists provider settings and records the provider on a run', () => {
     const dir = tmpDataDir();
     const store = new Store(dir);
-    store.updateSettings({ provider: 'ollama', model: 'llama3.2', endpoint: 'http://h/v1' });
+    store.updateSettings({ provider: 'openai', model: 'gpt-x', endpoint: 'https://gw/v1' });
     const run = store.startRun('t1');
-    store.finishRun(run.id, { status: 'succeeded', newItems: 1, provider: 'ollama' });
+    store.finishRun(run.id, { status: 'succeeded', newItems: 1, provider: 'openai' });
 
     const reloaded = new Store(dir);
-    expect(reloaded.getSettings().provider).toBe('ollama');
-    expect(reloaded.getSettings().model).toBe('llama3.2');
-    expect(reloaded.listRuns()[0]?.provider).toBe('ollama');
+    expect(reloaded.getSettings().provider).toBe('openai');
+    expect(reloaded.getSettings().model).toBe('gpt-x');
+    expect(reloaded.listRuns()[0]?.provider).toBe('openai');
   });
 
   it('migrates a legacy data file lacking provider settings', () => {
@@ -134,7 +133,27 @@ describe('Store', () => {
       JSON.stringify({ topics: [], items: [], settings: { checkIntervalMs: 3_600_000 }, runs: [] }),
     );
     const store = new Store(dir);
-    expect(store.getSettings()).toEqual({ checkIntervalMs: 3_600_000, provider: 'auto', model: '', endpoint: '', searchProvider: 'none' });
+    expect(store.getSettings()).toEqual({ checkIntervalMs: 3_600_000, provider: 'auto', model: '', endpoint: '' });
+  });
+
+  it('migrates a legacy file whose provider/keys were removed, without wiping data', () => {
+    const dir = tmpDataDir();
+    fs.writeFileSync(
+      path.join(dir, 'data.json'),
+      JSON.stringify({
+        topics: [{ id: 't1', name: 'Kept', paused: false, createdAt: '2026-07-01T00:00:00Z', lastCheckedAt: null }],
+        items: [],
+        // `ollama` + `searchProvider`/`grounded` no longer exist in the schema.
+        settings: { checkIntervalMs: 3_600_000, provider: 'ollama', model: 'llama3.2', endpoint: '', searchProvider: 'tavily' },
+        runs: [{ id: 'r1', topicId: 't1', startedAt: '2026-07-01T00:00:00Z', finishedAt: null, status: 'succeeded', newItems: 1, error: null, provider: 'ollama', grounded: true }],
+      }),
+    );
+    const store = new Store(dir);
+    // Data survives (no corrupt-file reset) and the dead provider degrades to auto.
+    expect(store.listTopics().map((t) => t.name)).toEqual(['Kept']);
+    expect(store.getSettings().provider).toBe('auto');
+    expect(store.getSettings().checkIntervalMs).toBe(3_600_000);
+    expect(fs.readdirSync(dir).filter((f) => f.includes('corrupt'))).toHaveLength(0);
   });
 
   it('markTopicChecked tolerates deleted topics', () => {

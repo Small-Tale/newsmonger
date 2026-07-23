@@ -1,6 +1,5 @@
 import { z } from 'zod';
 
-import type { SearchResult } from './search/types.js';
 import type { FoundNewsItem, KnownItem } from './types.js';
 
 const MAX_KNOWN_ITEMS = 60;
@@ -64,88 +63,19 @@ export function searchingSystemPrompt(): string {
   ].join('\n');
 }
 
-/**
- * System prompt for a provider that cannot browse (local models). It answers
- * from training data, so it must be honest that freshness isn't guaranteed.
- */
-export function offlineSystemPrompt(): string {
-  return [
-    'You are a news assistant working from your own knowledge — you cannot browse the web.',
-    'Given a topic, report notable developments you are aware of, and be honest that you cannot',
-    'confirm they are the latest.',
-    '',
-    'Rules:',
-    '- Report developments NOT in the "already reported" list you are given.',
-    '- Each summary should be 2-4 sentences, factual, and self-contained.',
-    '- Include source links only if you are confident the URL is real; otherwise use an empty sources list.',
-    '- If you have nothing new to add, return an empty items list rather than inventing stories.',
-    '',
-    'Respond with a JSON object of exactly this shape:',
-    '{"items": [{"title": "...", "summary": "...", "sources": [{"title": "...", "url": "https://..."}]}]}',
-  ].join('\n');
-}
 
-/**
- * System prompt for grounded summarization: the model is given real search
- * results and must summarize the genuinely-new ones, citing the provided URLs.
- */
-export function groundedSystemPrompt(): string {
-  return [
-    'You are a news summarizer. You are given candidate articles found by a web search for a topic,',
-    'and a list of stories already reported. Report only the genuinely NEW stories.',
-    '',
-    'Rules:',
-    '- Use ONLY the candidate articles provided — do not invent stories or URLs.',
-    '- Skip anything substantially the same as an already-reported story.',
-    '- Cite the article URL(s) you used from the candidates, in each story\'s sources.',
-    '- Each summary should be 2-4 sentences, factual, and self-contained.',
-    '- If none of the candidates are genuinely new, return an empty items list.',
-    '',
-    'Respond with a JSON object of exactly this shape:',
-    '{"items": [{"title": "...", "summary": "...", "sources": [{"title": "...", "url": "https://..."}]}]}',
-  ].join('\n');
-}
 
-/** Build the summarize prompt: topic + already-reported + candidate articles. */
-export function buildSummarizePrompt(topicName: string, known: KnownItem[], results: SearchResult[]): string {
-  const lines: string[] = [];
-  lines.push(`Topic: ${topicName}`);
-  lines.push(`Current date: ${new Date().toISOString().slice(0, 10)}`);
-  const recentKnown = known.slice(-MAX_KNOWN_ITEMS);
-  if (recentKnown.length > 0) {
-    lines.push('');
-    lines.push('Already reported (do NOT report these again):');
-    for (const item of recentKnown) lines.push(`- ${item.title} (reported ${item.foundAt.slice(0, 10)})`);
-  }
-  lines.push('');
-  lines.push('Candidate articles from web search:');
-  results.forEach((r, i) => {
-    lines.push(`${i + 1}. ${r.title}${r.publishedAt !== null ? ` (${r.publishedAt.slice(0, 10)})` : ''}`);
-    lines.push(`   URL: ${r.url}`);
-    if (r.snippet !== '') lines.push(`   ${r.snippet.slice(0, 400)}`);
-  });
-  lines.push('');
-  lines.push('Summarize the genuinely new stories and respond with the JSON object described in your instructions.');
-  return lines.join('\n');
-}
 
 /** Build the user prompt shared by every provider. */
-export function buildUserPrompt(
-  topicName: string,
-  known: KnownItem[],
-  sinceIso: string | null,
-  opts: { searchesWeb: boolean },
-): string {
+export function buildUserPrompt(topicName: string, known: KnownItem[], sinceIso: string | null): string {
   const lines: string[] = [];
   lines.push(`Topic: ${topicName}`);
   lines.push(`Current date: ${new Date().toISOString().slice(0, 10)}`);
-  if (opts.searchesWeb) {
-    lines.push(
-      sinceIso !== null
-        ? `Last checked: ${sinceIso} — focus on developments since then.`
-        : 'This is the first check for this topic — focus on notable news from roughly the past week.',
-    );
-  }
+  lines.push(
+    sinceIso !== null
+      ? `Last checked: ${sinceIso} — focus on developments since then.`
+      : 'This is the first check for this topic — focus on notable news from roughly the past week.',
+  );
   const recentKnown = known.slice(-MAX_KNOWN_ITEMS);
   if (recentKnown.length > 0) {
     lines.push('');

@@ -16,11 +16,6 @@ Features that can't be reliably automated (yet). Remove entries as automated cov
 2. Check — expect live items with real source links (the Responses API `web_search` tool). Confirm the default model (`gpt-5`) is available to the account, or set `--model`.
 3. Point `OPENAI_BASE_URL` / `--endpoint` at an OpenAI-compatible gateway and confirm it still works.
 
-## Real Ollama checks (needs a local Ollama with a pulled model)
-
-1. `ollama pull llama3.2` (or similar); `npm run dev --provider ollama`.
-2. Check a topic — expect a "not live-searched" badge (NEWS-10) and items summarized from the model's knowledge. Confirm dedup on a second check.
-3. Verified during development against `codestral:latest` (returned parseable JSON); `gpt-oss:20b` failed to load on the dev box (surfaced as a clear 500 with the server message).
 
 ## Tauri desktop shell (needs Rust toolchain)
 

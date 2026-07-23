@@ -1,19 +1,9 @@
 import { filterNewItems } from './ai/dedupe.js';
-import type { SearchProvider } from './ai/search/types.js';
 import type { KnownItem, NewsProvider } from './ai/types.js';
 import type { Store } from './db/store.js';
 
-/** The resolved backends for a check: the LLM provider and optional search grounding. */
-export interface CheckContext {
-  provider: NewsProvider;
-  /** Search backend for grounding non-searching providers; null = no grounding. */
-  search: SearchProvider | null;
-}
-
-/** Resolves the active provider (+ optional search grounding) from current settings, per check. */
-export type ProviderResolver = () => Promise<CheckContext>;
-
-const MAX_SEARCH_RESULTS = 8;
+/** Resolves the active provider from current settings, per check. */
+export type ProviderResolver = () => Promise<NewsProvider>;
 
 /**
  * Runs news checks for topics: resolves the active AI provider, asks it for
@@ -48,28 +38,13 @@ export class CheckRunner {
     this.inFlight.add(topicId);
     const run = this.store.startRun(topicId);
     let providerName: string | null = null;
-    let grounded = false;
     try {
-      const { provider, search } = await this.resolveProvider();
+      const provider = await this.resolveProvider();
       providerName = provider.name;
       const known: KnownItem[] = this.store
         .listItems(topicId)
         .map((i) => ({ title: i.title, foundAt: i.foundAt }));
-
-      // Three-branch pipeline (docs/7-search-grounding.md):
-      //   web-searching provider → native path
-      //   non-searching + search backend + summarize() → grounded on live results
-      //   otherwise → offline (model knowledge only)
-      let found;
-      if (provider.searchesWeb) {
-        found = await provider.checkTopic(topic.name, known, topic.lastCheckedAt);
-      } else if (search !== null && provider.summarize !== undefined) {
-        grounded = true; // took the grounded branch (set before the fallible search call)
-        const results = await search.search(topic.name, topic.lastCheckedAt, MAX_SEARCH_RESULTS);
-        found = await provider.summarize(topic.name, known, results);
-      } else {
-        found = await provider.checkTopic(topic.name, known, topic.lastCheckedAt);
-      }
+      const found = await provider.checkTopic(topic.name, known, topic.lastCheckedAt);
       const fresh = filterNewItems(found, this.store.dedupeKeysForTopic(topicId));
       // The topic may have been deleted while the check was in flight.
       if (this.store.getTopic(topicId)) {
@@ -86,7 +61,7 @@ export class CheckRunner {
         );
         this.store.markTopicChecked(topicId, new Date());
       }
-      this.store.finishRun(run.id, { status: 'succeeded', newItems: fresh.length, provider: providerName, grounded });
+      this.store.finishRun(run.id, { status: 'succeeded', newItems: fresh.length, provider: providerName });
       return fresh.length;
     } catch (err) {
       // Record the failure, but still advance lastCheckedAt so the scheduler
@@ -97,7 +72,6 @@ export class CheckRunner {
         newItems: 0,
         error: err instanceof Error ? err.message : String(err),
         provider: providerName,
-        grounded,
       });
       return 0;
     } finally {

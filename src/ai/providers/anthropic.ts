@@ -55,13 +55,12 @@ export function createAnthropicProvider(config: {
 
   return {
     name: 'anthropic',
-    searchesWeb: true,
     model,
     isAvailable: () => Promise.resolve(hasApiKey()),
     async checkTopic(topicName: string, known: KnownItem[], sinceIso: string | null): Promise<FoundNewsItem[]> {
       const text = await runner.run(
         searchingSystemPrompt(),
-        buildUserPrompt(topicName, known, sinceIso, { searchesWeb: true }),
+        buildUserPrompt(topicName, known, sinceIso),
         model,
       );
       return parseNewsResult(text);

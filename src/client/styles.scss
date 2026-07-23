@@ -252,40 +252,12 @@ h2.eyebrow {
   }
 }
 
-.source-sub {
-  display: block;
-  margin-top: 10px;
-
-  .eyebrow {
-    display: block;
-    margin-bottom: 4px;
-  }
-}
-
 .source-status {
   margin: 8px 0 0;
   font-family: var(--mono);
   font-size: 10.5px;
   color: var(--ink-soft);
   min-height: 1.2em;
-}
-
-.live-note {
-  display: flex;
-  gap: 8px;
-  align-items: baseline;
-  margin: 0 0 18px;
-  padding: 10px 14px;
-  border-radius: 8px;
-  background: color-mix(in srgb, var(--marigold) 12%, var(--panel));
-  border: 1px solid color-mix(in srgb, var(--marigold) 35%, var(--line));
-  font-size: 13px;
-  color: var(--ink);
-
-  .eyebrow {
-    color: var(--marigold);
-    flex-shrink: 0;
-  }
 }
 
 .topics {

@@ -9,7 +9,7 @@
 ```
 src/
   cli.ts              entry: arg parse → Store/service/runner → server → scheduler → open browser
-  config.ts           CLI flags (--port --data-dir --no-open --strict-port --ai-test), data-dir resolution
+  config.ts           CLI flags (--port --data-dir --provider --model --endpoint --no-open --strict-port --ai-test) + env
   server.ts           createApp (Hono, DI via middleware) + startServer (127.0.0.1, port fallback), /static handler
   scheduler.ts        startScheduler: 60s tick + 3s startup sweep, non-overlapping
   checks.ts           CheckRunner (checkTopic/checkDue/checkAll, in-flight guard) + isDue()
@@ -18,24 +18,18 @@ src/
     schemas.ts        zod: Topic, NewsItem, Settings, CheckRun, DataFile; DEFAULT_CHECK_INTERVAL_MS
     store.ts          Store: single data.json, atomic writes, corrupt-file backup+reset
   ai/
-    types.ts          NewsService + NewsProvider interfaces, PROVIDER_NAMES, FoundNewsItem, KnownItem
-    prompt.ts         shared prompts (searching/offline), buildUserPrompt, parseNewsResult, NEWS_JSON_SCHEMA
+    types.ts          NewsService + NewsProvider interfaces, PROVIDER_NAMES/INFO, FoundNewsItem, KnownItem
+    prompt.ts         searchingSystemPrompt, buildUserPrompt, parseNewsResult, NEWS_JSON_SCHEMA
     dedupe.ts         normalizeUrl/normalizeTitle/dedupeKeyFor/filterNewItems
     providers/
       index.ts        PROVIDERS/FACTORIES, AUTO_ORDER, resolveProvider, unavailableMessage
-      anthropic.ts    createAnthropicProvider (opus-4-8, adaptive thinking, web_search_20260209, streamed); searchesWeb:true
-      openai.ts       createOpenAIProvider (Responses API + hosted web_search, output_text; searchesWeb:true); OPENAI_BASE_URL
-      ollama.ts       createOllamaProvider (OpenAI-compat, local; searchesWeb:false); endpoint/model resolution + env
-      openaiCompat.ts shared OpenAI-compatible backend (model discovery, JSON chat, parse) — reused for hosted gateways later
-      mock.ts         createMockProvider (--ai-test; deterministic; "fail"→throws, "empty"→[]); searchesWeb:false
-    search/           web-search backends for grounding non-browsing providers (docs/7)
-      types.ts        SearchProvider interface, SearchResult, SEARCH_PROVIDER_NAMES/INFO
-      tavily.ts       createTavilyProvider (Tavily /search, TAVILY_API_KEY); daysSince + mapTavilyResults
-      index.ts        resolveSearchProvider (none|tavily|brave-stub), createFakeSearchProvider
+      anthropic.ts    createAnthropicProvider (opus-4-8, adaptive thinking, web_search_20260209, streamed)
+      openai.ts       createOpenAIProvider (Responses API + hosted web_search, output_text); OPENAI_BASE_URL
+      mock.ts         createMockProvider (--ai-test; deterministic; "fail"→throws, "empty"→[])
   api/
     schemas.ts        zod request schemas + StateResp (shared client/server)
   routes/
-    api.ts            /api/state (+searchesWeb), /api/providers, /api/topics, /api/settings (interval+provider/model/endpoint), /api/check, /api/open-external, /healthz
+    api.ts            /api/state, /api/providers, /api/topics, /api/settings (interval+provider/model/endpoint), /api/check, /api/open-external, /healthz
     pages.tsx         GET / — SSR shell
   components/
     layout.tsx        HTML shell
@@ -47,17 +41,17 @@ src/
     styles.scss       styling (light/dark via prefers-color-scheme)
 src-tauri/            Tauri v2 shell: dev spawns `node --import tsx src/cli.ts`; release NOT bundled yet
 tests/
-  helpers/tmp.ts      tmp data dirs, auto-cleanup
-  unit/               vitest: dedupe, store, checks, scheduler, config, parse-result, api (via app.request)
+  helpers/            tmp.ts (tmp data dirs), provider.ts (asResolver/fakeProvider)
+  unit/               vitest: dedupe, store, checks, scheduler, config, parse-result, providers, openai, api (via app.request)
   e2e/app.spec.ts     playwright, serial, mock AI (--ai-test), port 4189
-docs/                 numbered requirements (1–5), ai/ summaries, manual-test-plan.md
+docs/                 numbered requirements (1–6), ai/ summaries, manual-test-plan.md
 ```
 
 ## Data schema (`<data-dir>/data.json`)
 
 - `topics[]`: id, name, paused, createdAt, lastCheckedAt
 - `items[]`: id, topicId, title, summary, sources[{title,url}], dedupeKey, foundAt
-- `settings`: checkIntervalMs (default 1 day, min 5 min), provider (default `auto`), model (''), endpoint ('')
+- `settings`: checkIntervalMs (default 1 day, min 5 min), provider (default `auto`, `.catch('auto')` for retired providers), model (''), endpoint ('')
 - `runs[]`: id, topicId, startedAt, finishedAt, status(running|succeeded|failed), newItems, error, provider (last 200)
 
 Data dir: `--data-dir` flag → `NEWS_DATA_DIR` → `~/.news`.
@@ -80,7 +74,7 @@ Data dir: `--data-dir` flag → `NEWS_DATA_DIR` → `~/.news`.
 | Provider selection / auto order | `src/ai/providers/index.ts` (`resolveProvider`, `AUTO_ORDER`) |
 | Dedup behavior | `src/ai/dedupe.ts` (keys), `src/checks.ts` (application) |
 | Scheduling rules | `src/checks.ts` (`isDue`), `src/scheduler.ts` (tick) |
-| Persistence / schema change | `src/db/schemas.ts` + `src/db/store.ts` (bump carefully: old files that fail the schema get reset) |
+| Persistence / schema change | `src/db/schemas.ts` + `src/db/store.ts` — **removing an enum value needs `.catch()`** or old files get reset (see the migration tests) |
 | UI change | `src/client/app.tsx` (+ `styles.scss`); mind the kerf structural rules in `docs/3-ui.md` |
 | New CLI flag | `src/config.ts` + `src/cli.ts` |
 | Tauri shell | `src-tauri/src/lib.rs` (`running at ` marker must match `src/cli.ts`) |

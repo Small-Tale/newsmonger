@@ -131,35 +131,18 @@ describe('API', () => {
     expect(store.getSettings().checkIntervalMs).toBe(3_600_000);
   });
 
-  it('updates provider settings and reflects searchesWeb in state', async () => {
+  it('updates provider settings', async () => {
     const { app, store } = makeApp();
-    let res = await app.request('/api/settings', {
+    const res = await app.request('/api/settings', {
       method: 'PATCH',
-      body: JSON.stringify({ provider: 'ollama', model: 'llama3.2', endpoint: 'http://h/v1' }),
+      body: JSON.stringify({ provider: 'openai', model: 'gpt-x', endpoint: 'https://gw/v1' }),
     });
     expect(res.status).toBe(200);
-    expect(store.getSettings().provider).toBe('ollama');
-    expect(store.getSettings().model).toBe('llama3.2');
-
-    let state = StateRespSchema.parse(await json(await app.request('/api/state')));
-    expect(state.searchesWeb).toBe(false); // ollama doesn't search the web
-
-    res = await app.request('/api/settings', { method: 'PATCH', body: JSON.stringify({ provider: 'anthropic' }) });
-    expect(res.status).toBe(200);
-    state = StateRespSchema.parse(await json(await app.request('/api/state')));
-    expect(state.searchesWeb).toBe(true);
+    expect(store.getSettings().provider).toBe('openai');
+    expect(store.getSettings().model).toBe('gpt-x');
+    expect(store.getSettings().endpoint).toBe('https://gw/v1');
   });
 
-  it('a configured search provider makes a local provider count as web-searching (grounded)', async () => {
-    const { app } = makeApp();
-    await app.request('/api/settings', { method: 'PATCH', body: JSON.stringify({ provider: 'ollama' }) });
-    let state = StateRespSchema.parse(await json(await app.request('/api/state')));
-    expect(state.searchesWeb).toBe(false); // ollama alone: not live
-
-    await app.request('/api/settings', { method: 'PATCH', body: JSON.stringify({ searchProvider: 'tavily' }) });
-    state = StateRespSchema.parse(await json(await app.request('/api/state')));
-    expect(state.searchesWeb).toBe(true); // grounded on live search → effectively live
-  });
 
   it('rejects an invalid provider and an empty settings patch', async () => {
     const { app } = makeApp();
@@ -167,13 +150,13 @@ describe('API', () => {
     expect((await app.request('/api/settings', { method: 'PATCH', body: JSON.stringify({}) })).status).toBe(400);
   });
 
-  it('lists providers with capability + availability', async () => {
+  it('lists providers with availability', async () => {
     const { app } = makeApp();
     const resp = ProvidersRespSchema.parse(await json(await app.request('/api/providers')));
     const byName = new Map(resp.providers.map((p) => [p.name, p]));
     expect(byName.get('auto')?.available).toBeNull();
-    expect(byName.get('anthropic')?.searchesWeb).toBe(true);
-    expect(byName.get('ollama')?.searchesWeb).toBe(false);
+    expect(byName.get('openai')?.endpointConfigurable).toBe(true);
+    expect(byName.get('anthropic')?.endpointConfigurable).toBe(false);
     expect(byName.get('mock')?.available).toBe(true);
     // anthropic availability depends on env; assert it's a boolean either way.
     expect(typeof byName.get('anthropic')?.available).toBe('boolean');

@@ -11,8 +11,6 @@ export interface AppState {
   settings: StateResp['settings'];
   runs: StateResp['runs'];
   checking: string[];
-  /** Whether the selected provider searches the live web. */
-  searchesWeb: boolean;
   /** Provider list + availability (fetched on demand, not every poll). */
   providers: ProviderInfo[];
 }
@@ -23,10 +21,9 @@ export const appStore = defineStore({
     error: null,
     topics: [],
     items: [],
-    settings: { checkIntervalMs: 24 * 60 * 60 * 1000, provider: 'auto', model: '', endpoint: '', searchProvider: 'none' },
+    settings: { checkIntervalMs: 24 * 60 * 60 * 1000, provider: 'auto', model: '', endpoint: '' },
     runs: [],
     checking: [],
-    searchesWeb: true,
     providers: [],
   }),
   actions: (set, get) => ({

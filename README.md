@@ -16,15 +16,14 @@ Data lives in `~/.news/data.json` (override with `--data-dir` or `NEWS_DATA_DIR`
 
 ## AI providers
 
-Pick which AI finds and summarizes news, from the Source block in the UI or with `--provider` / `NEWS_PROVIDER`:
+Pick which AI finds and summarizes news, from the Source block in the UI or with `--provider` / `NEWS_PROVIDER`. Only platforms that do their own web search are supported — finding genuinely new news needs live browsing:
 
-| Provider | Live web search? | Config |
-|---|---|---|
-| `auto` (default) | ✅ | picks the first available web-searching provider |
-| `anthropic` | ✅ | `ANTHROPIC_API_KEY` (Claude + web search) |
-| `openai` | ✅ | `OPENAI_API_KEY`, `OPENAI_BASE_URL` (Responses API + web search) |
-| `ollama` | ❌ local model | `NEWS_OLLAMA_HOST`, `NEWS_OLLAMA_MODEL` — summarizes from the model's own knowledge, not a live search |
-| `mock` | ❌ | offline deterministic (`--ai-test`) |
+| Provider | Config |
+|---|---|
+| `auto` (default) | picks the first available provider |
+| `anthropic` | `ANTHROPIC_API_KEY` (Claude + web search) |
+| `openai` | `OPENAI_API_KEY`, `OPENAI_BASE_URL` (Responses API + web search) |
+| `mock` | offline deterministic (`--ai-test`) |
 
 Seed at startup with `--provider <name> --model <id> --endpoint <url>` (or `NEWS_PROVIDER`/`NEWS_MODEL`/`NEWS_ENDPOINT`); change any time in the UI. See [docs/6-providers.md](docs/6-providers.md).
 

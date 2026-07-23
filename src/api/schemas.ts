@@ -1,6 +1,5 @@
 import { z } from 'zod';
 
-import { SEARCH_PROVIDER_NAMES } from '../ai/search/types.js';
 import { PROVIDER_NAMES } from '../ai/types.js';
 import { CheckRunSchema, NewsItemSchema, SettingsSchema, TopicSchema } from '../db/schemas.js';
 
@@ -19,7 +18,6 @@ export const UpdateSettingsReqSchema = z
     provider: z.enum(PROVIDER_NAMES),
     model: z.string().max(200),
     endpoint: z.string().max(500),
-    searchProvider: z.enum(SEARCH_PROVIDER_NAMES),
   })
   .partial()
   .refine((v) => Object.keys(v).length > 0, { message: 'at least one setting is required' });
@@ -39,15 +37,12 @@ export const StateRespSchema = z.object({
   settings: SettingsSchema,
   runs: z.array(CheckRunSchema),
   checking: z.array(z.string()),
-  /** Whether the currently-selected provider searches the live web. */
-  searchesWeb: z.boolean(),
 });
 export type StateResp = z.infer<typeof StateRespSchema>;
 
 export const ProviderInfoSchema = z.object({
   name: z.enum(PROVIDER_NAMES),
   label: z.string(),
-  searchesWeb: z.boolean(),
   endpointConfigurable: z.boolean(),
   /** null = not probed (auto); otherwise whether the provider is usable now. */
   available: z.boolean().nullable(),

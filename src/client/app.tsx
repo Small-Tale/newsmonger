@@ -1,8 +1,6 @@
 import type { SafeHtml } from 'kerfjs';
 import { delegate, each, mount } from 'kerfjs';
 
-import type { SearchProviderName } from '../ai/search/types.js';
-import { SEARCH_PROVIDER_INFO, SEARCH_PROVIDER_NAMES } from '../ai/search/types.js';
 import type { ProviderName } from '../ai/types.js';
 import { PROVIDER_INFO, PROVIDER_NAMES } from '../ai/types.js';
 import type { NewsItem, Topic } from '../db/schemas.js';
@@ -206,21 +204,6 @@ function sourceJsx(): SafeHtml {
       ) : (
         ''
       )}
-      {/* Grounding only helps a provider that can't browse — offer it there. */}
-      {!info.searchesWeb ? (
-        <label class="source-sub">
-          <span class="eyebrow">Ground with search</span>
-          <select data-action="search-provider" title="Give the local model live search results to summarize">
-            {SEARCH_PROVIDER_NAMES.map((name) => (
-              <option value={name} selected={name === s.settings.searchProvider ? true : undefined}>
-                {SEARCH_PROVIDER_INFO[name].label}
-              </option>
-            ))}
-          </select>
-        </label>
-      ) : (
-        ''
-      )}
       <p class="source-status">
         {availability === false ? '⚠ not available — check the key/endpoint' : ''}
         {availability === true ? '✓ ready' : ''}
@@ -301,15 +284,6 @@ function appJsx(): SafeHtml {
       </section>
 
       <section id="feed" class="feed">
-        <div id="live-note">
-          {!s.searchesWeb ? (
-            <p class="live-note">
-              <span class="eyebrow">Not live</span> These summaries come from the model's own knowledge, not a live web search — treat “new” as best-effort. Pick a search backend under “Ground with search” to fix this.
-            </p>
-          ) : (
-            ''
-          )}
-        </div>
         {feedJsx(sortedItems, topicNames)}
         <div class="empty-slot">
           {s.loaded && sortedItems.length === 0 && s.topics.length > 0 ? (
@@ -349,9 +323,6 @@ function wireEvents(root: HTMLElement): void {
   });
   void delegate(root, 'change', '[data-action=endpoint]', (_e, el) => {
     void updateProviderSettings({ endpoint: (el as HTMLInputElement).value.trim() });
-  });
-  void delegate(root, 'change', '[data-action=search-provider]', (_e, el) => {
-    void updateProviderSettings({ searchProvider: (el as HTMLSelectElement).value as SearchProviderName });
   });
 
   void delegate(root, 'click', '[data-action=check-all]', () => {

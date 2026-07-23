@@ -1,6 +1,5 @@
 import { z } from 'zod';
 
-import { SEARCH_PROVIDER_NAMES } from '../ai/search/types.js';
 import { PROVIDER_NAMES } from '../ai/types.js';
 
 /** A topic the user wants news about. */
@@ -37,13 +36,11 @@ export const SettingsSchema = z.object({
   /** How often each topic is checked for news, in milliseconds. */
   checkIntervalMs: z.number().int().positive(),
   /** Which AI provider performs checks. `auto` picks the best available. */
-  provider: z.enum(PROVIDER_NAMES).default('auto'),
+  provider: z.enum(PROVIDER_NAMES).default('auto').catch('auto'),
   /** Model id for the provider; '' means the provider's default. */
   model: z.string().default(''),
   /** Base URL for endpoint-based providers (Ollama / OpenAI-compatible); '' = default. */
   endpoint: z.string().default(''),
-  /** Search backend that grounds non-searching providers on live results. */
-  searchProvider: z.enum(SEARCH_PROVIDER_NAMES).default('none'),
 });
 export type Settings = z.infer<typeof SettingsSchema>;
 
@@ -57,8 +54,6 @@ export const CheckRunSchema = z.object({
   error: z.string().nullable(),
   /** Which provider ran this check (e.g. "anthropic"); null if it never resolved one. */
   provider: z.string().nullable().default(null),
-  /** Whether this check was grounded on external search (non-searching provider + search backend). */
-  grounded: z.boolean().default(false),
 });
 export type CheckRun = z.infer<typeof CheckRunSchema>;
 
@@ -76,7 +71,7 @@ export function emptyDataFile(): DataFile {
   return {
     topics: [],
     items: [],
-    settings: { checkIntervalMs: DEFAULT_CHECK_INTERVAL_MS, provider: 'auto', model: '', endpoint: '', searchProvider: 'none' },
+    settings: { checkIntervalMs: DEFAULT_CHECK_INTERVAL_MS, provider: 'auto', model: '', endpoint: '' },
     runs: [],
   };
 }
