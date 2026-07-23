@@ -14,12 +14,14 @@ src/
   scheduler.ts        startScheduler: 60s tick + 3s startup sweep, non-overlapping
   checks.ts           CheckRunner (checkTopic/checkDue/checkAll, in-flight guard) + isDue()
   types.ts            Hono AppEnv (store, runner injected)
+  keychain.ts         OS credential store via platform CLI (security/secret-tool/cmdkey)
   db/
     schemas.ts        zod: Topic, NewsItem, Settings, CheckRun, DataFile; DEFAULT_CHECK_INTERVAL_MS
     store.ts          Store: single data.json, atomic writes, corrupt-file backup+reset
   ai/
     types.ts          NewsService + NewsProvider interfaces, PROVIDER_NAMES/INFO, FoundNewsItem, KnownItem
     prompt.ts         searchingSystemPrompt, buildUserPrompt, parseNewsResult, NEWS_JSON_SCHEMA
+    api-keys.ts       resolveApiKey/saveApiKey/deleteApiKey — env then keychain, never data.json
     dedupe.ts         normalizeUrl/normalizeTitle/dedupeKeyFor/filterNewItems
     providers/
       index.ts        PROVIDERS/FACTORIES, AUTO_ORDER, resolveProvider, unavailableMessage
@@ -29,12 +31,12 @@ src/
   api/
     schemas.ts        zod request schemas + StateResp (shared client/server)
   routes/
-    api.ts            /api/state, /api/providers, /api/topics, /api/settings (interval+provider/model/endpoint), /api/check, /api/open-external, /healthz
+    api.ts            /api/state, /api/providers, /api/topics, /api/settings, /api/keys (GET/PUT/DELETE), /api/check, /api/open-external, /healthz
     pages.tsx         GET / — SSR shell
   components/
     layout.tsx        HTML shell
   client/
-    app.tsx           kerf UI: mount + delegates; header/banners/topics/feed
+    app.tsx           kerf UI: mount + delegates; header/banners/settings dialog/topics/feed
     stores.ts         appStore (defineStore)
     api.ts            fetch wrappers, refreshState (zod-validated), withRefresh
     tauri.ts          __TAURI__ detection, openExternalUrl
@@ -48,9 +50,9 @@ scripts/
 .github/              CI: gate job (test:all) + rust job (fmt + clippy, BOTH profiles); dependabot
 tests/
   helpers/            tmp.ts (tmp data dirs), provider.ts (asResolver/fakeProvider)
-  unit/               vitest: dedupe, store, checks, scheduler, config, parse-result, providers, openai, api (via app.request)
-  e2e/app.spec.ts     playwright, serial, mock AI (--ai-test), port 4189
-docs/                 numbered requirements (1–6), ai/ summaries, manual-test-plan.md
+  unit/               vitest: dedupe, store, checks, scheduler, config, parse-result, providers, openai, api, api-keys, api-keys-routes
+  e2e/                playwright, serial, mock AI (--ai-test), port 4189: app.spec.ts, keys.spec.ts
+docs/                 numbered requirements (1–7), ai/ summaries, manual-test-plan.md
 ```
 
 ## Data schema (`<data-dir>/data.json`)
@@ -90,3 +92,5 @@ Data dir: `--data-dir` flag → `NEWS_DATA_DIR` → `~/.news`.
 | Release bundling / sidecar | `scripts/build-sidecar.sh` + `src-tauri/tauri.conf.json` (`externalBin`, `resources`) |
 | A new runtime dependency | just add it to `package.json` `dependencies` — tsup externalizes it and the sidecar script installs it; no list to update |
 | Mock behavior in tests | `src/ai/providers/mock.ts` (topic name containing "fail"/"empty" triggers those paths) |
+| API keys / keychain | `src/keychain.ts` (OS layer) + `src/ai/api-keys.ts` (env→keychain precedence); `NEWS_FAKE_KEYCHAIN=1` for tests |
+| Settings dialog | `src/client/app.tsx` `settingsDialogJsx`/`keyRowJsx`; routes in `src/routes/api.ts` under `/api/keys` |

@@ -37,9 +37,9 @@ export const AUTO_ORDER: ConcreteProviderName[] = ['anthropic', 'openai'];
 export function unavailableMessage(provider: NewsProvider): string {
   switch (provider.name) {
     case 'anthropic':
-      return 'Anthropic is not available — set ANTHROPIC_API_KEY.';
+      return 'Anthropic has no API key — add one in Settings, or set ANTHROPIC_API_KEY.';
     case 'openai':
-      return 'OpenAI is not available — set OPENAI_API_KEY.';
+      return 'OpenAI has no API key — add one in Settings, or set OPENAI_API_KEY.';
     case 'mock':
       return 'The mock provider is unavailable (this should not happen).';
   }
@@ -65,7 +65,7 @@ export async function resolveProvider(
       if (await provider.isAvailable()) return provider;
     }
     throw new Error(
-      'No AI provider is available. Set ANTHROPIC_API_KEY (or OPENAI_API_KEY), or choose a provider explicitly.',
+      'No AI provider has an API key. Add one in Settings, or set ANTHROPIC_API_KEY / OPENAI_API_KEY.',
     );
   }
   const provider = factories[cfg.provider](cfg);

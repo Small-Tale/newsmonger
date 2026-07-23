@@ -1,5 +1,5 @@
 import type { ProviderName } from '../ai/types.js';
-import { ProvidersRespSchema, StateRespSchema } from '../api/schemas.js';
+import { KeysRespSchema, ProvidersRespSchema, StateRespSchema } from '../api/schemas.js';
 import { appStore } from './stores.js';
 
 async function request(path: string, init?: RequestInit): Promise<unknown> {
@@ -75,6 +75,45 @@ export async function updateProviderSettings(patch: {
 }): Promise<void> {
   await withRefresh(() => request('/api/settings', { method: 'PATCH', body: JSON.stringify(patch) }));
   await refreshProviders();
+}
+
+/** Fetch per-provider key status. Carries no key values — see `KeyStatusSchema`. */
+export async function refreshKeys(): Promise<void> {
+  try {
+    const body = await request('/api/keys');
+    appStore.actions.setKeys(KeysRespSchema.parse(body));
+  } catch {
+    // non-fatal — the dialog shows the providers as unconfigured
+  }
+}
+
+/**
+ * Save a provider's key, then re-read status and availability.
+ *
+ * The value is passed straight through to the request and deliberately never
+ * stored in the app state: the only copy in the page is the input the user
+ * typed, which is cleared on success.
+ */
+export async function saveKey(provider: string, key: string): Promise<boolean> {
+  try {
+    await request(`/api/keys/${encodeURIComponent(provider)}`, { method: 'PUT', body: JSON.stringify({ key }) });
+    appStore.actions.setKeyError(null);
+  } catch (err) {
+    appStore.actions.setKeyError(err instanceof Error ? err.message : String(err));
+    return false;
+  }
+  await Promise.all([refreshKeys(), refreshProviders()]);
+  return true;
+}
+
+export async function deleteKey(provider: string): Promise<void> {
+  try {
+    await request(`/api/keys/${encodeURIComponent(provider)}`, { method: 'DELETE' });
+    appStore.actions.setKeyError(null);
+  } catch (err) {
+    appStore.actions.setKeyError(err instanceof Error ? err.message : String(err));
+  }
+  await Promise.all([refreshKeys(), refreshProviders()]);
 }
 
 export function startCheck(topicId?: string): Promise<void> {

@@ -1,5 +1,6 @@
 import Anthropic from '@anthropic-ai/sdk';
 
+import { resolveApiKey } from '../api-keys.js';
 import { buildUserPrompt, parseNewsResult, searchingSystemPrompt } from '../prompt.js';
 import type { FoundNewsItem, KnownItem, NewsProvider } from '../types.js';
 
@@ -10,10 +11,22 @@ export interface AnthropicRunner {
   run(system: string, prompt: string, model: string): Promise<string>;
 }
 
-function sdkRunner(getClient: () => Anthropic): AnthropicRunner {
+function sdkRunner(getApiKey: () => Promise<string | null>): AnthropicRunner {
+  // Cache the client, but key it on the credential it was built with: the user
+  // can change the key in Settings mid-session, and a client built with the
+  // previous one would keep authenticating as the old key.
+  let client: Anthropic | undefined;
+  let builtWith: string | null = null;
+
   return {
     async run(system, prompt, model) {
-      const stream = getClient().messages.stream({
+      const apiKey = await getApiKey();
+      if (apiKey === null) throw new Error('No Anthropic API key is configured');
+      if (client === undefined || builtWith !== apiKey) {
+        client = new Anthropic({ apiKey });
+        builtWith = apiKey;
+      }
+      const stream = client.messages.stream({
         model,
         max_tokens: 16000,
         thinking: { type: 'adaptive' },
@@ -39,24 +52,22 @@ function sdkRunner(getClient: () => Anthropic): AnthropicRunner {
  */
 export function createAnthropicProvider(config: {
   model?: string;
-  apiKey?: string;
+  /** Resolves the key at request time; null means none is configured. */
+  getApiKey?: () => Promise<string | null>;
   runner?: AnthropicRunner;
-  hasApiKey?: () => boolean;
 } = {}): NewsProvider {
   const model = config.model ?? DEFAULT_ANTHROPIC_MODEL;
-  // Construct the SDK client lazily: `new Anthropic()` throws when no key is
-  // set, and a provider must be constructable (for isAvailable / auto probing)
-  // even without credentials.
-  let client: Anthropic | undefined;
-  const runner =
-    config.runner ??
-    sdkRunner(() => (client ??= config.apiKey !== undefined ? new Anthropic({ apiKey: config.apiKey }) : new Anthropic()));
-  const hasApiKey = config.hasApiKey ?? (() => (process.env['ANTHROPIC_API_KEY'] ?? '') !== '');
+  // One seam for "is there a key" and "what is it", so the two can't disagree.
+  // Resolved per call rather than at construction, so a key saved in Settings
+  // takes effect without a restart — and so constructing a provider to probe
+  // its availability never needs credentials.
+  const getApiKey = config.getApiKey ?? (async () => (await resolveApiKey('anthropic')).key);
+  const runner = config.runner ?? sdkRunner(getApiKey);
 
   return {
     name: 'anthropic',
     model,
-    isAvailable: () => Promise.resolve(hasApiKey()),
+    isAvailable: async () => (await getApiKey()) !== null,
     async checkTopic(topicName: string, known: KnownItem[], sinceIso: string | null): Promise<FoundNewsItem[]> {
       const text = await runner.run(
         searchingSystemPrompt(),

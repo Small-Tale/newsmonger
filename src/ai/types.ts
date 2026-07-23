@@ -35,6 +35,27 @@ export const PROVIDER_INFO: Record<ProviderName, { label: string; endpointConfig
   mock: { label: 'Mock (offline test)', endpointConfigurable: false },
 };
 
+/**
+ * Providers that authenticate with an API key. `mock` needs none.
+ *
+ * Declared here rather than beside the keychain code because the shared API
+ * schemas reference it, and those are parsed by the browser client too — which
+ * must not pull `node:child_process` into its bundle.
+ */
+export const KEYED_PROVIDERS = ['anthropic', 'openai'] as const;
+export type KeyedProvider = (typeof KEYED_PROVIDERS)[number];
+
+/** Environment variable each provider's key can be supplied through. */
+export const KEY_ENV_VARS: Record<KeyedProvider, string> = {
+  anthropic: 'ANTHROPIC_API_KEY',
+  openai: 'OPENAI_API_KEY',
+};
+
+/** Narrows an untrusted value (e.g. a URL path segment) to a keyed provider. */
+export function isKeyedProvider(name: string): name is KeyedProvider {
+  return (KEYED_PROVIDERS as readonly string[]).includes(name);
+}
+
 /** A selectable news backend. Every real provider searches the web itself. */
 export interface NewsProvider extends NewsService {
   readonly name: ConcreteProviderName;

@@ -6,14 +6,18 @@ import { PROVIDER_INFO, PROVIDER_NAMES } from '../ai/types.js';
 import type { NewsItem, Topic } from '../db/schemas.js';
 import {
   addTopic,
+  deleteKey,
   deleteTopic,
+  refreshKeys,
   refreshProviders,
   refreshState,
+  saveKey,
   setTopicPaused,
   startCheck,
   updateInterval,
   updateProviderSettings,
 } from './api.js';
+import type { AppState } from './stores.js';
 import { appStore } from './stores.js';
 import { openExternalUrl } from './tauri.js';
 
@@ -159,56 +163,179 @@ function feedJsx(items: NewsItem[], topicNames: Map<string, string>): SafeHtml[]
   ));
 }
 
+/** Compact "is the current source usable" line, shown in the topics panel. */
 function sourceJsx(): SafeHtml {
   const s = appStore.state.value;
   const provider = s.settings.provider;
-  const info = PROVIDER_INFO[provider];
   const availability = s.providers.find((p) => p.name === provider)?.available ?? null;
   const lastProvider = s.runs.find((r) => r.provider !== null)?.provider ?? null;
 
   return (
     <div class="source">
       <h2 class="eyebrow">Source</h2>
-      <select data-action="provider" title="Which AI finds and summarizes news">
-        {PROVIDER_NAMES.map((name) => (
-          <option value={name} selected={name === provider ? true : undefined}>
-            {PROVIDER_INFO[name].label}
-          </option>
-        ))}
-      </select>
-      {provider !== 'auto' && provider !== 'mock' ? (
-        <input
-          type="text"
-          class="source-field"
-          name="model"
-          value={s.settings.model}
-          placeholder="model (optional)"
-          autocomplete="off"
-          data-action="model"
-          data-morph-skip-children
-        />
-      ) : (
-        ''
-      )}
-      {info.endpointConfigurable ? (
-        <input
-          type="text"
-          class="source-field"
-          name="endpoint"
-          value={s.settings.endpoint}
-          placeholder="endpoint (optional)"
-          autocomplete="off"
-          data-action="endpoint"
-          data-morph-skip-children
-        />
-      ) : (
-        ''
-      )}
       <p class="source-status">
-        {availability === false ? '⚠ not available — check the key/endpoint' : ''}
-        {availability === true ? '✓ ready' : ''}
-        {lastProvider !== null ? `${availability === null ? '' : ' · '}last check via ${lastProvider}` : ''}
+        <span class="source-name">{PROVIDER_INFO[provider].label}</span>
+        {availability === false ? ' · ⚠ no API key — open Settings' : ''}
+        {availability === true ? ' · ✓ ready' : ''}
+        {lastProvider !== null ? ` · last check via ${lastProvider}` : ''}
       </p>
+    </div>
+  );
+}
+
+/**
+ * One provider's key row.
+ *
+ * Three states, because they call for different controls: supplied by the
+ * environment (nothing to do here — the app can't unset a variable it didn't
+ * set), stored in the keychain (offer removal), or absent (offer an input).
+ * The stored key is never rendered; when one exists there is no field at all,
+ * so there's nothing for a screenshot or a password manager to pick up.
+ */
+function keyRowJsx(key: AppState['keys'][number], keychainLabel: string, keychainAvailable: boolean): SafeHtml {
+  const inputId = `key-input-${key.provider}`;
+
+  if (key.source === 'env') {
+    return (
+      <div class="key-row" data-key={`key-${key.provider}`}>
+        <span class="key-provider">{key.label}</span>
+        <span class="key-state ok">✓ from {key.envVar}</span>
+        <span class="key-hint">Set in the environment — unset the variable to change it.</span>
+      </div>
+    );
+  }
+
+  if (key.source === 'keychain') {
+    return (
+      <div class="key-row" data-key={`key-${key.provider}`}>
+        <span class="key-provider">{key.label}</span>
+        <span class="key-state ok">✓ stored in {keychainLabel}</span>
+        <button class="btn subtle" type="button" data-remove-key={key.provider}>
+          Remove
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div class="key-row" data-key={`key-${key.provider}`}>
+      <span class="key-provider">{key.label}</span>
+      <form class="key-form" data-save-key={key.provider}>
+        <input
+          type="password"
+          id={inputId}
+          name="api-key"
+          class="key-input"
+          placeholder={keychainAvailable ? 'Paste API key' : `Set ${key.envVar} instead`}
+          autocomplete="off"
+          spellcheck={false}
+          disabled={keychainAvailable ? undefined : true}
+          data-morph-skip-children
+        />
+        <button class="btn" type="submit" disabled={keychainAvailable ? undefined : true}>
+          Save
+        </button>
+      </form>
+    </div>
+  );
+}
+
+function settingsDialogJsx(): SafeHtml {
+  const s = appStore.state.value;
+  const provider = s.settings.provider;
+  const info = PROVIDER_INFO[provider];
+
+  return (
+    <div class="dialog-backdrop" data-action="settings-backdrop">
+      <div class="dialog" role="dialog" aria-modal="true" aria-labelledby="settings-title">
+        <div class="dialog-head">
+          <h2 id="settings-title">Settings</h2>
+          <button class="btn icon" type="button" data-action="close-settings" aria-label="Close settings">
+            ✕
+          </button>
+        </div>
+
+        <label class="field">
+          <span class="field-label">Check every</span>
+          <select data-action="interval">
+            {INTERVAL_OPTIONS.map((opt) => (
+              <option value={String(opt.ms)} selected={opt.ms === s.settings.checkIntervalMs ? true : undefined}>
+                {opt.label}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        <h3 class="eyebrow">Source</h3>
+        <label class="field">
+          <span class="field-label">Provider</span>
+          <select data-action="provider" title="Which AI finds and summarizes news">
+            {PROVIDER_NAMES.map((name) => (
+              <option value={name} selected={name === provider ? true : undefined}>
+                {PROVIDER_INFO[name].label}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        {/* Always-present container: conditional fields must not appear and
+            disappear as siblings (kerf KF-377 — see docs/3-ui.md). */}
+        <div class="source-fields">
+          {provider !== 'auto' && provider !== 'mock' ? (
+            <label class="field">
+              <span class="field-label">Model</span>
+              <input
+                type="text"
+                class="source-field"
+                name="model"
+                value={s.settings.model}
+                placeholder="default"
+                autocomplete="off"
+                data-action="model"
+                data-morph-skip-children
+              />
+            </label>
+          ) : (
+            ''
+          )}
+          {info.endpointConfigurable ? (
+            <label class="field">
+              <span class="field-label">Endpoint</span>
+              <input
+                type="text"
+                class="source-field"
+                name="endpoint"
+                value={s.settings.endpoint}
+                placeholder="default"
+                autocomplete="off"
+                data-action="endpoint"
+                data-morph-skip-children
+              />
+            </label>
+          ) : (
+            ''
+          )}
+        </div>
+
+        <h3 class="eyebrow">API keys</h3>
+        <div class="keys">{s.keys.map((k) => keyRowJsx(k, s.keychainLabel, s.keychainAvailable))}</div>
+
+        <div class="key-notes">
+          {s.keyError !== null ? <p class="banner error">{s.keyError}</p> : ''}
+          {!s.keychainAvailable ? (
+            <p class="note warn">
+              No {s.keychainLabel} is available here, so keys can't be saved from the app. Set the environment
+              variables above instead.
+            </p>
+          ) : (
+            ''
+          )}
+        </div>
+        <p class="note">
+          Keys are stored in your {s.keychainLabel} — never in ~/.news/data.json, and never sent anywhere but the
+          provider you chose.
+        </p>
+      </div>
     </div>
   );
 }
@@ -227,21 +354,18 @@ function appJsx(): SafeHtml {
           News<span class="mark-dot">.</span>
         </h1>
         <div class="header-controls">
-          <label class="interval-label">
-            <span class="eyebrow">Check</span>
-            <select data-action="interval">
-              {INTERVAL_OPTIONS.map((opt) => (
-                <option value={String(opt.ms)} selected={opt.ms === s.settings.checkIntervalMs ? true : undefined}>
-                  {opt.label}
-                </option>
-              ))}
-            </select>
-          </label>
+          <button class="btn icon" data-action="open-settings" aria-label="Settings" title="Settings">
+            ⚙
+          </button>
           <button class="btn primary" data-action="check-all" disabled={anyChecking ? true : undefined}>
             {anyChecking ? 'Checking…' : 'Check all now'}
           </button>
         </div>
       </header>
+
+      {/* Always-present container — the dialog appearing must not restructure
+          its siblings (kerf KF-377 — see docs/3-ui.md). */}
+      <div id="settings-slot">{s.settingsOpen ? settingsDialogJsx() : ''}</div>
 
       {/* Always-present container: banners coming and going must not shift the
           sections below (kerf KF-377 — see docs/3-ui.md). */}
@@ -327,6 +451,49 @@ function wireEvents(root: HTMLElement): void {
 
   void delegate(root, 'click', '[data-action=check-all]', () => {
     void startCheck();
+  });
+
+  void delegate(root, 'click', '[data-action=open-settings]', () => {
+    appStore.actions.setSettingsOpen(true);
+    // Status can go stale while the dialog is closed — a key added in another
+    // window, or an environment variable set since load.
+    void refreshKeys();
+    void refreshProviders();
+  });
+
+  void delegate(root, 'click', '[data-action=close-settings]', () => {
+    appStore.actions.setSettingsOpen(false);
+  });
+
+  // Backdrop click-away. This deliberately does NOT share the close action:
+  // delegation matches against the target's ancestors, and the backdrop wraps
+  // the whole dialog — so every click inside it, including Save, would match a
+  // `[data-action=close-settings]` backdrop and dismiss the dialog mid-submit.
+  // Only a click that landed on the backdrop itself should close.
+  void delegate(root, 'click', '[data-action=settings-backdrop]', (e, el) => {
+    if (e.target === el) appStore.actions.setSettingsOpen(false);
+  });
+
+  void delegate(root, 'submit', '[data-save-key]', (e, form) => {
+    e.preventDefault();
+    const provider = form.getAttribute('data-save-key');
+    const input = form.querySelector<HTMLInputElement>('input[name=api-key]');
+    if (provider === null || !input) return;
+    const key = input.value.trim();
+    if (key === '') return;
+    void saveKey(provider, key).then((ok) => {
+      // Clear the field either way: on success it's stored, and on failure
+      // leaving a key sitting in the DOM serves no purpose.
+      input.value = '';
+      return ok;
+    });
+  });
+
+  void delegate(root, 'click', '[data-remove-key]', (_e, el) => {
+    const provider = el.getAttribute('data-remove-key');
+    if (provider === null) return;
+    const label = appStore.state.value.keys.find((k) => k.provider === provider)?.label ?? provider;
+    if (window.confirm(`Remove the stored ${label} API key?`)) void deleteKey(provider);
   });
 
   void delegate(root, 'click', '[data-check-topic]', (_e, el) => {

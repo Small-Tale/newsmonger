@@ -35,7 +35,7 @@ describe('resolveProvider', () => {
   it('auto throws an actionable error when nothing is available', async () => {
     await expect(
       resolveProvider({ provider: 'auto', model: '', endpoint: '' }, factoriesWith({})),
-    ).rejects.toThrow(/No AI provider is available/);
+    ).rejects.toThrow(/No AI provider has an API key/);
   });
 
   it('auto only tries web-searching providers', () => {
@@ -88,11 +88,11 @@ describe('createMockProvider', () => {
 
 describe('createAnthropicProvider', () => {
   it('reports availability from the key check', async () => {
-    const withKey = createAnthropicProvider({ runner: { run: () => Promise.resolve('') }, hasApiKey: () => true });
+    const withKey = createAnthropicProvider({ runner: { run: () => Promise.resolve('') }, getApiKey: () => Promise.resolve('test-key') });
     expect(withKey.model).toBe('claude-opus-4-8');
     expect(await withKey.isAvailable()).toBe(true);
 
-    const noKey = createAnthropicProvider({ runner: { run: () => Promise.resolve('') }, hasApiKey: () => false });
+    const noKey = createAnthropicProvider({ runner: { run: () => Promise.resolve('') }, getApiKey: () => Promise.resolve(null) });
     expect(await noKey.isAvailable()).toBe(false);
   });
 
@@ -101,7 +101,7 @@ describe('createAnthropicProvider', () => {
       run: () =>
         Promise.resolve('Here you go:\n```json\n{"items":[{"title":"T","summary":"S","sources":[]}]}\n```'),
     };
-    const p = createAnthropicProvider({ runner, hasApiKey: () => true });
+    const p = createAnthropicProvider({ runner, getApiKey: () => Promise.resolve('test-key') });
     const items = await p.checkTopic('AI', [], null);
     expect(items).toEqual([{ title: 'T', summary: 'S', sources: [] }]);
   });
@@ -110,7 +110,7 @@ describe('createAnthropicProvider', () => {
     const runner = {
       run: () => Promise.reject(new Error('Claude declined to research this topic')),
     };
-    const p = createAnthropicProvider({ runner, hasApiKey: () => true });
+    const p = createAnthropicProvider({ runner, getApiKey: () => Promise.resolve('test-key') });
     await expect(p.checkTopic('X', [], null)).rejects.toThrow(/declined/);
   });
 });

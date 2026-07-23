@@ -6,18 +6,18 @@ const NEWS = '```json\n{"items":[{"title":"T","summary":"S","sources":[{"title":
 
 describe('createOpenAIProvider', () => {
   it('has the expected name and default model', () => {
-    const p = createOpenAIProvider({ runner: { run: () => Promise.resolve('') }, hasApiKey: () => true });
+    const p = createOpenAIProvider({ runner: { run: () => Promise.resolve('') }, getApiKey: () => Promise.resolve('test-key') });
     expect(p.name).toBe('openai');
     expect(p.model).toBe(DEFAULT_OPENAI_MODEL);
   });
 
   it('reports availability from the key check', async () => {
-    expect(await createOpenAIProvider({ runner: { run: () => Promise.resolve('') }, hasApiKey: () => true }).isAvailable()).toBe(true);
-    expect(await createOpenAIProvider({ runner: { run: () => Promise.resolve('') }, hasApiKey: () => false }).isAvailable()).toBe(false);
+    expect(await createOpenAIProvider({ runner: { run: () => Promise.resolve('') }, getApiKey: () => Promise.resolve('test-key') }).isAvailable()).toBe(true);
+    expect(await createOpenAIProvider({ runner: { run: () => Promise.resolve('') }, getApiKey: () => Promise.resolve(null) }).isAvailable()).toBe(false);
   });
 
   it('parses a fenced-JSON result from the runner', async () => {
-    const p = createOpenAIProvider({ runner: { run: () => Promise.resolve(`Here:\n${NEWS}`) }, hasApiKey: () => true });
+    const p = createOpenAIProvider({ runner: { run: () => Promise.resolve(`Here:\n${NEWS}`) }, getApiKey: () => Promise.resolve('test-key') });
     const items = await p.checkTopic('AI', [], null);
     expect(items).toEqual([{ title: 'T', summary: 'S', sources: [{ title: 'Src', url: 'https://a.com/x' }] }]);
   });
@@ -25,7 +25,7 @@ describe('createOpenAIProvider', () => {
   it('parses an empty result', async () => {
     const p = createOpenAIProvider({
       runner: { run: () => Promise.resolve('```json\n{"items":[]}\n```') },
-      hasApiKey: () => true,
+      getApiKey: () => Promise.resolve('test-key'),
     });
     expect(await p.checkTopic('AI', [], null)).toEqual([]);
   });
@@ -40,7 +40,7 @@ describe('createOpenAIProvider', () => {
           return Promise.resolve('```json\n{"items":[]}\n```');
         },
       },
-      hasApiKey: () => true,
+      getApiKey: () => Promise.resolve('test-key'),
     });
     await p.checkTopic('Fusion', [{ title: 'old', foundAt: '2026-07-01T00:00:00Z' }], '2026-07-20T00:00:00Z');
     expect(seen?.model).toBe('gpt-x');
@@ -50,7 +50,7 @@ describe('createOpenAIProvider', () => {
   });
 
   it('throws when the model returns no parseable result', async () => {
-    const p = createOpenAIProvider({ runner: { run: () => Promise.resolve('no json here') }, hasApiKey: () => true });
+    const p = createOpenAIProvider({ runner: { run: () => Promise.resolve('no json here') }, getApiKey: () => Promise.resolve('test-key') });
     await expect(p.checkTopic('AI', [], null)).rejects.toThrow(/could not parse/);
   });
 });

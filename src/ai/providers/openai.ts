@@ -1,5 +1,6 @@
 import OpenAI from 'openai';
 
+import { resolveApiKey } from '../api-keys.js';
 import { buildUserPrompt, parseNewsResult, searchingSystemPrompt } from '../prompt.js';
 import type { FoundNewsItem, KnownItem, NewsProvider } from '../types.js';
 
@@ -10,12 +11,23 @@ export interface OpenAIRunner {
   run(system: string, prompt: string, model: string): Promise<string>;
 }
 
-function sdkRunner(getClient: () => OpenAI): OpenAIRunner {
+function sdkRunner(getApiKey: () => Promise<string | null>, baseURL: string | undefined): OpenAIRunner {
+  // Cached, but rebuilt when the credential changes — see the note in
+  // `anthropic.ts`; a key edited in Settings must take effect immediately.
+  let client: OpenAI | undefined;
+  let builtWith: string | null = null;
+
   return {
     async run(system, prompt, model) {
+      const apiKey = await getApiKey();
+      if (apiKey === null) throw new Error('No OpenAI API key is configured');
+      if (client === undefined || builtWith !== apiKey) {
+        client = new OpenAI({ apiKey, ...(baseURL !== undefined && baseURL !== '' ? { baseURL } : {}) });
+        builtWith = apiKey;
+      }
       // Responses API + hosted `web_search` tool → live results, like
       // Anthropic's web_search_20260209. `output_text` aggregates the text.
-      const response = await getClient().responses.create({
+      const response = await client.responses.create({
         model,
         instructions: system,
         input: prompt,
@@ -34,30 +46,21 @@ function sdkRunner(getClient: () => OpenAI): OpenAIRunner {
  */
 export function createOpenAIProvider(config: {
   model?: string;
-  apiKey?: string;
   baseURL?: string;
+  /** Resolves the key at request time; null means none is configured. */
+  getApiKey?: () => Promise<string | null>;
   runner?: OpenAIRunner;
-  hasApiKey?: () => boolean;
 } = {}): NewsProvider {
   const model = config.model ?? DEFAULT_OPENAI_MODEL;
-  // Lazy client: `new OpenAI()` throws without a key, but the provider must be
-  // constructable for availability probing.
-  let client: OpenAI | undefined;
-  const runner =
-    config.runner ??
-    sdkRunner(
-      () =>
-        (client ??= new OpenAI({
-          ...(config.apiKey !== undefined ? { apiKey: config.apiKey } : {}),
-          ...(config.baseURL !== undefined && config.baseURL !== '' ? { baseURL: config.baseURL } : {}),
-        })),
-    );
-  const hasApiKey = config.hasApiKey ?? (() => (process.env['OPENAI_API_KEY'] ?? '') !== '');
+  // See `anthropic.ts`: one seam for both "is there a key" and "what is it",
+  // resolved per call so a key saved in Settings applies without a restart.
+  const getApiKey = config.getApiKey ?? (async () => (await resolveApiKey('openai')).key);
+  const runner = config.runner ?? sdkRunner(getApiKey, config.baseURL);
 
   return {
     name: 'openai',
     model,
-    isAvailable: () => Promise.resolve(hasApiKey()),
+    isAvailable: async () => (await getApiKey()) !== null,
     async checkTopic(topicName: string, known: KnownItem[], sinceIso: string | null): Promise<FoundNewsItem[]> {
       const text = await runner.run(
         searchingSystemPrompt(),

@@ -1,6 +1,8 @@
 import v8 from 'node:v8';
 
+import { resolveApiKey } from './ai/api-keys.js';
 import { createMockProvider, resolveProvider } from './ai/providers/index.js';
+import { KEYED_PROVIDERS } from './ai/types.js';
 import type { ProviderResolver } from './checks.js';
 import { CheckRunner } from './checks.js';
 import { parseArgs } from './config.js';
@@ -41,9 +43,18 @@ async function main(): Promise<void> {
       const s = store.getSettings();
       return resolveProvider({ provider: s.provider, model: s.model, endpoint: s.endpoint });
     };
+    // Warn only when nothing can authenticate. Checks the keychain too, not
+    // just the environment — otherwise every user who saved a key in Settings
+    // would be told at startup that they have none.
     const s = store.getSettings();
-    if ((s.provider === 'auto' || s.provider === 'anthropic') && (process.env['ANTHROPIC_API_KEY'] ?? '') === '') {
-      console.warn('news: warning: ANTHROPIC_API_KEY is not set — checks will fail until a provider is configured (or run with --ai-test)');
+    if (s.provider !== 'mock') {
+      const candidates = s.provider === 'auto' ? KEYED_PROVIDERS : [s.provider];
+      const resolved = await Promise.all(candidates.map((p) => resolveApiKey(p)));
+      if (!resolved.some((r) => r.key !== null)) {
+        console.warn(
+          'news: warning: no API key found — add one in Settings, or set ANTHROPIC_API_KEY / OPENAI_API_KEY (or run with --ai-test)',
+        );
+      }
     }
   }
 

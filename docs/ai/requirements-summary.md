@@ -29,3 +29,18 @@ Pluggable provider abstraction (`NewsProvider`), `FACTORIES`/`AUTO_ORDER`/`resol
 - FR-5.2 Tauri detection + external links: **Shipped**
 - FR-5.3 release sidecar bundling: **Shipped, verified on macOS** (`npm run tauri:build` → `News.app`/`.dmg`; built app starts its sidecar, serves the real UI, exits cleanly. Other target triples wired but unbuilt)
 - FR-5.4 orphan protection (`NEWS_WATCH_PARENT` ppid watch): **Shipped, verified**
+
+## [7 — API Keys and Settings Dialog](../7-api-keys.md) — Shipped (macOS verified; Linux/Windows keychain untested)
+
+- FR-7.1 env → keychain precedence: **Shipped**
+- FR-7.2 keys never written to `data.json` (no disk fallback): **Shipped**
+- FR-7.3 per-request resolution; SDK client cache keyed on the credential: **Shipped**
+- FR-7.4 keychain via platform CLI, no native module: **Shipped** (macOS verified; Linux `secret-tool` and Windows `cmdkey`/`CredRead` paths written but never run)
+- FR-7.5 availability probed once; Linux round-trip probe: **Shipped** (Linux path untested)
+- FR-7.6 write verified by read-back: **Shipped**
+- FR-7.7 key routes (`GET`/`PUT`/`DELETE /api/keys`): **Shipped**
+- FR-7.8 status never carries the key, masked or otherwise: **Shipped**
+- FR-7.9 single settings dialog (interval, provider, model, endpoint, keys): **Shipped**
+- FR-7.10 three key-row states; no input when a key exists: **Shipped**
+- FR-7.11 disabled inputs + env-var guidance with no keychain: **Shipped** (rendering path untested — needs a machine without a credential store)
+- FR-7.12 `NEWS_FAKE_KEYCHAIN=1` in-memory store for tests: **Shipped**

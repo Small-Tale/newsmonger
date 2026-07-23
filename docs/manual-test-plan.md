@@ -40,6 +40,17 @@ Still manual, and **unverified on every other platform**:
 
 1. `npm run dev` (without `--no-open`) — the default browser should open to the app.
 
+## API key storage on Linux and Windows
+
+The macOS path is verified (real Keychain round-trips, including long, non-ASCII, and quote-bearing values). The other two are written but have **never been run** — see [7 — API Keys](7-api-keys.md). E2E covers the UI against an in-memory store (`NEWS_FAKE_KEYCHAIN=1`), which by design exercises nothing below `src/keychain.ts`.
+
+1. **Linux**: with GNOME Keyring or KWallet running, save a key in Settings and confirm it appears via `secret-tool lookup service news account anthropic-api-key`. Restart the app and confirm the key is still found.
+2. **Linux, headless**: with `secret-tool` installed but no Secret Service daemon, confirm the dialog reports no keyring and disables the inputs rather than failing on save (this is what the round-trip probe is for).
+3. **Windows**: save a key, confirm it appears in Credential Manager under `news-anthropic-api-key`, and confirm it reads back after a restart (the `CredRead` P/Invoke path).
+4. **Long keys**: on each platform, save a key longer than 128 characters (an OpenAI project key) and confirm it round-trips exactly — this is the case that silently truncated on macOS before the write moved off stdin.
+5. **No credential store**: on a machine without one, confirm the dialog disables the inputs and names the environment variable instead.
+
 ## Automated Coverage Summary
 
 - Topics CRUD, scheduling logic, dedup, parsing, API validation, and full UI flows are covered by `npm test` + `npm run test:e2e` (mock AI service).
+- API key precedence, the `/api/keys` routes, and the Settings dialog save/remove flows are covered by `tests/unit/api-keys*.test.ts` and `tests/e2e/keys.spec.ts`, against the in-memory keychain (`NEWS_FAKE_KEYCHAIN=1`). The OS keychain layer itself stays manual per platform, above.

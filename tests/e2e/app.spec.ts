@@ -1,3 +1,5 @@
+import type { Page } from '@playwright/test';
+
 import { expect, test } from './fixtures.js';
 
 // Tests run serially against one shared server (see playwright.config.ts) and
@@ -6,6 +8,17 @@ import { expect, test } from './fixtures.js';
 // which lets us assert deduplication end-to-end.
 
 test.describe.configure({ mode: 'serial' });
+
+/** Settings (interval, provider, model/endpoint, API keys) live in a dialog. */
+async function openSettings(page: Page): Promise<void> {
+  await page.click('[data-action=open-settings]');
+  await expect(page.locator('.dialog')).toBeVisible();
+}
+
+async function closeSettings(page: Page): Promise<void> {
+  await page.locator('.dialog [data-action=close-settings]').click();
+  await expect(page.locator('.dialog')).toHaveCount(0);
+}
 
 test('loads the app shell', async ({ page }) => {
   await page.goto('/');
@@ -55,9 +68,11 @@ test('a second check deduplicates already-seen stories', async ({ page }) => {
 
 test('changing the check interval persists across reload', async ({ page }) => {
   await page.goto('/');
+  await openSettings(page);
   await page.selectOption('[data-action=interval]', { label: 'Every hour' });
   await expect(page.locator('[data-action=interval]')).toHaveValue('3600000');
   await page.reload();
+  await openSettings(page);
   await expect(page.locator('[data-action=interval]')).toHaveValue('3600000');
 });
 
@@ -97,18 +112,21 @@ test('a failing topic surfaces a warning banner', async ({ page }) => {
 
 test('the provider picker persists a choice across reload', async ({ page }) => {
   await page.goto('/');
+  await openSettings(page);
   await expect(page.locator('[data-action=provider]')).toBeVisible();
 
   await page.selectOption('[data-action=provider]', 'openai');
   // OpenAI is endpoint-configurable, so the endpoint field appears.
   await expect(page.locator('[data-action=endpoint]')).toBeVisible();
   await page.reload();
+  await openSettings(page);
   await expect(page.locator('[data-action=provider]')).toHaveValue('openai');
 
   // Reset to auto so later tests aren't affected. (Checks still run the mock
   // provider — the server is in --ai-test — regardless of this setting.)
   await page.selectOption('[data-action=provider]', 'auto');
   await expect(page.locator('[data-action=endpoint]')).toHaveCount(0);
+  await closeSettings(page);
 });
 
 test('deleting a topic removes its stories from the feed', async ({ page }) => {

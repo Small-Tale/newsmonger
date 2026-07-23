@@ -3,15 +3,19 @@ import { spawn } from 'node:child_process';
 import type { Hono } from 'hono';
 import type { z } from 'zod';
 
+import { deleteApiKey, resolveApiKey, saveApiKey } from '../ai/api-keys.js';
 import { probeProviders } from '../ai/providers/index.js';
-import type { ProvidersResp, StateResp } from '../api/schemas.js';
+import { isKeyedProvider, KEY_ENV_VARS, KEYED_PROVIDERS, PROVIDER_INFO } from '../ai/types.js';
+import type { KeysResp, ProvidersResp, StateResp } from '../api/schemas.js';
 import {
   CheckReqSchema,
   CreateTopicReqSchema,
   OpenExternalReqSchema,
+  SaveKeyReqSchema,
   UpdateSettingsReqSchema,
   UpdateTopicReqSchema,
 } from '../api/schemas.js';
+import { isKeychainAvailable, keychainLabel } from '../keychain.js';
 import type { AppEnv } from '../types.js';
 
 async function parseBody<T extends z.ZodType>(c: { req: { json(): Promise<unknown> } }, schema: T): Promise<z.infer<T> | null> {
@@ -110,6 +114,58 @@ export function registerApi(app: Hono<AppEnv>): void {
       console.error('news: check-all failed:', err);
     });
     return c.json({ started });
+  });
+
+  // API keys. Values are write-only: they go in on PUT and are never returned
+  // by any route here, so a key can't leak back through the polling client.
+  app.get('/api/keys', async (c) => {
+    const [available, keys] = await Promise.all([
+      isKeychainAvailable(),
+      Promise.all(
+        KEYED_PROVIDERS.map(async (provider) => {
+          const { source } = await resolveApiKey(provider);
+          return {
+            provider,
+            label: PROVIDER_INFO[provider].label,
+            configured: source !== null,
+            source,
+            envVar: KEY_ENV_VARS[provider],
+          };
+        }),
+      ),
+    ]);
+    const resp: KeysResp = { keys, keychainAvailable: available, keychainLabel: keychainLabel() };
+    return c.json(resp);
+  });
+
+  app.put('/api/keys/:provider', async (c) => {
+    const provider = c.req.param('provider');
+    if (!isKeyedProvider(provider)) return c.json({ error: 'no such provider' }, 404);
+    if (!(await isKeychainAvailable())) {
+      return c.json(
+        { error: `No ${keychainLabel()} is available on this machine — set ${KEY_ENV_VARS[provider]} instead.` },
+        503,
+      );
+    }
+    const body = await parseBody(c, SaveKeyReqSchema);
+    if (!body) return c.json({ error: 'invalid request: expected { key }' }, 400);
+    const key = body.key.trim();
+    if (key === '') return c.json({ error: 'invalid request: expected { key }' }, 400);
+    try {
+      await saveApiKey(provider, key);
+    } catch (err: unknown) {
+      // The keychain tool's own message, which names the real problem (locked
+      // keyring, denied prompt). It describes the failure, never the value.
+      return c.json({ error: `Could not save the key: ${err instanceof Error ? err.message : String(err)}` }, 500);
+    }
+    return c.json({ ok: true });
+  });
+
+  app.delete('/api/keys/:provider', async (c) => {
+    const provider = c.req.param('provider');
+    if (!isKeyedProvider(provider)) return c.json({ error: 'no such provider' }, 404);
+    await deleteApiKey(provider);
+    return c.json({ ok: true });
   });
 
   // Opens a URL in the system browser — used by the Tauri webview, where
