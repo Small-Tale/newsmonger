@@ -31,7 +31,7 @@ src/
   api/
     schemas.ts        zod request schemas + StateResp (shared client/server)
   routes/
-    api.ts            /api/state, /api/topics, /api/settings, /api/check, /api/open-external, /healthz; openInBrowser
+    api.ts            /api/state (+searchesWeb), /api/providers, /api/topics, /api/settings (interval+provider/model/endpoint), /api/check, /api/open-external, /healthz
     pages.tsx         GET / — SSR shell
   components/
     layout.tsx        HTML shell

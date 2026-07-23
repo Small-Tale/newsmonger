@@ -1,4 +1,5 @@
 import type { ConcreteProviderName, NewsProvider, ProviderName } from '../types.js';
+import { PROVIDER_INFO } from '../types.js';
 import { createAnthropicProvider } from './anthropic.js';
 import { createMockProvider } from './mock.js';
 import { createOllamaProvider } from './ollama.js';
@@ -86,4 +87,24 @@ export async function resolveProvider(
   const provider = factories[cfg.provider](cfg);
   if (!(await provider.isAvailable())) throw new Error(unavailableMessage(provider));
   return provider;
+}
+
+/** Static + probed metadata for each concrete provider, for the settings UI. */
+export async function probeProviders(
+  cfg: Pick<ResolveConfig, 'model' | 'endpoint'>,
+  factories: Record<ConcreteProviderName, ProviderFactory> = FACTORIES,
+): Promise<{ name: ConcreteProviderName; searchesWeb: boolean; endpointConfigurable: boolean; label: string; available: boolean }[]> {
+  const names: ConcreteProviderName[] = ['anthropic', 'openai', 'ollama', 'mock'];
+  return Promise.all(
+    names.map(async (name) => {
+      const info = PROVIDER_INFO[name];
+      let available: boolean;
+      try {
+        available = await factories[name]({ ...cfg, provider: name }).isAvailable();
+      } catch {
+        available = false;
+      }
+      return { name, searchesWeb: info.searchesWeb, endpointConfigurable: info.endpointConfigurable, label: info.label, available };
+    }),
+  );
 }

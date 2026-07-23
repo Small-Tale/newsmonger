@@ -21,6 +21,23 @@ export const PROVIDER_NAMES = ['auto', 'anthropic', 'openai', 'ollama', 'mock'] 
 export type ProviderName = (typeof PROVIDER_NAMES)[number];
 export type ConcreteProviderName = Exclude<ProviderName, 'auto'>;
 
+/** Static, no-probe metadata for each selectable provider (for the UI). */
+export const PROVIDER_INFO: Record<ProviderName, { label: string; searchesWeb: boolean; endpointConfigurable: boolean }> = {
+  auto: { label: 'Auto', searchesWeb: true, endpointConfigurable: false },
+  anthropic: { label: 'Anthropic (Claude)', searchesWeb: true, endpointConfigurable: false },
+  openai: { label: 'OpenAI', searchesWeb: true, endpointConfigurable: true },
+  ollama: { label: 'Ollama (local)', searchesWeb: false, endpointConfigurable: true },
+  mock: { label: 'Mock (offline test)', searchesWeb: false, endpointConfigurable: false },
+};
+
+/**
+ * Whether the *effective* provider for a setting searches the live web.
+ * `auto` implies a web-searching provider (it never resolves to a local one).
+ */
+export function providerSearchesWeb(name: ProviderName): boolean {
+  return PROVIDER_INFO[name].searchesWeb;
+}
+
 /**
  * A selectable news backend.
  *

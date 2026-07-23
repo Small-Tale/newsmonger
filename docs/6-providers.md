@@ -9,7 +9,7 @@ News checks run through a pluggable provider abstraction so you can choose which
 
 ## Selection & config
 
-- **FR-6.3** Provider, model, and endpoint are **persisted settings** (`Settings.provider` / `.model` / `.endpoint`), changeable at runtime (UI: NEWS-10). CLI flags / env seed them at startup: `--provider auto|anthropic|openai|ollama|mock`, `--model <id>`, `--endpoint <url>`; env `NEWS_PROVIDER`, `NEWS_MODEL`, `NEWS_ENDPOINT`. `--ai-test` forces the mock provider without touching settings.
+- **FR-6.3** Provider, model, and endpoint are **persisted settings** (`Settings.provider` / `.model` / `.endpoint`), changeable at runtime from the UI's Source block (`PATCH /api/settings`) or seeded by CLI/env. CLI flags / env seed them at startup: `--provider auto|anthropic|openai|ollama|mock`, `--model <id>`, `--endpoint <url>`; env `NEWS_PROVIDER`, `NEWS_MODEL`, `NEWS_ENDPOINT`. `--ai-test` forces the mock provider without touching settings.
 - **FR-6.4** `resolveProvider()` runs per check. For `auto` it returns the first available provider in `AUTO_ORDER` (`anthropic`, then `openai`); for an explicit choice it returns that provider if available, else throws an actionable message (e.g. "set ANTHROPIC_API_KEY"). If nothing is available, the check fails with a clear error rather than crashing the app. The provider that ran is recorded on the `CheckRun`.
 
 ## Providers

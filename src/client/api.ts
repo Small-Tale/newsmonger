@@ -1,4 +1,5 @@
-import { StateRespSchema } from '../api/schemas.js';
+import type { ProviderName } from '../ai/types.js';
+import { ProvidersRespSchema, StateRespSchema } from '../api/schemas.js';
 import { appStore } from './stores.js';
 
 async function request(path: string, init?: RequestInit): Promise<unknown> {
@@ -55,6 +56,25 @@ export function updateInterval(checkIntervalMs: number): Promise<void> {
   return withRefresh(() =>
     request('/api/settings', { method: 'PATCH', body: JSON.stringify({ checkIntervalMs }) }),
   );
+}
+
+/** Fetch the provider list + availability (probes providers; call on demand). */
+export async function refreshProviders(): Promise<void> {
+  try {
+    const body = await request('/api/providers');
+    appStore.actions.setProviders(ProvidersRespSchema.parse(body).providers);
+  } catch {
+    // non-fatal — the picker just shows no availability info
+  }
+}
+
+export async function updateProviderSettings(patch: {
+  provider?: ProviderName;
+  model?: string;
+  endpoint?: string;
+}): Promise<void> {
+  await withRefresh(() => request('/api/settings', { method: 'PATCH', body: JSON.stringify(patch) }));
+  await refreshProviders();
 }
 
 export function startCheck(topicId?: string): Promise<void> {

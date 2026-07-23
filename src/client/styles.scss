@@ -223,6 +223,61 @@ h2.eyebrow {
   padding-top: 10px;
 }
 
+.source {
+  margin-bottom: 22px;
+  padding-bottom: 20px;
+  border-bottom: 1px solid var(--line);
+
+  select,
+  .source-field {
+    display: block;
+    width: 100%;
+    margin-top: 8px;
+    background: var(--panel);
+    color: var(--ink);
+    border: 1px solid var(--line);
+    border-radius: 7px;
+    padding: 7px 9px;
+    font-family: var(--sans);
+    font-size: 13px;
+
+    &:focus-visible {
+      outline: 2px solid var(--pine);
+      outline-offset: 1px;
+    }
+  }
+
+  .source-field::placeholder {
+    color: var(--ink-soft);
+  }
+}
+
+.source-status {
+  margin: 8px 0 0;
+  font-family: var(--mono);
+  font-size: 10.5px;
+  color: var(--ink-soft);
+  min-height: 1.2em;
+}
+
+.live-note {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+  margin: 0 0 18px;
+  padding: 10px 14px;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--marigold) 12%, var(--panel));
+  border: 1px solid color-mix(in srgb, var(--marigold) 35%, var(--line));
+  font-size: 13px;
+  color: var(--ink);
+
+  .eyebrow {
+    color: var(--marigold);
+    flex-shrink: 0;
+  }
+}
+
 .topics {
   list-style: none;
   margin: 0;

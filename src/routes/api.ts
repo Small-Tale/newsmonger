@@ -3,7 +3,9 @@ import { spawn } from 'node:child_process';
 import type { Hono } from 'hono';
 import type { z } from 'zod';
 
-import type { StateResp } from '../api/schemas.js';
+import { probeProviders } from '../ai/providers/index.js';
+import { providerSearchesWeb } from '../ai/types.js';
+import type { ProvidersResp, StateResp } from '../api/schemas.js';
 import {
   CheckReqSchema,
   CreateTopicReqSchema,
@@ -27,14 +29,31 @@ export function registerApi(app: Hono<AppEnv>): void {
   app.get('/api/state', (c) => {
     const store = c.get('store');
     const runner = c.get('runner');
+    const settings = store.getSettings();
     const state: StateResp = {
       topics: store.listTopics(),
       items: store.listItems(),
-      settings: store.getSettings(),
+      settings,
       runs: store.listRuns(20),
       checking: runner.checking(),
+      searchesWeb: providerSearchesWeb(settings.provider),
     };
     return c.json(state);
+  });
+
+  // Providers + availability, for the settings picker. Probes each provider
+  // (Ollama hits its /models endpoint), so it's a separate on-demand call —
+  // NOT part of the 4s /api/state poll.
+  app.get('/api/providers', async (c) => {
+    const { model, endpoint } = c.get('store').getSettings();
+    const probed = await probeProviders({ model, endpoint });
+    const resp: ProvidersResp = {
+      providers: [
+        { name: 'auto', label: 'Auto', searchesWeb: true, endpointConfigurable: false, available: null },
+        ...probed.map((p) => ({ ...p, available: p.available })),
+      ],
+    };
+    return c.json(resp);
   });
 
   app.post('/api/topics', async (c) => {

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { createMockProvider } from '../../src/ai/providers/index.js';
-import { StateRespSchema } from '../../src/api/schemas.js';
+import { ProvidersRespSchema, StateRespSchema } from '../../src/api/schemas.js';
 import { CheckRunner } from '../../src/checks.js';
 import { Store } from '../../src/db/store.js';
 import { createApp } from '../../src/server.js';
@@ -129,6 +129,43 @@ describe('API', () => {
     res = await app.request('/api/settings', { method: 'PATCH', body: JSON.stringify({ checkIntervalMs: 1000 }) });
     expect(res.status).toBe(400);
     expect(store.getSettings().checkIntervalMs).toBe(3_600_000);
+  });
+
+  it('updates provider settings and reflects searchesWeb in state', async () => {
+    const { app, store } = makeApp();
+    let res = await app.request('/api/settings', {
+      method: 'PATCH',
+      body: JSON.stringify({ provider: 'ollama', model: 'llama3.2', endpoint: 'http://h/v1' }),
+    });
+    expect(res.status).toBe(200);
+    expect(store.getSettings().provider).toBe('ollama');
+    expect(store.getSettings().model).toBe('llama3.2');
+
+    let state = StateRespSchema.parse(await json(await app.request('/api/state')));
+    expect(state.searchesWeb).toBe(false); // ollama doesn't search the web
+
+    res = await app.request('/api/settings', { method: 'PATCH', body: JSON.stringify({ provider: 'anthropic' }) });
+    expect(res.status).toBe(200);
+    state = StateRespSchema.parse(await json(await app.request('/api/state')));
+    expect(state.searchesWeb).toBe(true);
+  });
+
+  it('rejects an invalid provider and an empty settings patch', async () => {
+    const { app } = makeApp();
+    expect((await app.request('/api/settings', { method: 'PATCH', body: JSON.stringify({ provider: 'grok' }) })).status).toBe(400);
+    expect((await app.request('/api/settings', { method: 'PATCH', body: JSON.stringify({}) })).status).toBe(400);
+  });
+
+  it('lists providers with capability + availability', async () => {
+    const { app } = makeApp();
+    const resp = ProvidersRespSchema.parse(await json(await app.request('/api/providers')));
+    const byName = new Map(resp.providers.map((p) => [p.name, p]));
+    expect(byName.get('auto')?.available).toBeNull();
+    expect(byName.get('anthropic')?.searchesWeb).toBe(true);
+    expect(byName.get('ollama')?.searchesWeb).toBe(false);
+    expect(byName.get('mock')?.available).toBe(true);
+    // anthropic availability depends on env; assert it's a boolean either way.
+    expect(typeof byName.get('anthropic')?.available).toBe('boolean');
   });
 
   it('failed checks surface in runs with an error message', async () => {

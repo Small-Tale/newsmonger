@@ -1,8 +1,19 @@
 import type { SafeHtml } from 'kerfjs';
 import { delegate, each, mount } from 'kerfjs';
 
+import type { ProviderName } from '../ai/types.js';
+import { PROVIDER_INFO, PROVIDER_NAMES } from '../ai/types.js';
 import type { NewsItem, Topic } from '../db/schemas.js';
-import { addTopic, deleteTopic, refreshState, setTopicPaused, startCheck, updateInterval } from './api.js';
+import {
+  addTopic,
+  deleteTopic,
+  refreshProviders,
+  refreshState,
+  setTopicPaused,
+  startCheck,
+  updateInterval,
+  updateProviderSettings,
+} from './api.js';
 import { appStore } from './stores.js';
 import { openExternalUrl } from './tauri.js';
 
@@ -148,6 +159,60 @@ function feedJsx(items: NewsItem[], topicNames: Map<string, string>): SafeHtml[]
   ));
 }
 
+function sourceJsx(): SafeHtml {
+  const s = appStore.state.value;
+  const provider = s.settings.provider;
+  const info = PROVIDER_INFO[provider];
+  const availability = s.providers.find((p) => p.name === provider)?.available ?? null;
+  const lastProvider = s.runs.find((r) => r.provider !== null)?.provider ?? null;
+
+  return (
+    <div class="source">
+      <h2 class="eyebrow">Source</h2>
+      <select data-action="provider" title="Which AI finds and summarizes news">
+        {PROVIDER_NAMES.map((name) => (
+          <option value={name} selected={name === provider ? true : undefined}>
+            {PROVIDER_INFO[name].label}
+          </option>
+        ))}
+      </select>
+      {provider !== 'auto' && provider !== 'mock' ? (
+        <input
+          type="text"
+          class="source-field"
+          name="model"
+          value={s.settings.model}
+          placeholder="model (optional)"
+          autocomplete="off"
+          data-action="model"
+          data-morph-skip-children
+        />
+      ) : (
+        ''
+      )}
+      {info.endpointConfigurable ? (
+        <input
+          type="text"
+          class="source-field"
+          name="endpoint"
+          value={s.settings.endpoint}
+          placeholder="endpoint (optional)"
+          autocomplete="off"
+          data-action="endpoint"
+          data-morph-skip-children
+        />
+      ) : (
+        ''
+      )}
+      <p class="source-status">
+        {availability === false ? '⚠ not available — check the key/endpoint' : ''}
+        {availability === true ? '✓ ready' : ''}
+        {lastProvider !== null ? `${availability === null ? '' : ' · '}last check via ${lastProvider}` : ''}
+      </p>
+    </div>
+  );
+}
+
 function appJsx(): SafeHtml {
   const s = appStore.state.value;
   const topicNames = new Map(s.topics.map((t) => [t.id, t.name]));
@@ -192,6 +257,7 @@ function appJsx(): SafeHtml {
       </div>
 
       <section id="topics-panel" class="topics-panel">
+        {sourceJsx()}
         <h2 class="eyebrow">Watching</h2>
         <ul class="topics">
           {each(s.topics, (topic) => topicRowJsx(topic, s.checking.includes(topic.id), s.settings.checkIntervalMs))}
@@ -218,6 +284,15 @@ function appJsx(): SafeHtml {
       </section>
 
       <section id="feed" class="feed">
+        <div id="live-note">
+          {!s.searchesWeb ? (
+            <p class="live-note">
+              <span class="eyebrow">Not live</span> These summaries come from the model's own knowledge, not a live web search — treat “new” as best-effort.
+            </p>
+          ) : (
+            ''
+          )}
+        </div>
         {feedJsx(sortedItems, topicNames)}
         <div class="empty-slot">
           {s.loaded && sortedItems.length === 0 && s.topics.length > 0 ? (
@@ -245,6 +320,18 @@ function wireEvents(root: HTMLElement): void {
   void delegate(root, 'change', '[data-action=interval]', (_e, el) => {
     const ms = Number.parseInt((el as HTMLSelectElement).value, 10);
     if (!Number.isNaN(ms)) void updateInterval(ms);
+  });
+
+  void delegate(root, 'change', '[data-action=provider]', (_e, el) => {
+    void updateProviderSettings({ provider: (el as HTMLSelectElement).value as ProviderName });
+  });
+
+  // Persist model / endpoint on change (blur or Enter), not every keystroke.
+  void delegate(root, 'change', '[data-action=model]', (_e, el) => {
+    void updateProviderSettings({ model: (el as HTMLInputElement).value.trim() });
+  });
+  void delegate(root, 'change', '[data-action=endpoint]', (_e, el) => {
+    void updateProviderSettings({ endpoint: (el as HTMLInputElement).value.trim() });
   });
 
   void delegate(root, 'click', '[data-action=check-all]', () => {
@@ -289,5 +376,6 @@ if (root) {
   mount(root, () => appJsx());
   wireEvents(root);
   void refreshState();
+  void refreshProviders();
   startPolling();
 }

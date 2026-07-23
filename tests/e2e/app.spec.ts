@@ -95,6 +95,28 @@ test('a failing topic surfaces a warning banner', async ({ page }) => {
   await expect(page.locator('.topic')).toHaveCount(2);
 });
 
+test('the not-live badge tracks the selected provider, and the choice persists', async ({ page }) => {
+  await page.goto('/');
+  await expect(page.locator('[data-action=provider]')).toBeVisible();
+
+  // A web-searching provider hides the badge...
+  await page.selectOption('[data-action=provider]', 'anthropic');
+  await expect(page.locator('.live-note')).toHaveCount(0);
+
+  // ...a local provider shows it, and the choice survives a reload.
+  await page.selectOption('[data-action=provider]', 'ollama');
+  await expect(page.locator('.live-note')).toBeVisible();
+  await expect(page.locator('.live-note')).toContainText('not a live web search');
+  await page.reload();
+  await expect(page.locator('[data-action=provider]')).toHaveValue('ollama');
+  await expect(page.locator('.live-note')).toBeVisible();
+
+  // Reset to auto so later tests aren't affected. (Checks still run the mock
+  // provider — the server is in --ai-test — regardless of this setting.)
+  await page.selectOption('[data-action=provider]', 'auto');
+  await expect(page.locator('.live-note')).toHaveCount(0);
+});
+
 test('deleting a topic removes its stories from the feed', async ({ page }) => {
   await page.goto('/');
   page.on('dialog', (d) => void d.accept());
