@@ -1,11 +1,15 @@
 import { filterNewItems } from './ai/dedupe.js';
-import type { KnownItem, NewsService } from './ai/types.js';
+import type { KnownItem, NewsProvider } from './ai/types.js';
 import type { Store } from './db/store.js';
 
+/** Resolves the active news provider from current settings, per check. */
+export type ProviderResolver = () => Promise<NewsProvider>;
+
 /**
- * Runs news checks for topics: asks the news service for stories, drops
- * anything already seen (by dedupe key), records the surviving items, and
- * tracks a check-run record for status reporting.
+ * Runs news checks for topics: resolves the active AI provider, asks it for
+ * stories, drops anything already seen (by dedupe key), records the surviving
+ * items, and tracks a check-run record (including which provider ran) for
+ * status reporting.
  *
  * A topic is never checked concurrently with itself: while a check for a topic
  * is in flight, further requests for that topic are ignored.
@@ -15,7 +19,7 @@ export class CheckRunner {
 
   constructor(
     private readonly store: Store,
-    private readonly service: NewsService,
+    private readonly resolveProvider: ProviderResolver,
   ) {}
 
   /** Topic ids currently being checked. */
@@ -33,11 +37,14 @@ export class CheckRunner {
     if (this.inFlight.has(topicId)) return null;
     this.inFlight.add(topicId);
     const run = this.store.startRun(topicId);
+    let providerName: string | null = null;
     try {
+      const provider = await this.resolveProvider();
+      providerName = provider.name;
       const known: KnownItem[] = this.store
         .listItems(topicId)
         .map((i) => ({ title: i.title, foundAt: i.foundAt }));
-      const found = await this.service.checkTopic(topic.name, known, topic.lastCheckedAt);
+      const found = await provider.checkTopic(topic.name, known, topic.lastCheckedAt);
       const fresh = filterNewItems(found, this.store.dedupeKeysForTopic(topicId));
       // The topic may have been deleted while the check was in flight.
       if (this.store.getTopic(topicId)) {
@@ -54,7 +61,7 @@ export class CheckRunner {
         );
         this.store.markTopicChecked(topicId, new Date());
       }
-      this.store.finishRun(run.id, { status: 'succeeded', newItems: fresh.length });
+      this.store.finishRun(run.id, { status: 'succeeded', newItems: fresh.length, provider: providerName });
       return fresh.length;
     } catch (err) {
       // Record the failure, but still advance lastCheckedAt so the scheduler
@@ -64,6 +71,7 @@ export class CheckRunner {
         status: 'failed',
         newItems: 0,
         error: err instanceof Error ? err.message : String(err),
+        provider: providerName,
       });
       return 0;
     } finally {

@@ -139,6 +139,7 @@ export class Store {
       status: 'running',
       newItems: 0,
       error: null,
+      provider: null,
     };
     this.data.runs.push(run);
     if (this.data.runs.length > MAX_RUNS_KEPT) {
@@ -148,13 +149,17 @@ export class Store {
     return run;
   }
 
-  finishRun(runId: string, result: { status: 'succeeded' | 'failed'; newItems: number; error?: string }): void {
+  finishRun(
+    runId: string,
+    result: { status: 'succeeded' | 'failed'; newItems: number; error?: string; provider?: string | null },
+  ): void {
     const run = this.data.runs.find((r) => r.id === runId);
     if (!run) return;
     run.finishedAt = new Date().toISOString();
     run.status = result.status;
     run.newItems = result.newItems;
     run.error = result.error ?? null;
+    if (result.provider !== undefined) run.provider = result.provider;
     this.save();
   }
 }

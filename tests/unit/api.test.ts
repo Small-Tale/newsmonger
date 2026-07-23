@@ -1,16 +1,17 @@
 import { describe, expect, it } from 'vitest';
 
-import { MockNewsService } from '../../src/ai/mock.js';
+import { createMockProvider } from '../../src/ai/providers/index.js';
 import { StateRespSchema } from '../../src/api/schemas.js';
 import { CheckRunner } from '../../src/checks.js';
 import { Store } from '../../src/db/store.js';
 import { createApp } from '../../src/server.js';
+import { asResolver } from '../helpers/provider.js';
 import { tmpDataDir } from '../helpers/tmp.js';
 
 function makeApp() {
   const store = new Store(tmpDataDir());
-  const service = new MockNewsService();
-  const runner = new CheckRunner(store, service);
+  const service = createMockProvider();
+  const runner = new CheckRunner(store, asResolver(service));
   const app = createApp({ store, runner });
   return { app, store, service, runner };
 }

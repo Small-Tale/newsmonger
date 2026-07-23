@@ -12,7 +12,12 @@ describe('Store', () => {
     const store = new Store(tmpDataDir());
     expect(store.listTopics()).toEqual([]);
     expect(store.listItems()).toEqual([]);
-    expect(store.getSettings()).toEqual({ checkIntervalMs: DEFAULT_CHECK_INTERVAL_MS });
+    expect(store.getSettings()).toEqual({
+      checkIntervalMs: DEFAULT_CHECK_INTERVAL_MS,
+      provider: 'auto',
+      model: '',
+      endpoint: '',
+    });
   });
 
   it('adds, pauses, and deletes topics', () => {
@@ -106,6 +111,29 @@ describe('Store', () => {
     expect(store.listTopics()).toEqual([]);
     const backups = fs.readdirSync(dir).filter((f) => f.includes('corrupt'));
     expect(backups).toHaveLength(1);
+  });
+
+  it('persists provider settings and records the provider on a run', () => {
+    const dir = tmpDataDir();
+    const store = new Store(dir);
+    store.updateSettings({ provider: 'ollama', model: 'llama3.2', endpoint: 'http://h/v1' });
+    const run = store.startRun('t1');
+    store.finishRun(run.id, { status: 'succeeded', newItems: 1, provider: 'ollama' });
+
+    const reloaded = new Store(dir);
+    expect(reloaded.getSettings().provider).toBe('ollama');
+    expect(reloaded.getSettings().model).toBe('llama3.2');
+    expect(reloaded.listRuns()[0]?.provider).toBe('ollama');
+  });
+
+  it('migrates a legacy data file lacking provider settings', () => {
+    const dir = tmpDataDir();
+    fs.writeFileSync(
+      path.join(dir, 'data.json'),
+      JSON.stringify({ topics: [], items: [], settings: { checkIntervalMs: 3_600_000 }, runs: [] }),
+    );
+    const store = new Store(dir);
+    expect(store.getSettings()).toEqual({ checkIntervalMs: 3_600_000, provider: 'auto', model: '', endpoint: '' });
   });
 
   it('markTopicChecked tolerates deleted topics', () => {

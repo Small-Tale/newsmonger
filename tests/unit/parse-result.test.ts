@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { parseNewsResult } from '../../src/ai/claude.js';
+import { parseNewsResult } from '../../src/ai/prompt.js';
 
 const VALID = '{"items": [{"title": "T", "summary": "S", "sources": [{"title": "Src", "url": "https://a.com/x"}]}]}';
 

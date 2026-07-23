@@ -1,9 +1,10 @@
 import { describe, expect, it } from 'vitest';
 
-import { MockNewsService } from '../../src/ai/mock.js';
-import type { FoundNewsItem, NewsService } from '../../src/ai/types.js';
+import { createMockProvider } from '../../src/ai/providers/index.js';
+import type { FoundNewsItem } from '../../src/ai/types.js';
 import { CheckRunner, isDue } from '../../src/checks.js';
 import { Store } from '../../src/db/store.js';
+import { asResolver, fakeProvider } from '../helpers/provider.js';
 import { tmpDataDir } from '../helpers/tmp.js';
 
 const HOUR = 3_600_000;
@@ -30,7 +31,7 @@ describe('isDue', () => {
 describe('CheckRunner', () => {
   it('adds found items and records a succeeded run', async () => {
     const store = new Store(tmpDataDir());
-    const runner = new CheckRunner(store, new MockNewsService());
+    const runner = new CheckRunner(store, asResolver(createMockProvider()));
     const topic = store.addTopic('Fusion');
 
     const added = await runner.checkTopic(topic.id);
@@ -44,7 +45,7 @@ describe('CheckRunner', () => {
 
   it('deduplicates on a second check (same stories found again)', async () => {
     const store = new Store(tmpDataDir());
-    const runner = new CheckRunner(store, new MockNewsService());
+    const runner = new CheckRunner(store, asResolver(createMockProvider()));
     const topic = store.addTopic('Fusion');
 
     await runner.checkTopic(topic.id);
@@ -55,8 +56,8 @@ describe('CheckRunner', () => {
 
   it('passes known items and last-checked to the service', async () => {
     const store = new Store(tmpDataDir());
-    const service = new MockNewsService();
-    const runner = new CheckRunner(store, service);
+    const service = createMockProvider();
+    const runner = new CheckRunner(store, asResolver(service));
     const topic = store.addTopic('Fusion');
 
     await runner.checkTopic(topic.id);
@@ -70,7 +71,7 @@ describe('CheckRunner', () => {
 
   it('records a failed run with the error, and still advances lastCheckedAt', async () => {
     const store = new Store(tmpDataDir());
-    const runner = new CheckRunner(store, new MockNewsService());
+    const runner = new CheckRunner(store, asResolver(createMockProvider()));
     const topic = store.addTopic('this will fail');
 
     const added = await runner.checkTopic(topic.id);
@@ -83,7 +84,7 @@ describe('CheckRunner', () => {
 
   it('returns null for unknown topics', async () => {
     const store = new Store(tmpDataDir());
-    const runner = new CheckRunner(store, new MockNewsService());
+    const runner = new CheckRunner(store, asResolver(createMockProvider()));
     expect(await runner.checkTopic('nope')).toBeNull();
   });
 
@@ -91,15 +92,13 @@ describe('CheckRunner', () => {
     const store = new Store(tmpDataDir());
     let release: (items: FoundNewsItem[]) => void = () => undefined;
     let callCount = 0;
-    const blocking: NewsService = {
-      checkTopic: () => {
-        callCount += 1;
-        return new Promise<FoundNewsItem[]>((resolve) => {
-          release = resolve;
-        });
-      },
-    };
-    const runner = new CheckRunner(store, blocking);
+    const blocking = fakeProvider(() => {
+      callCount += 1;
+      return new Promise<FoundNewsItem[]>((resolve) => {
+        release = resolve;
+      });
+    });
+    const runner = new CheckRunner(store, asResolver(blocking));
     const topic = store.addTopic('Slow');
 
     const first = runner.checkTopic(topic.id);
@@ -116,16 +115,19 @@ describe('CheckRunner', () => {
   it('drops results when the topic was deleted mid-check', async () => {
     const store = new Store(tmpDataDir());
     let release: (items: FoundNewsItem[]) => void = () => undefined;
-    const blocking: NewsService = {
-      checkTopic: () =>
+    const blocking = fakeProvider(
+      () =>
         new Promise<FoundNewsItem[]>((resolve) => {
           release = resolve;
         }),
-    };
-    const runner = new CheckRunner(store, blocking);
+    );
+    const runner = new CheckRunner(store, asResolver(blocking));
     const topic = store.addTopic('Doomed');
 
     const pending = runner.checkTopic(topic.id);
+    // Let the check progress past `await resolveProvider()` into checkTopic
+    // (where `release` gets assigned) before we delete + release.
+    await new Promise((r) => setTimeout(r, 0));
     store.deleteTopic(topic.id);
     release([{ title: 'late', summary: 's', sources: [] }]);
     await pending;
@@ -134,8 +136,8 @@ describe('CheckRunner', () => {
 
   it('checkDue only checks due, unpaused topics', async () => {
     const store = new Store(tmpDataDir());
-    const service = new MockNewsService();
-    const runner = new CheckRunner(store, service);
+    const service = createMockProvider();
+    const runner = new CheckRunner(store, asResolver(service));
     store.updateSettings({ checkIntervalMs: HOUR });
 
     const fresh = store.addTopic('Fresh');
@@ -150,8 +152,8 @@ describe('CheckRunner', () => {
 
   it('checkAll checks every unpaused topic regardless of due time', async () => {
     const store = new Store(tmpDataDir());
-    const service = new MockNewsService();
-    const runner = new CheckRunner(store, service);
+    const service = createMockProvider();
+    const runner = new CheckRunner(store, asResolver(service));
 
     const a = store.addTopic('A');
     store.markTopicChecked(a.id, new Date());
@@ -165,8 +167,8 @@ describe('CheckRunner', () => {
 
   it('pause -> unpause sequence: checks resume after unpausing', async () => {
     const store = new Store(tmpDataDir());
-    const service = new MockNewsService();
-    const runner = new CheckRunner(store, service);
+    const service = createMockProvider();
+    const runner = new CheckRunner(store, asResolver(service));
     store.updateSettings({ checkIntervalMs: HOUR });
     const topic = store.addTopic('Wave');
 

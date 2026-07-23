@@ -1,10 +1,11 @@
 import v8 from 'node:v8';
 
-import { ClaudeNewsService } from './ai/claude.js';
-import { MockNewsService } from './ai/mock.js';
-import type { NewsService } from './ai/types.js';
+import { createMockProvider, resolveProvider } from './ai/providers/index.js';
+import type { NewsProvider } from './ai/types.js';
+import type { ProviderResolver } from './checks.js';
 import { CheckRunner } from './checks.js';
 import { parseArgs } from './config.js';
+import type { Settings } from './db/schemas.js';
 import { Store } from './db/store.js';
 import { openInBrowser } from './routes/api.js';
 import { startScheduler } from './scheduler.js';
@@ -16,16 +17,38 @@ async function main(): Promise<void> {
     options = parseArgs(process.argv.slice(2));
   } catch (err) {
     console.error(err instanceof Error ? err.message : String(err));
-    console.error('usage: news [--port N] [--data-dir PATH] [--no-open] [--strict-port] [--ai-test]');
+    console.error(
+      'usage: news [--port N] [--data-dir PATH] [--provider auto|anthropic|openai|ollama|mock] [--model ID] [--endpoint URL] [--no-open] [--strict-port] [--ai-test]',
+    );
     process.exit(1);
   }
 
   const store = new Store(options.dataDir);
-  const service: NewsService = options.aiTest ? new MockNewsService() : new ClaudeNewsService();
-  if (!options.aiTest && (process.env['ANTHROPIC_API_KEY'] ?? '') === '') {
-    console.warn('news: warning: ANTHROPIC_API_KEY is not set — news checks will fail until it is (or run with --ai-test)');
+
+  // CLI flags / env seed the persisted provider settings (the UI can change
+  // them later). --ai-test forces the mock provider without touching settings.
+  const patch: Partial<Settings> = {};
+  if (options.provider !== null) patch.provider = options.provider;
+  if (options.model !== null) patch.model = options.model;
+  if (options.endpoint !== null) patch.endpoint = options.endpoint;
+  if (Object.keys(patch).length > 0) store.updateSettings(patch);
+
+  let resolve: ProviderResolver;
+  if (options.aiTest) {
+    const mock: NewsProvider = createMockProvider();
+    resolve = () => Promise.resolve(mock);
+  } else {
+    resolve = () => {
+      const s = store.getSettings();
+      return resolveProvider({ provider: s.provider, model: s.model, endpoint: s.endpoint });
+    };
+    const s = store.getSettings();
+    if ((s.provider === 'auto' || s.provider === 'anthropic') && (process.env['ANTHROPIC_API_KEY'] ?? '') === '') {
+      console.warn('news: warning: ANTHROPIC_API_KEY is not set — checks will fail until a provider is configured (or run with --ai-test)');
+    }
   }
-  const runner = new CheckRunner(store, service);
+
+  const runner = new CheckRunner(store, resolve);
   const app = createApp({ store, runner });
 
   const server = await startServer(app, {

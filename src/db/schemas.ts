@@ -1,5 +1,7 @@
 import { z } from 'zod';
 
+import { PROVIDER_NAMES } from '../ai/types.js';
+
 /** A topic the user wants news about. */
 export const TopicSchema = z.object({
   id: z.string(),
@@ -33,6 +35,12 @@ export type NewsItem = z.infer<typeof NewsItemSchema>;
 export const SettingsSchema = z.object({
   /** How often each topic is checked for news, in milliseconds. */
   checkIntervalMs: z.number().int().positive(),
+  /** Which AI provider performs checks. `auto` picks the best available. */
+  provider: z.enum(PROVIDER_NAMES).default('auto'),
+  /** Model id for the provider; '' means the provider's default. */
+  model: z.string().default(''),
+  /** Base URL for endpoint-based providers (Ollama / OpenAI-compatible); '' = default. */
+  endpoint: z.string().default(''),
 });
 export type Settings = z.infer<typeof SettingsSchema>;
 
@@ -44,6 +52,8 @@ export const CheckRunSchema = z.object({
   status: z.enum(['running', 'succeeded', 'failed']),
   newItems: z.number().int(),
   error: z.string().nullable(),
+  /** Which provider ran this check (e.g. "anthropic"); null if it never resolved one. */
+  provider: z.string().nullable().default(null),
 });
 export type CheckRun = z.infer<typeof CheckRunSchema>;
 
@@ -61,7 +71,7 @@ export function emptyDataFile(): DataFile {
   return {
     topics: [],
     items: [],
-    settings: { checkIntervalMs: DEFAULT_CHECK_INTERVAL_MS },
+    settings: { checkIntervalMs: DEFAULT_CHECK_INTERVAL_MS, provider: 'auto', model: '', endpoint: '' },
     runs: [],
   };
 }

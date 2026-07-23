@@ -2,13 +2,15 @@
 
 How a check turns a topic name into deduplicated, summarized news items.
 
-## Claude integration
+## AI provider integration
 
-- **FR-2.1** Checks are performed by Claude (`claude-opus-4-8`) via the Anthropic API with adaptive thinking and the `web_search_20260209` server tool (max 8 searches per check), streamed to avoid HTTP timeouts.
+Checks run through a pluggable **provider** abstraction (`src/ai/providers/`, see [6 — AI Providers](6-providers.md)). The provider is a persisted setting; the default `auto` resolves to the best available web-searching provider.
+
+- **FR-2.1** The default provider is Anthropic — Claude (`claude-opus-4-8`) via the Anthropic API with adaptive thinking and the `web_search_20260209` server tool (max 8 searches per check), streamed to avoid HTTP timeouts. Other providers (OpenAI, Ollama) plug in behind the same interface.
 - **FR-2.2** The prompt includes: the topic name, the current date, the last-checked time (first checks focus on roughly the past week), and the titles of up to 60 previously reported stories with instructions not to re-report them.
 - **FR-2.3** The model returns a fenced JSON block `{"items": [{title, summary, sources: [{title, url}]}]}`; an empty list means "no new news" and is a successful check. Parsing accepts the last fenced block or a bare trailing JSON object; anything else fails the check.
 - **FR-2.4** Summaries are 2–4 sentences; each story carries at least one link to a news article.
-- **FR-2.5** `ANTHROPIC_API_KEY` must be set for real checks; the CLI warns at startup when it's missing. `--ai-test` substitutes a deterministic mock service (used by E2E tests and offline development).
+- **FR-2.5** The active provider must be available (e.g. `ANTHROPIC_API_KEY` set) for real checks; the CLI warns at startup when the Anthropic key is missing under an `auto`/`anthropic` provider. `--ai-test` (or `--provider mock`) substitutes a deterministic mock provider (used by E2E tests and offline development). Which provider ran a check is recorded on the `CheckRun`.
 - **FR-2.6** A refusal or unparseable response fails the check; the error is recorded on the run.
 
 ## Deduplication

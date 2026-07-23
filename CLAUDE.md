@@ -7,7 +7,7 @@ Topic-based news tracker. The user enters topics; on a configurable interval (de
 - Node 20+, TypeScript (strict), ESM
 - [kerfjs](https://github.com/brianwestphal/kerf) 2.0 UI (JSX → HTML strings, signals + morph) — **read `.claude/skills/kerf-app/SKILL.md` before touching client code**
 - Hono + `@hono/node-server` (localhost-only, default port 4187)
-- `@anthropic-ai/sdk` — `claude-opus-4-8`, adaptive thinking, `web_search_20260209` server tool, streamed
+- Pluggable AI providers (`src/ai/providers/`, like `~/Documents/gitgist`) behind a `NewsProvider` interface with a `searchesWeb` capability; default `anthropic` uses `@anthropic-ai/sdk` (`claude-opus-4-8`, adaptive thinking, `web_search_20260209`, streamed). See `docs/6-providers.md`.
 - Single zod-validated JSON file for storage (`~/.news/data.json`; `--data-dir` / `NEWS_DATA_DIR` override)
 - Tauri v2 desktop shell (Node-sidecar architecture like glassbox; dev-mode only so far)
 - esbuild + sass for client assets; tsup for the server bundle; eslint flat config with `strictTypeChecked` + `eslint-plugin-kerfjs`

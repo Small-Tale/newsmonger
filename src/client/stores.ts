@@ -19,7 +19,7 @@ export const appStore = defineStore({
     error: null,
     topics: [],
     items: [],
-    settings: { checkIntervalMs: 24 * 60 * 60 * 1000 },
+    settings: { checkIntervalMs: 24 * 60 * 60 * 1000, provider: 'auto', model: '', endpoint: '' },
     runs: [],
     checking: [],
   }),

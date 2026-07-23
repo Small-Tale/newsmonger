@@ -18,6 +18,10 @@ Header/interval/check-all, topics panel with actions + confirm-delete, newest-fi
 
 Flags, usage errors, readiness line (`running at ` — synced with Tauri shell), clean shutdown, localhost-only Hono server with port fallback, zod-validated API, atomic single-file JSON store with corrupt-file recovery.
 
+## [6 — AI Providers](../6-providers.md) — Partial
+
+Pluggable provider abstraction (`NewsProvider` + `searchesWeb` capability), `PROVIDERS`/`AUTO_ORDER`/`resolveProvider`, provider/model/endpoint as persisted settings seeded by CLI/env, provider recorded per `CheckRun`. **Shipped**: the abstraction, `anthropic` (refactored from the old `ClaudeNewsService`), and `mock`. **Planned**: `openai` (NEWS-8), `ollama` (NEWS-9), UI selector + not-live badge (NEWS-10), external-search grounding (NEWS-12).
+
 ## [5 — Desktop App (Tauri)](../5-desktop-app.md) — Partial
 
 - FR-5.1 dev-mode shell: **Shipped, verified on macOS** (compile + spawn + navigate + page load confirmed via request log)

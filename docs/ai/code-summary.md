@@ -18,10 +18,14 @@ src/
     schemas.ts        zod: Topic, NewsItem, Settings, CheckRun, DataFile; DEFAULT_CHECK_INTERVAL_MS
     store.ts          Store: single data.json, atomic writes, corrupt-file backup+reset
   ai/
-    types.ts          NewsService interface, FoundNewsItem, KnownItem
-    claude.ts         ClaudeNewsService (opus-4-8, adaptive thinking, web_search_20260209, streamed) + parseNewsResult
-    mock.ts           MockNewsService (--ai-test; deterministic; "fail"→throws, "empty"→[])
+    types.ts          NewsService + NewsProvider interfaces, PROVIDER_NAMES, FoundNewsItem, KnownItem
+    prompt.ts         shared prompts (searching/offline), buildUserPrompt, parseNewsResult, NEWS_JSON_SCHEMA
     dedupe.ts         normalizeUrl/normalizeTitle/dedupeKeyFor/filterNewItems
+    providers/
+      index.ts        PROVIDERS/FACTORIES, AUTO_ORDER, resolveProvider, unavailableMessage
+      anthropic.ts    createAnthropicProvider (opus-4-8, adaptive thinking, web_search_20260209, streamed); searchesWeb:true
+      mock.ts         createMockProvider (--ai-test; deterministic; "fail"→throws, "empty"→[]); searchesWeb:false
+      // openai.ts (NEWS-8), ollama.ts (NEWS-9) — planned
   api/
     schemas.ts        zod request schemas + StateResp (shared client/server)
   routes/
@@ -47,8 +51,8 @@ docs/                 numbered requirements (1–5), ai/ summaries, manual-test-
 
 - `topics[]`: id, name, paused, createdAt, lastCheckedAt
 - `items[]`: id, topicId, title, summary, sources[{title,url}], dedupeKey, foundAt
-- `settings`: checkIntervalMs (default 1 day, min 5 min)
-- `runs[]`: id, topicId, startedAt, finishedAt, status(running|succeeded|failed), newItems, error (last 200)
+- `settings`: checkIntervalMs (default 1 day, min 5 min), provider (default `auto`), model (''), endpoint ('')
+- `runs[]`: id, topicId, startedAt, finishedAt, status(running|succeeded|failed), newItems, error, provider (last 200)
 
 Data dir: `--data-dir` flag → `NEWS_DATA_DIR` → `~/.news`.
 
@@ -65,7 +69,9 @@ Data dir: `--data-dir` flag → `NEWS_DATA_DIR` → `~/.news`.
 | X | Look in |
 |---|---|
 | Add/modify an API endpoint | `src/routes/api.ts` + `src/api/schemas.ts` (+ client `src/client/api.ts`) |
-| Change the Claude prompt/model/tools | `src/ai/claude.ts` |
+| Add/change an AI provider | `src/ai/providers/` (+ register in `index.ts`); interface in `src/ai/types.ts` |
+| Change prompts / result parsing | `src/ai/prompt.ts` |
+| Provider selection / auto order | `src/ai/providers/index.ts` (`resolveProvider`, `AUTO_ORDER`) |
 | Dedup behavior | `src/ai/dedupe.ts` (keys), `src/checks.ts` (application) |
 | Scheduling rules | `src/checks.ts` (`isDue`), `src/scheduler.ts` (tick) |
 | Persistence / schema change | `src/db/schemas.ts` + `src/db/store.ts` (bump carefully: old files that fail the schema get reset) |
