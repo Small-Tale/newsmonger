@@ -20,7 +20,7 @@ Flags, usage errors, readiness line (`running at ` — synced with Tauri shell),
 
 ## [6 — AI Providers](../6-providers.md) — Partial
 
-Pluggable provider abstraction (`NewsProvider` + `searchesWeb` capability), `PROVIDERS`/`AUTO_ORDER`/`resolveProvider`, provider/model/endpoint as persisted settings seeded by CLI/env, provider recorded per `CheckRun`. **Shipped**: the abstraction, `anthropic` (refactored from the old `ClaudeNewsService`), and `mock`. **Planned**: `openai` (NEWS-8), `ollama` (NEWS-9), UI selector + not-live badge (NEWS-10), external-search grounding (NEWS-12).
+Pluggable provider abstraction (`NewsProvider` + `searchesWeb` capability), `PROVIDERS`/`AUTO_ORDER`/`resolveProvider`, provider/model/endpoint as persisted settings seeded by CLI/env, provider recorded per `CheckRun`. **Shipped**: the abstraction, `anthropic` (refactored from the old `ClaudeNewsService`), `ollama` (OpenAI-compatible local models, `searchesWeb:false`), and `mock`. **Planned**: `openai` (NEWS-8), UI selector + not-live badge (NEWS-10), external-search grounding (NEWS-12).
 
 ## [5 — Desktop App (Tauri)](../5-desktop-app.md) — Partial
 

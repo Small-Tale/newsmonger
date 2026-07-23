@@ -55,6 +55,16 @@ describe('resolveProvider', () => {
     ).rejects.toThrow(/ANTHROPIC_API_KEY/);
   });
 
+  it('resolves the real ollama factory (searchesWeb false)', async () => {
+    // Uses the default FACTORIES; ollama isAvailable() will fail fast (no server),
+    // but constructing + selecting it explicitly should work and never search web.
+    const { FACTORIES } = await import('../../src/ai/providers/index.js');
+    const p = FACTORIES.ollama({ provider: 'ollama', model: 'llama3.2', endpoint: 'http://localhost:11434/v1' });
+    expect(p.name).toBe('ollama');
+    expect(p.searchesWeb).toBe(false);
+    expect(p.model).toBe('llama3.2');
+  });
+
   it('a factory that throws (unimplemented provider) is skipped by auto', async () => {
     const factories = {
       ...factoriesWith({ openai: true }),

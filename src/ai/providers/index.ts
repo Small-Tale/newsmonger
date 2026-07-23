@@ -1,9 +1,11 @@
 import type { ConcreteProviderName, NewsProvider, ProviderName } from '../types.js';
 import { createAnthropicProvider } from './anthropic.js';
 import { createMockProvider } from './mock.js';
+import { createOllamaProvider } from './ollama.js';
 
 export { createAnthropicProvider } from './anthropic.js';
 export { createMockProvider } from './mock.js';
+export { createOllamaProvider } from './ollama.js';
 
 /** Resolved provider settings (from the persisted `Settings`, seeded by CLI/env). */
 export interface ResolveConfig {
@@ -26,9 +28,11 @@ export const FACTORIES: Record<ConcreteProviderName, ProviderFactory> = {
   openai: () => {
     throw new Error('the OpenAI provider is not wired up yet (tracked in NEWS-8)');
   },
-  ollama: () => {
-    throw new Error('the Ollama provider is not wired up yet (tracked in NEWS-9)');
-  },
+  ollama: (c) =>
+    createOllamaProvider({
+      endpoint: c.endpoint !== '' ? c.endpoint : undefined,
+      model: c.model !== '' ? c.model : undefined,
+    }),
   mock: () => createMockProvider(),
 };
 

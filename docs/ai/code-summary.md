@@ -24,8 +24,10 @@ src/
     providers/
       index.ts        PROVIDERS/FACTORIES, AUTO_ORDER, resolveProvider, unavailableMessage
       anthropic.ts    createAnthropicProvider (opus-4-8, adaptive thinking, web_search_20260209, streamed); searchesWeb:true
+      ollama.ts       createOllamaProvider (OpenAI-compat, local; searchesWeb:false); endpoint/model resolution + env
+      openaiCompat.ts shared OpenAI-compatible backend (model discovery, JSON chat, parse) — reused for hosted gateways later
       mock.ts         createMockProvider (--ai-test; deterministic; "fail"→throws, "empty"→[]); searchesWeb:false
-      // openai.ts (NEWS-8), ollama.ts (NEWS-9) — planned
+      // openai.ts (NEWS-8) — planned
   api/
     schemas.ts        zod request schemas + StateResp (shared client/server)
   routes/
