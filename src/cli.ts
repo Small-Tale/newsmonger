@@ -1,7 +1,7 @@
 import v8 from 'node:v8';
 
 import { createMockProvider, resolveProvider } from './ai/providers/index.js';
-import type { NewsProvider } from './ai/types.js';
+import { resolveSearchProvider } from './ai/search/index.js';
 import type { ProviderResolver } from './checks.js';
 import { CheckRunner } from './checks.js';
 import { parseArgs } from './config.js';
@@ -31,16 +31,18 @@ async function main(): Promise<void> {
   if (options.provider !== null) patch.provider = options.provider;
   if (options.model !== null) patch.model = options.model;
   if (options.endpoint !== null) patch.endpoint = options.endpoint;
+  if (options.searchProvider !== null) patch.searchProvider = options.searchProvider;
   if (Object.keys(patch).length > 0) store.updateSettings(patch);
 
   let resolve: ProviderResolver;
   if (options.aiTest) {
-    const mock: NewsProvider = createMockProvider();
-    resolve = () => Promise.resolve(mock);
+    const mock = createMockProvider();
+    resolve = () => Promise.resolve({ provider: mock, search: null });
   } else {
-    resolve = () => {
+    resolve = async () => {
       const s = store.getSettings();
-      return resolveProvider({ provider: s.provider, model: s.model, endpoint: s.endpoint });
+      const provider = await resolveProvider({ provider: s.provider, model: s.model, endpoint: s.endpoint });
+      return { provider, search: resolveSearchProvider(s.searchProvider) };
     };
     const s = store.getSettings();
     if ((s.provider === 'auto' || s.provider === 'anthropic') && (process.env['ANTHROPIC_API_KEY'] ?? '') === '') {

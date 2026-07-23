@@ -1,4 +1,5 @@
-import { buildUserPrompt, offlineSystemPrompt, parseNewsResult, searchingSystemPrompt } from '../prompt.js';
+import { buildSummarizePrompt, buildUserPrompt, groundedSystemPrompt, offlineSystemPrompt, parseNewsResult, searchingSystemPrompt } from '../prompt.js';
+import type { SearchResult } from '../search/types.js';
 import type { FoundNewsItem, KnownItem } from '../types.js';
 
 export type FetchImpl = typeof fetch;
@@ -142,6 +143,17 @@ export function openAICompatCheckTopic(
   return async (topicName, known, sinceIso) => {
     const system = searchesWeb ? searchingSystemPrompt() : offlineSystemPrompt();
     const text = await backend.complete(system, buildUserPrompt(topicName, known, sinceIso, { searchesWeb }));
+    return parseNewsResult(text);
+  };
+}
+
+/** Build a summarize() that grounds the backend on pre-fetched search results. */
+export function openAICompatSummarize(
+  backend: { complete(system: string, prompt: string): Promise<string> },
+): (topicName: string, known: KnownItem[], results: SearchResult[]) => Promise<FoundNewsItem[]> {
+  return async (topicName, known, results) => {
+    if (results.length === 0) return [];
+    const text = await backend.complete(groundedSystemPrompt(), buildSummarizePrompt(topicName, known, results));
     return parseNewsResult(text);
   };
 }

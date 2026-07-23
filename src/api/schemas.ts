@@ -1,5 +1,6 @@
 import { z } from 'zod';
 
+import { SEARCH_PROVIDER_NAMES } from '../ai/search/types.js';
 import { PROVIDER_NAMES } from '../ai/types.js';
 import { CheckRunSchema, NewsItemSchema, SettingsSchema, TopicSchema } from '../db/schemas.js';
 
@@ -18,6 +19,7 @@ export const UpdateSettingsReqSchema = z
     provider: z.enum(PROVIDER_NAMES),
     model: z.string().max(200),
     endpoint: z.string().max(500),
+    searchProvider: z.enum(SEARCH_PROVIDER_NAMES),
   })
   .partial()
   .refine((v) => Object.keys(v).length > 0, { message: 'at least one setting is required' });

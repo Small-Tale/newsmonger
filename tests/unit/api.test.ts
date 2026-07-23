@@ -150,6 +150,17 @@ describe('API', () => {
     expect(state.searchesWeb).toBe(true);
   });
 
+  it('a configured search provider makes a local provider count as web-searching (grounded)', async () => {
+    const { app } = makeApp();
+    await app.request('/api/settings', { method: 'PATCH', body: JSON.stringify({ provider: 'ollama' }) });
+    let state = StateRespSchema.parse(await json(await app.request('/api/state')));
+    expect(state.searchesWeb).toBe(false); // ollama alone: not live
+
+    await app.request('/api/settings', { method: 'PATCH', body: JSON.stringify({ searchProvider: 'tavily' }) });
+    state = StateRespSchema.parse(await json(await app.request('/api/state')));
+    expect(state.searchesWeb).toBe(true); // grounded on live search → effectively live
+  });
+
   it('rejects an invalid provider and an empty settings patch', async () => {
     const { app } = makeApp();
     expect((await app.request('/api/settings', { method: 'PATCH', body: JSON.stringify({ provider: 'grok' }) })).status).toBe(400);

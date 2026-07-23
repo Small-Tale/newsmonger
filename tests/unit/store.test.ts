@@ -17,6 +17,7 @@ describe('Store', () => {
       provider: 'auto',
       model: '',
       endpoint: '',
+      searchProvider: 'none',
     });
   });
 
@@ -133,7 +134,7 @@ describe('Store', () => {
       JSON.stringify({ topics: [], items: [], settings: { checkIntervalMs: 3_600_000 }, runs: [] }),
     );
     const store = new Store(dir);
-    expect(store.getSettings()).toEqual({ checkIntervalMs: 3_600_000, provider: 'auto', model: '', endpoint: '' });
+    expect(store.getSettings()).toEqual({ checkIntervalMs: 3_600_000, provider: 'auto', model: '', endpoint: '', searchProvider: 'none' });
   });
 
   it('markTopicChecked tolerates deleted topics', () => {

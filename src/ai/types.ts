@@ -1,3 +1,5 @@
+import type { SearchResult } from './search/types.js';
+
 /** A news story returned by a news service, before deduplication. */
 export interface FoundNewsItem {
   title: string;
@@ -53,4 +55,11 @@ export interface NewsProvider extends NewsService {
   readonly model: string;
   /** Whether this provider is usable right now (key present, endpoint reachable, …). */
   isAvailable(): Promise<boolean>;
+  /**
+   * Summarize pre-fetched search results into news items (grounding a
+   * non-searching provider on live candidates — see `docs/7-search-grounding.md`).
+   * Only non-searching providers need to implement this; web-searching ones
+   * never take the grounded path.
+   */
+  summarize?(topicName: string, known: KnownItem[], results: SearchResult[]): Promise<FoundNewsItem[]>;
 }

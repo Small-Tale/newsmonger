@@ -27,6 +27,7 @@ describe('parseArgs', () => {
       provider: null,
       model: null,
       endpoint: null,
+      searchProvider: null,
     });
   });
 
@@ -55,6 +56,12 @@ describe('parseArgs', () => {
   it('rejects an invalid provider name', () => {
     expect(() => parseArgs(['--provider', 'grok'], {})).toThrow(/--provider must be one of/);
     expect(() => parseArgs([], { NEWS_PROVIDER: 'grok' })).toThrow(/--provider must be one of/);
+  });
+
+  it('parses the search provider from flag and env, and rejects invalid ones', () => {
+    expect(parseArgs(['--search-provider', 'tavily'], {}).searchProvider).toBe('tavily');
+    expect(parseArgs([], { NEWS_SEARCH_PROVIDER: 'tavily' }).searchProvider).toBe('tavily');
+    expect(() => parseArgs(['--search-provider', 'google'], {})).toThrow(/--search-provider must be one of/);
   });
 
   it('rejects bad ports', () => {

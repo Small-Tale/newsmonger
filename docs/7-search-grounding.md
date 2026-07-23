@@ -1,6 +1,6 @@
-# 7 — Search Grounding (design)
+# 7 — Search Grounding
 
-**Status: design + foundation.** This decouples *finding* candidate articles from *summarizing* them, so a provider that can't browse (Ollama, local, OpenAI-compatible gateways without a hosted search tool) can still produce genuinely fresh news. Tracks NEWS-12; build split into NEWS-13/14/15.
+**Status: pipeline shipped; UI pending (NEWS-15).** This decouples *finding* candidate articles from *summarizing* them, so a provider that can't browse (Ollama, local) can still produce genuinely fresh news. Tracks NEWS-12; NEWS-13 (SearchProvider + Tavily) and NEWS-14 (pipeline) are done, NEWS-15 (UI) remains.
 
 ## Problem
 
@@ -54,7 +54,7 @@ Add an optional `summarize(topic, known, results)` to `NewsProvider` (default: f
 ## Build plan (sub-tickets)
 
 - **NEWS-13** — ✅ `SearchProvider` interface + registry + a fake + **Tavily** implementation (`src/ai/search/`, raw fetch, injected-fetch tests). Self-contained; no pipeline change. Brave declared in the union but resolves to null (follow-up).
-- **NEWS-14** — thread it through `CheckRunner`: grounded path (`summarize`), `searchProvider` setting, `auto` allowing grounded locals, run records note grounding. Adversarial/transition tests around the three pipeline branches.
+- **NEWS-14** — ✅ threaded through `CheckRunner`: optional `NewsProvider.summarize(topic, known, results)` (implemented on Ollama + mock), the three-branch pipeline, `searchProvider` setting + `--search-provider`/`NEWS_SEARCH_PROVIDER`, `CheckRun.grounded`, and `/api/state.searchesWeb` reflecting the effective pipeline (grounded local = live). Adversarial/transition tests cover all three branches + dedup-across-modes + search failure. **Note**: `auto` still resolves LLM-only (it always finds a web-searching LLM); grounding applies to explicitly-selected local providers — a deliberate simplification.
 - **NEWS-15** — UI: search-provider picker + key status; suppress the NOT-LIVE badge for grounded runs; show "grounded via \<search\>".
 
 ## Open questions (for the maintainer)

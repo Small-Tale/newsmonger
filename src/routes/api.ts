@@ -36,7 +36,8 @@ export function registerApi(app: Hono<AppEnv>): void {
       settings,
       runs: store.listRuns(20),
       checking: runner.checking(),
-      searchesWeb: providerSearchesWeb(settings.provider),
+      // Effective: the LLM browses, or a search backend grounds it on live results.
+      searchesWeb: providerSearchesWeb(settings.provider) || settings.searchProvider !== 'none',
     };
     return c.json(state);
   });

@@ -125,6 +125,42 @@ describe('createOllamaProvider', () => {
     expect(sent.model).toBe('mistral');
   });
 
+  it('summarize() grounds on candidate articles and parses the result', async () => {
+    let sent: unknown;
+    const p = createOllamaProvider({
+      model: 'llama3.2',
+      env: {},
+      fetchImpl: fakeFetch({
+        onChatBody: (b) => {
+          sent = b;
+        },
+      }),
+    });
+    expect(typeof p.summarize).toBe('function');
+    const items = await (p.summarize?.('Fusion', [], [
+      { title: 'Reactor milestone', url: 'https://a.com/r', snippet: 'details', publishedAt: '2026-07-23' },
+    ]) ?? Promise.resolve([]));
+    expect(items).toEqual([{ title: 'T', summary: 'S', sources: [{ title: 'Src', url: 'https://a.com/x' }] }]);
+    const body = sent as { messages: { role: string; content: string }[] };
+    expect(body.messages[0]?.content).toMatch(/candidate articles/i);
+    expect(body.messages[1]?.content).toMatch(/https:\/\/a\.com\/r/);
+  });
+
+  it('summarize() returns [] for no candidates without calling the model', async () => {
+    let called = false;
+    const p = createOllamaProvider({
+      model: 'llama3.2',
+      env: {},
+      fetchImpl: fakeFetch({
+        onChatBody: () => {
+          called = true;
+        },
+      }),
+    });
+    expect(await (p.summarize?.('Fusion', [], []) ?? Promise.resolve([]))).toEqual([]);
+    expect(called).toBe(false);
+  });
+
   it('surfaces the server error message on a non-ok chat response', async () => {
     const failing = ((url: string) => {
       if (url.endsWith('/chat/completions')) {

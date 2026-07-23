@@ -1,6 +1,7 @@
+import type { SearchResult } from '../search/types.js';
 import type { FoundNewsItem, KnownItem, NewsProvider } from '../types.js';
 import type { FetchImpl } from './openaiCompat.js';
-import { createOpenAICompatBackend, openAICompatCheckTopic } from './openaiCompat.js';
+import { createOpenAICompatBackend, openAICompatCheckTopic, openAICompatSummarize } from './openaiCompat.js';
 
 /** Ollama's default OpenAI-compatible base URL. */
 export const DEFAULT_OLLAMA_ENDPOINT = 'http://localhost:11434/v1';
@@ -48,6 +49,7 @@ export function createOllamaProvider(config: {
     timeoutMs: config.timeoutMs,
   });
   const check = openAICompatCheckTopic(backend, false);
+  const summarize = openAICompatSummarize(backend);
 
   return {
     name: 'ollama',
@@ -62,6 +64,9 @@ export function createOllamaProvider(config: {
     },
     checkTopic(topicName: string, known: KnownItem[], sinceIso: string | null): Promise<FoundNewsItem[]> {
       return check(topicName, known, sinceIso);
+    },
+    summarize(topicName: string, known: KnownItem[], results: SearchResult[]): Promise<FoundNewsItem[]> {
+      return summarize(topicName, known, results);
     },
   };
 }

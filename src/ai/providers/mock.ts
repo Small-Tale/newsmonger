@@ -1,3 +1,4 @@
+import type { SearchResult } from '../search/types.js';
 import type { FoundNewsItem, KnownItem, NewsProvider } from '../types.js';
 
 /**
@@ -11,14 +12,28 @@ import type { FoundNewsItem, KnownItem, NewsProvider } from '../types.js';
  */
 export function createMockProvider(): NewsProvider & {
   calls: { topicName: string; known: KnownItem[]; sinceIso: string | null }[];
+  summarizeCalls: { topicName: string; results: SearchResult[] }[];
 } {
   const calls: { topicName: string; known: KnownItem[]; sinceIso: string | null }[] = [];
+  const summarizeCalls: { topicName: string; results: SearchResult[] }[] = [];
   return {
     name: 'mock',
     searchesWeb: false,
     model: 'mock',
     calls,
+    summarizeCalls,
     isAvailable: () => Promise.resolve(true),
+    summarize(topicName: string, _known: KnownItem[], results: SearchResult[]): Promise<FoundNewsItem[]> {
+      summarizeCalls.push({ topicName, results });
+      // Deterministically turn each candidate into a summarized item.
+      return Promise.resolve(
+        results.map((r) => ({
+          title: r.title,
+          summary: `Summary of “${r.title}” for ${topicName}.`,
+          sources: [{ title: r.title, url: r.url }],
+        })),
+      );
+    },
     checkTopic(topicName: string, known: KnownItem[], sinceIso: string | null): Promise<FoundNewsItem[]> {
       calls.push({ topicName, known, sinceIso });
       const lower = topicName.toLowerCase();
