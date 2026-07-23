@@ -9,8 +9,11 @@ export default defineConfig({
   clean: false,
   sourcemap: true,
   banner: { js: '#!/usr/bin/env node' },
-  // Bundle everything except heavyweight runtime deps that resolve fine from node_modules.
-  noExternal: [/^(?!@anthropic-ai|hono|@hono|kerfjs|zod)/],
+  // No `external`/`noExternal`: tsup's default externalizes exactly the
+  // `dependencies` in package.json and bundles everything else. That's the
+  // split we want, and scripts/build-sidecar.sh installs those same
+  // `dependencies` (with their transitive tree) beside the bundle — so
+  // package.json stays the single source of truth for the runtime deps.
   esbuildOptions(options) {
     options.jsx = 'automatic';
     options.jsxImportSource = 'kerfjs';

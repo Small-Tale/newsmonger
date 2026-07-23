@@ -23,9 +23,9 @@ Flags, usage errors, readiness line (`running at ` — synced with Tauri shell),
 Pluggable provider abstraction (`NewsProvider`), `FACTORIES`/`AUTO_ORDER`/`resolveProvider`, provider/model/endpoint as persisted settings seeded by CLI/env, provider recorded per `CheckRun`. **Shipped**: the abstraction, `anthropic`, `openai` (Responses API + hosted web search; live path needs a key to verify), and `mock` (test-only), plus the UI provider selector. **Scope decision (NEWS-18)**: only platforms that do their own web search are supported — Ollama/local providers and the whole search-grounding layer were removed as unnecessary complexity.
 
 
-## [5 — Desktop App (Tauri)](../5-desktop-app.md) — Partial
+## [5 — Desktop App (Tauri)](../5-desktop-app.md) — Shipped (macOS verified; other platforms unbuilt)
 
 - FR-5.1 dev-mode shell: **Shipped, verified on macOS** (compile + spawn + navigate + page load confirmed via request log)
 - FR-5.2 Tauri detection + external links: **Shipped**
-- FR-5.3 release sidecar bundling: **Design only** (NEWS-2 remainder; icons already generated)
+- FR-5.3 release sidecar bundling: **Shipped, verified on macOS** (`npm run tauri:build` → `News.app`/`.dmg`; built app starts its sidecar, serves the real UI, exits cleanly. Other target triples wired but unbuilt)
 - FR-5.4 orphan protection (`NEWS_WATCH_PARENT` ppid watch): **Shipped, verified**

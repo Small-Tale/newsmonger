@@ -18,6 +18,7 @@
     "build:client": "node -e \"require('fs').mkdirSync('dist/client',{recursive:true})\" && npx esbuild src/client/app.tsx --bundle --format=iife --outfile=dist/client/app.global.js --target=es2020 --sourcemap --jsx=automatic --jsx-import-source=kerfjs && npx sass src/client/styles.scss dist/client/styles.css --style compressed --no-source-map",
     "tauri": "tauri",
     "tauri:dev": "npm run build:client && tauri dev",
+    "tauri:build": "tauri build",
     "test": "vitest run --coverage",
     "test:watch": "vitest",
     "test:e2e": "npx playwright test",

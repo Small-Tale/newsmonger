@@ -39,10 +39,10 @@
         document.getElementById('msg').textContent =
           'The news server exited before it was ready. Check the terminal output.';
       };
-      window.showNotBundled = () => {
+      window.showError = (detail) => {
         document.querySelector('.spinner').style.display = 'none';
         document.getElementById('msg').textContent =
-          'Release builds are not wired up yet — run "npm run tauri:dev" for the desktop app, or "npm run dev" for the browser.';
+          'The news server could not be started: ' + detail;
       };
     </script>
   </body>

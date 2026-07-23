@@ -39,7 +39,12 @@ src/
     api.ts            fetch wrappers, refreshState (zod-validated), withRefresh
     tauri.ts          __TAURI__ detection, openExternalUrl
     styles.scss       styling (light/dark via prefers-color-scheme)
-src-tauri/            Tauri v2 shell: dev spawns `node --import tsx src/cli.ts`; release NOT bundled yet
+src-tauri/            Tauri v2 shell; one spawn path, dev runs tsx + release runs the sidecar
+  src/lib.rs          server_command() picks the command; spawn_server() watches stdout + navigates
+  binaries/           gitignored: news-node-<triple> (real Node binary, externalBin sidecar)
+  server/             gitignored: staged cli.js + client/ + node_modules (bundled as `resources`)
+scripts/
+  build-sidecar.sh    builds/stages the above, then boots it from a temp dir to verify
 tests/
   helpers/            tmp.ts (tmp data dirs), provider.ts (asResolver/fakeProvider)
   unit/               vitest: dedupe, store, checks, scheduler, config, parse-result, providers, openai, api (via app.request)
@@ -60,7 +65,8 @@ Data dir: `--data-dir` flag → `NEWS_DATA_DIR` → `~/.news`.
 
 - `npm run dev` — build client (esbuild IIFE + sass) then run server from source (tsx); port 4187
 - `npm run build` — tsup → `dist/cli.js`; `npm run build:client` → `dist/client/`
-- `npm run tauri:dev` — desktop dev shell (needs Rust; unverified)
+- `npm run tauri:dev` — desktop dev shell (needs Rust; verified on macOS)
+- `npm run tauri:build` — release app + dmg; runs `scripts/build-sidecar.sh` via `beforeBuildCommand`
 - `npm test` (vitest+coverage) · `npm run test:e2e` (playwright) · `npm run test:all` (typecheck+lint+unit+e2e)
 - Lint/typecheck: `npm run lint` / `npm run typecheck` (eslint strictTypeChecked + eslint-plugin-kerfjs)
 
@@ -78,4 +84,6 @@ Data dir: `--data-dir` flag → `NEWS_DATA_DIR` → `~/.news`.
 | UI change | `src/client/app.tsx` (+ `styles.scss`); mind the kerf structural rules in `docs/3-ui.md` |
 | New CLI flag | `src/config.ts` + `src/cli.ts` |
 | Tauri shell | `src-tauri/src/lib.rs` (`running at ` marker must match `src/cli.ts`) |
+| Release bundling / sidecar | `scripts/build-sidecar.sh` + `src-tauri/tauri.conf.json` (`externalBin`, `resources`) |
+| A new runtime dependency | just add it to `package.json` `dependencies` — tsup externalizes it and the sidecar script installs it; no list to update |
 | Mock behavior in tests | `src/ai/providers/mock.ts` (topic name containing "fail"/"empty" triggers those paths) |

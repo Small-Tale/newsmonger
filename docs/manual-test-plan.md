@@ -25,6 +25,17 @@ Verified against the live API (NEWS-3): real current stories with citations that
 2. Click a source link — it should open in the system browser, not inside the webview.
 3. Quit the app — the spawned `node` server process must exit too (`pgrep -f cli.ts`).
 
+## Tauri release bundle (needs Rust toolchain) — ✅ macOS verified 2026-07-24
+
+`npm run tauri:build` then launch `src-tauri/target/release/bundle/macos/News.app`. Verified on `aarch64-apple-darwin` (NEWS-2): the sidecar starts, the webview navigates, the real UI loads (`NEWS_LOG_REQUESTS=1` shows `GET /` → assets → `/api/state` → `/api/providers`), and quitting leaves no orphaned `news-node`.
+
+Still manual, and **unverified on every other platform**:
+
+1. Build on Windows and Linux — confirm the target-triple → Node-platform mapping in `scripts/build-sidecar.sh` is right and the app launches.
+2. On Windows, confirm no console window flashes when the sidecar spawns (`CREATE_NO_WINDOW`, written but never run).
+3. Install from the `.dmg` (not just the build tree) and launch — confirms resources resolve from a real install location.
+4. On macOS, the bundle is unsigned/unnotarized, so Gatekeeper will block it on another machine; signing is not set up.
+
 ## System browser opening
 
 1. `npm run dev` (without `--no-open`) — the default browser should open to the app.

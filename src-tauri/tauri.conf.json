@@ -5,6 +5,7 @@
   "identifier": "com.brianwestphal.news",
   "build": {
     "beforeDevCommand": "npm run build:client",
+    "beforeBuildCommand": "bash scripts/build-sidecar.sh \"$TAURI_ENV_TARGET_TRIPLE\"",
     "frontendDist": "loading"
   },
   "app": {
@@ -24,7 +25,9 @@
     }
   },
   "bundle": {
-    "active": false,
-    "targets": "all"
+    "active": true,
+    "targets": "all",
+    "externalBin": ["binaries/news-node"],
+    "resources": ["server"]
   }
 }
