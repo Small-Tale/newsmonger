@@ -20,6 +20,7 @@ Flags, usage errors, readiness line (`running at ` — synced with Tauri shell),
 
 ## [5 — Desktop App (Tauri)](../5-desktop-app.md) — Partial
 
-- FR-5.1 dev-mode shell: **Shipped, unverified** (scaffold written; needs a `cargo`/`tauri dev` run)
+- FR-5.1 dev-mode shell: **Shipped, verified on macOS** (compile + spawn + navigate + page load confirmed via request log)
 - FR-5.2 Tauri detection + external links: **Shipped**
-- FR-5.3 release sidecar bundling + icons: **Design only** (follow-up ticket)
+- FR-5.3 release sidecar bundling: **Design only** (NEWS-2 remainder; icons already generated)
+- FR-5.4 orphan protection (`NEWS_WATCH_PARENT` ppid watch): **Shipped, verified**

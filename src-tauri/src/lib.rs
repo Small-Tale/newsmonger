@@ -37,6 +37,9 @@ pub fn run() {
                     .args(["--import", "tsx", "src/cli.ts", "--no-open"])
                     .current_dir(&project_root)
                     .env("TSX_TSCONFIG_PATH", "tsconfig.json")
+                    // The server exits itself if this process dies without
+                    // cleaning up (hard kill, `tauri dev` rebuild restart).
+                    .env("NEWS_WATCH_PARENT", "1")
                     .stdout(std::process::Stdio::piped())
                     .stderr(std::process::Stdio::inherit())
                     .spawn()

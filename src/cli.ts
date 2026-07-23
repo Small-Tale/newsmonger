@@ -55,6 +55,18 @@ async function main(): Promise<void> {
   };
   process.on('SIGINT', shutdown);
   process.on('SIGTERM', shutdown);
+
+  // When the Tauri shell spawns us (NEWS_WATCH_PARENT=1), exit if the parent
+  // dies without cleaning us up — a hard kill or a `tauri dev` rebuild restart
+  // never fires the shell's exit hook, and each restart would orphan a server.
+  if (process.env['NEWS_WATCH_PARENT'] === '1') {
+    setInterval(() => {
+      if (process.ppid === 1) {
+        console.error('news: parent process gone — shutting down');
+        shutdown();
+      }
+    }, 2000).unref();
+  }
 }
 
 void main().catch((err: unknown) => {

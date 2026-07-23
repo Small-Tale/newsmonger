@@ -37,6 +37,10 @@ export function createApp(deps: { store: Store; runner: CheckRunner }): Hono<App
   app.use('*', async (c, next) => {
     c.set('store', deps.store);
     c.set('runner', deps.runner);
+    // Debug aid (e.g. verifying the Tauri webview actually hits the server).
+    if (process.env['NEWS_LOG_REQUESTS'] === '1') {
+      console.error(`[req] ${c.req.method} ${c.req.path}`);
+    }
     await next();
   });
 
