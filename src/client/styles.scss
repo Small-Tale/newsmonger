@@ -252,6 +252,16 @@ h2.eyebrow {
   }
 }
 
+.source-sub {
+  display: block;
+  margin-top: 10px;
+
+  .eyebrow {
+    display: block;
+    margin-bottom: 4px;
+  }
+}
+
 .source-status {
   margin: 8px 0 0;
   font-family: var(--mono);

@@ -28,6 +28,10 @@ src/
       ollama.ts       createOllamaProvider (OpenAI-compat, local; searchesWeb:false); endpoint/model resolution + env
       openaiCompat.ts shared OpenAI-compatible backend (model discovery, JSON chat, parse) — reused for hosted gateways later
       mock.ts         createMockProvider (--ai-test; deterministic; "fail"→throws, "empty"→[]); searchesWeb:false
+    search/           web-search backends for grounding non-browsing providers (docs/7)
+      types.ts        SearchProvider interface, SearchResult, SEARCH_PROVIDER_NAMES/INFO
+      tavily.ts       createTavilyProvider (Tavily /search, TAVILY_API_KEY); daysSince + mapTavilyResults
+      index.ts        resolveSearchProvider (none|tavily|brave-stub), createFakeSearchProvider
   api/
     schemas.ts        zod request schemas + StateResp (shared client/server)
   routes/

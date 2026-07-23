@@ -1,6 +1,10 @@
 # 7 — Search Grounding
 
-**Status: pipeline shipped; UI pending (NEWS-15).** This decouples *finding* candidate articles from *summarizing* them, so a provider that can't browse (Ollama, local) can still produce genuinely fresh news. Tracks NEWS-12; NEWS-13 (SearchProvider + Tavily) and NEWS-14 (pipeline) are done, NEWS-15 (UI) remains.
+**Status: shipped** (NEWS-12 epic: NEWS-13 SearchProvider+Tavily, NEWS-14 pipeline, NEWS-15 UI — all done). This decouples *finding* candidate articles from *summarizing* them, so a provider that can't browse (Ollama, local) can still produce genuinely fresh news. Remaining follow-ups: a Brave implementation (currently a stub), and the open questions below.
+
+### UI (NEWS-15)
+
+The Source block shows a **"Ground with search"** picker (None / Tavily / Brave) whenever the selected LLM provider can't browse; picking a backend suppresses the NOT-LIVE badge (the run is now live via search). Persisted like the other provider settings.
 
 ## Problem
 
@@ -55,7 +59,7 @@ Add an optional `summarize(topic, known, results)` to `NewsProvider` (default: f
 
 - **NEWS-13** — ✅ `SearchProvider` interface + registry + a fake + **Tavily** implementation (`src/ai/search/`, raw fetch, injected-fetch tests). Self-contained; no pipeline change. Brave declared in the union but resolves to null (follow-up).
 - **NEWS-14** — ✅ threaded through `CheckRunner`: optional `NewsProvider.summarize(topic, known, results)` (implemented on Ollama + mock), the three-branch pipeline, `searchProvider` setting + `--search-provider`/`NEWS_SEARCH_PROVIDER`, `CheckRun.grounded`, and `/api/state.searchesWeb` reflecting the effective pipeline (grounded local = live). Adversarial/transition tests cover all three branches + dedup-across-modes + search failure. **Note**: `auto` still resolves LLM-only (it always finds a web-searching LLM); grounding applies to explicitly-selected local providers — a deliberate simplification.
-- **NEWS-15** — UI: search-provider picker + key status; suppress the NOT-LIVE badge for grounded runs; show "grounded via \<search\>".
+- **NEWS-15** — ✅ UI: "Ground with search" picker in the Source block (shown for non-searching LLMs); NOT-LIVE badge auto-suppressed for grounded runs (driven by `/api/state.searchesWeb`). E2E covers select→badge-hidden→persist.
 
 ## Open questions (for the maintainer)
 

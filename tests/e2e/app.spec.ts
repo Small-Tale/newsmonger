@@ -111,10 +111,19 @@ test('the not-live badge tracks the selected provider, and the choice persists',
   await expect(page.locator('[data-action=provider]')).toHaveValue('ollama');
   await expect(page.locator('.live-note')).toBeVisible();
 
+  // Grounding a local provider with a search backend suppresses the badge.
+  await expect(page.locator('[data-action=search-provider]')).toBeVisible();
+  await page.selectOption('[data-action=search-provider]', 'tavily');
+  await expect(page.locator('.live-note')).toHaveCount(0);
+  await page.reload();
+  await expect(page.locator('[data-action=search-provider]')).toHaveValue('tavily');
+  await expect(page.locator('.live-note')).toHaveCount(0);
+
   // Reset to auto so later tests aren't affected. (Checks still run the mock
   // provider — the server is in --ai-test — regardless of this setting.)
   await page.selectOption('[data-action=provider]', 'auto');
   await expect(page.locator('.live-note')).toHaveCount(0);
+  await expect(page.locator('[data-action=search-provider]')).toHaveCount(0); // hidden for web-searching providers
 });
 
 test('deleting a topic removes its stories from the feed', async ({ page }) => {
