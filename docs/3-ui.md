@@ -2,13 +2,19 @@
 
 A single-page kerfjs app served by the Node server; the same UI runs in the browser and in the Tauri webview.
 
-- **FR-3.1** Header: app title, the global check-interval selector (presets 1h / 3h / 6h / 12h / 1d / 2d / 1w), and a "Check all now" button (disabled while any check runs).
-- **FR-3.2** Topics panel: an add-topic form (submit via button or Enter), and a list of topics showing name, status (checking… / paused / checked \<relative time\> / not checked yet) and per-topic Check / Pause–Resume / Delete actions. Delete asks for confirmation.
-- **FR-3.3** Feed: news items across all topics, newest first, each with topic tag, relative found-time, title, summary, and source links opening in a new tab (`rel="noopener noreferrer"`).
+### Visual design
+
+"The overnight briefing." Two-column layout (a sticky **Watching** rail + a **feed**), collapsing to one column under 860px. Bookish serif (`Iowan Old Style`/`Charter`/Georgia) for the stories themselves; quiet sans for controls; mono for the "clockwork" (eyebrows, timestamps, topic tags, meta). Cool porcelain paper in light mode, pre-dawn slate-green in dark; pine-green accent with a marigold "active" state.
+
+**Signature element — the watch dial**: each topic carries a small SVG ring that fills clockwise as the fraction of the check interval elapsed since its last check (an at-a-glance "how close to the next check"). It spins marigold while a check runs and goes dashed when paused. Purely decorative/informational (`aria-hidden`), with a text `title`; the textual status line remains the source of truth.
+
+- **FR-3.1** Header: serif wordmark, the global check-interval selector (presets 1h / 3h / 6h / 12h / 1d / 2d / 1w), and a "Check all now" button (disabled while any check runs).
+- **FR-3.2** Watching rail: a list of topics — dial, name, status line (checking… / paused / checked \<relative time\> / not checked yet), and per-topic Check / Pause–Resume / Delete actions (revealed on hover/focus on the desktop layout, always shown on touch/narrow). Delete asks for confirmation. Below the list: the add-topic form (submit via button or Enter).
+- **FR-3.3** Feed: news items across all topics, newest first, **grouped by local calendar day** with Today / Yesterday / "Mon D" headers. Each item has a topic tag, relative found-time, serif title + summary, and source links (prefixed with an arrow) opening in a new tab (`rel="noopener noreferrer"`). Items animate in on first render (respecting `prefers-reduced-motion`).
 - **FR-3.4** Errors from user actions appear in an error banner; the most recent failed check (when no action error is showing) appears in a warning banner naming the topic and error.
 - **FR-3.5** The client polls `/api/state` every 4 s while the tab is visible, so scheduled-check results appear without a reload.
-- **FR-3.6** Empty states: a hint when there are no topics, and a "nothing found yet" hint when topics exist but no items do.
-- **FR-3.7** The UI supports light and dark color schemes (`prefers-color-scheme`).
+- **FR-3.6** Empty states: an invitational hint when there are no topics, and a "no stories yet" hint when topics exist but no items do. Both render inside a stable `.empty-slot` wrapper so their appearance/disappearance can't disturb the keyed lists (kerf KF-377).
+- **FR-3.7** The UI supports light and dark color schemes (`prefers-color-scheme`), plus visible keyboard focus and `prefers-reduced-motion`.
 - **FR-3.8** In the Tauri webview, source links route through `POST /api/open-external` to open in the system browser (http/https only).
 
 ### kerf structural conventions (learned the hard way)

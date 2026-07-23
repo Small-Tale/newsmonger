@@ -9,7 +9,7 @@ test.describe.configure({ mode: 'serial' });
 
 test('loads the app shell', async ({ page }) => {
   await page.goto('/');
-  await expect(page.locator('h1')).toHaveText('News');
+  await expect(page.locator('h1')).toHaveText('News.');
   await expect(page.locator('.add-topic input')).toBeVisible();
 });
 

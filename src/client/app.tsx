@@ -27,9 +27,58 @@ function relativeTime(iso: string): string {
   return `${days}d ago`;
 }
 
-function topicRowJsx(topic: Topic, checking: boolean): SafeHtml {
+/** Label for a feed day group: Today, Yesterday, or "Jul 20". */
+function dayLabel(dateKey: string): string {
+  const today = new Date();
+  const yesterday = new Date(today.getTime() - 24 * 60 * 60 * 1000);
+  const keyOf = (d: Date): string => d.toLocaleDateString('en-CA'); // YYYY-MM-DD, local tz
+  if (dateKey === keyOf(today)) return 'Today';
+  if (dateKey === keyOf(yesterday)) return 'Yesterday';
+  const d = new Date(`${dateKey}T12:00:00`);
+  return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+}
+
+const DIAL_R = 8;
+const DIAL_C = 2 * Math.PI * DIAL_R;
+
+/**
+ * The watch dial: a ring that fills as the next scheduled check approaches.
+ * Spins while checking; dashed while paused; empty when never checked.
+ */
+function dialJsx(topic: Topic, checking: boolean, intervalMs: number): SafeHtml {
+  let fraction = 0;
+  if (topic.lastCheckedAt !== null && !topic.paused) {
+    fraction = Math.min(1, Math.max(0, (Date.now() - Date.parse(topic.lastCheckedAt)) / intervalMs));
+  }
+  const filled = (fraction * DIAL_C).toFixed(1);
+  const state = checking ? 'checking' : topic.paused ? 'paused' : 'watching';
+  const title = checking
+    ? 'Checking now'
+    : topic.paused
+      ? 'Paused'
+      : topic.lastCheckedAt === null
+        ? 'Waiting for first check'
+        : `${Math.round(fraction * 100)}% of the way to the next check`;
+  return (
+    <span class={`dial ${state}`} title={title} aria-hidden="true">
+      <svg viewBox="0 0 20 20" width="20" height="20">
+        <circle class="dial-track" cx="10" cy="10" r={String(DIAL_R)} />
+        <circle
+          class="dial-fill"
+          cx="10"
+          cy="10"
+          r={String(DIAL_R)}
+          stroke-dasharray={checking ? `${(DIAL_C * 0.3).toFixed(1)} ${DIAL_C.toFixed(1)}` : `${filled} ${DIAL_C.toFixed(1)}`}
+        />
+      </svg>
+    </span>
+  );
+}
+
+function topicRowJsx(topic: Topic, checking: boolean, intervalMs: number): SafeHtml {
   return (
     <li class={`topic${topic.paused ? ' paused' : ''}`} data-key={topic.id}>
+      {dialJsx(topic, checking, intervalMs)}
       <div class="topic-main">
         <span class="topic-name">{topic.name}</span>
         <span class="topic-meta">
@@ -43,13 +92,13 @@ function topicRowJsx(topic: Topic, checking: boolean): SafeHtml {
         </span>
       </div>
       <div class="topic-actions">
-        <button class="btn small" data-check-topic={topic.id} disabled={checking ? true : undefined} title="Check now">
+        <button class="chip" data-check-topic={topic.id} disabled={checking ? true : undefined} title="Check this topic now">
           Check
         </button>
-        <button class="btn small" data-toggle-topic={topic.id} title={topic.paused ? 'Resume checks' : 'Pause checks'}>
+        <button class="chip" data-toggle-topic={topic.id} title={topic.paused ? 'Resume checks' : 'Pause checks'}>
           {topic.paused ? 'Resume' : 'Pause'}
         </button>
-        <button class="btn small danger" data-delete-topic={topic.id} title="Delete topic and its stories">
+        <button class="chip danger" data-delete-topic={topic.id} title="Delete this topic and its stories">
           Delete
         </button>
       </div>
@@ -81,6 +130,24 @@ function itemJsx(item: NewsItem, topicName: string): SafeHtml {
   );
 }
 
+function feedJsx(items: NewsItem[], topicNames: Map<string, string>): SafeHtml[] {
+  // Group by local calendar day, newest first. Groups are dynamic, so plain
+  // `.map()` (no memoization); items keep data-key for keyed morphing.
+  const groups = new Map<string, NewsItem[]>();
+  for (const item of items) {
+    const key = new Date(item.foundAt).toLocaleDateString('en-CA');
+    const group = groups.get(key);
+    if (group) group.push(item);
+    else groups.set(key, [item]);
+  }
+  return [...groups.entries()].map(([dateKey, dayItems]) => (
+    <section class="day" data-key={`day-${dateKey}`}>
+      <h2 class="eyebrow">{dayLabel(dateKey)}</h2>
+      {dayItems.map((item) => itemJsx(item, topicNames.get(item.topicId) ?? 'unknown topic'))}
+    </section>
+  ));
+}
+
 function appJsx(): SafeHtml {
   const s = appStore.state.value;
   const topicNames = new Map(s.topics.map((t) => [t.id, t.name]));
@@ -91,10 +158,12 @@ function appJsx(): SafeHtml {
   return (
     <div class="shell">
       <header class="app-header">
-        <h1>News</h1>
+        <h1 class="wordmark">
+          News<span class="mark-dot">.</span>
+        </h1>
         <div class="header-controls">
           <label class="interval-label">
-            Check
+            <span class="eyebrow">Check</span>
             <select data-action="interval">
               {INTERVAL_OPTIONS.map((opt) => (
                 <option value={String(opt.ms)} selected={opt.ms === s.settings.checkIntervalMs ? true : undefined}>
@@ -103,14 +172,14 @@ function appJsx(): SafeHtml {
               ))}
             </select>
           </label>
-          <button class="btn" data-action="check-all" disabled={anyChecking ? true : undefined}>
+          <button class="btn primary" data-action="check-all" disabled={anyChecking ? true : undefined}>
             {anyChecking ? 'Checking…' : 'Check all now'}
           </button>
         </div>
       </header>
 
       {/* Always-present container: banners coming and going must not shift the
-          sections below, or kerf's positional sibling matching scrambles them. */}
+          sections below (kerf KF-377 — see docs/3-ui.md). */}
       <div id="banners">
         {s.error !== null ? <div class="banner error">{s.error}</div> : ''}
         {lastFailure !== undefined && s.error === null ? (
@@ -123,33 +192,40 @@ function appJsx(): SafeHtml {
       </div>
 
       <section id="topics-panel" class="topics-panel">
+        <h2 class="eyebrow">Watching</h2>
+        <ul class="topics">
+          {each(s.topics, (topic) => topicRowJsx(topic, s.checking.includes(topic.id), s.settings.checkIntervalMs))}
+        </ul>
+        <div class="empty-slot">
+          {s.loaded && s.topics.length === 0 ? (
+            <p class="empty">Nothing is being watched yet. Add a topic below — News checks it on your schedule and reports only what's new.</p>
+          ) : (
+            ''
+          )}
+        </div>
         <form class="add-topic" data-action="add-topic-form">
           <input
             type="text"
             name="topic-name"
-            placeholder="Add a topic to follow, e.g. “fusion energy”"
+            placeholder="Watch a topic — “solid-state batteries”"
             autocomplete="off"
             data-morph-skip-children
           />
-          <button class="btn primary" type="submit">
-            Add topic
+          <button class="btn" type="submit">
+            Add
           </button>
         </form>
-        <ul class="topics">{each(s.topics, (topic) => topicRowJsx(topic, s.checking.includes(topic.id)))}</ul>
-        {s.loaded && s.topics.length === 0 ? (
-          <p class="empty">No topics yet. Add one above — the app will check for news on your schedule.</p>
-        ) : (
-          ''
-        )}
       </section>
 
       <section id="feed" class="feed">
-        {each(sortedItems, (item) => itemJsx(item, topicNames.get(item.topicId) ?? 'unknown topic'))}
-        {s.loaded && sortedItems.length === 0 && s.topics.length > 0 ? (
-          <p class="empty">Nothing found yet. Hit “Check all now” or wait for the next scheduled check.</p>
-        ) : (
-          ''
-        )}
+        {feedJsx(sortedItems, topicNames)}
+        <div class="empty-slot">
+          {s.loaded && sortedItems.length === 0 && s.topics.length > 0 ? (
+            <p class="empty">No stories yet. Check now, or let the next scheduled check run — only genuinely new news lands here.</p>
+          ) : (
+            ''
+          )}
+        </div>
       </section>
     </div>
   );
