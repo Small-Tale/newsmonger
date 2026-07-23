@@ -80,4 +80,4 @@ Data dir: `--data-dir` flag → `NEWS_DATA_DIR` → `~/.news`.
 | UI change | `src/client/app.tsx` (+ `styles.scss`); mind the kerf structural rules in `docs/3-ui.md` |
 | New CLI flag | `src/config.ts` + `src/cli.ts` |
 | Tauri shell | `src-tauri/src/lib.rs` (`running at ` marker must match `src/cli.ts`) |
-| Mock behavior in tests | `src/ai/mock.ts` (topic name containing "fail"/"empty" triggers those paths) |
+| Mock behavior in tests | `src/ai/providers/mock.ts` (topic name containing "fail"/"empty" triggers those paths) |

@@ -14,7 +14,7 @@ Topic-based news tracker. The user enters topics; on a configurable interval (de
 
 ## Architecture
 
-`src/cli.ts` parses flags → constructs `Store` (JSON file), a `NewsService` (`ClaudeNewsService`, or `MockNewsService` with `--ai-test`), and a `CheckRunner` → starts the Hono server (`src/server.ts`, DI via middleware) and the minute-tick scheduler (`src/scheduler.ts`). The client (`src/client/app.tsx`) is a kerf app polling `/api/state` every 4 s.
+`src/cli.ts` parses flags → constructs `Store` (JSON file), a `ProviderResolver` (resolves the active AI provider per check from settings, or the forced mock under `--ai-test`), and a `CheckRunner` → starts the Hono server (`src/server.ts`, DI via middleware) and the minute-tick scheduler (`src/scheduler.ts`). The client (`src/client/app.tsx`) is a kerf app polling `/api/state` every 4 s. AI providers live behind `NewsProvider` in `src/ai/providers/` (see `docs/6-providers.md`).
 
 **Start every fresh session by reading `docs/ai/code-summary.md` and `docs/ai/requirements-summary.md`.** Requirements docs are numbered `docs/N-topic.md` (1–5).
 
@@ -54,7 +54,7 @@ When the user gives you work directly (not via the Hot Sheet channel or events),
 <!-- hotsheet:begin specifics=testing-philosophy v=1 -->
 ### This project's test setup
 
-- **Unit tests** (`tests/unit/**/*.test.ts`, helpers in `tests/helpers/`): vitest, `globals: true`, v8 coverage over `src/**`. Always use `tests/helpers/tmp.ts` for data dirs — never write to `~/.news`. API tests go through `createApp(...)` + `app.request(...)` (no real server). The news service is mocked via `MockNewsService` or an inline `NewsService`.
+- **Unit tests** (`tests/unit/**/*.test.ts`, helpers in `tests/helpers/`): vitest, `globals: true`, v8 coverage over `src/**`. Always use `tests/helpers/tmp.ts` for data dirs — never write to `~/.news`. API tests go through `createApp(...)` + `app.request(...)` (no real server). The AI provider is the deterministic `createMockProvider` (or an inline `fakeProvider`), wrapped as a `ProviderResolver` via `tests/helpers/provider.ts` (`asResolver`, `fakeProvider`).
 - **E2E tests** (`tests/e2e/**/*.spec.ts`): Playwright, serial (`workers: 1`), one shared server started by `playwright.config.ts` on port 4189 with `--ai-test` and a pid-scoped temp data dir. Tests build on each other's state (documented at the top of the spec).
 - **Commands**: unit `npm test` · E2E `npm run test:e2e` · everything `npm run test:all` (typecheck + lint + unit + E2E). Coverage report lands in `coverage/` (unit only for now — merged unit+E2E coverage is a known gap, see follow-up ticket).
 - The real Claude request path and the Tauri shell are covered by `docs/manual-test-plan.md`.
