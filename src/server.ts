@@ -1,0 +1,100 @@
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+import { serve } from '@hono/node-server';
+import { Hono } from 'hono';
+
+import type { CheckRunner } from './checks.js';
+import type { Store } from './db/store.js';
+import { registerApi } from './routes/api.js';
+import { registerPages } from './routes/pages.js';
+import type { AppEnv } from './types.js';
+
+export const DEFAULT_PORT = 4187;
+const PORT_FALLBACK_ATTEMPTS = 20;
+
+const STATIC_TYPES: Record<string, string> = {
+  '.js': 'text/javascript',
+  '.css': 'text/css',
+  '.map': 'application/json',
+  '.svg': 'image/svg+xml',
+};
+
+/** Locate the built client assets, whether running from source (tsx) or from dist. */
+function clientDir(): string {
+  const here = path.dirname(fileURLToPath(import.meta.url));
+  const candidates = [path.join(here, '../dist/client'), path.join(here, 'client')];
+  for (const dir of candidates) {
+    if (fs.existsSync(dir)) return dir;
+  }
+  return candidates[0] ?? '';
+}
+
+/** Build the Hono app with its dependencies injected (unit-testable via `app.request`). */
+export function createApp(deps: { store: Store; runner: CheckRunner }): Hono<AppEnv> {
+  const app = new Hono<AppEnv>();
+  app.use('*', async (c, next) => {
+    c.set('store', deps.store);
+    c.set('runner', deps.runner);
+    await next();
+  });
+
+  const assets = clientDir();
+  app.get('/static/:file', (c) => {
+    const file = c.req.param('file');
+    // Path traversal guard: single flat directory, no separators.
+    if (file.includes('/') || file.includes('\\') || file.includes('..')) return c.notFound();
+    const full = path.join(assets, file === 'app.js' ? 'app.global.js' : file);
+    if (!fs.existsSync(full)) return c.notFound();
+    const type = STATIC_TYPES[path.extname(full)] ?? 'application/octet-stream';
+    return c.body(fs.readFileSync(full), 200, { 'Content-Type': type });
+  });
+
+  registerApi(app);
+  registerPages(app);
+  return app;
+}
+
+export interface StartedServer {
+  port: number;
+  close(): void;
+}
+
+/**
+ * Start the HTTP server bound to 127.0.0.1. Unless `strictPort` is set, falls
+ * back to the next port (up to 20 attempts) when the requested one is busy.
+ */
+export async function startServer(
+  app: Hono<AppEnv>,
+  options: { port?: number; strictPort?: boolean } = {},
+): Promise<StartedServer> {
+  const basePort = options.port ?? DEFAULT_PORT;
+  const attempts = options.strictPort === true ? 1 : PORT_FALLBACK_ATTEMPTS;
+  let lastError: unknown = null;
+  for (let i = 0; i < attempts; i++) {
+    const port = basePort + i;
+    try {
+      const server = await new Promise<ReturnType<typeof serve>>((resolve, reject) => {
+        const s = serve({ fetch: app.fetch, port, hostname: '127.0.0.1' }, () => {
+          resolve(s);
+        });
+        s.on('error', reject);
+      });
+      return {
+        port,
+        close: () => {
+          server.close();
+        },
+      };
+    } catch (err) {
+      lastError = err;
+      if (!isAddrInUse(err)) throw err;
+    }
+  }
+  throw new Error(`no free port found starting at ${basePort}: ${String(lastError)}`);
+}
+
+function isAddrInUse(err: unknown): boolean {
+  return typeof err === 'object' && err !== null && (err as NodeJS.ErrnoException).code === 'EADDRINUSE';
+}

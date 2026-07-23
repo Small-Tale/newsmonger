@@ -1,0 +1,135 @@
+{
+  "appName": "News",
+  "ticketPrefix": "NEWS",
+  "terminals": [
+    {
+      "id": "claude",
+      "name": "Claude",
+      "command": "{{aiCommand}}",
+      "lazy": true,
+      "theme": "github-dark",
+      "fontSize": 17
+    }
+  ],
+  "auto_context": [
+    {
+      "type": "category",
+      "key": "feature",
+      "text": "Read docs/ai/code-summary.md and docs/ai/requirements-summary.md if you haven't yet or if you feel you might be out-of-date.\n\nAdd a new requirements document.\n\nAsk clarifying questions as needed.\n\nBe sure to create follow up tickets as needed as well.\n"
+    },
+    {
+      "type": "category",
+      "key": "requirement_change",
+      "text": "Read docs/ai/code-summary.md and docs/ai/requirements-summary.md if you haven't yet or if you feel you might be out-of-date.\n\nUpdate requirements documents as appropriate.\n\nAsk clarifying questions as needed.\n"
+    },
+    {
+      "type": "category",
+      "key": "bug",
+      "text": "Read docs/ai/code-summary.md and docs/ai/requirements-summary.md if you haven't yet or if you feel you might be out-of-date.\n\nEvaluate current tests and add unit tests or test automation to protected against this kind of bug going forward, if applicable.\n"
+    },
+    {
+      "type": "tag",
+      "key": "fable",
+      "text": "Use a subagent running the Fable model for this ticket."
+    },
+    {
+      "type": "category",
+      "key": "investigation",
+      "text": "Investigate and write up your findings; recommend concrete next steps. Don't implement the change yet — file follow-up tickets for the work you'd propose."
+    },
+    {
+      "type": "category",
+      "key": "investigation",
+      "text": "Investigate and write up your findings; recommend concrete next steps. Don't implement the change yet — file follow-up tickets for the work you'd propose."
+    }
+  ],
+  "custom_commands": [
+    {
+      "name": "Commit Changes",
+      "prompt": "make a commit message for the recently completed tickets, without wrapping long lines.  Don't include any co-authored by Anthropic type lines in the commit message.  add all unstaged changes to the git commit.  git commit with the message you generated but don't push",
+      "icon": "send",
+      "color": "#3b82f6",
+      "id": "77fbbfe2-ecd1-41e4-be66-1e0c895a5364"
+    },
+    {
+      "name": "Update Requirements",
+      "prompt": "Update the requirements docs as appropriate",
+      "icon": "file-text",
+      "color": "#6b7280",
+      "id": "858607d2-4473-4709-a4de-d3da5d915490"
+    },
+    {
+      "type": "group",
+      "name": "quality",
+      "children": [
+        {
+          "name": "Reqs ↔︎ Code",
+          "prompt": "/check-requirements-against-code",
+          "icon": "arrow-left-right",
+          "color": "#ec4899",
+          "id": "57f1941b-7448-4d77-a22c-19e6d220e185"
+        },
+        {
+          "name": "Analyze Code Quality",
+          "prompt": "/analyze-code-quality",
+          "icon": "circle-check-big",
+          "color": "#8b5cf6",
+          "id": "c4f7687e-326d-4d08-9fac-3061b326c584"
+        },
+        {
+          "name": "Kerf Usage Audit",
+          "prompt": "Audit this codebase for kerf usage.  See ~/.claude/skills/kerf-app/SKILL.md or node_modules/kerfjs/ai/skill.md.  For each finding, make Hot Sheet tickets with: file:line, which rule or pattern, the fix shape. Don't speculate - only flag patterns you can point to in the code. Top \"must fix\" list, then \"consider\" list.",
+          "icon": "slice",
+          "color": "#f97316",
+          "id": "afceb68e-ab56-4dcb-a9ea-9a791c2ed9dc"
+        },
+        {
+          "name": "Check Code Hygene",
+          "prompt": "/check-code-hygiene",
+          "icon": "soap-dispenser-droplet",
+          "color": "#f97316",
+          "id": "0c8d9fad-aedf-4ce4-9e14-9b6ae20275c7"
+        },
+        {
+          "name": "Everything",
+          "prompt": "do these sequentially, creating follow up tickets for all concerns encountered:\n/check-requirements-against-code\n/check-code-hygiene\n/analyze-code-quality\n",
+          "icon": "balloon",
+          "color": "#e5e7eb",
+          "id": "f0563791-385b-40ec-8d6a-0646725f82ef"
+        }
+      ],
+      "id": "e27d6cb7-96b2-454a-8711-57c030e9c4eb"
+    },
+    {
+      "type": "group",
+      "name": "GIT",
+      "children": [
+        {
+          "name": "git status",
+          "prompt": "git status",
+          "icon": "git-compare",
+          "color": "#e5e7eb",
+          "target": "shell",
+          "autoShowLog": true,
+          "id": "6fe3f89e-f05d-4e15-a71c-8dcd6bdc3fdb"
+        },
+        {
+          "name": "git push",
+          "prompt": "git push",
+          "icon": "git-compare-arrows",
+          "target": "shell",
+          "id": "dda90867-9308-4445-b83d-d9b57c13dd2e"
+        }
+      ],
+      "id": "36b7318f-fef0-4169-81de-ecc541952c2b"
+    },
+    {
+      "name": "Prep Major Release",
+      "prompt": "/prep-major-release",
+      "icon": "wand",
+      "color": "#14b8a6",
+      "id": "df38a36a-03b1-40bf-8d10-9081a39da0a3"
+    }
+  ],
+  "telemetry_enabled": true
+}

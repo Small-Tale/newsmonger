@@ -1,0 +1,21 @@
+# 1 — Topics and Scheduling
+
+The core of the app: a list of topics the user follows, checked for news on a schedule.
+
+## Topics
+
+- **FR-1.1** The user can add a topic by name. Names are trimmed; empty names are rejected.
+- **FR-1.2** Topic names are unique, case-insensitively. Adding a duplicate is rejected with a clear error.
+- **FR-1.3** The user can delete a topic. Deleting a topic removes all of its news items and check-run records.
+- **FR-1.4** The user can pause and resume a topic. Paused topics are skipped by both scheduled and "check all" sweeps (an explicit per-topic "Check" still works via the API only when unpaused — the UI disables nothing, but scheduled/check-all never touch paused topics).
+- **FR-1.5** Each topic tracks when it was last checked (`lastCheckedAt`); this is shown in the UI as relative time.
+
+## Scheduling
+
+- **FR-1.6** A single global check interval applies to all topics (default: 1 day). The user can change it; allowed range is 5 minutes and up (UI offers 1h–1 week presets).
+- **FR-1.7** A scheduler sweeps once per minute (plus once ~3 s after startup) and checks every unpaused topic whose last check is older than the interval, or that has never been checked.
+- **FR-1.8** Sweeps never overlap; topics are checked sequentially within a sweep; a topic is never checked concurrently with itself.
+- **FR-1.9** A failed check still advances `lastCheckedAt`, so a broken topic retries next interval instead of hammering the API every minute. The failure is recorded in the run history and surfaced in the UI.
+- **FR-1.10** The user can trigger an immediate check for one topic or all unpaused topics ("Check all now").
+
+See also: [2 — News Checks and Deduplication](2-news-checks-and-dedup.md), [4 — CLI, Server, and Storage](4-cli-server-storage.md).

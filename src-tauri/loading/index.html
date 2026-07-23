@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>News</title>
+    <style>
+      body {
+        margin: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        height: 100vh;
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+        background: #f6f5f2;
+        color: #1d1f24;
+      }
+      @media (prefers-color-scheme: dark) {
+        body { background: #16181d; color: #e8e8e4; }
+      }
+      .box { text-align: center; }
+      .spinner {
+        width: 28px; height: 28px; margin: 0 auto 14px;
+        border: 3px solid rgba(127, 127, 127, 0.25);
+        border-top-color: #1f6f5c;
+        border-radius: 50%;
+        animation: spin 0.9s linear infinite;
+      }
+      @keyframes spin { to { transform: rotate(360deg); } }
+    </style>
+  </head>
+  <body>
+    <div class="box">
+      <div class="spinner"></div>
+      <p id="msg">Starting the news server…</p>
+    </div>
+    <script>
+      window.showExited = () => {
+        document.querySelector('.spinner').style.display = 'none';
+        document.getElementById('msg').textContent =
+          'The news server exited before it was ready. Check the terminal output.';
+      };
+      window.showNotBundled = () => {
+        document.querySelector('.spinner').style.display = 'none';
+        document.getElementById('msg').textContent =
+          'Release builds are not wired up yet — run "npm run tauri:dev" for the desktop app, or "npm run dev" for the browser.';
+      };
+    </script>
+  </body>
+</html>

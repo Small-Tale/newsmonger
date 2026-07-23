@@ -1,0 +1,62 @@
+{
+  "name": "news",
+  "version": "0.1.0",
+  "description": "Topic-based news tracker: enter topics, and on a configurable interval the app asks Claude (with web search) for new developments, deduplicating against previously seen stories.",
+  "type": "module",
+  "license": "MIT",
+  "author": "westphal",
+  "engines": {
+    "node": ">=20"
+  },
+  "bin": {
+    "news": "./dist/cli.js"
+  },
+  "scripts": {
+    "dev": "npm run build:client && tsx src/cli.ts",
+    "dev:server": "npm run build:client && tsx src/cli.ts --no-open --strict-port",
+    "build": "tsup",
+    "build:client": "node -e \"require('fs').mkdirSync('dist/client',{recursive:true})\" && npx esbuild src/client/app.tsx --bundle --format=iife --outfile=dist/client/app.global.js --target=es2020 --sourcemap --jsx=automatic --jsx-import-source=kerfjs && npx sass src/client/styles.scss dist/client/styles.css --style compressed --no-source-map",
+    "tauri": "tauri",
+    "tauri:dev": "npm run build:client && tauri dev",
+    "test": "vitest run --coverage",
+    "test:watch": "vitest",
+    "test:e2e": "npx playwright test",
+    "test:all": "npm run typecheck && npm run lint && npm test && npm run test:e2e",
+    "lint": "eslint src/ tests/",
+    "typecheck": "tsc --noEmit",
+    "clean": "rm -rf dist node_modules/.cache"
+  },
+  "files": [
+    "dist",
+    "!dist/*.map"
+  ],
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.113.0",
+    "@hono/node-server": "^2.0.5",
+    "hono": "^4.12.25",
+    "kerfjs": "^2.0.0",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@playwright/test": "^1.61.0",
+    "@tauri-apps/cli": "^2.11.2",
+    "@types/node": "^25.9.3",
+    "@vitest/coverage-v8": "^4.1.9",
+    "esbuild": "^0.28.1",
+    "eslint": "^10.5.0",
+    "eslint-plugin-import-x": "^4.16.2",
+    "eslint-plugin-kerfjs": "^2.0.0",
+    "eslint-plugin-simple-import-sort": "^12.1.1",
+    "eslint-plugin-tsdoc": "^0.5.2",
+    "sass": "^1.97.3",
+    "tsup": "^8.5.1",
+    "tsx": "^4.22.4",
+    "typescript": "^5.9.3",
+    "typescript-eslint": "^8.61.1",
+    "vitest": "^4.1.9"
+  },
+  "overrides": {
+    "esbuild": "^0.28.1"
+  }
+}

@@ -1,0 +1,270 @@
+:root {
+  --bg: #f6f5f2;
+  --panel: #ffffff;
+  --ink: #1d1f24;
+  --muted: #6b7080;
+  --line: #e4e2dc;
+  --accent: #1f6f5c;
+  --accent-ink: #ffffff;
+  --danger: #b3423a;
+  --warn-bg: #fdf3e0;
+  --error-bg: #fbe9e7;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #16181d;
+    --panel: #1f2229;
+    --ink: #e8e8e4;
+    --muted: #9aa0ad;
+    --line: #2e323b;
+    --accent: #3fa98c;
+    --accent-ink: #10231d;
+    --warn-bg: #3a3222;
+    --error-bg: #3c2523;
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-size: 15px;
+  line-height: 1.5;
+}
+
+.shell {
+  max-width: 760px;
+  margin: 0 auto;
+  padding: 24px 20px 80px;
+}
+
+.app-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-bottom: 20px;
+
+  h1 {
+    margin: 0;
+    font-size: 26px;
+    letter-spacing: -0.02em;
+  }
+}
+
+.header-controls {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.interval-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 13px;
+
+  select {
+    background: var(--panel);
+    color: var(--ink);
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    padding: 5px 8px;
+    font-size: 13px;
+  }
+}
+
+.btn {
+  background: var(--panel);
+  color: var(--ink);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 6px 12px;
+  font-size: 13px;
+  cursor: pointer;
+
+  &:hover:not(:disabled) {
+    border-color: var(--accent);
+  }
+
+  &:disabled {
+    opacity: 0.55;
+    cursor: default;
+  }
+
+  &.primary {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: var(--accent-ink);
+  }
+
+  &.danger {
+    color: var(--danger);
+  }
+
+  &.small {
+    padding: 4px 9px;
+    font-size: 12px;
+  }
+}
+
+.banner {
+  border-radius: 8px;
+  padding: 10px 14px;
+  margin-bottom: 16px;
+  font-size: 13px;
+
+  &.error {
+    background: var(--error-bg);
+  }
+
+  &.warn {
+    background: var(--warn-bg);
+  }
+}
+
+.topics-panel {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 16px;
+  margin-bottom: 28px;
+}
+
+.add-topic {
+  display: flex;
+  gap: 8px;
+
+  input {
+    flex: 1;
+    background: var(--bg);
+    color: var(--ink);
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    padding: 8px 12px;
+    font-size: 14px;
+
+    &:focus {
+      outline: 2px solid var(--accent);
+      outline-offset: -1px;
+      border-color: transparent;
+    }
+  }
+}
+
+.topics {
+  list-style: none;
+  margin: 14px 0 0;
+  padding: 0;
+}
+
+.topic {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 4px;
+  border-top: 1px solid var(--line);
+
+  &.paused .topic-name {
+    color: var(--muted);
+  }
+}
+
+.topic-main {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.topic-name {
+  font-weight: 600;
+}
+
+.topic-meta {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.topic-actions {
+  display: flex;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.feed {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.item {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 16px 18px;
+
+  header {
+    display: flex;
+    justify-content: space-between;
+    gap: 8px;
+    margin-bottom: 6px;
+  }
+
+  h3 {
+    margin: 0 0 6px;
+    font-size: 17px;
+    letter-spacing: -0.01em;
+  }
+
+  p {
+    margin: 0 0 10px;
+    color: var(--ink);
+  }
+}
+
+.item-topic {
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.item-time {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.sources {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+
+  a {
+    color: var(--accent);
+    font-size: 13px;
+    text-decoration: none;
+
+    &:hover {
+      text-decoration: underline;
+    }
+  }
+}
+
+.empty {
+  color: var(--muted);
+  text-align: center;
+  margin: 18px 0 8px;
+}
