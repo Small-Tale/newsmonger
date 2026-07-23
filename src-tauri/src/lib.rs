@@ -89,7 +89,10 @@ fn server_command(app: &AppHandle) -> Result<Command, String> {
             "news-node"
         });
     if !node.exists() {
-        return Err(format!("bundled Node sidecar is missing: {}", node.display()));
+        return Err(format!(
+            "bundled Node sidecar is missing: {}",
+            node.display()
+        ));
     }
 
     let server_js = app

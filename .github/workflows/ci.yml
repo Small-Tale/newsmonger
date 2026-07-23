@@ -1,0 +1,92 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # Matches the Node the desktop sidecar bundles (scripts/build-sidecar.sh).
+  NODE_VERSION: '22'
+
+jobs:
+  gate:
+    name: Typecheck, lint, unit + E2E
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+      - run: npm ci
+
+      # Cache the browser binaries, keyed on the resolved Playwright version so
+      # a version bump misses the cache instead of running against stale ones.
+      - name: Resolve Playwright version
+        id: pw
+        run: echo "version=$(node -p "require('@playwright/test/package.json').version")" >> "$GITHUB_OUTPUT"
+      - uses: actions/cache@v4
+        id: pw-cache
+        with:
+          path: ~/.cache/ms-playwright
+          key: ${{ runner.os }}-playwright-${{ steps.pw.outputs.version }}
+      - name: Install Playwright browsers
+        if: steps.pw-cache.outputs.cache-hit != 'true'
+        run: npx playwright install --with-deps chromium
+      # The cache holds the browsers but not the apt libraries they link against.
+      - name: Install Playwright system dependencies
+        if: steps.pw-cache.outputs.cache-hit == 'true'
+        run: npx playwright install-deps chromium
+
+      # typecheck + lint + vitest + Playwright (E2E runs the mock provider via
+      # --ai-test, so CI needs no API key), then merges coverage.
+      - run: npm run test:all
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: playwright-report
+          path: playwright-report/
+          retention-days: 7
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: coverage
+          path: coverage/
+          retention-days: 7
+
+  rust:
+    name: Tauri shell (debug + release cfg)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+      - name: Install Tauri system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev librsvg2-dev patchelf
+
+      - name: Format
+        working-directory: src-tauri
+        run: cargo fmt --check
+
+      # Both profiles, deliberately. The dev and release server-spawn paths in
+      # src/lib.rs sit behind `#[cfg(debug_assertions)]` / `#[cfg(not(...))]`,
+      # so a debug-only check never compiles the release branch at all — a
+      # broken release path would sail through and only fail at bundle time.
+      - name: Check (debug)
+        working-directory: src-tauri
+        run: cargo clippy --all-targets -- -D warnings
+
+      - name: Check (release cfg)
+        working-directory: src-tauri
+        run: cargo clippy --release --all-targets -- -D warnings

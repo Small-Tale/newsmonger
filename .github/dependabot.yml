@@ -1,0 +1,35 @@
+# Keeps dependencies current between releases so vulnerable transitive packages
+# don't accumulate silently. Mirrors the glassbox setup.
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: "/"
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 10
+    # Runtime dependencies are what actually ship — they're bundled into the
+    # desktop sidecar's node_modules (scripts/build-sidecar.sh), so each is
+    # security-relevant and worth reviewing on its own. Dev/build/test tooling
+    # (tsup, eslint, vitest, playwright, …) never reaches a user's machine, so
+    # its updates collapse into one weekly PR to keep review overhead low.
+    groups:
+      dev-dependencies:
+        dependency-type: development
+    commit-message:
+      prefix: "deps"
+      prefix-development: "deps-dev"
+
+  - package-ecosystem: cargo
+    directory: "/src-tauri"
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "deps"
+
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: "ci"

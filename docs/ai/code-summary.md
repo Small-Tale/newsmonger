@@ -45,6 +45,7 @@ src-tauri/            Tauri v2 shell; one spawn path, dev runs tsx + release run
   server/             gitignored: staged cli.js + client/ + node_modules (bundled as `resources`)
 scripts/
   build-sidecar.sh    builds/stages the above, then boots it from a temp dir to verify
+.github/              CI: gate job (test:all) + rust job (fmt + clippy, BOTH profiles); dependabot
 tests/
   helpers/            tmp.ts (tmp data dirs), provider.ts (asResolver/fakeProvider)
   unit/               vitest: dedupe, store, checks, scheduler, config, parse-result, providers, openai, api (via app.request)
@@ -69,6 +70,8 @@ Data dir: `--data-dir` flag → `NEWS_DATA_DIR` → `~/.news`.
 - `npm run tauri:build` — release app + dmg; runs `scripts/build-sidecar.sh` via `beforeBuildCommand`
 - `npm test` (vitest+coverage) · `npm run test:e2e` (playwright) · `npm run test:all` (typecheck+lint+unit+e2e)
 - Lint/typecheck: `npm run lint` / `npm run typecheck` (eslint strictTypeChecked + eslint-plugin-kerfjs)
+- Rust: `cd src-tauri && cargo fmt --check && cargo clippy --all-targets -- -D warnings`, **and the same with `--release`** — the dev/release spawn paths are `cfg`-gated, so a debug-only check never compiles the release branch
+- CI (`.github/workflows/ci.yml`) runs all of the above; **never executed — the repo has no remote yet** (NEWS-6)
 
 ## Where do I look for X?
 
