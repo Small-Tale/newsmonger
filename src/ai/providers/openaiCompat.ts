@@ -34,7 +34,7 @@ async function fetchJson(
   }, timeoutMs);
   try {
     const res = await fetchImpl(url, { ...init, signal: controller.signal });
-    if (!res.ok) throw new Error(`${url} returned ${res.status}`);
+    if (!res.ok) throw new Error(`${url} returned ${res.status}${await errorDetail(res)}`);
     return (await res.json()) as unknown;
   } catch (err) {
     if (err instanceof Error && err.name === 'AbortError') {
@@ -44,6 +44,22 @@ async function fetchJson(
   } finally {
     clearTimeout(timer);
   }
+}
+
+/** Best-effort extraction of a server error message (OpenAI `{error:{message}}` shape). */
+async function errorDetail(res: Response): Promise<string> {
+  try {
+    const body: unknown = await res.json();
+    if (typeof body === 'object' && body !== null && 'error' in body) {
+      const err = body.error;
+      const message =
+        typeof err === 'string' ? err : typeof err === 'object' && err !== null && 'message' in err ? err.message : undefined;
+      if (typeof message === 'string' && message !== '') return `: ${message}`;
+    }
+  } catch {
+    // non-JSON body — nothing useful to add
+  }
+  return '';
 }
 
 /** Normalize a base URL: drop a trailing slash so `${base}/models` is clean. */

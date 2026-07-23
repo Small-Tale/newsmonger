@@ -125,6 +125,21 @@ describe('createOllamaProvider', () => {
     expect(sent.model).toBe('mistral');
   });
 
+  it('surfaces the server error message on a non-ok chat response', async () => {
+    const failing = ((url: string) => {
+      if (url.endsWith('/chat/completions')) {
+        return Promise.resolve({
+          ok: false,
+          status: 500,
+          json: () => Promise.resolve({ error: { message: 'tensor size overflow' } }),
+        } as Response);
+      }
+      return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve({ data: [{ id: 'm' }] }) } as Response);
+    }) as typeof fetch;
+    const p = createOllamaProvider({ model: 'm', fetchImpl: failing, env: {} });
+    await expect(p.checkTopic('Fusion', [], null)).rejects.toThrow(/500: tensor size overflow/);
+  });
+
   it('throws a pull hint when no model is configured and none are listed', async () => {
     const p = createOllamaProvider({ env: {}, fetchImpl: fakeFetch({ models: [] }) });
     await expect(p.checkTopic('Fusion', [], null)).rejects.toThrow(/ollama pull/);
