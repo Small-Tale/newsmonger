@@ -36,7 +36,7 @@ src/
   api/
     schemas.ts        zod request schemas + StateResp (shared client/server)
   routes/
-    api.ts            /api/state, /api/providers, /api/topics, /api/settings, /api/keys (GET/PUT/DELETE), /api/foreground, /api/check, /api/open-external, /healthz
+    api.ts            /api/state, /api/providers, /api/topics, /api/items/:id (save), /api/settings, /api/keys, /api/foreground, /api/check, /api/open-external, /healthz
     pages.tsx         GET / — SSR shell
   components/
     layout.tsx        HTML shell
@@ -65,7 +65,7 @@ docs/                 numbered requirements (1–7), ai/ summaries, manual-test-
 ## Data schema (`<data-dir>/data.json`)
 
 - `topics[]`: id, name, paused, createdAt, lastCheckedAt (every attempt), coveredThroughAt (successes only — drives the prompt window)
-- `items[]`: id, topicId, title, summary, sources[{title,url}], dedupeKey, foundAt
+- `items[]`: id, topicId, title, summary, sources[{title,url}], image, saved (bookmark), dedupeKey, foundAt
 - `settings`: checkIntervalMs (default 1 day, min 5 min), provider (default `auto`, `.catch('auto')` for retired providers), model (''), endpoint ('')
 - `runs[]`: id, topicId, startedAt, finishedAt, status(running|succeeded|failed), newItems, error, provider (last 200)
 

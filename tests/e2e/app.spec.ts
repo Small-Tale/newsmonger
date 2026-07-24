@@ -342,3 +342,42 @@ test('the failure warning can be dismissed and stays dismissed, but a new failur
   await topicAction(page, row, 'delete');
   await expect(row).toHaveCount(0);
 });
+
+test('bookmark a story and filter to saved (NEWS-42)', async ({ page }) => {
+  // Needs stories in the feed. Add a topic and check it (mock returns 2).
+  await page.goto('/');
+  await page.fill('.add-topic input', 'saved probe topic');
+  await page.press('.add-topic input', 'Enter');
+  const row = page.locator('.topic', { hasText: 'saved probe topic' });
+  await expect(row).toBeVisible();
+  await topicAction(page, row, 'check');
+  await expect(page.locator('.item', { hasText: 'saved probe topic' }).first()).toBeVisible({ timeout: 15_000 });
+
+  const probeItems = page.locator('.item', { has: page.locator('.item-topic', { hasText: 'saved probe topic' }) });
+  const before = await probeItems.count();
+  expect(before).toBeGreaterThan(0);
+
+  // Bookmark the first of this topic's stories.
+  await probeItems.first().locator('[data-save-item]').click();
+  await expect(probeItems.first()).toHaveClass(/saved/);
+  await expect(probeItems.first().locator('.item-action.bookmark.on')).toHaveCount(1);
+
+  // Filter to saved: only saved stories show, and the banner reports a count.
+  await page.click('[data-action=toggle-saved-filter]');
+  await expect(page.locator('.banner.saved')).toBeVisible();
+  await expect(page.locator('.item:not(.saved)')).toHaveCount(0);
+  await expect(page.locator('.item.saved')).not.toHaveCount(0);
+
+  // Unbookmark while filtered removes it from view.
+  const savedShown = await page.locator('.item.saved').count();
+  await page.locator('.item.saved').first().locator('[data-save-item]').click();
+  await expect(page.locator('.item.saved')).toHaveCount(savedShown - 1);
+
+  // The filter is ephemeral — a reload clears it (but not the saved flags).
+  await page.reload();
+  await expect(page.locator('.banner.saved')).toHaveCount(0);
+
+  // Clean up.
+  await topicAction(page, page.locator('.topic', { hasText: 'saved probe topic' }), 'delete');
+  await expect(page.locator('.topic', { hasText: 'saved probe topic' })).toHaveCount(0);
+});

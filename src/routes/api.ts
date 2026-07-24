@@ -12,6 +12,7 @@ import {
   CheckReqSchema,
   CreateTopicReqSchema,
   OpenExternalReqSchema,
+  SaveItemReqSchema,
   SaveKeyReqSchema,
   UpdateSettingsReqSchema,
   UpdateTopicReqSchema,
@@ -92,6 +93,14 @@ export function registerApi(app: Hono<AppEnv>): void {
     // (a shared image survives via liveImageHashes). Best-effort — a failed
     // prune must not fail the delete.
     pruneImageCache(c.get('dataDir'), liveImageHashes(store.listItems()));
+    return c.json({ ok: true });
+  });
+
+  app.patch('/api/items/:id', async (c) => {
+    const body = await parseBody(c, SaveItemReqSchema);
+    if (!body) return c.json({ error: 'invalid request: expected { saved }' }, 400);
+    const item = c.get('store').setItemSaved(c.req.param('id'), body.saved);
+    if (item === null) return c.json({ error: 'no such item' }, 404);
     return c.json({ ok: true });
   });
 

@@ -30,6 +30,10 @@ export type CheckReq = z.infer<typeof CheckReqSchema>;
 export const OpenExternalReqSchema = z.object({ url: z.url() });
 export type OpenExternalReq = z.infer<typeof OpenExternalReqSchema>;
 
+/** Body of a bookmark toggle. */
+export const SaveItemReqSchema = z.object({ saved: z.boolean() });
+export type SaveItemReq = z.infer<typeof SaveItemReqSchema>;
+
 /** Body of a key save. The value is write-only — no endpoint ever returns it. */
 export const SaveKeyReqSchema = z.object({ key: z.string().min(1).max(500) });
 export type SaveKeyReq = z.infer<typeof SaveKeyReqSchema>;

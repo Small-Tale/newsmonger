@@ -37,6 +37,8 @@ export interface AppState {
   sidebarCollapsed: boolean;
   /** Currently selected topic ids. Selection is transient — never persisted. */
   selectedTopicIds: string[];
+  /** When true, the feed shows only bookmarked stories (NEWS-42). Ephemeral. */
+  savedFilter: boolean;
   /**
    * Topics that are solo'd: when non-empty, the feed shows only their stories.
    *
@@ -100,6 +102,7 @@ export const appStore = defineStore({
     keyError: null,
     sidebarCollapsed: readSidebarCollapsed(),
     selectedTopicIds: [],
+    savedFilter: false,
     soloTopicIds: [],
     contextMenu: null,
     confirm: null,
@@ -127,6 +130,9 @@ export const appStore = defineStore({
     },
     setSolo: (soloTopicIds: string[]) => {
       set({ ...get(), soloTopicIds });
+    },
+    setSavedFilter: (savedFilter: boolean) => {
+      set({ ...get(), savedFilter });
     },
     openContextMenu: (menu: { x: number; y: number; topicIds: string[] }) => {
       set({ ...get(), contextMenu: menu });

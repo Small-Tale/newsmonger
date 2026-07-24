@@ -13,6 +13,7 @@ import {
   refreshState,
   reportForeground,
   saveKey,
+  setItemSaved,
   setNotifyOnNewItems,
   setTopicPaused,
   startCheck,
@@ -141,10 +142,21 @@ function topicRowJsx(
 
 function itemJsx(item: NewsItem, topicName: string): SafeHtml {
   return (
-    <article class="item" data-key={item.id}>
+    <article class={`item${item.saved ? ' saved' : ''}`} data-key={item.id}>
       <header>
         <span class="item-topic">{topicName}</span>
         <span class="item-time">{relativeTime(item.foundAt)}</span>
+        <button
+          class={`item-action bookmark${item.saved ? ' on' : ''}`}
+          type="button"
+          data-save-item={item.id}
+          data-saved={item.saved ? 'true' : 'false'}
+          aria-pressed={item.saved ? 'true' : 'false'}
+          aria-label={item.saved ? 'Remove bookmark' : 'Save story'}
+          title={item.saved ? 'Saved — click to remove' : 'Save story'}
+        >
+          {icon('bookmark', 15)}
+        </button>
       </header>
       {/* Always-present slot: the picture coming and going must not restructure
           the card (kerf KF-377 — see docs/3-ui.md). Roughly a third of articles
@@ -544,7 +556,9 @@ function appJsx(): SafeHtml {
   const selected = new Set(s.selectedTopicIds);
   const allItems = [...s.items].sort((a, b) => b.foundAt.localeCompare(a.foundAt));
   // Solo is a view filter: it hides stories, never deletes or unsubscribes.
-  const sortedItems = solo.size > 0 ? allItems.filter((i) => solo.has(i.topicId)) : allItems;
+  const soloItems = solo.size > 0 ? allItems.filter((i) => solo.has(i.topicId)) : allItems;
+  const sortedItems = s.savedFilter ? soloItems.filter((i) => i.saved) : soloItems;
+  const savedCount = allItems.filter((i) => i.saved).length;
   const anyChecking = s.checking.length > 0;
   const lastFailure = s.runs.find((r) => r.status === 'failed');
 
@@ -567,6 +581,15 @@ function appJsx(): SafeHtml {
           </h1>
         </div>
         <div class="header-controls">
+          <button
+            class={`btn icon${s.savedFilter ? ' active' : ''}`}
+            data-action="toggle-saved-filter"
+            aria-pressed={s.savedFilter ? 'true' : 'false'}
+            aria-label={s.savedFilter ? 'Show all stories' : 'Show saved stories'}
+            title={s.savedFilter ? 'Showing saved — click to show all' : 'Show saved only'}
+          >
+            {icon('bookmark', 17)}
+          </button>
           <button class="btn icon" data-action="open-settings" aria-label="Settings" title="Settings">
             {icon('settings', 17)}
           </button>
@@ -585,6 +608,19 @@ function appJsx(): SafeHtml {
       {/* Always-present container: banners coming and going must not shift the
           sections below (kerf KF-377 — see docs/3-ui.md). */}
       <div id="banners">
+        {s.savedFilter ? (
+          <div class="banner saved">
+            {icon('bookmark', 14)}
+            <span class="banner-text">
+              Showing {String(savedCount)} saved {savedCount === 1 ? 'story' : 'stories'}
+            </span>
+            <button class="btn subtle" type="button" data-action="clear-saved-filter">
+              Show all
+            </button>
+          </div>
+        ) : (
+          ''
+        )}
         {solo.size > 0 ? (
           <div class="banner solo">
             {icon('solo', 14)}
@@ -679,7 +715,9 @@ function appJsx(): SafeHtml {
       <section id="feed" class="feed">
         {feedJsx(sortedItems, topicNames)}
         <div class="empty-slot">
-          {s.loaded && sortedItems.length === 0 && s.topics.length > 0 ? (
+          {s.loaded && sortedItems.length === 0 && s.savedFilter ? (
+            <p class="empty">No saved stories yet. Use the bookmark button on a story to keep it here.</p>
+          ) : s.loaded && sortedItems.length === 0 && s.topics.length > 0 ? (
             <p class="empty">No stories yet. Check now, or let the next scheduled check run — only genuinely new news lands here.</p>
           ) : (
             ''
@@ -895,6 +933,19 @@ function wireEvents(root: HTMLElement): void {
 
   void delegate(root, 'click', '[data-action=clear-solo]', () => {
     appStore.actions.setSolo([]);
+  });
+
+  void delegate(root, 'click', '[data-save-item]', (_e, el) => {
+    const id = el.getAttribute('data-save-item');
+    if (id === null) return;
+    const saved = el.getAttribute('data-saved') === 'true';
+    void setItemSaved(id, !saved);
+  });
+  void delegate(root, 'click', '[data-action=toggle-saved-filter]', () => {
+    appStore.actions.setSavedFilter(!appStore.state.value.savedFilter);
+  });
+  void delegate(root, 'click', '[data-action=clear-saved-filter]', () => {
+    appStore.actions.setSavedFilter(false);
   });
 
   void delegate(root, 'click', '[data-action=dismiss-error]', () => {

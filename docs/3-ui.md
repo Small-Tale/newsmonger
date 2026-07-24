@@ -25,6 +25,12 @@ Two rendering rules this UI depends on — regression-tested by the E2E suite:
 - Keep sibling structure around keyed lists stable: conditional elements (banners) live inside an always-present container (`#banners`). Each error/warning banner carries a dismiss button (NEWS-41). The error banner clears `s.error`; the failure warning is *derived* from the runs list, so its dismissal is remembered by **run id** — a later, different failure has a new id and reappears, which is the intent. **This works around a confirmed kerfjs 2.0.0 bug (kerf KF-377)**: removing a conditional sibling rendered before a keyed `each()` list permanently empties the list (verified in a minimal standalone repro attached to that ticket).
 - Keep `each()` containers structurally stable: empty-state messages render *alongside* the list, not instead of it. The pure container swap (`<p>` ↔ `<ul>{each(...)}</ul>`) tested OK in isolation on 2.0.0, so this one is defensive convention rather than a confirmed trigger — but the app's original failures involved the combination, and the stable shape is regression-covered here and flagged for a pinning test in KF-377.
 
+## Bookmarking stories (Saved)
+
+Each story card has a bookmark button (NEWS-42). Saving sets `item.saved` in `data.json` — a persistent property of the story, so it survives restarts but goes with the story if its topic is deleted. The toggle is `PATCH /api/items/:id { saved }`.
+
+A **Saved filter** (bookmark toggle in the header, next to the gear) filters the feed to saved stories only, with a "Showing N saved" banner and a Show-all button — the same shape as the Solo filter. The filter itself is a **view state, ephemeral** (cleared on reload); only the saved flags persist. Solo and Saved compose: Saved filters within the current Solo set.
+
 ## Confirmations (never `window.confirm`)
 
 Destructive actions — deleting topics, removing a stored key — confirm through an **in-app dialog** (`confirmDialogJsx` + the `confirm()` promise helper in `app.tsx`), never `window.confirm`.

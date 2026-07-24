@@ -29,7 +29,9 @@ export type IconName =
   | 'panel'
   | 'ok'
   | 'warn'
-  | 'arrow';
+  | 'arrow'
+  | 'bookmark'
+  | 'share';
 
 function paths(name: IconName): SafeHtml {
   switch (name) {
@@ -110,6 +112,22 @@ function paths(name: IconName): SafeHtml {
         <g>
           <path d="M5 12h14" />
           <path d="m12 5 7 7-7 7" />
+        </g>
+      );
+    case 'bookmark':
+      return (
+        <g>
+          <path d="M17 3a2 2 0 0 1 2 2v15a1 1 0 0 1-1.496.868l-4.512-2.578a2 2 0 0 0-1.984 0l-4.512 2.578A1 1 0 0 1 5 20V5a2 2 0 0 1 2-2z" />
+        </g>
+      );
+    case 'share': // share-2
+      return (
+        <g>
+          <circle cx="18" cy="5" r="3" />
+          <circle cx="6" cy="12" r="3" />
+          <circle cx="18" cy="19" r="3" />
+          <line x1="8.59" x2="15.42" y1="13.51" y2="17.49" />
+          <line x1="15.41" x2="8.59" y1="6.51" y2="10.49" />
         </g>
       );
   }

@@ -988,3 +988,80 @@ h2.eyebrow {
     background: rgba(255, 255, 255, 0.1);
   }
 }
+
+// -------------------------------------------------------- item actions ---
+
+.item > header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.item-time {
+  margin-left: auto;
+}
+
+.item-action {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 3px;
+  border: 0;
+  border-radius: 5px;
+  background: none;
+  color: var(--ink-soft);
+  cursor: pointer;
+  transition: color 120ms ease;
+
+  &:hover {
+    color: var(--ink);
+    background: rgba(26, 36, 32, 0.06);
+  }
+
+  .icon {
+    fill: none;
+  }
+}
+
+.item-action.bookmark.on {
+  color: var(--pine);
+
+  .icon {
+    fill: currentColor;
+  }
+}
+
+// The header Saved-filter toggle, when active.
+.btn.icon.active {
+  color: var(--pine);
+  background: var(--pine-soft);
+
+  .icon {
+    fill: currentColor;
+    stroke: currentColor;
+  }
+}
+
+.banner.saved {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  background: var(--pine-soft);
+  color: var(--ink);
+
+  .icon {
+    color: var(--pine);
+    fill: currentColor;
+  }
+
+  .banner-text {
+    flex: 1;
+  }
+}
+
+@media (prefers-color-scheme: dark) {
+  .item-action:hover {
+    background: rgba(255, 255, 255, 0.08);
+  }
+}

@@ -41,6 +41,8 @@ export const NewsItemSchema = z.object({
   // time the data file is loaded rather than needing a migration.
   title: z.string().transform(stripMarkup),
   summary: z.string().transform(stripMarkup),
+  /** Whether the user bookmarked this story (NEWS-42). Defaults false. */
+  saved: z.boolean().default(false),
   sources: z.array(NewsSourceSchema),
   /**
    * Lead image, cached locally. `hash` names the file the image route serves;

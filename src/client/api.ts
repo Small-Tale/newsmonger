@@ -126,6 +126,12 @@ export async function deleteKey(provider: string): Promise<void> {
   await Promise.all([refreshKeys(), refreshProviders()]);
 }
 
+export function setItemSaved(id: string, saved: boolean): Promise<void> {
+  return withRefresh(() =>
+    request(`/api/items/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify({ saved }) }),
+  );
+}
+
 export function startCheck(topicId?: string): Promise<void> {
   return withRefresh(() =>
     request('/api/check', { method: 'POST', body: JSON.stringify(topicId !== undefined ? { topicId } : {}) }),

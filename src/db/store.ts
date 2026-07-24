@@ -87,6 +87,15 @@ export class Store {
    * Record a check *attempt*. Call for successes and failures alike — it is
    * what keeps the scheduler from retrying a broken provider every tick.
    */
+  /** Bookmark or un-bookmark a story. Returns the updated item, or null if gone. */
+  setItemSaved(id: string, saved: boolean): NewsItem | null {
+    const item = this.data.items.find((i) => i.id === id);
+    if (!item) return null;
+    item.saved = saved;
+    this.save();
+    return item;
+  }
+
   markTopicChecked(id: string, when: Date): void {
     const topic = this.getTopic(id);
     if (!topic) return; // topic may have been deleted mid-check
@@ -126,9 +135,9 @@ export class Store {
     return new Set(this.data.items.filter((i) => i.topicId === topicId).map((i) => i.dedupeKey));
   }
 
-  /** `image` is optional: most callers have no picture, and none is the norm. */
-  addItems(items: (Omit<NewsItem, 'id' | 'image'> & { image?: NewsItem['image'] })[]): NewsItem[] {
-    const added = items.map((item) => ({ image: null, ...item, id: randomUUID() }));
+  /** `image`/`saved` are optional: a new story has no picture and isn't saved. */
+  addItems(items: (Omit<NewsItem, 'id' | 'image' | 'saved'> & { image?: NewsItem['image']; saved?: boolean })[]): NewsItem[] {
+    const added = items.map((item) => ({ image: null, saved: false, ...item, id: randomUUID() }));
     this.data.items.push(...added);
     this.save();
     return added;
