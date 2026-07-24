@@ -29,7 +29,7 @@ jobs:
       - name: Resolve Playwright version
         id: pw
         run: echo "version=$(node -p "require('@playwright/test/package.json').version")" >> "$GITHUB_OUTPUT"
-      - uses: actions/cache@v4
+      - uses: actions/cache@v6
         id: pw-cache
         with:
           path: ~/.cache/ms-playwright
