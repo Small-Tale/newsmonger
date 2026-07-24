@@ -6,6 +6,14 @@ Status markers: **Shipped** · **Partial** · **Design only** · **Deferred**. S
 
 Add/delete/pause topics (unique, case-insensitive); global interval (default 1 day, min 5 min); minute-tick scheduler + startup sweep; sequential, non-overlapping checks; failures advance `lastCheckedAt` (retry next interval); manual per-topic and check-all triggers; **adding a topic checks it immediately** (manual-semantics, background-fired — FR-1.12, NEWS-54). All shipped and covered by unit + E2E tests.
 
+## [14 — Feed Search](../14-search.md) — Shipped
+
+- FR-14.1 live header search box; case-insensitive match on title/summary/topic name — NEWS-60: **Shipped**
+- FR-14.2 composes with Solo/Saved; ephemeral query: **Shipped**
+- FR-14.3 compact box that animates wider on focus/non-empty, with a clear button: **Shipped**
+- FR-14.4 "no stories match" empty state: **Shipped**
+- Live on-demand web search: **Deferred** (feed-filter only for now)
+
 ## [13 — Scheduling Under Load](../13-scheduling-under-load.md) — Shipped
 
 - FR-13.1 overrun cycle restarts immediately (scheduler drains; `checkDue` returns a count) — NEWS-57: **Shipped**

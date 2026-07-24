@@ -39,6 +39,8 @@ export interface AppState {
   selectedTopicIds: string[];
   /** When true, the feed shows only bookmarked stories (NEWS-42). Ephemeral. */
   savedFilter: boolean;
+  /** Live feed search query (NEWS-60). Ephemeral, composes with Solo/Saved. */
+  searchQuery: string;
   /**
    * Topics that are solo'd: when non-empty, the feed shows only their stories.
    *
@@ -141,6 +143,7 @@ export const appStore = defineStore({
     sidebarCollapsed: readSidebarCollapsed(),
     selectedTopicIds: [],
     savedFilter: false,
+    searchQuery: '',
     soloTopicIds: [],
     contextMenu: null,
     confirm: null,
@@ -173,6 +176,9 @@ export const appStore = defineStore({
     },
     setSavedFilter: (savedFilter: boolean) => {
       set({ ...get(), savedFilter });
+    },
+    setSearchQuery: (searchQuery: string) => {
+      set({ ...get(), searchQuery });
     },
     openContextMenu: (menu: { x: number; y: number; topicIds: string[] }) => {
       set({ ...get(), contextMenu: menu });

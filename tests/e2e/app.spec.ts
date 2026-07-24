@@ -510,3 +510,36 @@ test('warns when checks fall behind the chosen interval (NEWS-59)', async ({ pag
   await page.selectOption('[data-action=interval]', String(24 * HOUR));
   await page.locator('.dialog [data-action=close-settings]').click();
 });
+
+test('search filters the feed live, and clearing restores it (NEWS-60)', async ({ page }) => {
+  await page.goto('/');
+  await page.fill('.add-topic input', 'Search Probe');
+  await page.press('.add-topic input', 'Enter');
+  const row = page.locator('.topic', { hasText: 'Search Probe' });
+  await expect(row).toBeVisible();
+  const probeItems = page.locator('.item', { has: page.locator('.item-topic', { hasText: 'Search Probe' }) });
+  await expect(probeItems).toHaveCount(2, { timeout: 15_000 });
+
+  const box = page.locator('.search');
+  const input = page.locator('[data-action=search]');
+
+  // "experts" appears in only one of the two deterministic mock stories.
+  await input.fill('experts');
+  await expect(box).toHaveClass(/has-query/); // the box widens when it has a query
+  await expect(probeItems).toHaveCount(1);
+  await expect(probeItems.first()).toContainText(/experts/i);
+
+  // A no-match query shows the empty state (all topics filtered out).
+  await input.fill('zzznotarealword');
+  await expect(page.locator('#feed .empty')).toContainText('No stories match');
+
+  // Clearing restores the full feed and collapses the box.
+  await page.locator('[data-action=clear-search]').click();
+  await expect(input).toHaveValue('');
+  await expect(box).not.toHaveClass(/has-query/);
+  await expect(probeItems).toHaveCount(2);
+
+  // Clean up.
+  await topicAction(page, row, 'delete');
+  await expect(row).toHaveCount(0);
+});

@@ -50,6 +50,7 @@ src/
     share.ts          shareText + shareItem — OS share sheet, clipboard fallback (NEWS-43)
     schedule.ts       isBehindSchedule/topicsBehindSchedule — falling-behind detection for the banner (NEWS-59)
     failure.ts        currentFailure — the topic-currently-failing warning source (NEWS-41); dismissal persisted in localStorage
+    search.ts         itemMatchesQuery/filterItemsByQuery — live feed search filter (NEWS-60)
     styles.scss       styling (light/dark via prefers-color-scheme)
 src-tauri/            Tauri v2 shell; one spawn path, dev runs tsx + release runs the sidecar
   src/lib.rs          server_command() picks the command; spawn_server() watches stdout + navigates
@@ -62,7 +63,7 @@ tests/
   helpers/            tmp.ts (tmp data dirs), provider.ts (asResolver/fakeProvider)
   unit/               vitest: dedupe, store, checks, scheduler, config, parse-result, providers, openai, api, api-keys, api-keys-routes, attendance, catch-up, sanitize
   e2e/                playwright, serial, mock AI (--ai-test), port 4189: app.spec.ts, keys.spec.ts, topics.spec.ts
-docs/                 numbered requirements (1–13), ai/ summaries, manual-test-plan.md
+docs/                 numbered requirements (1–14), ai/ summaries, manual-test-plan.md
 ```
 
 ## Data schema (`<data-dir>/data.json`)
@@ -115,4 +116,5 @@ Data dir: `--data-dir` flag → `NEWS_DATA_DIR` → `~/.news`.
 | Topic selection / context menu / solo | `src/client/app.tsx` (`contextMenuJsx`, `selectTopic`, `runTopicAction`); state in `stores.ts`. **Row state outside the topic object needs `each()`'s cacheKey** |
 | Confirm a destructive action | `confirm()` helper + `confirmDialogJsx` in `app.tsx`. **Never `window.confirm` — a silent no-op in Tauri's WKWebView** |
 | Save/bookmark or share a story | `src/client/app.tsx` (bookmark + share buttons in `itemJsx`, `showToast`); `setItemSaved` in `store.ts` + `PATCH /api/items/:id`; `src/client/share.ts`. See `docs/11-story-actions.md` |
+| Feed filters (Solo / Saved / Search) | `src/client/app.tsx` feed pipeline (`soloItems` → `savedItems` → `filterItemsByQuery`); Solo/Saved/`searchQuery` state in `stores.ts`; `src/client/search.ts`. See `docs/14-search.md` |
 | Transient toast | `#toast-slot`/`.toast` + `showToast` in `app.tsx`; `toast` state in `stores.ts`. **Never `window.alert` — a WKWebView no-op** |

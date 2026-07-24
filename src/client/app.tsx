@@ -26,6 +26,7 @@ import { currentFailure } from './failure.js';
 import { icon } from './icons.js';
 import { ensureNotificationPermission } from './notifications.js';
 import { topicsBehindSchedule } from './schedule.js';
+import { filterItemsByQuery } from './search.js';
 import { shareItem } from './share.js';
 import type { AppState } from './stores.js';
 import { appStore } from './stores.js';
@@ -616,7 +617,10 @@ function appJsx(): SafeHtml {
   const allItems = [...s.items].sort((a, b) => b.foundAt.localeCompare(a.foundAt));
   // Solo is a view filter: it hides stories, never deletes or unsubscribes.
   const soloItems = solo.size > 0 ? allItems.filter((i) => solo.has(i.topicId)) : allItems;
-  const sortedItems = s.savedFilter ? soloItems.filter((i) => i.saved) : soloItems;
+  const savedItems = s.savedFilter ? soloItems.filter((i) => i.saved) : soloItems;
+  // Search narrows within whatever Solo/Saved is showing (NEWS-60).
+  const sortedItems = filterItemsByQuery(savedItems, topicNames, s.searchQuery);
+  const searching = s.searchQuery.trim() !== '';
   const savedCount = allItems.filter((i) => i.saved).length;
   const anyChecking = s.checking.length > 0;
   // Only warn about a topic whose *latest* run failed — not a stale failure from
@@ -646,6 +650,22 @@ function appJsx(): SafeHtml {
           </h1>
         </div>
         <div class="header-controls">
+          {/* Small by design; grows on focus or when it has a query (NEWS-60).
+              Clear button is always rendered and shown via CSS so the input's
+              siblings never restructure (kerf morph safety). */}
+          <div class={`search${searching ? ' has-query' : ''}`}>
+            {icon('search', 16)}
+            <input
+              type="text"
+              class="search-input"
+              placeholder="Search stories"
+              aria-label="Search stories"
+              data-action="search"
+            />
+            <button class="search-clear" type="button" data-action="clear-search" aria-label="Clear search">
+              {icon('clear', 14)}
+            </button>
+          </div>
           <button
             class={`btn icon${s.savedFilter ? ' active' : ''}`}
             data-action="toggle-saved-filter"
@@ -801,7 +821,9 @@ function appJsx(): SafeHtml {
       <section id="feed" class="feed">
         {feedJsx(sortedItems, topicNames)}
         <div class="empty-slot">
-          {s.loaded && sortedItems.length === 0 && s.savedFilter ? (
+          {s.loaded && sortedItems.length === 0 && searching ? (
+            <p class="empty">No stories match your search.</p>
+          ) : s.loaded && sortedItems.length === 0 && s.savedFilter ? (
             <p class="empty">No saved stories yet. Use the bookmark button on a story to keep it here.</p>
           ) : s.loaded && sortedItems.length === 0 && s.topics.length > 0 ? (
             <p class="empty">No stories yet. Check now, or let the next scheduled check run — only genuinely new news lands here.</p>
@@ -1058,6 +1080,22 @@ function wireEvents(root: HTMLElement): void {
   });
   void delegate(root, 'click', '[data-action=clear-saved-filter]', () => {
     appStore.actions.setSavedFilter(false);
+  });
+
+  // Live feed search (NEWS-60). The input is uncontrolled — no `value` binding —
+  // so re-rendering the app on each keystroke can't fight the cursor; the store
+  // just drives the filter and the expand/collapse class.
+  void delegate(root, 'input', '[data-action=search]', (_e, el) => {
+    appStore.actions.setSearchQuery((el as HTMLInputElement).value);
+  });
+  void delegate(root, 'click', '[data-action=clear-search]', (_e, el) => {
+    // Clear the store AND the uncontrolled input's live value, then refocus it.
+    appStore.actions.setSearchQuery('');
+    const input = el.closest('.search')?.querySelector<HTMLInputElement>('[data-action=search]');
+    if (input) {
+      input.value = '';
+      input.focus();
+    }
   });
 
   void delegate(root, 'click', '[data-action=dismiss-error]', () => {
