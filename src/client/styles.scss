@@ -232,12 +232,50 @@ h2.eyebrow {
   color: var(--ink);
 }
 
+// Flex + gap rather than literal separator characters between the parts: the
+// state span is empty until a provider has been probed, and a hard-coded
+// separator would then either double up or strand itself.
+.source-state:empty {
+  display: none;
+}
+
+.state {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+
+  .icon {
+    stroke-width: 2.4;
+  }
+
+  &.ok {
+    color: var(--pine);
+  }
+
+  &.warn {
+    color: var(--marigold);
+  }
+}
+
+.key-state .icon {
+  stroke-width: 2.4;
+  vertical-align: -2px;
+}
+
 .source-status {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px 10px;
   margin: 8px 0 0;
   font-family: var(--mono);
   font-size: 10.5px;
   color: var(--ink-soft);
   min-height: 1.2em;
+
+  .source-last:empty {
+    display: none;
+  }
 }
 
 .topics {
@@ -476,14 +514,17 @@ h2.eyebrow {
   gap: 4px 16px;
 
   a {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
     font-size: 12.5px;
     color: var(--ink-soft);
     text-decoration: none;
     transition: color 120ms ease;
 
-    &::before {
-      content: '→ ';
+    .icon {
       color: var(--pine);
+      stroke-width: 2.2;
     }
 
     &:hover {
@@ -540,23 +581,6 @@ h2.eyebrow {
   }
 }
 
-// The sidebar toggle's panel glyph: the divider fills in when the panel is
-// showing, so the button reflects state rather than just naming an action.
-.panel-frame {
-  fill: none;
-  stroke: currentColor;
-  stroke-width: 1.4;
-}
-
-.panel-divider {
-  stroke: currentColor;
-  stroke-width: 1.4;
-}
-
-.shell:not(.sidebar-collapsed) .panel-divider {
-  stroke-width: 3.6;
-}
-
 // ------------------------------------------------------ settings dialog ---
 
 .btn.subtle {
@@ -571,7 +595,8 @@ h2.eyebrow {
   }
 }
 
-// Glyph-only buttons (gear, ✕) need the mark to read as a control.
+// Icon-only buttons (settings, close, panel toggle) need the mark to read as a
+// control rather than decoration.
 .btn.icon {
   background: none;
   border-color: transparent;

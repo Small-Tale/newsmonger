@@ -18,6 +18,7 @@ Default Anthropic provider (`claude-opus-4-8` + web search), prompt-level exclus
 
 - Collapsible topics sidebar (localStorage-persisted, panel stays mounted): **Shipped**
 - Topic selection (click / Cmd-click / Shift-range), right-click context menu with Lucide icons, bulk actions, Delete key: **Shipped**
+- All icons are Lucide; no emoji or text glyphs anywhere in the UI (E2E-guarded): **Shipped**
 - Solo (show only chosen topics' stories) — additive, banner + dimming, ephemeral by design: **Shipped**
 
 Header/interval/check-all, topics panel with actions + confirm-delete, newest-first feed with source links, error + last-failure banners, 4 s visible-tab polling, empty states, light/dark. kerf structural conventions documented and E2E-regression-tested.

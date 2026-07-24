@@ -40,7 +40,7 @@ src/
     app.tsx           kerf UI: mount + delegates; header/banners/settings dialog/topics/feed
     stores.ts         appStore (defineStore)
     api.ts            fetch wrappers, refreshState (zod-validated), withRefresh
-    icons.tsx         Lucide paths inlined (lucide-static@1.26.0), no runtime dep
+    icons.tsx         ALL icons live here — Lucide paths inlined (lucide-static@1.26.0), no runtime dep, no emoji
     tauri.ts          __TAURI__ detection, openExternalUrl
     styles.scss       styling (light/dark via prefers-color-scheme)
 src-tauri/            Tauri v2 shell; one spawn path, dev runs tsx + release runs the sidecar

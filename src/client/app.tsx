@@ -152,6 +152,7 @@ function itemJsx(item: NewsItem, topicName: string): SafeHtml {
         {item.sources.map((source, i) => (
           <li data-key={`${item.id}-${i}`}>
             <a href={source.url} target="_blank" rel="noopener noreferrer" data-external="1">
+              {icon('arrow', 13)}
               {source.title !== '' ? source.title : source.url}
             </a>
           </li>
@@ -191,9 +192,23 @@ function sourceJsx(): SafeHtml {
       <h2 class="eyebrow">Source</h2>
       <p class="source-status">
         <span class="source-name">{PROVIDER_INFO[provider].label}</span>
-        {availability === false ? ' · ⚠ no API key — open Settings' : ''}
-        {availability === true ? ' · ✓ ready' : ''}
-        {lastProvider !== null ? ` · last check via ${lastProvider}` : ''}
+        <span class="source-state">
+          {availability === false ? (
+            <span class="state warn">
+              {icon('warn', 12)} no API key — open Settings
+            </span>
+          ) : (
+            ''
+          )}
+          {availability === true ? (
+            <span class="state ok">
+              {icon('ok', 12)} ready
+            </span>
+          ) : (
+            ''
+          )}
+        </span>
+        <span class="source-last">{lastProvider !== null ? `last check via ${lastProvider}` : ''}</span>
       </p>
     </div>
   );
@@ -215,7 +230,9 @@ function keyRowJsx(key: AppState['keys'][number], keychainLabel: string, keychai
     return (
       <div class="key-row" data-key={`key-${key.provider}`}>
         <span class="key-provider">{key.label}</span>
-        <span class="key-state ok">✓ from {key.envVar}</span>
+        <span class="key-state ok">
+          {icon('ok', 13)} from {key.envVar}
+        </span>
         <span class="key-hint">Set in the environment — unset the variable to change it.</span>
       </div>
     );
@@ -225,7 +242,9 @@ function keyRowJsx(key: AppState['keys'][number], keychainLabel: string, keychai
     return (
       <div class="key-row" data-key={`key-${key.provider}`}>
         <span class="key-provider">{key.label}</span>
-        <span class="key-state ok">✓ stored in {keychainLabel}</span>
+        <span class="key-state ok">
+          {icon('ok', 13)} stored in {keychainLabel}
+        </span>
         <button class="btn subtle" type="button" data-remove-key={key.provider}>
           Remove
         </button>
@@ -267,7 +286,7 @@ function settingsDialogJsx(): SafeHtml {
         <div class="dialog-head">
           <h2 id="settings-title">Settings</h2>
           <button class="btn icon" type="button" data-action="close-settings" aria-label="Close settings">
-            ✕
+            {icon('clear', 17)}
           </button>
         </div>
 
@@ -424,10 +443,7 @@ function appJsx(): SafeHtml {
             aria-label={s.sidebarCollapsed ? 'Show topics' : 'Hide topics'}
             title={s.sidebarCollapsed ? 'Show topics' : 'Hide topics'}
           >
-            <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
-              <rect class="panel-frame" x="1.5" y="2.5" width="13" height="11" rx="2" />
-              <line class="panel-divider" x1="6" y1="2.5" x2="6" y2="13.5" />
-            </svg>
+            {icon('panel', 17)}
           </button>
           <h1 class="wordmark">
             News<span class="mark-dot">.</span>
@@ -435,7 +451,7 @@ function appJsx(): SafeHtml {
         </div>
         <div class="header-controls">
           <button class="btn icon" data-action="open-settings" aria-label="Settings" title="Settings">
-            ⚙
+            {icon('settings', 17)}
           </button>
           <button class="btn primary" data-action="check-all" disabled={anyChecking ? true : undefined}>
             {anyChecking ? 'Checking…' : 'Check all now'}

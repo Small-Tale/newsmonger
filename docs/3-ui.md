@@ -25,6 +25,18 @@ Two rendering rules this UI depends on — regression-tested by the E2E suite:
 - Keep sibling structure around keyed lists stable: conditional elements (banners) live inside an always-present container (`#banners`). **This works around a confirmed kerfjs 2.0.0 bug (kerf KF-377)**: removing a conditional sibling rendered before a keyed `each()` list permanently empties the list (verified in a minimal standalone repro attached to that ticket).
 - Keep `each()` containers structurally stable: empty-state messages render *alongside* the list, not instead of it. The pure container swap (`<p>` ↔ `<ul>{each(...)}</ul>`) tested OK in isolation on 2.0.0, so this one is defensive convention rather than a confirmed trigger — but the app's original failures involved the combination, and the stable shape is regression-covered here and flagged for a pinning test in KF-377.
 
+## Icons
+
+**Every icon comes from `src/client/icons.tsx`. No emoji, and no hand-drawn glyphs.** An emoji renders as someone else's artwork at someone else's weight and colour, and no amount of CSS brings it into line with a stroked icon set — the gear, the close ✕, and the source-link arrow were all previously text characters and all three sat visibly wrong next to real icons.
+
+Path data is copied verbatim from [`lucide-static@1.26.0`](https://lucide.dev) rather than taken as a dependency: the set is a few hundred bytes against a package that would be staged into the desktop sidecar's `node_modules`. Re-copy from the same version when adding icons so the set stays visually consistent.
+
+The one exception is the **watch dial** on each topic row, which is a data visualisation — its arc encodes progress toward the next check — rather than an icon.
+
+`icon(name, size)` renders at the requested pixel size; `.icon` in `styles.scss` sets `stroke` to `currentColor` so icons inherit the colour of whatever they sit in. Lucide's 24×24 grid assumes a 2px stroke, which reads as a blob at 12–15px, so the stroke is scaled down there.
+
+An E2E test scans the rendered DOM for arrow/dingbat/symbol/emoji codepoints and fails if any appear in a text node — typographic punctuation (em dash, curly quotes, ellipsis, middle dot) is deliberately excluded, since that's prose rather than iconography.
+
 ## Topic selection, context menu, and solo
 
 Topic actions used to be three buttons per row, revealed on hover. They were invisible most of the time yet always reserved their width, so every topic name was truncated to pay for controls nobody could see. They now live in a right-click menu.

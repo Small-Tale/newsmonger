@@ -11,8 +11,25 @@ import type { SafeHtml } from 'kerfjs';
  *
  * Lucide's grid is 24×24 with a 2px stroke; `stroke-width` is scaled down here
  * because these render at 15px, where a literal 2px stroke reads as a blob.
+ *
+ * Every icon in the UI comes from here. No emoji, and no hand-drawn glyphs —
+ * emoji render as someone else's artwork at someone else's weight and colour,
+ * which no amount of CSS brings into line with a stroked icon set. The one
+ * exception is the watch dial, which is a data visualisation (its arc encodes
+ * progress toward the next check) rather than an icon.
  */
-export type IconName = 'check' | 'pause' | 'play' | 'solo' | 'delete' | 'clear';
+export type IconName =
+  | 'check'
+  | 'pause'
+  | 'play'
+  | 'solo'
+  | 'delete'
+  | 'clear'
+  | 'settings'
+  | 'panel'
+  | 'ok'
+  | 'warn'
+  | 'arrow';
 
 function paths(name: IconName): SafeHtml {
   switch (name) {
@@ -58,6 +75,41 @@ function paths(name: IconName): SafeHtml {
         <g>
           <path d="M18 6 6 18" />
           <path d="m6 6 12 12" />
+        </g>
+      );
+    case 'settings':
+      return (
+        <g>
+          <path d="M9.671 4.136a2.34 2.34 0 0 1 4.659 0 2.34 2.34 0 0 0 3.319 1.915 2.34 2.34 0 0 1 2.33 4.033 2.34 2.34 0 0 0 0 3.831 2.34 2.34 0 0 1-2.33 4.033 2.34 2.34 0 0 0-3.319 1.915 2.34 2.34 0 0 1-4.659 0 2.34 2.34 0 0 0-3.32-1.915 2.34 2.34 0 0 1-2.33-4.033 2.34 2.34 0 0 0 0-3.831A2.34 2.34 0 0 1 6.35 6.051a2.34 2.34 0 0 0 3.319-1.915" />
+          <circle cx="12" cy="12" r="3" />
+        </g>
+      );
+    case 'panel': // panel-left
+      return (
+        <g>
+          <rect width="18" height="18" x="3" y="3" rx="2" />
+          <path d="M9 3v18" />
+        </g>
+      );
+    case 'ok': // check
+      return (
+        <g>
+          <path d="M20 6 9 17l-5-5" />
+        </g>
+      );
+    case 'warn': // triangle-alert
+      return (
+        <g>
+          <path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3" />
+          <path d="M12 9v4" />
+          <path d="M12 17h.01" />
+        </g>
+      );
+    case 'arrow': // arrow-right
+      return (
+        <g>
+          <path d="M5 12h14" />
+          <path d="m12 5 7 7-7 7" />
         </g>
       );
   }

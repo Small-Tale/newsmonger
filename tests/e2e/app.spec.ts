@@ -188,3 +188,32 @@ test('the topics sidebar collapses and the choice persists', async ({ page }) =>
   await expect(page.locator('.topics-panel')).toBeVisible();
   await expect(page.locator('.topic')).toHaveCount(topicCount);
 });
+
+test('every icon is Lucide artwork, never a text glyph', async ({ page }) => {
+  // NEWS-35: emoji and symbol characters render as someone else's artwork at
+  // someone else's weight and colour, which no CSS brings into line with a
+  // stroked icon set. This fails loudly if one creeps back in.
+  await page.goto('/');
+  await expect(page.locator('.topic').first()).toBeVisible();
+
+  const glyphs = await page.evaluate(() => {
+    // Arrows, dingbats, symbols, and emoji — deliberately NOT matching
+    // typographic punctuation (em dash, curly quotes, ellipsis, middle dot),
+    // which is prose rather than iconography.
+    const iconish = /[\u2190-\u21FF\u2300-\u23FF\u2500-\u27BF\u2B00-\u2BFF\u{1F300}-\u{1FAFF}]/u;
+    const found: string[] = [];
+    document.querySelectorAll('body *').forEach((el) => {
+      el.childNodes.forEach((n) => {
+        if (n.nodeType === Node.TEXT_NODE && iconish.test(n.textContent ?? '')) {
+          found.push(`${el.tagName}: ${(n.textContent ?? '').trim().slice(0, 40)}`);
+        }
+      });
+    });
+    return found;
+  });
+  expect(glyphs).toEqual([]);
+
+  // And the icon-only controls really are rendered icons.
+  await expect(page.locator('[data-action=open-settings] svg.icon')).toHaveCount(1);
+  await expect(page.locator('[data-action=toggle-sidebar] svg.icon')).toHaveCount(1);
+});
