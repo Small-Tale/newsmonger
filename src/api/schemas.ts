@@ -18,6 +18,7 @@ export const UpdateSettingsReqSchema = z
     provider: z.enum(PROVIDER_NAMES),
     model: z.string().max(200),
     endpoint: z.string().max(500),
+    notifyOnNewItems: z.boolean(),
   })
   .partial()
   .refine((v) => Object.keys(v).length > 0, { message: 'at least one setting is required' });

@@ -244,3 +244,53 @@ test('the model field is a combobox with per-provider suggestions (NEWS-37)', as
   await page.locator('[data-action=model]').blur();
   await page.selectOption('[data-action=provider]', 'auto');
 });
+
+test('notification toggle persists when permission is granted (NEWS-38)', async ({ page, context }) => {
+  await context.grantPermissions(['notifications']);
+  await page.addInitScript(() => {
+    class Rec {
+      static permission = 'granted';
+      static requestPermission = () => Promise.resolve('granted');
+      close() {}
+    }
+    (window as unknown as { Notification: unknown }).Notification = Rec;
+  });
+  await page.goto('/');
+  await openSettings(page);
+
+  await page.check('[data-action=notify-toggle]');
+  await expect(page.locator('[data-action=notify-toggle]')).toBeChecked();
+  // Survives a reload — it's a real persisted setting.
+  await page.reload();
+  await openSettings(page);
+  await expect(page.locator('[data-action=notify-toggle]')).toBeChecked();
+  await expect(page.locator('.notify-note .note')).toHaveCount(0);
+
+  // Turn it back off so later tests see a clean app.
+  await page.uncheck('[data-action=notify-toggle]');
+  await expect(page.locator('[data-action=notify-toggle]')).not.toBeChecked();
+});
+
+test('a refused notification permission shows a note and leaves the toggle off (NEWS-38)', async ({ page }) => {
+  await page.addInitScript(() => {
+    class Rec {
+      static permission = 'default';
+      static requestPermission = () => Promise.resolve('denied');
+      close() {}
+    }
+    (window as unknown as { Notification: unknown }).Notification = Rec;
+  });
+  await page.goto('/');
+  await openSettings(page);
+
+  await page.click('[data-action=notify-toggle]');
+  await expect(page.locator('.notify-note .note')).toBeVisible();
+  await expect(page.locator('[data-action=notify-toggle]')).not.toBeChecked();
+
+  // And nothing was persisted.
+  const persisted = await page.evaluate(async () => {
+    const r = await fetch('/api/state');
+    return ((await r.json()) as { settings: { notifyOnNewItems: boolean } }).settings.notifyOnNewItems;
+  });
+  expect(persisted).toBe(false);
+});

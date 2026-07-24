@@ -13,12 +13,14 @@ import {
   refreshState,
   reportForeground,
   saveKey,
+  setNotifyOnNewItems,
   setTopicPaused,
   startCheck,
   updateInterval,
   updateProviderSettings,
 } from './api.js';
 import { icon } from './icons.js';
+import { ensureNotificationPermission } from './notifications.js';
 import type { AppState } from './stores.js';
 import { appStore } from './stores.js';
 import { openExternalUrl } from './tauri.js';
@@ -446,6 +448,27 @@ function settingsDialogJsx(): SafeHtml {
           )}
         </div>
 
+        <h3 class="eyebrow">Notifications</h3>
+        <label class="field checkbox-field">
+          <input
+            type="checkbox"
+            data-action="notify-toggle"
+            checked={s.settings.notifyOnNewItems ? true : undefined}
+          />
+          <span>Notify me when new stories arrive while News isn’t focused</span>
+        </label>
+        {/* Always-present slot for the permission note (KF-377). */}
+        <div class="notify-note">
+          {s.notifyPermissionDenied ? (
+            <p class="note warn">
+              Notifications are blocked for this app in your browser or system settings. Enable them there to turn
+              this on.
+            </p>
+          ) : (
+            ''
+          )}
+        </div>
+
         <h3 class="eyebrow">API keys</h3>
         <div class="keys">{s.keys.map((k) => keyRowJsx(k, s.keychainLabel, s.keychainAvailable))}</div>
 
@@ -851,6 +874,31 @@ function wireEvents(root: HTMLElement): void {
 
   void delegate(root, 'click', '[data-action=clear-solo]', () => {
     appStore.actions.setSolo([]);
+  });
+
+  // Notification toggle. Enabling requires a permission grant, and the request
+  // must ride the user gesture that is this change event.
+  void delegate(root, 'change', '[data-action=notify-toggle]', (_e, el) => {
+    const wantsOn = (el as HTMLInputElement).checked;
+    if (!wantsOn) {
+      appStore.actions.setNotifyPermissionDenied(false);
+      void setNotifyOnNewItems(false);
+      return;
+    }
+    void (async () => {
+      const granted = await ensureNotificationPermission();
+      appStore.actions.setNotifyPermissionDenied(!granted);
+      if (granted) {
+        // Persist only when we can actually deliver — otherwise the box would
+        // read "on" while nothing ever fires.
+        await setNotifyOnNewItems(true);
+      } else {
+        // The user's click already checked the box. The stored setting stays
+        // false, but false→false is no attribute change, so morph won't reset
+        // the live `checked` property — do it by hand.
+        (el as HTMLInputElement).checked = false;
+      }
+    })();
   });
 
   void delegate(root, 'click', '[data-action=confirm-ok]', () => {

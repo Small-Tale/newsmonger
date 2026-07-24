@@ -1,5 +1,6 @@
 import type { ProviderName } from '../ai/types.js';
 import { KeysRespSchema, ProvidersRespSchema, StateRespSchema } from '../api/schemas.js';
+import { noteState } from './notifications.js';
 import { appStore } from './stores.js';
 
 async function request(path: string, init?: RequestInit): Promise<unknown> {
@@ -21,7 +22,10 @@ async function request(path: string, init?: RequestInit): Promise<unknown> {
 export async function refreshState(): Promise<void> {
   try {
     const body = await request('/api/state');
-    appStore.actions.setState(StateRespSchema.parse(body));
+    const state = StateRespSchema.parse(body);
+    appStore.actions.setState(state);
+    // Fire an OS notification if new stories arrived while unfocused (NEWS-38).
+    noteState(state);
   } catch (err) {
     appStore.actions.setError(err instanceof Error ? err.message : String(err));
   }
@@ -49,6 +53,12 @@ export function deleteTopic(id: string): Promise<void> {
 export function setTopicPaused(id: string, paused: boolean): Promise<void> {
   return withRefresh(() =>
     request(`/api/topics/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify({ paused }) }),
+  );
+}
+
+export function setNotifyOnNewItems(notifyOnNewItems: boolean): Promise<void> {
+  return withRefresh(() =>
+    request('/api/settings', { method: 'PATCH', body: JSON.stringify({ notifyOnNewItems }) }),
   );
 }
 

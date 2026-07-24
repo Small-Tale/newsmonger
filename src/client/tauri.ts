@@ -1,7 +1,13 @@
 import { openExternal } from './api.js';
 
+interface TauriWindow {
+  requestUserAttention?: (type: number | null) => Promise<unknown>;
+  setFocus?: () => Promise<unknown>;
+}
+
 interface TauriGlobal {
   core?: { invoke?: (cmd: string) => Promise<unknown> };
+  window?: { getCurrentWindow?: () => TauriWindow };
 }
 
 /** The Tauri global injected into the webview when running as a desktop app. */
@@ -25,4 +31,36 @@ export function openExternalUrl(url: string): boolean {
     /* nothing sensible to do in the webview */
   });
   return true;
+}
+
+/** UserAttentionType.Critical — the continuous dock bounce / taskbar flash. */
+const ATTENTION_CRITICAL = 1;
+
+/**
+ * Bounce the dock icon (macOS) or flash the taskbar (Windows/Linux).
+ *
+ * Best-effort and desktop-only: in a browser there is no icon to bounce, so
+ * this is a no-op. Reached through the global Tauri API (`withGlobalTauri` in
+ * tauri.conf.json) rather than an import, so the browser build pulls in no
+ * Tauri packages. **Unverified in a live Tauri window in this environment** —
+ * see docs/10-notifications.md.
+ */
+export function bounceDockIcon(): void {
+  const win = getTauriGlobal()?.window?.getCurrentWindow?.();
+  if (win?.requestUserAttention === undefined) return;
+  // Promise.resolve guards against a non-promise runtime return; attention is a
+  // nicety, so a rejection is swallowed.
+  void Promise.resolve(win.requestUserAttention(ATTENTION_CRITICAL)).catch(() => {
+    /* never surface a failure */
+  });
+}
+
+/** Bring the desktop window to the front (best-effort, desktop-only). */
+export function focusAppWindow(): void {
+  const win = getTauriGlobal()?.window?.getCurrentWindow?.();
+  if (win?.setFocus !== undefined) {
+    void Promise.resolve(win.setFocus()).catch(() => {});
+    return;
+  }
+  if (typeof window !== 'undefined') window.focus();
 }

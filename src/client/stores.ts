@@ -53,6 +53,8 @@ export interface AppState {
    * every guarded action (delete, key removal) do nothing in the desktop app.
    */
   confirm: { message: string; confirmLabel: string; danger: boolean } | null;
+  /** True when the user tried to enable notifications but permission was refused. */
+  notifyPermissionDenied: boolean;
 }
 
 /**
@@ -79,7 +81,7 @@ export const appStore = defineStore({
     error: null,
     topics: [],
     items: [],
-    settings: { checkIntervalMs: 24 * 60 * 60 * 1000, provider: 'auto', model: '', endpoint: '' },
+    settings: { checkIntervalMs: 24 * 60 * 60 * 1000, provider: 'auto', model: '', endpoint: '', notifyOnNewItems: false },
     runs: [],
     checking: [],
     providers: [],
@@ -94,6 +96,7 @@ export const appStore = defineStore({
     soloTopicIds: [],
     contextMenu: null,
     confirm: null,
+    notifyPermissionDenied: false,
   }),
   actions: (set, get) => ({
     setSettingsOpen: (settingsOpen: boolean) => {
@@ -128,6 +131,9 @@ export const appStore = defineStore({
     },
     closeConfirm: () => {
       set({ ...get(), confirm: null });
+    },
+    setNotifyPermissionDenied: (notifyPermissionDenied: boolean) => {
+      set({ ...get(), notifyPermissionDenied });
     },
     setSidebarCollapsed: (sidebarCollapsed: boolean) => {
       if (typeof localStorage !== 'undefined') {

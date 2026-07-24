@@ -80,3 +80,9 @@ Subscription-backed providers (`attended: true`) run *scheduled* checks only whi
 - FR-9.9–9.11 subscription-first `AUTO_ORDER`, no key row, startup warning probes properly: **Shipped**
 - FR-9.12–9.17 `codex-cli`: read-only sandbox, schema-as-file, combined prompt, `auth_mode` probe, stderr ignored: **Shipped**
 - Live paths for both: **manual only** (unit tests inject a fake runner)
+
+## [10 — New-Item Notifications](../10-notifications.md) — Shipped (browser-verified; Tauri-native manual)
+
+- FR-10.1–10.4 opt-in setting, unfocused-only, 5-min throttle, first-load seeded silent: **Shipped**
+- FR-10.5 web Notification (click focuses the app): **Shipped, browser-verified**
+- FR-10.6 dock bounce / taskbar flash via Tauri `requestUserAttention`: **Shipped, unverified in a live WKWebView** (NEWS-40)

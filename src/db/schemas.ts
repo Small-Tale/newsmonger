@@ -67,6 +67,13 @@ export const SettingsSchema = z.object({
   model: z.string().default(''),
   /** Base URL for endpoint-based providers (Ollama / OpenAI-compatible); '' = default. */
   endpoint: z.string().default(''),
+  /**
+   * Whether to raise an OS notification (and bounce the dock / flash the
+   * taskbar) when new stories arrive while the app isn't focused. Opt-in — off
+   * by default, since it needs a browser permission grant and shouldn't
+   * surprise anyone.
+   */
+  notifyOnNewItems: z.boolean().default(false),
 });
 export type Settings = z.infer<typeof SettingsSchema>;
 
@@ -97,7 +104,13 @@ export function emptyDataFile(): DataFile {
   return {
     topics: [],
     items: [],
-    settings: { checkIntervalMs: DEFAULT_CHECK_INTERVAL_MS, provider: 'auto', model: '', endpoint: '' },
+    settings: {
+      checkIntervalMs: DEFAULT_CHECK_INTERVAL_MS,
+      provider: 'auto',
+      model: '',
+      endpoint: '',
+      notifyOnNewItems: false,
+    },
     runs: [],
   };
 }

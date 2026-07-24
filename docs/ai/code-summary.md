@@ -45,7 +45,8 @@ src/
     stores.ts         appStore (defineStore)
     api.ts            fetch wrappers, refreshState (zod-validated), withRefresh
     icons.tsx         ALL icons live here — Lucide paths inlined (lucide-static@1.26.0), no runtime dep, no emoji
-    tauri.ts          __TAURI__ detection, openExternalUrl
+    tauri.ts          __TAURI__ detection, openExternalUrl, bounceDockIcon, focusAppWindow
+    notifications.ts  noteState — OS notification when new items arrive while unfocused (NEWS-38)
     styles.scss       styling (light/dark via prefers-color-scheme)
 src-tauri/            Tauri v2 shell; one spawn path, dev runs tsx + release runs the sidecar
   src/lib.rs          server_command() picks the command; spawn_server() watches stdout + navigates

@@ -74,6 +74,16 @@ Same shape as the Claude one — unit tests inject a fake runner, so the live pa
 3. Confirm Codex writes nothing: it runs `-s read-only`, so a check must not create or modify files in the working directory.
 4. Sign out of Codex and check again — expect an actionable "Codex is not signed in" error.
 
+## New-item notifications in Tauri (NEWS-38) — needs a desktop run
+
+Browser-verified (toggle, permission, firing, throttle). The native desktop path is manual, because the web Notification API may behave differently in the WKWebView (cf. the window.confirm no-op in NEWS-39).
+
+1. `npm run tauri:dev`, enable notifications in Settings, grant permission.
+2. Add a topic with active coverage on an API-key provider, background the app, and let a scheduled check run — confirm an OS notification appears **and** the dock icon bounces (macOS) / taskbar flashes.
+3. Clicking the notification should bring the window to the front.
+4. Confirm nothing fires while the app is focused, and no more than once per 5 minutes.
+5. If the web Notification API does **not** work in the WKWebView, switch to the Tauri notification plugin (NEWS-40).
+
 ## Automated Coverage Summary
 
 - Topics CRUD, scheduling logic, dedup, parsing, API validation, and full UI flows are covered by `npm test` + `npm run test:e2e` (mock AI service).
