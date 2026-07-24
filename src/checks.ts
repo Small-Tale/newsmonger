@@ -1,7 +1,9 @@
 import { filterNewItems } from './ai/dedupe.js';
 import type { KnownItem, NewsProvider } from './ai/types.js';
 import { Attendance } from './attendance.js';
+import type { NewsItem } from './db/schemas.js';
 import type { Store } from './db/store.js';
+import type { ImageFetcher } from './images/index.js';
 
 /** Resolves the active provider from current settings, per check. */
 export type ProviderResolver = () => Promise<NewsProvider>;
@@ -28,6 +30,11 @@ export class CheckRunner {
      * subscription provider unattended.
      */
     private readonly attendance: Attendance = new Attendance(),
+    /**
+     * Resolves an article URL to a locally cached lead image. Optional so tests
+     * and the mock path never touch the network; omitted means no pictures.
+     */
+    private readonly fetchImage: ImageFetcher | null = null,
   ) {}
 
   /** Topic ids currently being checked. */
@@ -56,15 +63,21 @@ export class CheckRunner {
       // that failed with news pending must not shrink the next window.
       const found = await provider.checkTopic(topic.name, known, topic.coveredThroughAt);
       const fresh = filterNewItems(found, this.store.dedupeKeysForTopic(topicId));
+      // Fetch lead images before storing, so an item never appears without one
+      // and then pops a picture in a moment later. Failures are silent by
+      // design: a missing image is cosmetic, and must not fail the check.
+      const images = await this.resolveImages(fresh.map(({ item }) => item.sources[0]?.url));
+
       // The topic may have been deleted while the check was in flight.
       if (this.store.getTopic(topicId)) {
         const now = new Date().toISOString();
         this.store.addItems(
-          fresh.map(({ item, dedupeKey }) => ({
+          fresh.map(({ item, dedupeKey }, i) => ({
             topicId,
             title: item.title,
             summary: item.summary,
             sources: item.sources,
+            image: images[i] ?? null,
             dedupeKey,
             foundAt: now,
           })),
@@ -92,6 +105,22 @@ export class CheckRunner {
     } finally {
       this.inFlight.delete(topicId);
     }
+  }
+
+  /** Resolve a lead image per story, in parallel, never throwing. */
+  private async resolveImages(urls: (string | undefined)[]): Promise<(NewsItem['image'] | null)[]> {
+    const fetchImage = this.fetchImage;
+    if (fetchImage === null) return urls.map(() => null);
+    return Promise.all(
+      urls.map(async (url) => {
+        if (url === undefined) return null;
+        try {
+          return await fetchImage(url);
+        } catch {
+          return null; // a picture is never worth failing a check over
+        }
+      }),
+    );
   }
 
   /**

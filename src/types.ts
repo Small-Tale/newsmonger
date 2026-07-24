@@ -8,5 +8,7 @@ export interface AppEnv {
     store: Store;
     runner: CheckRunner;
     attendance: Attendance;
+    /** Data directory, for locating the on-disk image cache. */
+    dataDir: string;
   };
 }

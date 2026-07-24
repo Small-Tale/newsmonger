@@ -17,7 +17,11 @@ export class Store {
   private readonly filePath: string;
   private data: DataFile;
 
+  /** Where the data file and image cache live. */
+  readonly dataDir: string;
+
   constructor(dataDir: string) {
+    this.dataDir = dataDir;
     fs.mkdirSync(dataDir, { recursive: true });
     this.filePath = path.join(dataDir, 'data.json');
     this.data = this.load();
@@ -122,8 +126,9 @@ export class Store {
     return new Set(this.data.items.filter((i) => i.topicId === topicId).map((i) => i.dedupeKey));
   }
 
-  addItems(items: Omit<NewsItem, 'id'>[]): NewsItem[] {
-    const added = items.map((item) => ({ ...item, id: randomUUID() }));
+  /** `image` is optional: most callers have no picture, and none is the norm. */
+  addItems(items: (Omit<NewsItem, 'id' | 'image'> & { image?: NewsItem['image'] })[]): NewsItem[] {
+    const added = items.map((item) => ({ image: null, ...item, id: randomUUID() }));
     this.data.items.push(...added);
     this.save();
     return added;

@@ -59,3 +59,11 @@ Subscription-backed providers (`attended: true`) run *scheduled* checks only whi
 - FR-7.10 three key-row states; no input when a key exists: **Shipped**
 - FR-7.11 disabled inputs + env-var guidance with no keychain: **Shipped** (rendering path untested — needs a machine without a credential store)
 - FR-7.12 `NEWS_FAKE_KEYCHAIN=1` in-memory store for tests: **Shipped**
+
+## [8 — Article Images](../8-article-images.md) — Shipped (verified against live sites)
+
+- FR-8.1–8.3 og:image scraped server-side; no-image is the normal case; failures never cost a story: **Shipped**
+- FR-8.4–8.5 proxied through `/api/image/:hash`, content-addressed cache, zero third-party browser requests: **Shipped**
+- FR-8.6–8.11 SSRF guards (protocol, host, post-DNS address, re-validated image URL, cache-only route, size/type caps): **Shipped**
+- FR-8.12 fixed-ratio media slot, collapses when absent: **Shipped**
+- Cache pruning on topic delete: **Not implemented** (NEWS-36)

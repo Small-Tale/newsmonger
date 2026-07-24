@@ -15,6 +15,7 @@ src/
   checks.ts           CheckRunner (checkTopic/checkDue/checkAll, in-flight guard) + isDue()
   types.ts            Hono AppEnv (store, runner injected)
   keychain.ts         OS credential store via platform CLI (security/secret-tool/cmdkey)
+  images/             og:image scrape + local cache; safety.ts holds the SSRF guards
   attendance.ts       Attendance: in-memory lastSeenAt + 5 min window; gates attended providers
   db/
     schemas.ts        zod: Topic, NewsItem, Settings, CheckRun, DataFile; DEFAULT_CHECK_INTERVAL_MS
@@ -99,6 +100,7 @@ Data dir: `--data-dir` flag → `NEWS_DATA_DIR` → `~/.news`.
 | Mock behavior in tests | `src/ai/providers/mock.ts` (topic name containing "fail"/"empty" triggers those paths) |
 | API keys / keychain | `src/keychain.ts` (OS layer) + `src/ai/api-keys.ts` (env→keychain precedence); `NEWS_FAKE_KEYCHAIN=1` for tests |
 | Foreground/attendance gate | `src/attendance.ts` + `CheckRunner.checkDue`; provider opts in via `attended: true` |
+| Article images / SSRF guards | `src/images/` — `safety.ts` (URL vetting), `ogimage.ts` (extract), `cache.ts` (fetch+store), route `/api/image/:hash` is **cache-only** |
 | Settings dialog | `src/client/app.tsx` `settingsDialogJsx`/`keyRowJsx`; routes in `src/routes/api.ts` under `/api/keys` |
 | Sidebar collapse | `sidebarCollapsed` in `src/client/stores.ts` (localStorage `news:sidebar-collapsed`); `.shell.sidebar-collapsed` in `styles.scss` |
 | Topic selection / context menu / solo | `src/client/app.tsx` (`contextMenuJsx`, `selectTopic`, `runTopicAction`); state in `stores.ts`. **Row state outside the topic object needs `each()`'s cacheKey** |

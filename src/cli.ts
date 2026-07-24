@@ -9,6 +9,7 @@ import { CheckRunner } from './checks.js';
 import { parseArgs } from './config.js';
 import type { Settings } from './db/schemas.js';
 import { Store } from './db/store.js';
+import { createImageFetcher } from './images/index.js';
 import { openInBrowser } from './routes/api.js';
 import { startScheduler } from './scheduler.js';
 import { createApp, startServer } from './server.js';
@@ -62,8 +63,11 @@ async function main(): Promise<void> {
   // One tracker, shared: the route records foreground signals and the runner
   // reads them.
   const attendance = new Attendance();
-  const runner = new CheckRunner(store, resolve, attendance);
-  const app = createApp({ store, runner, attendance });
+  // No image fetching under --ai-test: the mock provider's URLs are fake, and
+  // a test run must not reach out to the network.
+  const fetchImage = options.aiTest ? null : createImageFetcher(options.dataDir);
+  const runner = new CheckRunner(store, resolve, attendance, fetchImage);
+  const app = createApp({ store, runner, attendance, dataDir: options.dataDir });
 
   const server = await startServer(app, {
     port: options.port ?? undefined,

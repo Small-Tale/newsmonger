@@ -1,4 +1,5 @@
 import { spawn } from 'node:child_process';
+import fs from 'node:fs';
 
 import type { Hono } from 'hono';
 import type { z } from 'zod';
@@ -15,6 +16,7 @@ import {
   UpdateSettingsReqSchema,
   UpdateTopicReqSchema,
 } from '../api/schemas.js';
+import { cachedImagePath, isValidHash, sniffImageType } from '../images/index.js';
 import { isKeychainAvailable, keychainLabel } from '../keychain.js';
 import type { AppEnv } from '../types.js';
 
@@ -114,6 +116,36 @@ export function registerApi(app: Hono<AppEnv>): void {
       console.error('news: check-all failed:', err);
     });
     return c.json({ started });
+  });
+
+  /**
+   * Serve a cached article image.
+   *
+   * Reads from the cache only — it never fetches a URL on request. That's the
+   * whole point: an endpoint that fetched whatever it was pointed at would be
+   * an open proxy sitting on the user's machine. Images enter the cache during
+   * a check, from URLs vetted in `src/images/safety.ts`.
+   */
+  app.get('/api/image/:hash', (c) => {
+    const hash = c.req.param('hash');
+    // Validating the shape is also what makes the path join safe — a hash can
+    // never contain a separator or a `..`.
+    if (!isValidHash(hash)) return c.json({ error: 'bad image id' }, 400);
+
+    const file = cachedImagePath(c.get('dataDir'), hash);
+    let bytes: Buffer;
+    try {
+      bytes = fs.readFileSync(file);
+    } catch {
+      return c.json({ error: 'no such image' }, 404);
+    }
+    // `new Uint8Array(...)` rather than the Buffer itself: Hono's body() types
+    // reject Buffer's ArrayBufferLike union (it may be a SharedArrayBuffer).
+    return c.body(new Uint8Array(bytes), 200, {
+      'Content-Type': sniffImageType(bytes),
+      // Content-addressed, so it can never go stale.
+      'Cache-Control': 'public, max-age=31536000, immutable',
+    });
   });
 
   // Foreground heartbeat. The client posts this only while the app is visible

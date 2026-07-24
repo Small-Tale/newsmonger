@@ -858,3 +858,27 @@ h2.eyebrow {
     color: #e08a72;
   }
 }
+
+// ---------------------------------------------------------- item media ---
+
+.item-media {
+  // Empty for cards without a picture, and collapses to nothing rather than
+  // reserving a gap — most stories have no image.
+  &:empty {
+    display: none;
+  }
+
+  margin: 0 0 12px;
+  border-radius: 8px;
+  overflow: hidden;
+  background: var(--paper);
+
+  img {
+    display: block;
+    width: 100%;
+    // Fixed ratio so a card doesn't reflow as the image decodes, and so a
+    // publisher's tall or panoramic artwork can't distort the feed's rhythm.
+    aspect-ratio: 16 / 9;
+    object-fit: cover;
+  }
+}

@@ -42,6 +42,16 @@ export const NewsItemSchema = z.object({
   title: z.string().transform(stripMarkup),
   summary: z.string().transform(stripMarkup),
   sources: z.array(NewsSourceSchema),
+  /**
+   * Lead image, cached locally. `hash` names the file the image route serves;
+   * `sourceUrl` is kept for attribution and debugging, never fetched by the
+   * browser. Null when the article had no usable image — most layouts of a
+   * news feed need to handle that anyway, since roughly a third don't.
+   */
+  image: z
+    .object({ hash: z.string(), sourceUrl: z.string() })
+    .nullable()
+    .default(null),
   /** Normalized key used to deduplicate against stories already seen. */
   dedupeKey: z.string(),
   foundAt: z.string(),

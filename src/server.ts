@@ -33,7 +33,12 @@ function clientDir(): string {
 }
 
 /** Build the Hono app with its dependencies injected (unit-testable via `app.request`). */
-export function createApp(deps: { store: Store; runner: CheckRunner; attendance?: Attendance }): Hono<AppEnv> {
+export function createApp(deps: {
+  store: Store;
+  runner: CheckRunner;
+  attendance?: Attendance;
+  dataDir?: string;
+}): Hono<AppEnv> {
   const app = new Hono<AppEnv>();
   // Same instance the CheckRunner consults, when the caller passes one; tests
   // that don't care get a standalone tracker.
@@ -42,6 +47,7 @@ export function createApp(deps: { store: Store; runner: CheckRunner; attendance?
     c.set('store', deps.store);
     c.set('runner', deps.runner);
     c.set('attendance', attendance);
+    c.set('dataDir', deps.dataDir ?? deps.store.dataDir);
     // Debug aid (e.g. verifying the Tauri webview actually hits the server).
     if (process.env['NEWS_LOG_REQUESTS'] === '1') {
       console.error(`[req] ${c.req.method} ${c.req.path}`);

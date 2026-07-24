@@ -144,6 +144,22 @@ function itemJsx(item: NewsItem, topicName: string): SafeHtml {
         <span class="item-topic">{topicName}</span>
         <span class="item-time">{relativeTime(item.foundAt)}</span>
       </header>
+      {/* Always-present slot: the picture coming and going must not restructure
+          the card (kerf KF-377 — see docs/3-ui.md). Roughly a third of articles
+          publish no og:image, so "no picture" is the normal case, not an edge. */}
+      <div class="item-media">
+        {item.image !== null ? (
+          <img
+            src={`/api/image/${item.image.hash}`}
+            alt=""
+            loading="lazy"
+            decoding="async"
+            data-morph-skip-children
+          />
+        ) : (
+          ''
+        )}
+      </div>
       <h3>{item.title}</h3>
       <p>{item.summary}</p>
       <ul class="sources">
