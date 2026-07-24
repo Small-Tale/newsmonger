@@ -55,6 +55,13 @@ export interface AppState {
   confirm: { message: string; confirmLabel: string; danger: boolean } | null;
   /** True when the user tried to enable notifications but permission was refused. */
   notifyPermissionDenied: boolean;
+  /**
+   * Id of the failed check-run whose warning banner the user dismissed. The
+   * warning is derived from the runs list (server state), not a piece of
+   * dismissable state — so dismissal is remembered by run id. A *different*
+   * later failure has a new id and shows again, which is what you want.
+   */
+  dismissedRunId: string | null;
 }
 
 /**
@@ -97,6 +104,7 @@ export const appStore = defineStore({
     contextMenu: null,
     confirm: null,
     notifyPermissionDenied: false,
+    dismissedRunId: null,
   }),
   actions: (set, get) => ({
     setSettingsOpen: (settingsOpen: boolean) => {
@@ -134,6 +142,9 @@ export const appStore = defineStore({
     },
     setNotifyPermissionDenied: (notifyPermissionDenied: boolean) => {
       set({ ...get(), notifyPermissionDenied });
+    },
+    dismissRun: (dismissedRunId: string) => {
+      set({ ...get(), dismissedRunId });
     },
     setSidebarCollapsed: (sidebarCollapsed: boolean) => {
       if (typeof localStorage !== 'undefined') {

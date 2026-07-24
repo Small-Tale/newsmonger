@@ -294,3 +294,51 @@ test('a refused notification permission shows a note and leaves the toggle off (
   });
   expect(persisted).toBe(false);
 });
+
+test('the error banner can be dismissed (NEWS-41)', async ({ page }) => {
+  await page.goto('/');
+  // A duplicate topic raises the error banner.
+  await page.fill('.add-topic input', 'Dismiss Error Probe');
+  await page.press('.add-topic input', 'Enter');
+  await expect(page.locator('.topic', { hasText: 'Dismiss Error Probe' })).toBeVisible();
+  await page.fill('.add-topic input', 'Dismiss Error Probe');
+  await page.press('.add-topic input', 'Enter');
+
+  await expect(page.locator('.banner.error')).toBeVisible();
+  await page.locator('.banner.error [data-action=dismiss-error]').click();
+  await expect(page.locator('.banner.error')).toHaveCount(0);
+
+  // Clean up the topic this test created (assert it's gone so a botched cleanup
+  // can't leave residue for the count-sensitive earlier tests on a retry).
+  await page.fill('.add-topic input', '');
+  await topicAction(page, page.locator('.topic', { hasText: 'Dismiss Error Probe' }), 'delete');
+  await expect(page.locator('.topic', { hasText: 'Dismiss Error Probe' })).toHaveCount(0);
+});
+
+test('the failure warning can be dismissed and stays dismissed, but a new failure reappears (NEWS-41)', async ({
+  page,
+}) => {
+  // The mock provider throws for a topic whose name contains "fail".
+  await page.goto('/');
+  await page.fill('.add-topic input', 'fail banner probe');
+  await page.press('.add-topic input', 'Enter');
+  const row = page.locator('.topic', { hasText: 'fail banner probe' });
+  await expect(row).toBeVisible();
+
+  await topicAction(page, row, 'check');
+  await expect(page.locator('.banner.warn')).toBeVisible();
+
+  await page.locator('.banner.warn [data-action=dismiss-warn]').click();
+  await expect(page.locator('.banner.warn')).toHaveCount(0);
+  // Stays gone across a poll cycle — the dismissal is remembered by run id.
+  await page.waitForTimeout(4500);
+  await expect(page.locator('.banner.warn')).toHaveCount(0);
+
+  // A fresh failure is a new run id, so the banner comes back.
+  await topicAction(page, row, 'check');
+  await expect(page.locator('.banner.warn')).toBeVisible();
+
+  // Clean up.
+  await topicAction(page, row, 'delete');
+  await expect(row).toHaveCount(0);
+});

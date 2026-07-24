@@ -598,10 +598,31 @@ function appJsx(): SafeHtml {
         ) : (
           ''
         )}
-        {s.error !== null ? <div class="banner error">{s.error}</div> : ''}
-        {lastFailure !== undefined && s.error === null ? (
+        {s.error !== null ? (
+          <div class="banner error">
+            <span class="banner-text">{s.error}</span>
+            <button class="banner-dismiss" type="button" data-action="dismiss-error" aria-label="Dismiss">
+              {icon('clear', 15)}
+            </button>
+          </div>
+        ) : (
+          ''
+        )}
+        {lastFailure !== undefined && s.error === null && lastFailure.id !== s.dismissedRunId ? (
           <div class="banner warn">
-            Last check for “{topicNames.get(lastFailure.topicId) ?? 'deleted topic'}” failed: {lastFailure.error ?? 'unknown error'}
+            <span class="banner-text">
+              Last check for “{topicNames.get(lastFailure.topicId) ?? 'deleted topic'}” failed:{' '}
+              {lastFailure.error ?? 'unknown error'}
+            </span>
+            <button
+              class="banner-dismiss"
+              type="button"
+              data-action="dismiss-warn"
+              data-run-id={lastFailure.id}
+              aria-label="Dismiss"
+            >
+              {icon('clear', 15)}
+            </button>
           </div>
         ) : (
           ''
@@ -874,6 +895,16 @@ function wireEvents(root: HTMLElement): void {
 
   void delegate(root, 'click', '[data-action=clear-solo]', () => {
     appStore.actions.setSolo([]);
+  });
+
+  void delegate(root, 'click', '[data-action=dismiss-error]', () => {
+    appStore.actions.setError(null);
+  });
+  // The warning is derived from the runs list, so dismissal is by run id — a
+  // later, different failure has a new id and shows again.
+  void delegate(root, 'click', '[data-action=dismiss-warn]', (_e, el) => {
+    const id = el.getAttribute('data-run-id');
+    if (id !== null) appStore.actions.dismissRun(id);
   });
 
   // Notification toggle. Enabling requires a permission grant, and the request

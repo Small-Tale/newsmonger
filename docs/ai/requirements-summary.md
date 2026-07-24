@@ -22,6 +22,7 @@ Default Anthropic provider (`claude-opus-4-8` + web search), prompt-level exclus
 - All icons are Lucide; no emoji or text glyphs anywhere in the UI (E2E-guarded): **Shipped**
 - Source status moved from the sidebar into the settings dialog: **Shipped**
 - Solo (show only chosen topics' stories) — additive, banner + dimming, ephemeral by design: **Shipped**
+- Error/warning banners are dismissable; the failure warning's dismissal is remembered by run id so a new failure reappears (NEWS-41): **Shipped**
 - Destructive confirmations via an in-app dialog, never `window.confirm` (a WKWebView no-op that broke delete in the desktop app — NEWS-39): **Shipped**
 
 Header/interval/check-all, topics panel with actions + confirm-delete, newest-first feed with source links, error + last-failure banners, 4 s visible-tab polling, empty states, light/dark. kerf structural conventions documented and E2E-regression-tested.

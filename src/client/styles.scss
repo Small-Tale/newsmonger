@@ -199,10 +199,18 @@ h2.eyebrow {
 }
 
 .banner {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
   border-radius: 8px;
   padding: 10px 14px;
   margin-bottom: 14px;
   font-size: 13px;
+
+  .banner-text {
+    flex: 1;
+    min-width: 0;
+  }
 
   &.error {
     background: var(--error-bg);
@@ -948,4 +956,35 @@ h2.eyebrow {
 
 .notify-note .note {
   margin-top: 8px;
+}
+
+// ------------------------------------------------------- banner dismiss ---
+
+.banner-dismiss {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2px;
+  margin: -1px -4px -1px 0;
+  border: 0;
+  border-radius: 5px;
+  background: none;
+  color: var(--ink-soft);
+  cursor: pointer;
+
+  &:hover {
+    color: var(--ink);
+    background: rgba(26, 36, 32, 0.08);
+  }
+
+  .icon {
+    stroke-width: 2.2;
+  }
+}
+
+@media (prefers-color-scheme: dark) {
+  .banner-dismiss:hover {
+    background: rgba(255, 255, 255, 0.1);
+  }
 }
