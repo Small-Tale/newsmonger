@@ -84,6 +84,15 @@ Browser-verified (toggle, permission, firing, throttle). The native desktop path
 4. Confirm nothing fires while the app is focused, and no more than once per 5 minutes.
 5. If the web Notification API does **not** work in the WKWebView, switch to the Tauri notification plugin (NEWS-40).
 
+## Share a story in Tauri (NEWS-43) — needs a desktop run
+
+Browser-verified both paths (OS-sheet path via a stubbed `navigator.share`, and the clipboard fallback + toast). The **real** desktop share sheet is manual, because `navigator.share` may be absent or a no-op in the WKWebView (cf. the `window.confirm` no-op in NEWS-39). The clipboard fallback is the reliable path and is what a WKWebView will use if the sheet doesn't work.
+
+1. `npm run tauri:dev`, add a topic, run a check so there are stories.
+2. Click a story's **share** button. If the OS share sheet opens, it should carry the title + summary + source link; cancelling it should do nothing (no toast).
+3. If no share sheet appears, the story text must land on the clipboard and a **"Copied to clipboard"** toast must show and then fade. Paste somewhere to confirm the block (title, blank line, summary, blank line, URL).
+4. If `navigator.share` works in the WKWebView, the fallback path won't fire — note which path this platform took (NEWS-45 tracks confirming the sheet in a live shell).
+
 ## Automated Coverage Summary
 
 - Topics CRUD, scheduling logic, dedup, parsing, API validation, and full UI flows are covered by `npm test` + `npm run test:e2e` (mock AI service).

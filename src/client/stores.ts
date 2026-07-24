@@ -58,6 +58,12 @@ export interface AppState {
   /** True when the user tried to enable notifications but permission was refused. */
   notifyPermissionDenied: boolean;
   /**
+   * Transient one-line notice shown at the bottom of the screen, or null.
+   * In-app rather than `window.alert` (a WKWebView no-op), used to confirm a
+   * share landed on the clipboard when there's no OS share sheet (NEWS-43).
+   */
+  toast: string | null;
+  /**
    * Id of the failed check-run whose warning banner the user dismissed. The
    * warning is derived from the runs list (server state), not a piece of
    * dismissable state — so dismissal is remembered by run id. A *different*
@@ -108,6 +114,7 @@ export const appStore = defineStore({
     confirm: null,
     notifyPermissionDenied: false,
     dismissedRunId: null,
+    toast: null,
   }),
   actions: (set, get) => ({
     setSettingsOpen: (settingsOpen: boolean) => {
@@ -151,6 +158,9 @@ export const appStore = defineStore({
     },
     dismissRun: (dismissedRunId: string) => {
       set({ ...get(), dismissedRunId });
+    },
+    setToast: (toast: string | null) => {
+      set({ ...get(), toast });
     },
     setSidebarCollapsed: (sidebarCollapsed: boolean) => {
       if (typeof localStorage !== 'undefined') {

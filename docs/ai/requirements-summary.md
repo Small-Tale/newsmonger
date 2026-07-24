@@ -22,7 +22,7 @@ Default Anthropic provider (`claude-opus-4-8` + web search), prompt-level exclus
 - All icons are Lucide; no emoji or text glyphs anywhere in the UI (E2E-guarded): **Shipped**
 - Source status moved from the sidebar into the settings dialog: **Shipped**
 - Solo (show only chosen topics' stories) — additive, banner + dimming, ephemeral by design: **Shipped**
-- Bookmark/save stories (`item.saved` persisted) + a Saved feed filter (ephemeral view, composes with Solo) — NEWS-42: **Shipped**
+- Bookmark/save stories + Saved feed filter, and Share a story — see [11 — Story Actions](../11-story-actions.md): **Shipped**
 - Error/warning banners are dismissable; the failure warning's dismissal is remembered by run id so a new failure reappears (NEWS-41): **Shipped**
 - Destructive confirmations via an in-app dialog, never `window.confirm` (a WKWebView no-op that broke delete in the desktop app — NEWS-39): **Shipped**
 
@@ -88,3 +88,9 @@ Subscription-backed providers (`attended: true`) run *scheduled* checks only whi
 - FR-10.1–10.4 opt-in setting, unfocused-only, 5-min throttle, first-load seeded silent: **Shipped**
 - FR-10.5 web Notification (click focuses the app): **Shipped, browser-verified**
 - FR-10.6 dock bounce / taskbar flash via Tauri `requestUserAttention`: **Shipped, unverified in a live WKWebView** (NEWS-40)
+
+## [11 — Story Actions (Save & Share)](../11-story-actions.md) — Shipped
+
+- FR-11.1 bookmark/save a story (`item.saved` persisted via `PATCH /api/items/:id`): **Shipped**
+- FR-11.2 Saved feed filter (ephemeral view, composes with Solo): **Shipped**
+- FR-11.3 share a story — formatted title+summary+link via OS share sheet, clipboard fallback + toast: **Shipped**

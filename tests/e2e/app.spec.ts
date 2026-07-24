@@ -381,3 +381,52 @@ test('bookmark a story and filter to saved (NEWS-42)', async ({ page }) => {
   await topicAction(page, page.locator('.topic', { hasText: 'saved probe topic' }), 'delete');
   await expect(page.locator('.topic', { hasText: 'saved probe topic' })).toHaveCount(0);
 });
+
+test('share a story via the OS sheet, or fall back to the clipboard (NEWS-43)', async ({ page, context }) => {
+  await context.grantPermissions(['clipboard-read', 'clipboard-write']);
+  await page.goto('/');
+  await page.fill('.add-topic input', 'share probe topic');
+  await page.press('.add-topic input', 'Enter');
+  const row = page.locator('.topic', { hasText: 'share probe topic' });
+  await expect(row).toBeVisible();
+  await topicAction(page, row, 'check');
+
+  const probeItems = page.locator('.item', { has: page.locator('.item-topic', { hasText: 'share probe topic' }) });
+  await expect(probeItems.first()).toBeVisible({ timeout: 15_000 });
+  const first = probeItems.first();
+  const title = (await first.locator('h3').textContent())?.trim() ?? '';
+  expect(title).not.toBe('');
+
+  // Share-sheet path: with navigator.share present, the story goes to the OS
+  // sheet (title + summary + url) and no clipboard toast appears.
+  await page.evaluate(() => {
+    (window as unknown as { __shared?: unknown }).__shared = undefined;
+    (navigator as unknown as { share: (d: unknown) => Promise<void> }).share = (d: unknown) => {
+      (window as unknown as { __shared?: unknown }).__shared = d;
+      return Promise.resolve();
+    };
+  });
+  await first.locator('[data-share-item]').click();
+  const shared = await page.evaluate(() => (window as unknown as { __shared?: { title?: string; url?: string } }).__shared);
+  expect(shared?.title).toBe(title);
+  expect(shared?.url).toContain('http');
+  await expect(page.locator('.toast')).toHaveCount(0);
+
+  // Fallback path: with no share sheet, the same content lands on the clipboard
+  // and a toast confirms it.
+  await page.evaluate(() => {
+    delete (navigator as unknown as { share?: unknown }).share;
+  });
+  await first.locator('[data-share-item]').click();
+  await expect(page.locator('.toast')).toHaveText('Copied to clipboard');
+  const clip = await page.evaluate(() => navigator.clipboard.readText());
+  expect(clip).toContain(title);
+  expect(clip).toContain('http');
+
+  // The toast clears itself.
+  await expect(page.locator('.toast')).toHaveCount(0, { timeout: 5_000 });
+
+  // Clean up.
+  await topicAction(page, row, 'delete');
+  await expect(page.locator('.topic', { hasText: 'share probe topic' })).toHaveCount(0);
+});

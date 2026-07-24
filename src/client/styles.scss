@@ -1060,6 +1060,29 @@ h2.eyebrow {
   }
 }
 
+// The two per-story actions (bookmark + share) sit together on the right,
+// tighter than the header's default gap.
+.item > header .item-action + .item-action {
+  margin-left: -4px;
+}
+
+// Transient share confirmation, anchored to the bottom-centre of the screen.
+.toast {
+  position: fixed;
+  left: 50%;
+  bottom: 28px;
+  transform: translateX(-50%);
+  z-index: 60;
+  padding: 9px 16px;
+  border-radius: 8px;
+  background: var(--ink);
+  color: var(--paper);
+  font-size: 13px;
+  font-weight: 500;
+  box-shadow: 0 6px 20px rgba(26, 36, 32, 0.28);
+  pointer-events: none;
+}
+
 @media (prefers-color-scheme: dark) {
   .item-action:hover {
     background: rgba(255, 255, 255, 0.08);

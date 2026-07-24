@@ -22,6 +22,7 @@ import {
 } from './api.js';
 import { icon } from './icons.js';
 import { ensureNotificationPermission } from './notifications.js';
+import { shareItem } from './share.js';
 import type { AppState } from './stores.js';
 import { appStore } from './stores.js';
 import { openExternalUrl } from './tauri.js';
@@ -35,6 +36,19 @@ const INTERVAL_OPTIONS: { label: string; ms: number }[] = [
   { label: 'Every 2 days', ms: 48 * 60 * 60 * 1000 },
   { label: 'Every week', ms: 7 * 24 * 60 * 60 * 1000 },
 ];
+
+/** How long a toast stays up before it fades out on its own. */
+const TOAST_MS = 2600;
+let toastTimer: ReturnType<typeof setTimeout> | undefined;
+
+/** Show a transient bottom-of-screen notice, replacing any current one. */
+function showToast(message: string): void {
+  appStore.actions.setToast(message);
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => {
+    appStore.actions.setToast(null);
+  }, TOAST_MS);
+}
 
 function relativeTime(iso: string): string {
   const ms = Date.now() - Date.parse(iso);
@@ -156,6 +170,15 @@ function itemJsx(item: NewsItem, topicName: string): SafeHtml {
           title={item.saved ? 'Saved — click to remove' : 'Save story'}
         >
           {icon('bookmark', 15)}
+        </button>
+        <button
+          class="item-action share"
+          type="button"
+          data-share-item={item.id}
+          aria-label="Share story"
+          title="Share story"
+        >
+          {icon('share', 15)}
         </button>
       </header>
       {/* Always-present slot: the picture coming and going must not restructure
@@ -604,6 +627,11 @@ function appJsx(): SafeHtml {
       <div id="settings-slot">{s.settingsOpen ? settingsDialogJsx() : ''}</div>
       <div id="menu-slot">{s.contextMenu !== null ? contextMenuJsx(s.contextMenu, s.topics) : ''}</div>
       <div id="confirm-slot">{s.confirm !== null ? confirmDialogJsx(s.confirm) : ''}</div>
+      {/* Always-present slot: the toast coming and going must not restructure
+          its siblings (kerf KF-377 — see docs/3-ui.md). */}
+      <div id="toast-slot" aria-live="polite">
+        {s.toast !== null ? <div class="toast">{s.toast}</div> : ''}
+      </div>
 
       {/* Always-present container: banners coming and going must not shift the
           sections below (kerf KF-377 — see docs/3-ui.md). */}
@@ -940,6 +968,18 @@ function wireEvents(root: HTMLElement): void {
     if (id === null) return;
     const saved = el.getAttribute('data-saved') === 'true';
     void setItemSaved(id, !saved);
+  });
+  void delegate(root, 'click', '[data-share-item]', (_e, el) => {
+    const id = el.getAttribute('data-share-item');
+    if (id === null) return;
+    const item = appStore.state.value.items.find((i) => i.id === id);
+    if (item === undefined) return;
+    void shareItem(item).then((result) => {
+      // The OS share sheet is its own feedback, and a cancelled share needs
+      // none — only the clipboard fallback and a failure warrant a toast.
+      if (result === 'copied') showToast('Copied to clipboard');
+      else if (result === 'failed') showToast("Couldn't share this story");
+    });
   });
   void delegate(root, 'click', '[data-action=toggle-saved-filter]', () => {
     appStore.actions.setSavedFilter(!appStore.state.value.savedFilter);
