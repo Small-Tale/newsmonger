@@ -13,6 +13,10 @@ function factoriesWith(available: Partial<Record<ConcreteProviderName, boolean>>
       ...make('claude-cli'),
       isAvailable: () => Promise.resolve(available['claude-cli'] ?? false),
     }),
+    'codex-cli': () => ({
+      ...make('codex-cli'),
+      isAvailable: () => Promise.resolve(available['codex-cli'] ?? false),
+    }),
     anthropic: () => ({ ...make('anthropic'), isAvailable: () => Promise.resolve(available.anthropic ?? false) }),
     openai: () => ({ ...make('openai'), isAvailable: () => Promise.resolve(available.openai ?? false) }),
     mock: () => make('mock'),
@@ -45,7 +49,7 @@ describe('resolveProvider', () => {
   it('auto prefers the subscription provider over API keys', () => {
     // Someone holding a Claude subscription expects its quota to be spent
     // before an API key they also happen to have configured.
-    expect(AUTO_ORDER).toEqual(['claude-cli', 'anthropic', 'openai']);
+    expect(AUTO_ORDER).toEqual(['claude-cli', 'codex-cli', 'anthropic', 'openai']);
   });
 
   it('auto picks claude-cli ahead of an available anthropic key', async () => {

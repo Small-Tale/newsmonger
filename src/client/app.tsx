@@ -291,7 +291,7 @@ function keyRowJsx(key: AppState['keys'][number], keychainLabel: string, keychai
  * it's static metadata, and the dialog only needs it to decide what to explain.
  */
 function providerIsAttended(provider: ProviderName): boolean {
-  return provider === 'claude-cli';
+  return provider === 'claude-cli' || provider === 'codex-cli';
 }
 
 function settingsDialogJsx(): SafeHtml {
@@ -339,8 +339,8 @@ function settingsDialogJsx(): SafeHtml {
         <div class="source-note">
           {providerIsAttended(s.settings.provider) ? (
             <p class="note">
-              Signed in through Claude Code — checks use your subscription, not an API key. Scheduled checks run only
-              while News is open; “Check now” always works.
+              Checks use your subscription, not an API key. Scheduled checks run only while News is open; “Check now”
+              always works.
             </p>
           ) : (
             ''

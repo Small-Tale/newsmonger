@@ -60,6 +60,15 @@ Unit tests inject a fake runner and never spawn the CLI, so the live path is man
 4. With `auto` selected and both a subscription and an API key available, confirm the run uses the subscription (the feed's "last check via" says `claude-cli`).
 5. Background the app and confirm scheduled checks don't fire; return to it and confirm the due check runs.
 
+## ChatGPT subscription provider (`codex-cli`, needs Codex signed in)
+
+Same shape as the Claude one — unit tests inject a fake runner, so the live path is manual.
+
+1. With `codex` installed and `~/.codex/auth.json` reporting `auth_mode: chatgpt`, pick "ChatGPT subscription (Codex)" in Settings and confirm the status reads ready.
+2. Check a topic with active coverage — expect real current stories with working links.
+3. Confirm Codex writes nothing: it runs `-s read-only`, so a check must not create or modify files in the working directory.
+4. Sign out of Codex and check again — expect an actionable "Codex is not signed in" error.
+
 ## Automated Coverage Summary
 
 - Topics CRUD, scheduling logic, dedup, parsing, API validation, and full UI flows are covered by `npm test` + `npm run test:e2e` (mock AI service).

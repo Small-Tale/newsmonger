@@ -23,7 +23,7 @@ export interface NewsService {
  * genuinely *new* news requires live browsing, and we don't carry a search
  * backend to compensate for models that can't. (`mock` is test-only.)
  */
-export const PROVIDER_NAMES = ['auto', 'claude-cli', 'anthropic', 'openai', 'mock'] as const;
+export const PROVIDER_NAMES = ['auto', 'claude-cli', 'codex-cli', 'anthropic', 'openai', 'mock'] as const;
 export type ProviderName = (typeof PROVIDER_NAMES)[number];
 export type ConcreteProviderName = Exclude<ProviderName, 'auto'>;
 
@@ -31,6 +31,7 @@ export type ConcreteProviderName = Exclude<ProviderName, 'auto'>;
 export const PROVIDER_INFO: Record<ProviderName, { label: string; endpointConfigurable: boolean }> = {
   auto: { label: 'Auto', endpointConfigurable: false },
   'claude-cli': { label: 'Claude subscription (Claude Code)', endpointConfigurable: false },
+  'codex-cli': { label: 'ChatGPT subscription (Codex)', endpointConfigurable: false },
   anthropic: { label: 'Anthropic API key', endpointConfigurable: false },
   openai: { label: 'OpenAI API key', endpointConfigurable: true },
   mock: { label: 'Mock (offline test)', endpointConfigurable: false },

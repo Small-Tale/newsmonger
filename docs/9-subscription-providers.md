@@ -4,7 +4,7 @@ Run checks against a personal Claude subscription instead of a metered API key, 
 
 See also: [6 — AI Providers](6-providers.md), [7 — API Keys](7-api-keys.md).
 
-## Status: `claude-cli` shipped; `codex-cli` designed (NEWS-28)
+## Status: both shipped
 
 ## Why a CLI and not the API
 
@@ -47,6 +47,29 @@ See also: [6 — AI Providers](6-providers.md), [7 — API Keys](7-api-keys.md).
 ## On cost figures
 
 Claude Code reports `total_cost_usd` (a measured run: $1.35 across 21 turns). For a subscriber **that is an estimate of equivalent API cost, not money charged** — no per-token billing happens. The real constraint is plan rate limits, so treat the turn count as a rate-limit signal and don't present these numbers to users as a price.
+
+## The `codex-cli` provider
+
+- **FR-9.12** *(Shipped)* The OpenAI-side counterpart, on the same reasoning: `~/.codex/auth.json` reports `auth_mode: "chatgpt"` with `OPENAI_API_KEY: null`, so the CLI already holds subscription credentials.
+
+  ```
+  codex exec --search --skip-git-repo-check -s read-only \
+    --output-schema <temp file> --output-last-message <temp file> "<prompt>"
+  ```
+
+- **FR-9.13** *(Shipped)* **`-s read-only`.** Codex is a coding agent that can execute shell commands; a news lookup must not write anything. This is the equivalent of `claude-cli`'s `--allowed-tools WebSearch` — narrow the agent to the job.
+
+- **FR-9.14** *(Shipped)* Two differences from the Claude CLI drive the implementation:
+  - **`--output-schema` takes a file path**, not an inline string, so `NEWS_JSON_SCHEMA` is written to a temp file per run (Claude's `--json-schema` takes it directly).
+  - **No separate system-prompt flag**, so system and user prompts are combined into the single positional argument with a `---` boundary (`combinePrompt`).
+
+  The final message is read from `--output-last-message` rather than scraped off stdout, which carries a progress log. Both temp files are cleaned up in a `finally`.
+
+- **FR-9.15** *(Shipped)* `isAvailable()` = the binary answers `--version` **and** `auth.json` reports `auth_mode: "chatgpt"`. Only that field is read, never the tokens beside it. An API key configured in Codex deliberately does *not* qualify — this provider exists to spend subscription quota, and `openai` already covers the key path.
+
+- **FR-9.16** *(Shipped)* Non-empty stderr is **not** treated as failure: some installs emit a benign `could not create PATH aliases` warning. Only the exit code decides.
+
+- **FR-9.17** *(Shipped)* `AUTO_ORDER` is `claude-cli` → `codex-cli` → `anthropic` → `openai`.
 
 ## Not covered
 

@@ -2,11 +2,13 @@ import type { ConcreteProviderName, NewsProvider, ProviderName } from '../types.
 import { PROVIDER_INFO } from '../types.js';
 import { createAnthropicProvider } from './anthropic.js';
 import { createClaudeCliProvider } from './claude-cli.js';
+import { createCodexCliProvider } from './codex-cli.js';
 import { createMockProvider } from './mock.js';
 import { createOpenAIProvider } from './openai.js';
 
 export { createAnthropicProvider } from './anthropic.js';
 export { createClaudeCliProvider } from './claude-cli.js';
+export { createCodexCliProvider } from './codex-cli.js';
 export { createMockProvider } from './mock.js';
 export { createOpenAIProvider } from './openai.js';
 
@@ -24,6 +26,7 @@ export type ProviderFactory = (cfg: ResolveConfig) => NewsProvider;
 /** How each concrete provider is constructed from resolved settings. */
 export const FACTORIES: Record<ConcreteProviderName, ProviderFactory> = {
   'claude-cli': (c) => createClaudeCliProvider({ model: c.model }),
+  'codex-cli': (c) => createCodexCliProvider({ model: c.model }),
   anthropic: (c) => createAnthropicProvider({ model: c.model !== '' ? c.model : undefined }),
   openai: (c) =>
     createOpenAIProvider({
@@ -40,13 +43,15 @@ export const FACTORIES: Record<ConcreteProviderName, ProviderFactory> = {
  * subscription, spending its quota is what they'd expect over billing an API
  * key they also happen to hold.
  */
-export const AUTO_ORDER: ConcreteProviderName[] = ['claude-cli', 'anthropic', 'openai'];
+export const AUTO_ORDER: ConcreteProviderName[] = ['claude-cli', 'codex-cli', 'anthropic', 'openai'];
 
 /** Message shown when an explicitly-requested provider isn't usable. */
 export function unavailableMessage(provider: NewsProvider): string {
   switch (provider.name) {
     case 'claude-cli':
       return 'Claude Code is not signed in — run `claude` and log in, or choose a provider that uses an API key.';
+    case 'codex-cli':
+      return 'Codex is not signed in — run `codex login` and choose ChatGPT, or pick a provider that uses an API key.';
     case 'anthropic':
       return 'Anthropic has no API key — add one in Settings, or set ANTHROPIC_API_KEY.';
     case 'openai':
@@ -89,7 +94,7 @@ export async function probeProviders(
   cfg: Pick<ResolveConfig, 'model' | 'endpoint'>,
   factories: Record<ConcreteProviderName, ProviderFactory> = FACTORIES,
 ): Promise<{ name: ConcreteProviderName; endpointConfigurable: boolean; label: string; available: boolean }[]> {
-  const names: ConcreteProviderName[] = ['claude-cli', 'anthropic', 'openai', 'mock'];
+  const names: ConcreteProviderName[] = ['claude-cli', 'codex-cli', 'anthropic', 'openai', 'mock'];
   return Promise.all(
     names.map(async (name) => {
       const info = PROVIDER_INFO[name];
