@@ -45,13 +45,13 @@ Subscription-backed providers (`attended: true`) run *scheduled* checks only whi
 - FR-5.3 release sidecar bundling: **Shipped, verified on macOS** (`npm run tauri:build` → `News.app`/`.dmg`; built app starts its sidecar, serves the real UI, exits cleanly. Other target triples wired but unbuilt)
 - FR-5.4 orphan protection (`NEWS_WATCH_PARENT` ppid watch): **Shipped, verified**
 
-## [7 — API Keys and Settings Dialog](../7-api-keys.md) — Shipped (macOS verified; Linux/Windows keychain untested)
+## [7 — API Keys and Settings Dialog](../7-api-keys.md) — Shipped (all three platforms verified)
 
 - FR-7.1 env → keychain precedence: **Shipped**
 - FR-7.2 keys never written to `data.json` (no disk fallback): **Shipped**
 - FR-7.3 per-request resolution; SDK client cache keyed on the credential: **Shipped**
-- FR-7.4 keychain via platform CLI, no native module: **Shipped** (macOS verified; Linux `secret-tool` and Windows `cmdkey`/`CredRead` paths written but never run)
-- FR-7.5 availability probed once; Linux round-trip probe: **Shipped** (Linux path untested)
+- FR-7.4 keychain via platform tooling, no native module: **Shipped, all three platforms verified** (macOS real Keychain; Linux in Docker; Windows 11 in Parallels — three Windows bugs found and fixed)
+- FR-7.5 availability probed once; Linux round-trip probe: **Shipped, verified** (the headless-no-daemon case is exactly what it catches)
 - FR-7.6 write verified by read-back: **Shipped**
 - FR-7.7 key routes (`GET`/`PUT`/`DELETE /api/keys`): **Shipped**
 - FR-7.8 status never carries the key, masked or otherwise: **Shipped**

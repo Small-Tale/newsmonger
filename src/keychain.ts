@@ -12,12 +12,13 @@
  * |---------|----------------------------|---------------|
  * | macOS   | Keychain                   | `security`    |
  * | Linux   | Secret Service             | `secret-tool` |
- * | Windows | Credential Manager         | `cmdkey` + PowerShell `CredRead` |
+ * | Windows | Credential Manager         | PowerShell P/Invoke over `advapi32` |
  *
  * Secrets avoid argv where the tool allows it — Linux takes the value on stdin,
  * Windows through the environment. macOS is the exception, for a measured
  * reason spelled out at the write itself. Every write is read back before it's
- * reported as saved.
+ * reported as saved — which is what caught the Windows read bug described at
+ * `runPowerShell`.
  */
 
 import { spawn } from 'node:child_process';
@@ -39,6 +40,20 @@ interface RunResult {
   status: number | null;
   stdout: string;
   stderr: string;
+}
+
+/**
+ * Run a PowerShell script.
+ *
+ * `-EncodedCommand` (base64 UTF-16LE), NOT a script piped to `-Command -`.
+ * Measured on Windows 11: a multi-line script fed through stdin runs but
+ * produces no output — the `Add-Type` here-string defining the `CredRead` shim
+ * silently fails to take effect, so reads returned empty while exiting 0. That
+ * shape also sidesteps every quoting question.
+ */
+async function runPowerShell(script: string, env?: NodeJS.ProcessEnv): Promise<RunResult> {
+  const encoded = Buffer.from(script, 'utf16le').toString('base64');
+  return run('powershell', ['-NoProfile', '-NonInteractive', '-EncodedCommand', encoded], { ...(env ? { env } : {}) });
 }
 
 /** Run a command, optionally writing `input` to its stdin. Never rejects. */
@@ -75,15 +90,26 @@ async function run(
   });
 }
 
-/** PowerShell P/Invoke shim over `advapi32!CredRead` — `cmdkey` can write and
- *  delete credentials but cannot read a password back. */
-const WIN_CRED_READ_PS = `
+/**
+ * PowerShell P/Invoke shim over the Windows Credential Manager API.
+ *
+ * All three operations go through `advapi32` rather than `cmdkey`. `cmdkey`
+ * can't read a password back at all, and — measured on Windows 11 — its write
+ * form silently truncates: `cmdkey /pass:$env:SECRET` lets PowerShell split the
+ * value at the first space, so a secret containing one is stored incomplete.
+ * `CredWrite` takes the string as a marshalled blob, so nothing parses it.
+ */
+const WIN_CRED_PS = `
 Add-Type -TypeDefinition @'
 using System;
 using System.Runtime.InteropServices;
 public class CredHelper {
     [DllImport("advapi32", SetLastError = true, CharSet = CharSet.Unicode)]
     static extern bool CredRead(string t, int type, int f, out IntPtr p);
+    [DllImport("advapi32", SetLastError = true, CharSet = CharSet.Unicode)]
+    static extern bool CredWrite(ref CRED c, int flags);
+    [DllImport("advapi32", SetLastError = true, CharSet = CharSet.Unicode)]
+    static extern bool CredDelete(string t, int type, int f);
     [DllImport("advapi32")]
     static extern void CredFree(IntPtr p);
     [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
@@ -101,6 +127,22 @@ public class CredHelper {
         CredFree(ptr);
         return r;
     }
+    public static bool Write(string target, string user, string secret) {
+        byte[] bytes = System.Text.Encoding.Unicode.GetBytes(secret);
+        IntPtr blob = Marshal.AllocHGlobal(bytes.Length);
+        Marshal.Copy(bytes, 0, blob, bytes.Length);
+        CRED c = new CRED();
+        c.Type = 1;                       // CRED_TYPE_GENERIC
+        c.TargetName = target;
+        c.UserName = user;
+        c.CredentialBlob = blob;
+        c.CredentialBlobSize = bytes.Length;
+        c.Persist = 2;                    // CRED_PERSIST_LOCAL_MACHINE
+        bool ok = CredWrite(ref c, 0);
+        Marshal.FreeHGlobal(blob);
+        return ok;
+    }
+    public static bool Delete(string target) { return CredDelete(target, 1, 0); }
 }
 '@
 `;
@@ -164,11 +206,22 @@ export async function keychainGet(account: string): Promise<string | null> {
       // nothing is stored, so detect the "* NONE *" marker instead.
       const list = await run('cmdkey', [`/list:${target}`]);
       if (list.status !== 0 || list.stdout.includes('* NONE *')) return null;
-      const r = await run('powershell', ['-NoProfile', '-Command', '-'], {
-        input: `${WIN_CRED_READ_PS}Write-Output ([CredHelper]::Read('${target}'))`,
-      });
-      const value = r.stdout.trim();
-      return r.status === 0 && value !== '' ? value : null;
+      // Base64 of UTF-16, not the raw string. PowerShell writes stdout through
+      // the console code page, which mangles anything non-ASCII on the way back
+      // — measured on Windows 11: "sk-ümlaut-🔑" arrived as "sk-?mlaut-??".
+      // The value itself reaches PowerShell intact (verified byte-for-byte via
+      // the environment); it is only the return trip that corrupts it, so the
+      // answer is encoded into ASCII before it crosses.
+      const r = await runPowerShell(
+        `${WIN_CRED_PS}Write-Output ([Convert]::ToBase64String(` +
+          `[System.Text.Encoding]::Unicode.GetBytes([CredHelper]::Read($env:NEWS_KC_TARGET))))`,
+        { NEWS_KC_TARGET: target },
+      );
+      if (r.status !== 0) return null;
+      const encoded = r.stdout.trim();
+      if (encoded === '') return null;
+      const value = Buffer.from(encoded, 'base64').toString('utf16le');
+      return value !== '' ? value : null;
     }
   } catch {
     return null;
@@ -236,16 +289,16 @@ export async function keychainSet(account: string, value: string): Promise<void>
   }
 
   if (process.platform === 'win32') {
-    // The value goes through the environment rather than being interpolated
-    // into the script text: a key containing a quote would otherwise break the
-    // command, and PowerShell passes a bare `$env:` reference as a single
-    // argument without further parsing. It is still visible in `cmdkey`'s own
-    // argv on Windows — `cmdkey` offers no stdin form.
-    const r = await run('powershell', ['-NoProfile', '-Command', '-'], {
-      input: `cmdkey /generic:$env:NEWS_KC_TARGET /user:${SERVICE} /pass:$env:NEWS_KC_SECRET`,
-      env: { NEWS_KC_TARGET: winTarget(account), NEWS_KC_SECRET: value },
-    });
+    // The value reaches PowerShell through the environment and is handed to
+    // CredWrite as a string — never interpolated into script text, and never
+    // an argv element, so nothing splits or quotes it. `Write-Output` reports
+    // the API's own success flag, since a failed CredWrite still exits 0.
+    const r = await runPowerShell(
+      `${WIN_CRED_PS}Write-Output ([CredHelper]::Write($env:NEWS_KC_TARGET, '${SERVICE}', $env:NEWS_KC_SECRET))`,
+      { NEWS_KC_TARGET: winTarget(account), NEWS_KC_SECRET: value },
+    );
     if (r.status !== 0) fail('Credential Manager write', r);
+    if (!r.stdout.includes('True')) fail('Credential Manager write', r);
     await verifyStored(account, value);
     return;
   }
@@ -265,9 +318,8 @@ export async function keychainDelete(account: string): Promise<void> {
     } else if (process.platform === 'linux') {
       await run('secret-tool', ['clear', 'service', SERVICE, 'account', account]);
     } else if (process.platform === 'win32') {
-      await run('powershell', ['-NoProfile', '-Command', '-'], {
-        input: `cmdkey /delete:$env:NEWS_KC_TARGET`,
-        env: { NEWS_KC_TARGET: winTarget(account) },
+      await runPowerShell(`${WIN_CRED_PS}[void][CredHelper]::Delete($env:NEWS_KC_TARGET)`, {
+        NEWS_KC_TARGET: winTarget(account),
       });
     }
   } catch {

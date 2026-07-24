@@ -4,7 +4,7 @@ Providers need credentials. Keys can be entered in the app and are stored in the
 
 See also: [6 — AI Providers](6-providers.md), [3 — UI](3-ui.md), [4 — CLI, Server, and Storage](4-cli-server-storage.md).
 
-## Status: shipped, verified on macOS
+## Status: shipped, verified on macOS, Linux and Windows
 
 ## Where a key comes from
 
@@ -28,14 +28,24 @@ See also: [6 — AI Providers](6-providers.md), [3 — UI](3-ui.md), [4 — CLI,
   | OS | Store | Tool | Verified |
   |---|---|---|---|
   | macOS | Keychain | `security` | ✅ |
-  | Linux | Secret Service | `secret-tool` | ❌ untested |
-  | Windows | Credential Manager | `cmdkey` + PowerShell `CredRead` | ❌ untested |
+  | Linux | Secret Service | `secret-tool` | ✅ (Docker, both with and without a daemon) |
+  | Windows | Credential Manager | PowerShell P/Invoke over `advapi32` | ✅ (Windows 11 VM) |
 
   Service name is `news`; the account is the varying part. On Windows the credential target is `news-<account>`.
 
 - **FR-7.5** *(Shipped)* Availability is **probed once per process**. On Linux the probe is a real store → lookup → clear round-trip on a throwaway entry, because `which secret-tool` passes on a headless box with the binary installed and no Secret Service daemon running — and the failure would otherwise surface as a mystifying write error. On macOS it checks `security default-keychain` first, which fails when no user keychain exists (a temp `HOME` in tests) and would otherwise pop a system dialog.
 
 - **FR-7.6** *(Shipped)* **Every write is read back before it is reported as saved.** A credential tool that exits 0 having stored nothing — or something truncated — would otherwise be shown to the user as success and only surface later as an authentication failure.
+
+### Three more, found by actually running Windows
+
+Verified on a Windows 11 VM. Every one of these exited 0 while doing the wrong thing, and all three were caught by the read-back check in FR-7.6 rather than by any error.
+
+**A multi-line script piped to `powershell -Command -` silently does nothing.** The `Add-Type` here-string defining the `CredRead` shim never took effect, so reads returned empty with no stderr and a zero exit. Scripts now go through `-EncodedCommand` (base64 UTF-16LE), which also sidesteps every quoting question.
+
+**`cmdkey /pass:$env:SECRET` truncates at the first space.** PowerShell splits the expanded value into separate arguments, so a secret containing a space was stored incomplete. Writes and deletes now use `CredWrite`/`CredDelete` through the same P/Invoke shim as the read — the value is marshalled as a blob, so nothing parses it. `cmdkey` survives only as the fast existence gate, where it handles no secret.
+
+**PowerShell's stdout mangles non-ASCII.** `sk-ümlaut-🔑` came back as `sk-?mlaut-??`, because output crosses the console code page. The value reaches PowerShell intact — verified byte-for-byte through the environment — so only the return trip was corrupt. The read now asks for base64 of UTF-16 and decodes it in Node.
 
 ### Two measured findings worth keeping
 

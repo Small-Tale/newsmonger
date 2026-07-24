@@ -40,15 +40,19 @@ Still manual, and **unverified on every other platform**:
 
 1. `npm run dev` (without `--no-open`) — the default browser should open to the app.
 
-## API key storage on Linux and Windows
+## API key storage — ✅ all three platforms verified 2026-07-24
 
-The macOS path is verified (real Keychain round-trips, including long, non-ASCII, and quote-bearing values). The other two are written but have **never been run** — see [7 — API Keys](7-api-keys.md). E2E covers the UI against an in-memory store (`NEWS_FAKE_KEYCHAIN=1`), which by design exercises nothing below `src/keychain.ts`.
+macOS (real Keychain), Linux (Docker, both with and without a Secret Service daemon) and Windows 11 (Parallels VM) all pass an identical round-trip harness: absent-reads-null, write/read, overwrite, a >128-character key, special characters including non-ASCII and emoji, delete, and idempotent delete. Three real Windows bugs were fixed in the process — see [7 — API Keys](7-api-keys.md).
 
-1. **Linux**: with GNOME Keyring or KWallet running, save a key in Settings and confirm it appears via `secret-tool lookup service news account anthropic-api-key`. Restart the app and confirm the key is still found.
-2. **Linux, headless**: with `secret-tool` installed but no Secret Service daemon, confirm the dialog reports no keyring and disables the inputs rather than failing on save (this is what the round-trip probe is for).
-3. **Windows**: save a key, confirm it appears in Credential Manager under `news-anthropic-api-key`, and confirm it reads back after a restart (the `CredRead` P/Invoke path).
-4. **Long keys**: on each platform, save a key longer than 128 characters (an OpenAI project key) and confirm it round-trips exactly — this is the case that silently truncated on macOS before the write moved off stdin.
-5. **No credential store**: on a machine without one, confirm the dialog disables the inputs and names the environment variable instead.
+> **When testing the keychain by hand, never use the production account names.** A harness that used `anthropic-api-key` deleted a real stored key on cleanup. Use a scratch account (`harness-scratch-do-not-use`) — the production accounts hold live credentials.
+
+E2E still covers the UI against an in-memory store (`NEWS_FAKE_KEYCHAIN=1`), which by design exercises nothing below `src/keychain.ts`, so the OS layer stays manual.
+
+Still worth doing by hand, since the harness exercises `src/keychain.ts` directly rather than the UI:
+
+1. **Through the app on each platform**: save a key in Settings, restart, and confirm it is still found.
+2. **Linux, headless**: with `secret-tool` installed but no daemon, confirm the dialog reports no keyring and disables the inputs. (The harness covers the probe; this covers the *rendering*, which is FR-7.11's untested half.)
+3. **KWallet** rather than GNOME Keyring — only gnome-keyring has been exercised.
 
 ## Claude subscription provider (`claude-cli`, needs Claude Code signed in)
 
