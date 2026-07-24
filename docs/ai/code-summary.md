@@ -49,6 +49,7 @@ src/
     notifications.ts  noteState — OS notification when new items arrive while unfocused (NEWS-38)
     share.ts          shareText + shareItem — OS share sheet, clipboard fallback (NEWS-43)
     schedule.ts       isBehindSchedule/topicsBehindSchedule — falling-behind detection for the banner (NEWS-59)
+    failure.ts        currentFailure — the topic-currently-failing warning source (NEWS-41); dismissal persisted in localStorage
     styles.scss       styling (light/dark via prefers-color-scheme)
 src-tauri/            Tauri v2 shell; one spawn path, dev runs tsx + release runs the sidecar
   src/lib.rs          server_command() picks the command; spawn_server() watches stdout + navigates

@@ -95,6 +95,32 @@ function readSidebarCollapsed(): boolean {
   }
 }
 
+/**
+ * The dismissed failed-run id is persisted (NEWS-41): the failure warning is
+ * derived from server state that outlives a page reload, so an in-memory
+ * dismissal meant relaunching the app resurrected a warning the user had
+ * already closed. A *new* failure has a new id and still shows.
+ */
+const DISMISSED_RUN_KEY = 'news:dismissed-run';
+
+function readDismissedRunId(): string | null {
+  if (typeof localStorage === 'undefined') return null;
+  try {
+    return localStorage.getItem(DISMISSED_RUN_KEY);
+  } catch {
+    return null;
+  }
+}
+
+function writeDismissedRunId(id: string): void {
+  if (typeof localStorage === 'undefined') return;
+  try {
+    localStorage.setItem(DISMISSED_RUN_KEY, id);
+  } catch {
+    // private mode / storage disabled — dismissal just won't persist
+  }
+}
+
 
 export const appStore = defineStore({
   initial: (): AppState => ({
@@ -119,7 +145,7 @@ export const appStore = defineStore({
     contextMenu: null,
     confirm: null,
     notifyPermissionDenied: false,
-    dismissedRunId: null,
+    dismissedRunId: readDismissedRunId(),
     dismissedBehind: false,
     toast: null,
   }),
@@ -164,6 +190,7 @@ export const appStore = defineStore({
       set({ ...get(), notifyPermissionDenied });
     },
     dismissRun: (dismissedRunId: string) => {
+      writeDismissedRunId(dismissedRunId);
       set({ ...get(), dismissedRunId });
     },
     dismissBehind: () => {

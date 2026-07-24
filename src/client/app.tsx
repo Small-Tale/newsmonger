@@ -22,6 +22,7 @@ import {
   updateInterval,
   updateProviderSettings,
 } from './api.js';
+import { currentFailure } from './failure.js';
 import { icon } from './icons.js';
 import { ensureNotificationPermission } from './notifications.js';
 import { topicsBehindSchedule } from './schedule.js';
@@ -618,7 +619,9 @@ function appJsx(): SafeHtml {
   const sortedItems = s.savedFilter ? soloItems.filter((i) => i.saved) : soloItems;
   const savedCount = allItems.filter((i) => i.saved).length;
   const anyChecking = s.checking.length > 0;
-  const lastFailure = s.runs.find((r) => r.status === 'failed');
+  // Only warn about a topic whose *latest* run failed — not a stale failure from
+  // one that has since recovered (NEWS-41).
+  const lastFailure = currentFailure(s.runs);
   // Topics whose real cadence has fallen well behind the interval the user set
   // (NEWS-59). Informational only — the scheduler already cycles as fast as it
   // can; this just explains why freshness may lag.
@@ -711,7 +714,7 @@ function appJsx(): SafeHtml {
         ) : (
           ''
         )}
-        {lastFailure !== undefined && s.error === null && lastFailure.id !== s.dismissedRunId ? (
+        {lastFailure !== null && s.error === null && lastFailure.id !== s.dismissedRunId ? (
           <div class="banner warn">
             <span class="banner-text">
               Last check for “{topicNames.get(lastFailure.topicId) ?? 'deleted topic'}” failed:{' '}

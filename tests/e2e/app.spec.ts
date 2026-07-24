@@ -360,6 +360,33 @@ test('the failure warning can be dismissed and stays dismissed, but a new failur
   await expect(row).toHaveCount(0);
 });
 
+test('a dismissed failure warning stays dismissed after an app relaunch (NEWS-41)', async ({ page }) => {
+  // The reopened bug: the warning is derived from server state that survives a
+  // reload, and the dismissal used to live only in memory — so relaunching the
+  // app resurrected a warning the user had already closed.
+  await page.goto('/');
+  await page.fill('.add-topic input', 'relaunch fail probe');
+  await page.press('.add-topic input', 'Enter');
+  const row = page.locator('.topic', { hasText: 'relaunch fail probe' });
+  await expect(row).toBeVisible();
+
+  await topicAction(page, row, 'check');
+  await expect(page.locator('.banner.warn')).toBeVisible();
+  await page.locator('.banner.warn [data-action=dismiss-warn]').click();
+  await expect(page.locator('.banner.warn')).toHaveCount(0);
+
+  // Relaunch = reload. The failed run is still in server state, but the
+  // dismissal now persists, so the warning must not reappear.
+  await page.reload();
+  await expect(row).toBeVisible();
+  await page.waitForTimeout(4500); // a full poll cycle
+  await expect(page.locator('.banner.warn')).toHaveCount(0);
+
+  // Clean up.
+  await topicAction(page, row, 'delete');
+  await expect(row).toHaveCount(0);
+});
+
 test('bookmark a story and filter to saved (NEWS-42)', async ({ page }) => {
   // Needs stories in the feed. Add a topic and check it (mock returns 2).
   await page.goto('/');
