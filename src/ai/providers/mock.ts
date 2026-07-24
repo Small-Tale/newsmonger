@@ -7,14 +7,19 @@ import type { FoundNewsItem, KnownItem, NewsProvider } from '../types.js';
  * Returns the same two stories for a topic on every call, so a second check
  * exercises the dedupe path. Topics whose name contains "empty" return no
  * stories; topics containing "fail" throw. It never touches the network.
+ *
+ * `attended` is settable so the foreground gate (`src/attendance.ts`) can be
+ * tested end to end without a real subscription-backed CLI. It defaults to
+ * false, matching the API-key providers, so existing tests are unaffected.
  */
-export function createMockProvider(): NewsProvider & {
+export function createMockProvider(config: { attended?: boolean } = {}): NewsProvider & {
   calls: { topicName: string; known: KnownItem[]; sinceIso: string | null }[];
 } {
   const calls: { topicName: string; known: KnownItem[]; sinceIso: string | null }[] = [];
   return {
     name: 'mock',
     model: 'mock',
+    attended: config.attended ?? false,
     calls,
     isAvailable: () => Promise.resolve(true),
     checkTopic(topicName: string, known: KnownItem[], sinceIso: string | null): Promise<FoundNewsItem[]> {

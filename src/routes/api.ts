@@ -116,6 +116,18 @@ export function registerApi(app: Hono<AppEnv>): void {
     return c.json({ started });
   });
 
+  // Foreground heartbeat. The client posts this only while the app is visible
+  // AND focused; scheduled checks on a subscription-backed provider won't run
+  // without a recent one (see src/attendance.ts).
+  //
+  // Deliberately its own endpoint rather than a flag inferred from the 4 s
+  // /api/state poll: that poll is just an HTTP request, so a stray curl would
+  // otherwise read as "a person is watching".
+  app.post('/api/foreground', (c) => {
+    c.get('attendance').record();
+    return c.json({ ok: true });
+  });
+
   // API keys. Values are write-only: they go in on PUT and are never returned
   // by any route here, so a key can't leak back through the polling client.
   app.get('/api/keys', async (c) => {

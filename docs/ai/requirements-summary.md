@@ -23,6 +23,10 @@ Flags, usage errors, readiness line (`running at ` — synced with Tauri shell),
 Pluggable provider abstraction (`NewsProvider`), `FACTORIES`/`AUTO_ORDER`/`resolveProvider`, provider/model/endpoint as persisted settings seeded by CLI/env, provider recorded per `CheckRun`. **Shipped**: the abstraction, `anthropic`, `openai` (Responses API + hosted web search; live path needs a key to verify), and `mock` (test-only), plus the UI provider selector. **Scope decision (NEWS-18)**: only platforms that do their own web search are supported — Ollama/local providers and the whole search-grounding layer were removed as unnecessary complexity.
 
 
+### Attendance gate (FR-6.5–6.10) — **Shipped**
+
+Subscription-backed providers (`attended: true`) run *scheduled* checks only while the app is foregrounded; manual checks are never gated; the gate fails closed. No `attended` provider exists yet — NEWS-27 (claude-cli) / NEWS-28 (codex-cli) are the first. Gate decision unit-tested; E2E covers the client heartbeat only.
+
 ## [5 — Desktop App (Tauri)](../5-desktop-app.md) — Shipped (macOS verified; other platforms unbuilt)
 
 - FR-5.1 dev-mode shell: **Shipped, verified on macOS** (compile + spawn + navigate + page load confirmed via request log)

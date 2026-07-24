@@ -58,6 +58,16 @@ export function isKeyedProvider(name: string): name is KeyedProvider {
 
 /** A selectable news backend. Every real provider searches the web itself. */
 export interface NewsProvider extends NewsService {
+  /**
+   * Whether this provider may only run *scheduled* checks while the app is
+   * foregrounded (see `src/attendance.ts`).
+   *
+   * True for providers backed by a personal subscription, where a check spends
+   * the user's plan quota; false for API-key providers, whose usage is metered
+   * and billed and so is fine to schedule unattended. Manual checks are never
+   * gated — clicking the button is itself proof someone is there.
+   */
+  readonly attended: boolean;
   readonly name: ConcreteProviderName;
   /** Human-facing model id in use (for display / run records); '' if not applicable. */
   readonly model: string;

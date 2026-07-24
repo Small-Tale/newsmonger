@@ -122,6 +122,17 @@ export function startCheck(topicId?: string): Promise<void> {
   );
 }
 
+/**
+ * Tell the server the app is in front of the user right now.
+ *
+ * Only sent when the page is both visible and focused — a visible but
+ * unfocused window on a second monitor isn't someone using the app, and this
+ * signal is what permits scheduled checks to spend subscription quota.
+ */
+export function reportForeground(): Promise<unknown> {
+  return request('/api/foreground', { method: 'POST' }).catch(() => null);
+}
+
 export function openExternal(url: string): Promise<unknown> {
   return request('/api/open-external', { method: 'POST', body: JSON.stringify({ url }) });
 }

@@ -138,3 +138,23 @@ test('deleting a topic removes its stories from the feed', async ({ page }) => {
   await expect(page.locator('.item')).toHaveCount(2);
   await expect(page.locator('.item-topic').first()).not.toContainText('Quantum');
 });
+
+test('the client reports foreground so scheduled checks may run', async ({ page }) => {
+  // Subscription-backed providers only run scheduled checks while the app is
+  // in front of someone (src/attendance.ts). This asserts the client half of
+  // that contract: the heartbeat is sent on load, and again on regaining
+  // focus. The gate decision itself is unit-tested in attendance.test.ts,
+  // where attendance can actually be made stale.
+  const beats: string[] = [];
+  page.on('request', (r) => {
+    if (r.url().includes('/api/foreground')) beats.push(r.method());
+  });
+
+  await page.goto('/');
+  await expect.poll(() => beats.length).toBeGreaterThan(0);
+  expect(beats[0]).toBe('POST');
+
+  const afterLoad = beats.length;
+  await page.evaluate(() => { window.dispatchEvent(new Event('focus')); });
+  await expect.poll(() => beats.length).toBeGreaterThan(afterLoad);
+});

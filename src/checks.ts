@@ -1,5 +1,6 @@
 import { filterNewItems } from './ai/dedupe.js';
 import type { KnownItem, NewsProvider } from './ai/types.js';
+import { Attendance } from './attendance.js';
 import type { Store } from './db/store.js';
 
 /** Resolves the active provider from current settings, per check. */
@@ -20,6 +21,13 @@ export class CheckRunner {
   constructor(
     private readonly store: Store,
     private readonly resolveProvider: ProviderResolver,
+    /**
+     * Foreground tracker for the attendance gate. Defaults to a fresh
+     * `Attendance`, which reports "nobody is watching" — so forgetting to wire
+     * this up stops scheduled checks rather than silently running a
+     * subscription provider unattended.
+     */
+    private readonly attendance: Attendance = new Attendance(),
   ) {}
 
   /** Topic ids currently being checked. */
@@ -79,11 +87,37 @@ export class CheckRunner {
     }
   }
 
-  /** Check every non-paused topic that is due, sequentially. */
+  /**
+   * Whether a *scheduled* sweep may run right now.
+   *
+   * Only subscription-backed providers are gated; metered API-key providers
+   * run on schedule as always. The provider comes from global settings, so one
+   * resolution covers the whole sweep rather than one per topic.
+   */
+  private async mayRunScheduled(now: Date): Promise<boolean> {
+    let provider: NewsProvider;
+    try {
+      provider = await this.resolveProvider();
+    } catch {
+      // Nothing usable is configured. Proceed so `checkTopic` resolves again
+      // and records the failure against each topic, as it did before the gate.
+      return true;
+    }
+    return !provider.attended || this.attendance.isAttended(now.getTime());
+  }
+
+  /**
+   * Check every non-paused topic that is due, sequentially.
+   *
+   * Deferred topics are left untouched — `lastCheckedAt` does not advance — so
+   * they stay due and run as soon as someone opens the app.
+   */
   async checkDue(now: Date): Promise<void> {
     const { checkIntervalMs } = this.store.getSettings();
-    for (const topic of this.store.listTopics()) {
-      if (!isDue(topic, checkIntervalMs, now)) continue;
+    const due = this.store.listTopics().filter((topic) => isDue(topic, checkIntervalMs, now));
+    if (due.length === 0) return;
+    if (!(await this.mayRunScheduled(now))) return;
+    for (const topic of due) {
       await this.checkTopic(topic.id);
     }
   }

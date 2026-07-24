@@ -11,6 +11,7 @@ import {
   refreshKeys,
   refreshProviders,
   refreshState,
+  reportForeground,
   saveKey,
   setTopicPaused,
   startCheck,
@@ -529,6 +530,28 @@ function startPolling(): void {
   }, 4000);
 }
 
+/** Is the app actually in front of the user right now? */
+function isForegrounded(): boolean {
+  return document.visibilityState === 'visible' && document.hasFocus();
+}
+
+/**
+ * Heartbeat that permits scheduled checks on subscription-backed providers.
+ *
+ * Sent on an interval comfortably shorter than the server's window, plus
+ * immediately on the events that can make the app foregrounded, so returning
+ * to it takes effect at once instead of after the next tick.
+ */
+function startForegroundHeartbeat(): void {
+  const beat = (): void => {
+    if (isForegrounded()) void reportForeground();
+  };
+  beat();
+  setInterval(beat, 60_000);
+  window.addEventListener('focus', beat);
+  document.addEventListener('visibilitychange', beat);
+}
+
 const root = document.getElementById('app');
 if (root) {
   mount(root, () => appJsx());
@@ -536,4 +559,5 @@ if (root) {
   void refreshState();
   void refreshProviders();
   startPolling();
+  startForegroundHeartbeat();
 }

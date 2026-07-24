@@ -3,6 +3,7 @@ import v8 from 'node:v8';
 import { resolveApiKey } from './ai/api-keys.js';
 import { createMockProvider, resolveProvider } from './ai/providers/index.js';
 import { KEYED_PROVIDERS } from './ai/types.js';
+import { Attendance } from './attendance.js';
 import type { ProviderResolver } from './checks.js';
 import { CheckRunner } from './checks.js';
 import { parseArgs } from './config.js';
@@ -58,8 +59,11 @@ async function main(): Promise<void> {
     }
   }
 
-  const runner = new CheckRunner(store, resolve);
-  const app = createApp({ store, runner });
+  // One tracker, shared: the route records foreground signals and the runner
+  // reads them.
+  const attendance = new Attendance();
+  const runner = new CheckRunner(store, resolve, attendance);
+  const app = createApp({ store, runner, attendance });
 
   const server = await startServer(app, {
     port: options.port ?? undefined,

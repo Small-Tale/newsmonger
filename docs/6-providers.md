@@ -32,6 +32,23 @@ Claude with adaptive thinking and the `web_search_20260209` server tool (max 8 s
 
 The **Responses API** with the hosted `web_search` tool (`client.responses.create({ model, instructions, input, tools: [{type:'web_search'}] })`, reading `output_text`) — the OpenAI analog of Anthropic's server tool. Result parsing reuses the shared fenced-JSON `parseNewsResult`; a strict `json_schema` output was left as a possible enhancement to avoid schema-vs-hosted-tool friction. `OPENAI_BASE_URL` (or `--endpoint`) targets an OpenAI-compatible gateway. **The live request path needs a real key to verify** — see `manual-test-plan.md`.
 
+## Attended providers and the foreground gate
+
+Some providers authenticate with a **personal subscription** (Claude Pro/Max, ChatGPT) rather than an API key. A check on one of those spends the user's plan quota, and a scheduler firing at 3am against someone's subscription is an unattended background agent. So those providers only run **scheduled** checks while the app is actually in front of someone.
+
+- **FR-6.5** *(Shipped)* `NewsProvider` carries `readonly attended: boolean`. True for subscription-backed providers; false for API-key providers and `mock`, whose usage is metered and billed and so is fine to schedule unattended.
+- **FR-6.6** *(Shipped)* The client posts `/api/foreground` when the page is **visible AND focused** — on load, on an interval, and on `focus`/`visibilitychange` so returning to the app takes effect immediately. A visible-but-unfocused window on a second monitor is not someone using the app.
+
+  It's a dedicated endpoint rather than a flag inferred from the 4 s `/api/state` poll on purpose: that poll is just an HTTP request, so a stray `curl` would otherwise read as "a person is watching".
+- **FR-6.7** *(Shipped)* `Attendance` (`src/attendance.ts`) holds `lastSeenAt` **in memory** — session state, not user data, and a restart genuinely should start from "nobody is watching". A check counts as attended within `ATTENDANCE_WINDOW_MS` (5 minutes) of the last signal.
+- **FR-6.8** *(Shipped)* `CheckRunner.checkDue()` resolves the provider once per sweep (the provider comes from global settings, so it's the same for every topic) and returns early when the provider is `attended` and attendance has lapsed. Deferred topics are left untouched — `lastCheckedAt` does not advance and no `CheckRun` is recorded — so they stay due and run as soon as someone opens the app. A deferral is not a failure.
+- **FR-6.9** *(Shipped)* **Manual checks are never gated.** `checkTopic` (a topic's Check button) and `checkAll` (Check all now) always run: clicking is itself proof someone is there.
+- **FR-6.10** *(Shipped)* The gate **fails closed**. A fresh `Attendance` reports "not attended", and it is the default constructor argument for `CheckRunner` — so forgetting to wire the tracker stops scheduled checks rather than silently running a subscription provider unattended.
+
+Provider-resolution failures are deliberately *not* swallowed by the gate: if resolving throws, the sweep proceeds so `checkTopic` records the failure per topic exactly as it did before.
+
+**Coverage note:** the gate decision is unit-tested (`tests/unit/attendance.test.ts`, including window boundaries and away→return→away sequences). E2E covers only the *client* half — that the heartbeat is sent on load and on regaining focus — because a Playwright page is always focused, so attendance can't be made stale through the browser.
+
 See also: [2 — News Checks and Deduplication](2-news-checks-and-dedup.md), [4 — CLI, Server, and Storage](4-cli-server-storage.md).
 
 Key storage and the Settings dialog are covered in [7 — API Keys and Settings Dialog](7-api-keys.md).
