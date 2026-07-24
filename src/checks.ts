@@ -45,8 +45,14 @@ export class CheckRunner {
   /**
    * Check one topic now. Resolves with the number of new items added, or null
    * if the topic is unknown or a check for it is already in flight.
+   *
+   * A *manual* check (`manual: true` — the Check / Check all now buttons)
+   * records attendance: the user explicitly asked for this, so they are active
+   * by definition, and the scheduler shouldn't defer the rest of a long sweep
+   * just because the window lost focus mid-fetch (NEWS-44).
    */
-  async checkTopic(topicId: string): Promise<number | null> {
+  async checkTopic(topicId: string, opts: { manual?: boolean } = {}): Promise<number | null> {
+    if (opts.manual === true) this.attendance.record();
     const topic = this.store.getTopic(topicId);
     if (!topic) return null;
     if (this.inFlight.has(topicId)) return null;
@@ -158,11 +164,18 @@ export class CheckRunner {
     }
   }
 
-  /** Check every non-paused topic immediately, sequentially. */
+  /**
+   * Check every non-paused topic immediately, sequentially.
+   *
+   * Always a manual action, so each check records attendance — a long sweep
+   * (a subscription provider takes minutes per topic) keeps the user counted as
+   * active for its whole duration, so a scheduler tick that fires mid-sweep
+   * isn't gated and the remaining topics aren't deferred (NEWS-44).
+   */
   async checkAll(): Promise<void> {
     for (const topic of this.store.listTopics()) {
       if (topic.paused) continue;
-      await this.checkTopic(topic.id);
+      await this.checkTopic(topic.id, { manual: true });
     }
   }
 }

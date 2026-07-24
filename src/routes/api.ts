@@ -108,7 +108,7 @@ export function registerApi(app: Hono<AppEnv>): void {
     const runner = c.get('runner');
     if (body.topicId !== undefined) {
       if (!store.getTopic(body.topicId)) return c.json({ error: 'no such topic' }, 404);
-      void runner.checkTopic(body.topicId).catch((err: unknown) => {
+      void runner.checkTopic(body.topicId, { manual: true }).catch((err: unknown) => {
         console.error('news: check failed:', err);
       });
       return c.json({ started: [body.topicId] });

@@ -157,6 +157,63 @@ describe('manual checks are never gated', () => {
   });
 });
 
+describe('manual checks record attendance (NEWS-44)', () => {
+  it('a manual check-all keeps the scheduler ungated for the rest of a long sweep', async () => {
+    // The reported bug: click Check all now on a subscription provider, then
+    // background the app; topics late in the slow sequential sweep were then
+    // gated out of the scheduler and had to wait. A manual check now counts as
+    // activity, so a scheduler tick during the sweep isn't gated.
+    const { store, runner, attendance, provider } = attendedSetup();
+    store.addTopic('fusion energy');
+    store.addTopic('quantum computing');
+    expect(attendance.isAttended(Date.now())).toBe(false); // backgrounded
+
+    await runner.checkAll();
+
+    // checkAll ran every topic (it's ungated)...
+    expect(provider.calls.length).toBe(2);
+    // ...and recorded attendance, so a scheduled sweep right after is NOT gated.
+    expect(attendance.isAttended(Date.now())).toBe(true);
+  });
+
+  it('a manual single-topic check records attendance', async () => {
+    const { store, runner, attendance } = attendedSetup();
+    const topic = store.addTopic('fusion energy');
+    expect(attendance.isAttended(Date.now())).toBe(false);
+
+    await runner.checkTopic(topic.id, { manual: true });
+
+    expect(attendance.isAttended(Date.now())).toBe(true);
+  });
+
+  it('a SCHEDULED check does not record attendance', async () => {
+    // checkTopic without the manual flag (the scheduler's path) must not stamp
+    // attendance — otherwise one scheduled check would prop the gate open.
+    const { store, runner, attendance } = attendedSetup();
+    const topic = store.addTopic('fusion energy');
+
+    await runner.checkTopic(topic.id); // no manual flag
+
+    expect(attendance.isAttended(Date.now())).toBe(false);
+  });
+
+  it('after a manual sweep, a backgrounded scheduled check runs within the window', async () => {
+    // End to end: manual sweep -> attendance fresh -> the very next scheduled
+    // sweep (still backgrounded) checks a now-due topic instead of deferring it.
+    const { store, runner, provider } = attendedSetup();
+    const topic = store.addTopic('fusion energy');
+
+    await runner.checkAll(); // records attendance
+    provider.calls.length = 0;
+
+    // Make it due again, then run the scheduler while still backgrounded.
+    store.markTopicChecked(topic.id, new Date(Date.now() - 48 * 60 * 60 * 1000));
+    await runner.checkDue(new Date());
+
+    expect(provider.calls.length).toBe(1); // ran, not deferred
+  });
+});
+
 describe('unattended (API-key) providers are unaffected', () => {
   it('scheduled checks run with no foreground signal at all', async () => {
     const store = new Store(tmpDataDir());
@@ -179,6 +236,32 @@ describe('unattended (API-key) providers are unaffected', () => {
     await runner.checkDue(new Date(T0));
 
     expect(provider.calls).toHaveLength(0);
+  });
+});
+
+describe('the manual check routes record attendance (NEWS-44)', () => {
+  it('POST /api/check (all) records attendance', async () => {
+    const store = new Store(tmpDataDir());
+    const attendance = new Attendance();
+    const runner = new CheckRunner(store, asResolver(createMockProvider({ attended: true })), attendance);
+    const app = createApp({ store, runner, attendance });
+    store.addTopic('fusion energy');
+    expect(attendance.isAttended(Date.now())).toBe(false);
+
+    await app.request('/api/check', { method: 'POST', body: JSON.stringify({}) });
+    expect(attendance.isAttended(Date.now())).toBe(true);
+  });
+
+  it('POST /api/check {topicId} records attendance', async () => {
+    const store = new Store(tmpDataDir());
+    const attendance = new Attendance();
+    const runner = new CheckRunner(store, asResolver(createMockProvider({ attended: true })), attendance);
+    const app = createApp({ store, runner, attendance });
+    const topic = store.addTopic('fusion energy');
+    expect(attendance.isAttended(Date.now())).toBe(false);
+
+    await app.request('/api/check', { method: 'POST', body: JSON.stringify({ topicId: topic.id }) });
+    expect(attendance.isAttended(Date.now())).toBe(true);
   });
 });
 

@@ -40,7 +40,7 @@ Pluggable provider abstraction (`NewsProvider`), `FACTORIES`/`AUTO_ORDER`/`resol
 
 ### Attendance gate (FR-6.5–6.10) — **Shipped**
 
-Subscription-backed providers (`attended: true`) run *scheduled* checks only while the app is foregrounded; manual checks are never gated; the gate fails closed. No `attended` provider exists yet — NEWS-27 (claude-cli) / NEWS-28 (codex-cli) are the first. Gate decision unit-tested; E2E covers the client heartbeat only.
+Subscription-backed providers (`attended: true`) run *scheduled* checks only while the app is foregrounded; manual checks are never gated **and record attendance** (so a long manual sweep isn't deferred mid-way when the app is backgrounded — NEWS-44); the gate fails closed. No `attended` provider exists yet — NEWS-27 (claude-cli) / NEWS-28 (codex-cli) are the first. Gate decision unit-tested; E2E covers the client heartbeat only.
 
 ## [5 — Desktop App (Tauri)](../5-desktop-app.md) — Shipped (macOS verified; other platforms unbuilt)
 

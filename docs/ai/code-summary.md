@@ -102,7 +102,7 @@ Data dir: `--data-dir` flag → `NEWS_DATA_DIR` → `~/.news`.
 | A new runtime dependency | just add it to `package.json` `dependencies` — tsup externalizes it and the sidecar script installs it; no list to update |
 | Mock behavior in tests | `src/ai/providers/mock.ts` (topic name containing "fail"/"empty" triggers those paths) |
 | API keys / keychain | `src/keychain.ts` (OS layer) + `src/ai/api-keys.ts` (env→keychain precedence); `NEWS_FAKE_KEYCHAIN=1` for tests |
-| Foreground/attendance gate | `src/attendance.ts` + `CheckRunner.checkDue`; provider opts in via `attended: true` |
+| Foreground/attendance gate | `src/attendance.ts` + `CheckRunner.checkDue`; provider opts in via `attended: true`. **Manual checks (`{manual:true}`) record attendance** so a long sweep isn't deferred (NEWS-44) |
 | Article images / SSRF guards | `src/images/` — `safety.ts` (URL vetting), `ogimage.ts` (extract), `cache.ts` (fetch+store+`pruneImageCache`), route `/api/image/:hash` is **cache-only** |
 | Image cache pruning | `pruneImageCache`/`liveImageHashes` in `src/images/cache.ts`; called at startup (`cli.ts`) + on `DELETE /api/topics/:id` |
 | Settings dialog | `src/client/app.tsx` `settingsDialogJsx`/`keyRowJsx`; routes in `src/routes/api.ts` under `/api/keys` |
