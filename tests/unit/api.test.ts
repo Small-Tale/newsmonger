@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import { createMockProvider } from '../../src/ai/providers/index.js';
 import { ProvidersRespSchema, StateRespSchema } from '../../src/api/schemas.js';
+import { Attendance } from '../../src/attendance.js';
 import { CheckRunner } from '../../src/checks.js';
 import { Store } from '../../src/db/store.js';
 import { createApp } from '../../src/server.js';
@@ -55,6 +56,56 @@ describe('API', () => {
 
     const dupe = await app.request('/api/topics', { method: 'POST', body: JSON.stringify({ name: 'fusion' }) });
     expect(dupe.status).toBe(409);
+  });
+
+  it('adds a topic and checks it immediately, without a manual check (NEWS-54)', async () => {
+    // The bug: a freshly added topic just sat until the next scheduler tick
+    // (up to a minute). Adding it must kick off a check on its own.
+    const { app, store, service } = makeApp();
+    const res = await app.request('/api/topics', { method: 'POST', body: JSON.stringify({ name: 'Fusion' }) });
+    expect(res.status).toBe(201);
+
+    // Nobody called /api/check — the add did.
+    await waitForIdle(app);
+    expect(service.calls.map((c) => c.topicName)).toEqual(['Fusion']);
+
+    const state = StateRespSchema.parse(await json(await app.request('/api/state')));
+    expect(state.items).toHaveLength(2);
+    expect(state.runs[0]?.status).toBe('succeeded');
+    expect(store.listTopics()[0]?.lastCheckedAt).not.toBeNull();
+  });
+
+  it('the initial check counts as attendance, so it runs for a subscription provider unwatched (NEWS-54)', async () => {
+    // The initial check is manual — the user is plainly present — so it must run
+    // even for an attended provider with no prior foreground signal, and leave
+    // attendance fresh (like the Check-now buttons, NEWS-44).
+    const store = new Store(tmpDataDir());
+    const attendance = new Attendance();
+    const service = createMockProvider({ attended: true });
+    const runner = new CheckRunner(store, asResolver(service), attendance);
+    const app = createApp({ store, runner, attendance });
+    expect(attendance.isAttended(Date.now())).toBe(false);
+
+    await app.request('/api/topics', { method: 'POST', body: JSON.stringify({ name: 'Fusion' }) });
+    await waitForIdle(app);
+
+    expect(service.calls).toHaveLength(1);
+    expect(store.listItems()).toHaveLength(2);
+    expect(attendance.isAttended(Date.now())).toBe(true);
+  });
+
+  it('a topic that fails to be created is not checked (NEWS-54)', async () => {
+    // The check must fire only after a *successful* add — a duplicate (409)
+    // must not trigger a spurious check.
+    const { app, service } = makeApp();
+    await app.request('/api/topics', { method: 'POST', body: JSON.stringify({ name: 'Fusion' }) });
+    await waitForIdle(app);
+    expect(service.calls).toHaveLength(1);
+
+    const dupe = await app.request('/api/topics', { method: 'POST', body: JSON.stringify({ name: 'fusion' }) });
+    expect(dupe.status).toBe(409);
+    await waitForIdle(app);
+    expect(service.calls).toHaveLength(1); // still one — the dupe checked nothing
   });
 
   it('full flow: add topic, check, items appear, second check dedupes', async () => {

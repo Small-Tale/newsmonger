@@ -66,6 +66,23 @@ test('a second check deduplicates already-seen stories', async ({ page }) => {
   await expect(page.locator('.item')).toHaveCount(2);
 });
 
+test('a newly added topic is checked automatically, with no manual check (NEWS-54)', async ({ page }) => {
+  // The bug: a fresh topic sat unchecked until the next scheduler tick. Adding
+  // it must produce stories on its own — this test never invokes Check now.
+  await page.goto('/');
+  await page.fill('.add-topic input', 'Auto Check Probe');
+  await page.press('.add-topic input', 'Enter');
+  const row = page.locator('.topic', { hasText: 'Auto Check Probe' });
+  await expect(row).toBeVisible();
+
+  const probeItems = page.locator('.item', { has: page.locator('.item-topic', { hasText: 'Auto Check Probe' }) });
+  await expect(probeItems).toHaveCount(2, { timeout: 15_000 });
+
+  // Clean up so the serial suite is undisturbed.
+  await topicAction(page, row, 'delete');
+  await expect(row).toHaveCount(0);
+});
+
 test('changing the check interval persists across reload', async ({ page }) => {
   await page.goto('/');
   await openSettings(page);

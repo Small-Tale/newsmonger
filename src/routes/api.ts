@@ -63,12 +63,24 @@ export function registerApi(app: Hono<AppEnv>): void {
   app.post('/api/topics', async (c) => {
     const body = await parseBody(c, CreateTopicReqSchema);
     if (!body) return c.json({ error: 'invalid request: expected { name }' }, 400);
+    let topic;
     try {
-      const topic = c.get('store').addTopic(body.name);
-      return c.json(topic, 201);
+      topic = c.get('store').addTopic(body.name);
     } catch (err) {
       return c.json({ error: err instanceof Error ? err.message : String(err) }, 409);
     }
+    // Check the new topic right away rather than leaving it for the next
+    // scheduler tick (up to a minute out) — the user just added it and is
+    // watching for the first results. Treated as a *manual* check: it records
+    // attendance and so runs ungated even for a subscription provider (the user
+    // is plainly present), matching the Check-now buttons. Fired in the
+    // background so the response returns immediately; the client's /api/state
+    // poll surfaces the in-flight state and then the items. The in-flight guard
+    // means a scheduler tick that also finds this topic due won't double-run it.
+    void c.get('runner').checkTopic(topic.id, { manual: true }).catch((err: unknown) => {
+      console.error('news: initial check failed:', err);
+    });
+    return c.json(topic, 201);
   });
 
   app.patch('/api/topics/:id', async (c) => {
