@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import { createMockProvider } from '../../src/ai/providers/index.js';
 import type { FoundNewsItem } from '../../src/ai/types.js';
-import { CheckRunner, isDue } from '../../src/checks.js';
+import { CheckRunner, effectiveInterval, isDue } from '../../src/checks.js';
 import { Store } from '../../src/db/store.js';
 import { asResolver, fakeProvider } from '../helpers/provider.js';
 import { tmpDataDir } from '../helpers/tmp.js';
@@ -26,6 +26,18 @@ describe('isDue', () => {
     expect(isDue({ paused: false, lastCheckedAt: '2026-07-23T11:00:00Z' }, HOUR, now)).toBe(true);
     expect(isDue({ paused: false, lastCheckedAt: '2026-07-23T11:00:01Z' }, HOUR, now)).toBe(false);
     expect(isDue({ paused: false, lastCheckedAt: '2026-07-23T09:00:00Z' }, HOUR, now)).toBe(true);
+  });
+});
+
+describe('effectiveInterval (NEWS-56)', () => {
+  const settings = { checkIntervalMs: 24 * HOUR, highPriorityIntervalMs: HOUR };
+
+  it('uses the default interval for a normal topic', () => {
+    expect(effectiveInterval({ highPriority: false }, settings)).toBe(24 * HOUR);
+  });
+
+  it('uses the shorter high-priority interval for a flagged topic', () => {
+    expect(effectiveInterval({ highPriority: true }, settings)).toBe(HOUR);
   });
 });
 
@@ -149,6 +161,31 @@ describe('CheckRunner', () => {
 
     await runner.checkDue(new Date());
     expect(service.calls.map((c) => c.topicName)).toEqual(['Due']);
+  });
+
+  it('checkDue runs a high-priority topic on the shorter interval (NEWS-56)', async () => {
+    const store = new Store(tmpDataDir());
+    const service = createMockProvider();
+    const runner = new CheckRunner(store, asResolver(service));
+    // Default 1 day, high-priority 1 hour.
+    store.updateSettings({ checkIntervalMs: 24 * HOUR, highPriorityIntervalMs: HOUR });
+
+    const normal = store.addTopic('Normal');
+    const hot = store.addTopic('Hot');
+    store.setTopicHighPriority(hot.id, true);
+    const t0 = new Date('2026-07-24T00:00:00Z');
+    store.markTopicChecked(normal.id, t0);
+    store.markTopicChecked(hot.id, t0);
+
+    // 2 hours later: past the 1h high-priority interval, well short of the 1-day default.
+    await runner.checkDue(new Date(t0.getTime() + 2 * HOUR));
+    expect(service.calls.map((c) => c.topicName)).toEqual(['Hot']);
+
+    // A full day later, the normal topic comes due too.
+    service.calls.length = 0;
+    store.markTopicChecked(hot.id, new Date(t0.getTime() + 2 * HOUR)); // keep hot recent
+    await runner.checkDue(new Date(t0.getTime() + 25 * HOUR));
+    expect(service.calls.map((c) => c.topicName)).toContain('Normal');
   });
 
   it('checkAll checks every unpaused topic regardless of due time', async () => {

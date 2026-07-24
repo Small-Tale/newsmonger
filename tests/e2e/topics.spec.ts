@@ -73,8 +73,8 @@ test('right-click opens a menu with icons and separators', async ({ page }) => {
   await row(page, 'Alpha Topic').click({ button: 'right' });
   await expect(page.locator('.menu')).toBeVisible();
 
-  await expect(page.locator('.menu-item')).toHaveCount(4);
-  await expect(page.locator('.menu .icon')).toHaveCount(4);
+  await expect(page.locator('.menu-item')).toHaveCount(5);
+  await expect(page.locator('.menu .icon')).toHaveCount(5);
   await expect(page.locator('.menu-sep')).toHaveCount(2);
   await expect(page.locator('.menu-item span').first()).toHaveText('Check now');
 
@@ -163,7 +163,8 @@ test('solo is additive and Show all clears it', async ({ page }) => {
 
   // Unsolo is the same menu item, flipped, once every target is solo'd.
   await row(page, 'Beta Topic').click({ button: 'right' });
-  await expect(page.locator('.menu-item span').nth(2)).toHaveText('Unsolo');
+  // Menu order: Check, Pause, High priority, Solo, Delete — Solo is index 3.
+  await expect(page.locator('.menu-item span').nth(3)).toHaveText('Unsolo');
   await page.keyboard.press('Escape');
 
   await page.locator('[data-action=clear-solo]').click();
@@ -225,6 +226,55 @@ test('a cancelled confirmation deletes nothing', async ({ page }) => {
   await cancelConfirm(page);
   await expect(page.locator('.topic')).toHaveCount(before);
   await expect(row(page, 'Gamma Topic')).toBeVisible();
+});
+
+test('mark a topic high priority and show a star, then clear it (NEWS-56)', async ({ page }) => {
+  await page.goto('/');
+  const target = row(page, 'Alpha Topic');
+  await expect(target).toBeVisible();
+  await expect(target).not.toHaveClass(/high-priority/);
+
+  // Mark it via the right-click menu.
+  await target.click({ button: 'right' });
+  await expect(page.locator('.menu-item span', { hasText: 'High priority' })).toBeVisible();
+  await page.locator('[data-menu-action=priority]').click();
+  await expect(target).toHaveClass(/high-priority/);
+  await expect(target.locator('.topic-flags .flag.high-priority')).toHaveCount(1);
+
+  // The menu now offers the reverse, and it persists across reload.
+  await page.reload();
+  await expect(row(page, 'Alpha Topic')).toHaveClass(/high-priority/);
+
+  await row(page, 'Alpha Topic').click({ button: 'right' });
+  await expect(page.locator('.menu-item span', { hasText: 'Normal priority' })).toBeVisible();
+  await page.locator('[data-menu-action=priority]').click();
+  await expect(row(page, 'Alpha Topic')).not.toHaveClass(/high-priority/);
+});
+
+test('the high-priority interval is clamped to the default (NEWS-56)', async ({ page }) => {
+  const HOUR = 60 * 60 * 1000;
+  await page.goto('/');
+  await page.click('[data-action=open-settings]');
+  await expect(page.locator('.dialog')).toBeVisible();
+  const dflt = page.locator('[data-action=interval]');
+  const hp = page.locator('[data-action=hp-interval]');
+
+  // Default 6h, high-priority 3h — valid (<=).
+  await dflt.selectOption(String(6 * HOUR));
+  await hp.selectOption(String(3 * HOUR));
+  await expect(hp).toHaveValue(String(3 * HOUR));
+
+  // Shorten the default below high-priority → high-priority follows *down*.
+  await dflt.selectOption(String(HOUR));
+  await expect(hp).toHaveValue(String(HOUR));
+
+  // Lengthen high-priority above the default → the default follows *up*.
+  await hp.selectOption(String(12 * HOUR));
+  await expect(dflt).toHaveValue(String(12 * HOUR));
+
+  // Restore a sane default so later serial tests aren't on a short interval.
+  await dflt.selectOption(String(24 * HOUR));
+  await page.locator('.dialog [data-action=close-settings]').click();
 });
 
 test('clean up the topics this spec created', async ({ page }) => {

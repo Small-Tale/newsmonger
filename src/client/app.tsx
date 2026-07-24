@@ -15,8 +15,10 @@ import {
   saveKey,
   setItemSaved,
   setNotifyOnNewItems,
+  setTopicHighPriority,
   setTopicPaused,
   startCheck,
+  updateHighPriorityInterval,
   updateInterval,
   updateProviderSettings,
 } from './api.js';
@@ -125,6 +127,7 @@ function topicRowJsx(
   const classes = [
     'topic',
     topic.paused ? 'paused' : '',
+    topic.highPriority ? 'high-priority' : '',
     selected ? 'selected' : '',
     soloed ? 'soloed' : '',
     dimmed ? 'solo-dimmed' : '',
@@ -147,8 +150,15 @@ function topicRowJsx(
         </span>
       </div>
       {/* Always-present slot so the badge appearing can't restructure the row. */}
-      <span class="topic-flags" title={soloed ? 'Solo — only this topic\u2019s stories are shown' : ''}>
-        {soloed ? icon('solo', 13) : ''}
+      <span class="topic-flags">
+        {topic.highPriority ? (
+          <span class="flag high-priority" title="High priority: checked on the shorter interval">
+            {icon('star', 13)}
+          </span>
+        ) : (
+          ''
+        )}
+        {soloed ? <span class="flag">{icon('solo', 13)}</span> : ''}
       </span>
     </li>
   );
@@ -409,6 +419,22 @@ function settingsDialogJsx(): SafeHtml {
           </select>
         </label>
 
+        <label class="field">
+          <span class="field-label">
+            {icon('star', 13)} High-priority topics every
+          </span>
+          <select data-action="hp-interval">
+            {INTERVAL_OPTIONS.map((opt) => (
+              <option value={String(opt.ms)} selected={opt.ms === s.settings.highPriorityIntervalMs ? true : undefined}>
+                {opt.label}
+              </option>
+            ))}
+          </select>
+        </label>
+        <p class="field-hint">
+          Kept at or below the default interval — changing either adjusts the other to keep that true.
+        </p>
+
         <h3 class="eyebrow">Source</h3>
         <label class="field">
           <span class="field-label">Provider</span>
@@ -540,6 +566,7 @@ function contextMenuJsx(menu: NonNullable<AppState['contextMenu']>, topics: Topi
   const suffix = count > 1 ? ` ${String(count)} topics` : '';
   // With a mixed selection, offer the action that changes the most rows.
   const anyActive = targets.some((t) => !t.paused);
+  const anyNormal = targets.some((t) => !t.highPriority);
   const solo = new Set(appStore.state.value.soloTopicIds);
   const allSoloed = count > 0 && targets.every((t) => solo.has(t.id));
 
@@ -554,6 +581,13 @@ function contextMenuJsx(menu: NonNullable<AppState['contextMenu']>, topics: Topi
           {icon(anyActive ? 'pause' : 'play')}
           <span>
             {anyActive ? 'Pause' : 'Resume'}
+            {suffix}
+          </span>
+        </button>
+        <button class="menu-item" role="menuitem" type="button" data-menu-action="priority">
+          {icon('star')}
+          <span>
+            {anyNormal ? 'High priority' : 'Normal priority'}
             {suffix}
           </span>
         </button>
@@ -704,7 +738,7 @@ function appJsx(): SafeHtml {
               topicRowJsx(
                 topic,
                 s.checking.includes(topic.id),
-                s.settings.checkIntervalMs,
+                topic.highPriority ? s.settings.highPriorityIntervalMs : s.settings.checkIntervalMs,
                 selected.has(topic.id),
                 solo.has(topic.id),
                 solo.size > 0 && !solo.has(topic.id),
@@ -713,10 +747,12 @@ function appJsx(): SafeHtml {
             // live outside the topic object — so without this comparator a row
             // keeps its cached HTML and selecting it appears to do nothing until
             // the next poll happens to replace `topics` with fresh objects.
+            // `highPriority` is in the key too so toggling it re-renders the
+            // star and the dial's interval without waiting for the next poll.
             (topic) =>
               `${String(selected.has(topic.id))}|${String(solo.has(topic.id))}|${String(solo.size)}|${String(
                 s.checking.includes(topic.id),
-              )}`,
+              )}|${String(topic.highPriority)}`,
           )}
         </ul>
         <div class="empty-slot">
@@ -816,6 +852,15 @@ function runTopicAction(action: string, ids: string[]): void {
       }
       break;
     }
+    case 'priority': {
+      // Mixed selections resolve toward high-priority (the label the menu showed).
+      const high = targets.some((t) => !t.highPriority);
+      for (const t of targets) {
+        if (t.highPriority === high) continue;
+        void setTopicHighPriority(t.id, high);
+      }
+      break;
+    }
     case 'solo': {
       const solo = new Set(soloTopicIds);
       const allSoloed = targets.length > 0 && targets.every((t) => solo.has(t.id));
@@ -848,6 +893,11 @@ function wireEvents(root: HTMLElement): void {
   void delegate(root, 'change', '[data-action=interval]', (_e, el) => {
     const ms = Number.parseInt((el as HTMLSelectElement).value, 10);
     if (!Number.isNaN(ms)) void updateInterval(ms);
+  });
+
+  void delegate(root, 'change', '[data-action=hp-interval]', (_e, el) => {
+    const ms = Number.parseInt((el as HTMLSelectElement).value, 10);
+    if (!Number.isNaN(ms)) void updateHighPriorityInterval(ms);
   });
 
   void delegate(root, 'change', '[data-action=provider]', (_e, el) => {

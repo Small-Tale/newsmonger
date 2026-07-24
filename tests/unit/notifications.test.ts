@@ -11,6 +11,7 @@ import { appStore } from '../../src/client/stores.js';
 
 const BASE_SETTINGS: StateResp['settings'] = {
   checkIntervalMs: 86_400_000,
+  highPriorityIntervalMs: 86_400_000,
   provider: 'auto',
   model: '',
   endpoint: '',

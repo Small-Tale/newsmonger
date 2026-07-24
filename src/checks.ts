@@ -155,8 +155,8 @@ export class CheckRunner {
    * they stay due and run as soon as someone opens the app.
    */
   async checkDue(now: Date): Promise<void> {
-    const { checkIntervalMs } = this.store.getSettings();
-    const due = this.store.listTopics().filter((topic) => isDue(topic, checkIntervalMs, now));
+    const settings = this.store.getSettings();
+    const due = this.store.listTopics().filter((topic) => isDue(topic, effectiveInterval(topic, settings), now));
     if (due.length === 0) return;
     if (!(await this.mayRunScheduled(now))) return;
     for (const topic of due) {
@@ -180,13 +180,26 @@ export class CheckRunner {
   }
 }
 
-/** Whether a topic is due for a scheduled check at `now`. */
+/**
+ * The interval a topic is checked on: the shorter high-priority interval when
+ * it's flagged, otherwise the default (NEWS-56). `highPriorityIntervalMs` is
+ * always kept ≤ `checkIntervalMs` by the store, so a high-priority topic is
+ * never checked *less* often than a normal one.
+ */
+export function effectiveInterval(
+  topic: { highPriority: boolean },
+  settings: { checkIntervalMs: number; highPriorityIntervalMs: number },
+): number {
+  return topic.highPriority ? settings.highPriorityIntervalMs : settings.checkIntervalMs;
+}
+
+/** Whether a topic is due for a scheduled check at `now`, given its interval. */
 export function isDue(
   topic: { paused: boolean; lastCheckedAt: string | null },
-  checkIntervalMs: number,
+  intervalMs: number,
   now: Date,
 ): boolean {
   if (topic.paused) return false;
   if (topic.lastCheckedAt === null) return true;
-  return now.getTime() - Date.parse(topic.lastCheckedAt) >= checkIntervalMs;
+  return now.getTime() - Date.parse(topic.lastCheckedAt) >= intervalMs;
 }

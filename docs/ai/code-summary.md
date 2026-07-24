@@ -60,14 +60,14 @@ tests/
   helpers/            tmp.ts (tmp data dirs), provider.ts (asResolver/fakeProvider)
   unit/               vitest: dedupe, store, checks, scheduler, config, parse-result, providers, openai, api, api-keys, api-keys-routes, attendance, catch-up, sanitize
   e2e/                playwright, serial, mock AI (--ai-test), port 4189: app.spec.ts, keys.spec.ts, topics.spec.ts
-docs/                 numbered requirements (1–7), ai/ summaries, manual-test-plan.md
+docs/                 numbered requirements (1–12), ai/ summaries, manual-test-plan.md
 ```
 
 ## Data schema (`<data-dir>/data.json`)
 
-- `topics[]`: id, name, paused, createdAt, lastCheckedAt (every attempt), coveredThroughAt (successes only — drives the prompt window)
+- `topics[]`: id, name, paused, highPriority (checked on the shorter interval — NEWS-56), createdAt, lastCheckedAt (every attempt), coveredThroughAt (successes only — drives the prompt window)
 - `items[]`: id, topicId, title, summary, sources[{title,url}], image, saved (bookmark), dedupeKey, foundAt
-- `settings`: checkIntervalMs (default 1 day, min 5 min), provider (default `auto`, `.catch('auto')` for retired providers), model (''), endpoint ('')
+- `settings`: checkIntervalMs (default 1 day, min 5 min), highPriorityIntervalMs (≤ checkIntervalMs, clamped on update+load — NEWS-56), provider (default `auto`, `.catch('auto')` for retired providers), model (''), endpoint ('')
 - `runs[]`: id, topicId, startedAt, finishedAt, status(running|succeeded|failed), newItems, error, provider (last 200)
 
 Data dir: `--data-dir` flag → `NEWS_DATA_DIR` → `~/.news`.
@@ -92,7 +92,8 @@ Data dir: `--data-dir` flag → `NEWS_DATA_DIR` → `~/.news`.
 | Change prompts / result parsing | `src/ai/prompt.ts` |
 | Provider selection / auto order | `src/ai/providers/index.ts` (`resolveProvider`, `AUTO_ORDER`) |
 | Dedup behavior | `src/ai/dedupe.ts` (keys), `src/checks.ts` (application) |
-| Scheduling rules | `src/checks.ts` (`isDue`), `src/scheduler.ts` (tick). **Adding a topic checks it immediately** — `POST /api/topics` fires `checkTopic({manual:true})` in the background (NEWS-54, FR-1.12) |
+| Scheduling rules | `src/checks.ts` (`isDue`, `effectiveInterval`), `src/scheduler.ts` (tick). **Adding a topic checks it immediately** — `POST /api/topics` fires `checkTopic({manual:true})` in the background (NEWS-54, FR-1.12) |
+| Topic priority (high-priority interval) | `highPriority` on the topic + `highPriorityIntervalMs` in settings; `effectiveInterval` in `src/checks.ts`; clamp in `store.updateSettings` + `SettingsSchema` transform; menu action `priority` + star icon in `app.tsx`. See `docs/12-topic-priority.md` |
 | How far back a check asks | `coveredThroughAt` on the topic → `sinceIso` → `windowLine()` in `src/ai/prompt.ts`; **not** `lastCheckedAt` |
 | How much a check returns | `searchingSystemPrompt()` volume rule (portable); `max_uses: 8` in `anthropic.ts` is a cost guard, not the mechanism |
 | Persistence / schema change | `src/db/schemas.ts` + `src/db/store.ts` — **removing an enum value needs `.catch()`** or old files get reset (see the migration tests) |

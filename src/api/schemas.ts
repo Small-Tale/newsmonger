@@ -8,13 +8,20 @@ import { CheckRunSchema, NewsItemSchema, SettingsSchema, TopicSchema } from '../
 export const CreateTopicReqSchema = z.object({ name: z.string().min(1).max(200) });
 export type CreateTopicReq = z.infer<typeof CreateTopicReqSchema>;
 
-export const UpdateTopicReqSchema = z.object({ paused: z.boolean() });
+// A topic PATCH may toggle pause and/or high-priority; at least one is required.
+export const UpdateTopicReqSchema = z
+  .object({ paused: z.boolean(), highPriority: z.boolean() })
+  .partial()
+  .refine((v) => Object.keys(v).length > 0, { message: 'at least one field is required' });
 export type UpdateTopicReq = z.infer<typeof UpdateTopicReqSchema>;
 
 const MIN_CHECK_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
 export const UpdateSettingsReqSchema = z
   .object({
     checkIntervalMs: z.number().int().min(MIN_CHECK_INTERVAL_MS),
+    // The <= checkIntervalMs constraint is enforced by clamping in the store,
+    // not rejected here — clamping is the intended UX (NEWS-56).
+    highPriorityIntervalMs: z.number().int().min(MIN_CHECK_INTERVAL_MS),
     provider: z.enum(PROVIDER_NAMES),
     model: z.string().max(200),
     endpoint: z.string().max(500),

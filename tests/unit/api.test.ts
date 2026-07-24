@@ -168,6 +168,48 @@ describe('API', () => {
     expect(res.status).toBe(404);
   });
 
+  it('toggles a topic high-priority over HTTP (NEWS-56)', async () => {
+    const { app, store } = makeApp();
+    const topic = store.addTopic('Fusion');
+    await waitForIdle(app); // let the add-triggered check settle
+
+    let res = await app.request(`/api/topics/${topic.id}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ highPriority: true }),
+    });
+    expect(res.status).toBe(200);
+    expect(store.getTopic(topic.id)?.highPriority).toBe(true);
+
+    res = await app.request(`/api/topics/${topic.id}`, { method: 'PATCH', body: JSON.stringify({ highPriority: false }) });
+    expect(res.status).toBe(200);
+    expect(store.getTopic(topic.id)?.highPriority).toBe(false);
+
+    // A patch with neither field is rejected.
+    expect((await app.request(`/api/topics/${topic.id}`, { method: 'PATCH', body: '{}' })).status).toBe(400);
+    // A high-priority patch on an unknown topic 404s.
+    expect(
+      (await app.request('/api/topics/nope', { method: 'PATCH', body: JSON.stringify({ highPriority: true }) })).status,
+    ).toBe(404);
+  });
+
+  it('clamps the high-priority interval to the default over HTTP (NEWS-56)', async () => {
+    const { app, store } = makeApp();
+    // Set default to 1h; a longer high-priority value pulls the default up with it.
+    await app.request('/api/settings', { method: 'PATCH', body: JSON.stringify({ checkIntervalMs: 3_600_000 }) });
+    const res = await app.request('/api/settings', {
+      method: 'PATCH',
+      body: JSON.stringify({ highPriorityIntervalMs: 6 * 3_600_000 }),
+    });
+    expect(res.status).toBe(200);
+    expect(store.getSettings().highPriorityIntervalMs).toBe(6 * 3_600_000);
+    expect(store.getSettings().checkIntervalMs).toBe(6 * 3_600_000);
+
+    // Below the 5-minute floor is rejected.
+    expect(
+      (await app.request('/api/settings', { method: 'PATCH', body: JSON.stringify({ highPriorityIntervalMs: 1000 }) })).status,
+    ).toBe(400);
+  });
+
   it('updates settings and rejects intervals under five minutes', async () => {
     const { app, store } = makeApp();
     let res = await app.request('/api/settings', {

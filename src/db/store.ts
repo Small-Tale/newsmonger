@@ -66,6 +66,7 @@ export class Store {
       id: randomUUID(),
       name: trimmed,
       paused: false,
+      highPriority: false,
       createdAt: new Date().toISOString(),
       lastCheckedAt: null,
       coveredThroughAt: null,
@@ -79,6 +80,15 @@ export class Store {
     const topic = this.getTopic(id);
     if (!topic) throw new Error(`no such topic: ${id}`);
     topic.paused = paused;
+    this.save();
+    return topic;
+  }
+
+  /** Mark a topic high-priority (shorter interval) or normal (NEWS-56). */
+  setTopicHighPriority(id: string, highPriority: boolean): Topic {
+    const topic = this.getTopic(id);
+    if (!topic) throw new Error(`no such topic: ${id}`);
+    topic.highPriority = highPriority;
     this.save();
     return topic;
   }
@@ -150,7 +160,20 @@ export class Store {
   }
 
   updateSettings(patch: Partial<Settings>): Settings {
-    this.data.settings = { ...this.data.settings, ...patch };
+    const next = { ...this.data.settings, ...patch };
+    // Keep the invariant highPriorityIntervalMs <= checkIntervalMs (NEWS-56) by
+    // moving the value the user did NOT just change: shorten the default and the
+    // high-priority interval follows down; lengthen the high-priority interval
+    // past the default and the default follows up. When both are in one patch,
+    // the default is treated as the ceiling.
+    if (patch.checkIntervalMs !== undefined || patch.highPriorityIntervalMs !== undefined) {
+      if (patch.highPriorityIntervalMs !== undefined && patch.checkIntervalMs === undefined) {
+        next.checkIntervalMs = Math.max(next.checkIntervalMs, next.highPriorityIntervalMs);
+      } else {
+        next.highPriorityIntervalMs = Math.min(next.highPriorityIntervalMs, next.checkIntervalMs);
+      }
+    }
+    this.data.settings = next;
     this.save();
     return this.getSettings();
   }

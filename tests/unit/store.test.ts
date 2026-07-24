@@ -14,6 +14,7 @@ describe('Store', () => {
     expect(store.listItems()).toEqual([]);
     expect(store.getSettings()).toEqual({
       checkIntervalMs: DEFAULT_CHECK_INTERVAL_MS,
+      highPriorityIntervalMs: DEFAULT_CHECK_INTERVAL_MS,
       provider: 'auto',
       model: '',
       endpoint: '',
@@ -33,6 +34,58 @@ describe('Store', () => {
 
     store.deleteTopic(topic.id);
     expect(store.listTopics()).toEqual([]);
+  });
+
+  it('marks a topic high-priority and back (NEWS-56)', () => {
+    const store = new Store(tmpDataDir());
+    const topic = store.addTopic('Fusion');
+    expect(topic.highPriority).toBe(false);
+
+    expect(store.setTopicHighPriority(topic.id, true).highPriority).toBe(true);
+    expect(new Store(store.dataDir).getTopic(topic.id)?.highPriority).toBe(true); // persisted
+
+    expect(store.setTopicHighPriority(topic.id, false).highPriority).toBe(false);
+    expect(() => store.setTopicHighPriority('nope', true)).toThrow(/no such topic/);
+  });
+
+  describe('high-priority interval clamping (NEWS-56)', () => {
+    it('keeps high-priority <= default when the default is shortened', () => {
+      const store = new Store(tmpDataDir());
+      // default 1 day, high-priority 1 hour — valid.
+      store.updateSettings({ highPriorityIntervalMs: 3_600_000 });
+      expect(store.getSettings().highPriorityIntervalMs).toBe(3_600_000);
+
+      // Shorten the default below the high-priority value → high-priority follows down.
+      const s = store.updateSettings({ checkIntervalMs: 30 * 60_000 }); // 30 min
+      expect(s.checkIntervalMs).toBe(30 * 60_000);
+      expect(s.highPriorityIntervalMs).toBe(30 * 60_000);
+    });
+
+    it('raises the default when high-priority is set longer than it', () => {
+      const store = new Store(tmpDataDir());
+      store.updateSettings({ checkIntervalMs: 3_600_000 }); // default 1h, HP clamps to 1h
+      expect(store.getSettings().highPriorityIntervalMs).toBe(3_600_000);
+
+      // Explicitly lengthen high-priority past the default → default follows up.
+      const s = store.updateSettings({ highPriorityIntervalMs: 6 * 3_600_000 }); // 6h
+      expect(s.highPriorityIntervalMs).toBe(6 * 3_600_000);
+      expect(s.checkIntervalMs).toBe(6 * 3_600_000);
+    });
+
+    it('treats the default as the ceiling when both are set in one patch', () => {
+      const store = new Store(tmpDataDir());
+      const s = store.updateSettings({ checkIntervalMs: 3_600_000, highPriorityIntervalMs: 24 * 3_600_000 });
+      expect(s.checkIntervalMs).toBe(3_600_000);
+      expect(s.highPriorityIntervalMs).toBe(3_600_000); // clamped down to the default
+    });
+
+    it('leaves the pair alone when a non-interval setting changes', () => {
+      const store = new Store(tmpDataDir());
+      store.updateSettings({ checkIntervalMs: 3_600_000 });
+      const s = store.updateSettings({ notifyOnNewItems: true });
+      expect(s.checkIntervalMs).toBe(3_600_000);
+      expect(s.highPriorityIntervalMs).toBe(3_600_000);
+    });
   });
 
   it('rejects empty and duplicate topic names (case-insensitive)', () => {
@@ -136,6 +189,9 @@ describe('Store', () => {
     const store = new Store(dir);
     expect(store.getSettings()).toEqual({
       checkIntervalMs: 3_600_000,
+      // Clamped down to the (shorter) default interval on load, not the 1-day
+      // field default — a high-priority topic is never checked less often.
+      highPriorityIntervalMs: 3_600_000,
       provider: 'auto',
       model: '',
       endpoint: '',

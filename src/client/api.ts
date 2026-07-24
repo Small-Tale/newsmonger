@@ -56,6 +56,12 @@ export function setTopicPaused(id: string, paused: boolean): Promise<void> {
   );
 }
 
+export function setTopicHighPriority(id: string, highPriority: boolean): Promise<void> {
+  return withRefresh(() =>
+    request(`/api/topics/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify({ highPriority }) }),
+  );
+}
+
 export function setNotifyOnNewItems(notifyOnNewItems: boolean): Promise<void> {
   return withRefresh(() =>
     request('/api/settings', { method: 'PATCH', body: JSON.stringify({ notifyOnNewItems }) }),
@@ -65,6 +71,12 @@ export function setNotifyOnNewItems(notifyOnNewItems: boolean): Promise<void> {
 export function updateInterval(checkIntervalMs: number): Promise<void> {
   return withRefresh(() =>
     request('/api/settings', { method: 'PATCH', body: JSON.stringify({ checkIntervalMs }) }),
+  );
+}
+
+export function updateHighPriorityInterval(highPriorityIntervalMs: number): Promise<void> {
+  return withRefresh(() =>
+    request('/api/settings', { method: 'PATCH', body: JSON.stringify({ highPriorityIntervalMs }) }),
   );
 }
 

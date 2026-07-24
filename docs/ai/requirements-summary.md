@@ -6,6 +6,14 @@ Status markers: **Shipped** · **Partial** · **Design only** · **Deferred**. S
 
 Add/delete/pause topics (unique, case-insensitive); global interval (default 1 day, min 5 min); minute-tick scheduler + startup sweep; sequential, non-overlapping checks; failures advance `lastCheckedAt` (retry next interval); manual per-topic and check-all triggers; **adding a topic checks it immediately** (manual-semantics, background-fired — FR-1.12, NEWS-54). All shipped and covered by unit + E2E tests.
 
+## [12 — Topic Priority](../12-topic-priority.md) — Shipped
+
+- FR-12.1 single high-priority tier (`highPriority` boolean on the topic): **Shipped**
+- FR-12.2 separate high-priority interval; `effectiveInterval` selects per topic: **Shipped**
+- FR-12.3 high-priority interval kept ≤ default by bidirectional clamping (on update AND on load): **Shipped**
+- FR-12.4 cadence only — not sweep ordering (NEWS-58), not the attendance gate: **Shipped**
+- FR-12.5 marked via right-click menu; star indicator in the sidebar: **Shipped**
+
 ## [2 — News Checks and Deduplication](../2-news-checks-and-dedup.md) — Shipped (real-API path untested)
 
 - Prompt window wording scales with the gap (first check / hours / 1 day / ≥2 days catch-up): **Shipped**

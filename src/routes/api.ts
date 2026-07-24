@@ -85,9 +85,13 @@ export function registerApi(app: Hono<AppEnv>): void {
 
   app.patch('/api/topics/:id', async (c) => {
     const body = await parseBody(c, UpdateTopicReqSchema);
-    if (!body) return c.json({ error: 'invalid request: expected { paused }' }, 400);
+    if (!body) return c.json({ error: 'invalid request: expected { paused?, highPriority? }' }, 400);
+    const store = c.get('store');
+    const id = c.req.param('id');
     try {
-      const topic = c.get('store').setTopicPaused(c.req.param('id'), body.paused);
+      let topic;
+      if (body.paused !== undefined) topic = store.setTopicPaused(id, body.paused);
+      if (body.highPriority !== undefined) topic = store.setTopicHighPriority(id, body.highPriority);
       return c.json(topic);
     } catch {
       return c.json({ error: 'no such topic' }, 404);
