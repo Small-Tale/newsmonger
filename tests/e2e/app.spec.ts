@@ -447,3 +447,39 @@ test('share a story via the OS sheet, or fall back to the clipboard (NEWS-43)', 
   await topicAction(page, row, 'delete');
   await expect(page.locator('.topic', { hasText: 'share probe topic' })).toHaveCount(0);
 });
+
+test('warns when checks fall behind the chosen interval (NEWS-59)', async ({ page }) => {
+  const HOUR = 60 * 60 * 1000;
+  // Freeze the client clock at "now" so we can jump it forward past the interval.
+  await page.clock.install({ time: Date.now() });
+  await page.goto('/');
+
+  // Use a 1-hour interval so the 2x "behind" threshold is reachable by fast-forward.
+  await page.click('[data-action=open-settings]');
+  await page.selectOption('[data-action=interval]', String(HOUR));
+  await page.locator('.dialog [data-action=close-settings]').click();
+
+  await page.fill('.add-topic input', 'Behind Probe');
+  await page.press('.add-topic input', 'Enter');
+  const row = page.locator('.topic', { hasText: 'Behind Probe' });
+  await expect(row).toBeVisible();
+  // Adding checks it (NEWS-54); wait for the check to land so lastCheckedAt is set.
+  await expect(row.locator('.topic-meta')).toContainText('checked', { timeout: 15_000 });
+
+  const banner = page.locator('.banner.warn', { hasText: 'falling behind' });
+  await expect(banner).toHaveCount(0); // fresh check → not behind yet
+
+  // Jump 3 hours ahead: the topic is now ~3h stale against a 1h interval → behind.
+  await page.clock.fastForward(3 * HOUR);
+  await expect(banner).toBeVisible();
+
+  // Dismissible, and it stays dismissed across the 4s poll.
+  await banner.locator('[data-action=dismiss-behind]').click();
+  await expect(page.locator('.banner.warn', { hasText: 'falling behind' })).toHaveCount(0);
+
+  // Clean up: delete the probe and restore the default interval.
+  await topicAction(page, row, 'delete');
+  await page.click('[data-action=open-settings]');
+  await page.selectOption('[data-action=interval]', String(24 * HOUR));
+  await page.locator('.dialog [data-action=close-settings]').click();
+});

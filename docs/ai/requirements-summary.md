@@ -6,6 +6,12 @@ Status markers: **Shipped** · **Partial** · **Design only** · **Deferred**. S
 
 Add/delete/pause topics (unique, case-insensitive); global interval (default 1 day, min 5 min); minute-tick scheduler + startup sweep; sequential, non-overlapping checks; failures advance `lastCheckedAt` (retry next interval); manual per-topic and check-all triggers; **adding a topic checks it immediately** (manual-semantics, background-fired — FR-1.12, NEWS-54). All shipped and covered by unit + E2E tests.
 
+## [13 — Scheduling Under Load](../13-scheduling-under-load.md) — Shipped
+
+- FR-13.1 overrun cycle restarts immediately (scheduler drains; `checkDue` returns a count) — NEWS-57: **Shipped**
+- FR-13.2 due topics serviced most-overdue-first, high-priority ahead (`byCheckOrder`) — NEWS-58: **Shipped**
+- FR-13.3 dismissible "falling behind" banner when cadence lags ≥2× the interval — NEWS-59: **Shipped**
+
 ## [12 — Topic Priority](../12-topic-priority.md) — Shipped
 
 - FR-12.1 single high-priority tier (`highPriority` boolean on the topic): **Shipped**

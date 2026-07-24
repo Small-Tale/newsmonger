@@ -11,8 +11,8 @@ src/
   cli.ts              entry: arg parse → Store/service/runner → server → scheduler → open browser
   config.ts           CLI flags (--port --data-dir --provider --model --endpoint --no-open --strict-port --ai-test) + env
   server.ts           createApp (Hono, DI via middleware) + startServer (127.0.0.1, port fallback), /static handler
-  scheduler.ts        startScheduler: 60s tick + 3s startup sweep, non-overlapping
-  checks.ts           CheckRunner (checkTopic/checkDue/checkAll, in-flight guard) + isDue()
+  scheduler.ts        startScheduler: 60s tick + 3s startup sweep, non-overlapping; drains an overrun cycle (NEWS-57)
+  checks.ts           CheckRunner (checkTopic/checkDue/checkAll, in-flight guard) + isDue() + effectiveInterval() + byCheckOrder() (most-overdue-first, NEWS-58)
   types.ts            Hono AppEnv (store, runner injected)
   keychain.ts         OS credential store via platform CLI (security/secret-tool/cmdkey)
   images/             og:image scrape + local cache; safety.ts holds the SSRF guards
@@ -48,6 +48,7 @@ src/
     tauri.ts          __TAURI__ detection, openExternalUrl, bounceDockIcon, focusAppWindow
     notifications.ts  noteState — OS notification when new items arrive while unfocused (NEWS-38)
     share.ts          shareText + shareItem — OS share sheet, clipboard fallback (NEWS-43)
+    schedule.ts       isBehindSchedule/topicsBehindSchedule — falling-behind detection for the banner (NEWS-59)
     styles.scss       styling (light/dark via prefers-color-scheme)
 src-tauri/            Tauri v2 shell; one spawn path, dev runs tsx + release runs the sidecar
   src/lib.rs          server_command() picks the command; spawn_server() watches stdout + navigates
@@ -60,7 +61,7 @@ tests/
   helpers/            tmp.ts (tmp data dirs), provider.ts (asResolver/fakeProvider)
   unit/               vitest: dedupe, store, checks, scheduler, config, parse-result, providers, openai, api, api-keys, api-keys-routes, attendance, catch-up, sanitize
   e2e/                playwright, serial, mock AI (--ai-test), port 4189: app.spec.ts, keys.spec.ts, topics.spec.ts
-docs/                 numbered requirements (1–12), ai/ summaries, manual-test-plan.md
+docs/                 numbered requirements (1–13), ai/ summaries, manual-test-plan.md
 ```
 
 ## Data schema (`<data-dir>/data.json`)
@@ -92,7 +93,8 @@ Data dir: `--data-dir` flag → `NEWS_DATA_DIR` → `~/.news`.
 | Change prompts / result parsing | `src/ai/prompt.ts` |
 | Provider selection / auto order | `src/ai/providers/index.ts` (`resolveProvider`, `AUTO_ORDER`) |
 | Dedup behavior | `src/ai/dedupe.ts` (keys), `src/checks.ts` (application) |
-| Scheduling rules | `src/checks.ts` (`isDue`, `effectiveInterval`), `src/scheduler.ts` (tick). **Adding a topic checks it immediately** — `POST /api/topics` fires `checkTopic({manual:true})` in the background (NEWS-54, FR-1.12) |
+| Scheduling rules | `src/checks.ts` (`isDue`, `effectiveInterval`, `byCheckOrder`), `src/scheduler.ts` (tick + overrun drain). **Adding a topic checks it immediately** — `POST /api/topics` fires `checkTopic({manual:true})` in the background (NEWS-54, FR-1.12) |
+| Behaviour under load (overrun, ordering, falling-behind) | `src/scheduler.ts` drain (NEWS-57), `byCheckOrder` in `src/checks.ts` (NEWS-58), `src/client/schedule.ts` + the "falling behind" banner in `app.tsx` (NEWS-59). See `docs/13-scheduling-under-load.md` |
 | Topic priority (high-priority interval) | `highPriority` on the topic + `highPriorityIntervalMs` in settings; `effectiveInterval` in `src/checks.ts`; clamp in `store.updateSettings` + `SettingsSchema` transform; menu action `priority` + star icon in `app.tsx`. See `docs/12-topic-priority.md` |
 | How far back a check asks | `coveredThroughAt` on the topic → `sinceIso` → `windowLine()` in `src/ai/prompt.ts`; **not** `lastCheckedAt` |
 | How much a check returns | `searchingSystemPrompt()` volume rule (portable); `max_uses: 8` in `anthropic.ts` is a cost guard, not the mechanism |

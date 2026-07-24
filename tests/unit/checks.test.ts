@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import { createMockProvider } from '../../src/ai/providers/index.js';
 import type { FoundNewsItem } from '../../src/ai/types.js';
-import { CheckRunner, effectiveInterval, isDue } from '../../src/checks.js';
+import { byCheckOrder, CheckRunner, effectiveInterval, isDue } from '../../src/checks.js';
 import { Store } from '../../src/db/store.js';
 import { asResolver, fakeProvider } from '../helpers/provider.js';
 import { tmpDataDir } from '../helpers/tmp.js';
@@ -26,6 +26,40 @@ describe('isDue', () => {
     expect(isDue({ paused: false, lastCheckedAt: '2026-07-23T11:00:00Z' }, HOUR, now)).toBe(true);
     expect(isDue({ paused: false, lastCheckedAt: '2026-07-23T11:00:01Z' }, HOUR, now)).toBe(false);
     expect(isDue({ paused: false, lastCheckedAt: '2026-07-23T09:00:00Z' }, HOUR, now)).toBe(true);
+  });
+});
+
+describe('byCheckOrder (NEWS-58)', () => {
+  const T = (iso: string | null, highPriority = false) => ({ highPriority, lastCheckedAt: iso });
+
+  it('puts high-priority topics ahead of normal ones', () => {
+    // Even a freshly-checked high-priority topic sorts before an overdue normal one.
+    expect(byCheckOrder(T('2026-07-24T11:00:00Z', true), T('2026-07-01T00:00:00Z', false))).toBeLessThan(0);
+  });
+
+  it('puts never-checked before ever-checked (same priority)', () => {
+    expect(byCheckOrder(T(null), T('2026-07-24T00:00:00Z'))).toBeLessThan(0);
+    expect(byCheckOrder(T('2026-07-24T00:00:00Z'), T(null))).toBeGreaterThan(0);
+  });
+
+  it('puts the oldest lastCheckedAt first among checked, same priority', () => {
+    expect(byCheckOrder(T('2026-07-23T00:00:00Z'), T('2026-07-24T00:00:00Z'))).toBeLessThan(0);
+  });
+
+  it('sorts a mixed set: high-priority (stalest-first) then normal (stalest-first)', () => {
+    const topics = [
+      T('2026-07-24T00:00:00Z', false), // normal, recent
+      T(null, false), // normal, never checked
+      T('2026-07-24T06:00:00Z', true), // high, recent
+      T('2026-07-20T00:00:00Z', true), // high, older
+    ];
+    const order = [...topics].sort(byCheckOrder);
+    expect(order).toEqual([
+      T('2026-07-20T00:00:00Z', true), // high + oldest
+      T('2026-07-24T06:00:00Z', true), // high
+      T(null, false), // normal never-checked
+      T('2026-07-24T00:00:00Z', false), // normal recent
+    ]);
   });
 });
 
@@ -161,6 +195,27 @@ describe('CheckRunner', () => {
 
     await runner.checkDue(new Date());
     expect(service.calls.map((c) => c.topicName)).toEqual(['Due']);
+  });
+
+  it('checkDue services topics most-overdue-first, high-priority ahead (NEWS-58)', async () => {
+    const store = new Store(tmpDataDir());
+    const service = createMockProvider();
+    const runner = new CheckRunner(store, asResolver(service));
+    store.updateSettings({ checkIntervalMs: HOUR });
+
+    // Insertion order deliberately unlike the intended check order.
+    const recent = store.addTopic('RecentNormal');
+    const stale = store.addTopic('StaleNormal');
+    const hot = store.addTopic('Hot');
+    store.setTopicHighPriority(hot.id, true);
+    const t0 = Date.parse('2026-07-24T00:00:00Z');
+    store.markTopicChecked(recent.id, new Date(t0 - 2 * HOUR)); // due, least stale
+    store.markTopicChecked(stale.id, new Date(t0 - 10 * HOUR)); // due, most stale
+    store.markTopicChecked(hot.id, new Date(t0 - 2 * HOUR)); // due, high priority
+
+    await runner.checkDue(new Date(t0));
+    // High-priority first, then the stalest normal, then the least-stale normal.
+    expect(service.calls.map((c) => c.topicName)).toEqual(['Hot', 'StaleNormal', 'RecentNormal']);
   });
 
   it('checkDue runs a high-priority topic on the shorter interval (NEWS-56)', async () => {

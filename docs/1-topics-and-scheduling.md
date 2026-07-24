@@ -27,6 +27,6 @@ The core of the app: a list of topics the user follows, checked for news on a sc
 - **FR-1.11** The user can trigger an immediate check for one topic or all unpaused topics ("Check all now").
 - **FR-1.12** *(Shipped)* **Adding a topic checks it immediately** rather than leaving it for the next scheduler tick (up to a minute away) — the user just added it and is watching for the first results. The initial check is treated as **manual** (`checkTopic({ manual: true })`): it records attendance and so runs even for a subscription provider with no prior foreground signal, matching the Check-now buttons. It is fired in the background, so `POST /api/topics` returns immediately; the client's `/api/state` poll surfaces the in-flight state and then the items. The in-flight guard (FR-1.8) means a scheduler tick that also finds the new topic due won't double-run it.
 
-Per-topic interval overrides (high-priority topics) are covered in [12 — Topic Priority](12-topic-priority.md).
+Per-topic interval overrides (high-priority topics) are covered in [12 — Topic Priority](12-topic-priority.md). What happens when a cycle can't keep up with the interval — immediate restart, most-overdue-first ordering, and the falling-behind signal — is in [13 — Scheduling Under Load](13-scheduling-under-load.md).
 
 See also: [2 — News Checks and Deduplication](2-news-checks-and-dedup.md), [4 — CLI, Server, and Storage](4-cli-server-storage.md).

@@ -58,6 +58,12 @@ export interface AppState {
   /** True when the user tried to enable notifications but permission was refused. */
   notifyPermissionDenied: boolean;
   /**
+   * Whether the "checks are falling behind" banner has been dismissed this
+   * session (NEWS-59). Informational, so a plain session-level dismiss — it
+   * reappears on reload if the condition persists.
+   */
+  dismissedBehind: boolean;
+  /**
    * Transient one-line notice shown at the bottom of the screen, or null.
    * In-app rather than `window.alert` (a WKWebView no-op), used to confirm a
    * share landed on the clipboard when there's no OS share sheet (NEWS-43).
@@ -114,6 +120,7 @@ export const appStore = defineStore({
     confirm: null,
     notifyPermissionDenied: false,
     dismissedRunId: null,
+    dismissedBehind: false,
     toast: null,
   }),
   actions: (set, get) => ({
@@ -158,6 +165,9 @@ export const appStore = defineStore({
     },
     dismissRun: (dismissedRunId: string) => {
       set({ ...get(), dismissedRunId });
+    },
+    dismissBehind: () => {
+      set({ ...get(), dismissedBehind: true });
     },
     setToast: (toast: string | null) => {
       set({ ...get(), toast });

@@ -149,19 +149,33 @@ export class CheckRunner {
   }
 
   /**
-   * Check every non-paused topic that is due, sequentially.
+   * Check every non-paused topic that is due, sequentially, and return how many
+   * were checked (0 if none were due or the sweep was gated).
    *
    * Deferred topics are left untouched — `lastCheckedAt` does not advance — so
    * they stay due and run as soon as someone opens the app.
+   *
+   * Due topics are serviced **most-overdue-first** (NEWS-58): high-priority
+   * topics ahead of normal ones, then never-checked, then the longest-waiting.
+   * With a backlog too big to clear within the interval, this is what keeps the
+   * order fair (and high-priority topics ahead of the pack) rather than frozen
+   * in insertion order. The count is what lets the scheduler restart an overrun
+   * cycle immediately instead of idling (NEWS-57).
    */
-  async checkDue(now: Date): Promise<void> {
+  async checkDue(now: Date): Promise<number> {
     const settings = this.store.getSettings();
-    const due = this.store.listTopics().filter((topic) => isDue(topic, effectiveInterval(topic, settings), now));
-    if (due.length === 0) return;
-    if (!(await this.mayRunScheduled(now))) return;
+    const due = this.store
+      .listTopics()
+      .filter((topic) => isDue(topic, effectiveInterval(topic, settings), now))
+      .sort(byCheckOrder);
+    if (due.length === 0) return 0;
+    if (!(await this.mayRunScheduled(now))) return 0;
+    let checked = 0;
     for (const topic of due) {
       await this.checkTopic(topic.id);
+      checked += 1;
     }
+    return checked;
   }
 
   /**
@@ -191,6 +205,29 @@ export function effectiveInterval(
   settings: { checkIntervalMs: number; highPriorityIntervalMs: number },
 ): number {
   return topic.highPriority ? settings.highPriorityIntervalMs : settings.checkIntervalMs;
+}
+
+/**
+ * Order due topics for a sweep (NEWS-58): high-priority first, then the most
+ * overdue — never-checked before ever-checked, then oldest `lastCheckedAt`
+ * first. Deterministic and total, so a large backlog is serviced fairly rather
+ * than in insertion order, and high-priority topics jump ahead of it.
+ *
+ * Caveat: under a backlog so large that high-priority topics are *always* due,
+ * strict priority-first can starve normal topics. That's an extreme-overload
+ * corner (surfaced to the user by the falling-behind signal, NEWS-59), and
+ * high-priority topics are hand-picked and few — so the simple, predictable
+ * ordering is the right call over a fancier anti-starvation scheme.
+ */
+export function byCheckOrder(
+  a: { highPriority: boolean; lastCheckedAt: string | null },
+  b: { highPriority: boolean; lastCheckedAt: string | null },
+): number {
+  if (a.highPriority !== b.highPriority) return a.highPriority ? -1 : 1;
+  if (a.lastCheckedAt === null && b.lastCheckedAt === null) return 0;
+  if (a.lastCheckedAt === null) return -1; // never checked = most overdue
+  if (b.lastCheckedAt === null) return 1;
+  return Date.parse(a.lastCheckedAt) - Date.parse(b.lastCheckedAt); // oldest first
 }
 
 /** Whether a topic is due for a scheduled check at `now`, given its interval. */

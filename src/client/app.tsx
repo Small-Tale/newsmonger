@@ -24,6 +24,7 @@ import {
 } from './api.js';
 import { icon } from './icons.js';
 import { ensureNotificationPermission } from './notifications.js';
+import { topicsBehindSchedule } from './schedule.js';
 import { shareItem } from './share.js';
 import type { AppState } from './stores.js';
 import { appStore } from './stores.js';
@@ -618,6 +619,10 @@ function appJsx(): SafeHtml {
   const savedCount = allItems.filter((i) => i.saved).length;
   const anyChecking = s.checking.length > 0;
   const lastFailure = s.runs.find((r) => r.status === 'failed');
+  // Topics whose real cadence has fallen well behind the interval the user set
+  // (NEWS-59). Informational only — the scheduler already cycles as fast as it
+  // can; this just explains why freshness may lag.
+  const behind = topicsBehindSchedule(s.topics, s.settings, Date.now());
 
   return (
     <div class={`shell${s.sidebarCollapsed ? ' sidebar-collapsed' : ''}`}>
@@ -719,6 +724,20 @@ function appJsx(): SafeHtml {
               data-run-id={lastFailure.id}
               aria-label="Dismiss"
             >
+              {icon('clear', 15)}
+            </button>
+          </div>
+        ) : (
+          ''
+        )}
+        {behind.length > 0 && !s.dismissedBehind ? (
+          <div class="banner warn">
+            <span class="banner-text">
+              Checks are falling behind your schedule — {String(behind.length)}{' '}
+              {behind.length === 1 ? 'topic is' : 'topics are'} refreshing slower than the interval you picked. Try
+              fewer topics, a longer interval, or a faster provider.
+            </span>
+            <button class="banner-dismiss" type="button" data-action="dismiss-behind" aria-label="Dismiss">
               {icon('clear', 15)}
             </button>
           </div>
@@ -1046,6 +1065,9 @@ function wireEvents(root: HTMLElement): void {
   void delegate(root, 'click', '[data-action=dismiss-warn]', (_e, el) => {
     const id = el.getAttribute('data-run-id');
     if (id !== null) appStore.actions.dismissRun(id);
+  });
+  void delegate(root, 'click', '[data-action=dismiss-behind]', () => {
+    appStore.actions.dismissBehind();
   });
 
   // Notification toggle. Enabling requires a permission grant, and the request
