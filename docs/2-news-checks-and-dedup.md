@@ -20,6 +20,19 @@ Checks run through a pluggable **provider** abstraction (`src/ai/providers/`, se
 - **FR-2.9** Dedup scope is per-topic: the same story may legitimately appear under two different topics.
 - **FR-2.10** If the topic is deleted while its check is in flight, the results are discarded.
 
+## Sanitizing model output
+
+Titles, summaries and source titles are stripped of markup at the boundary (`src/ai/sanitize.ts`), on both write and read.
+
+Web-searching models emit their own citation markup inside the JSON strings we asked for — Claude's `web_search` tool wraps cited sentences in `<cite index="11-2,11-3">…</cite>`. The UI escapes everything it renders, as it should, so those tags surfaced as literal text in the middle of a summary.
+
+- **Tags are removed, contents kept.** The text inside a `<cite>` is the actual sentence, not decoration.
+- **Applied at parse time** (`ResultSchema`) so nothing downstream needs to know, **and at read time** (`NewsItemSchema`) so items stored before the fix are cleaned when the data file loads — no migration needed. `stripMarkup` is idempotent, which is what makes applying it twice safe.
+- **URLs are never touched.** A URL is data; mangling it breaks the link rather than tidying it.
+- **Conservative about what counts as a tag** — the pattern requires a letter straight after `<`, so a summary containing `profits fell < 5%` survives intact.
+
+The prompt also asks for plain prose, but that is belt-and-braces: the markup comes from the tool layer rather than the model's own writing, so instructions don't reliably suppress it. Cleaning at the boundary doesn't depend on the model cooperating.
+
 ## How much comes back
 
 A check returns a **digest, not an archive**: the handful of significant stories someone can read in one sitting. A longer gap means covering a **wider span of time, not proportionally more stories** — what bounds a useful check is how much a person will actually read, and that doesn't grow because they were away longer.

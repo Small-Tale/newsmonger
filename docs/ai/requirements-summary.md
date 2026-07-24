@@ -9,6 +9,7 @@ Add/delete/pause topics (unique, case-insensitive); global interval (default 1 d
 ## [2 — News Checks and Deduplication](../2-news-checks-and-dedup.md) — Shipped (real-API path untested)
 
 - Prompt window wording scales with the gap (first check / hours / 1 day / ≥2 days catch-up): **Shipped**
+- Model output sanitized (citation markup stripped) on both write and read: **Shipped**
 - Digest-size bound in the shared system prompt (wider span, not longer list) — portable across all providers, since only `anthropic` has a tool-level cap: **Shipped**
 - FR-1.10 `coveredThroughAt` separate from `lastCheckedAt` so a failure can't discard pending news: **Shipped**
 
@@ -19,6 +20,7 @@ Default Anthropic provider (`claude-opus-4-8` + web search), prompt-level exclus
 - Collapsible topics sidebar (localStorage-persisted, panel stays mounted): **Shipped**
 - Topic selection (click / Cmd-click / Shift-range), right-click context menu with Lucide icons, bulk actions, Delete key: **Shipped**
 - All icons are Lucide; no emoji or text glyphs anywhere in the UI (E2E-guarded): **Shipped**
+- Source status moved from the sidebar into the settings dialog: **Shipped**
 - Solo (show only chosen topics' stories) — additive, banner + dimming, ephemeral by design: **Shipped**
 
 Header/interval/check-all, topics panel with actions + confirm-delete, newest-first feed with source links, error + last-failure banners, 4 s visible-tab polling, empty states, light/dark. kerf structural conventions documented and E2E-regression-tested.

@@ -1,5 +1,6 @@
 import { z } from 'zod';
 
+import { stripMarkup } from '../ai/sanitize.js';
 import { PROVIDER_NAMES } from '../ai/types.js';
 
 /** A topic the user wants news about. */
@@ -26,7 +27,7 @@ export const TopicSchema = z.object({
 export type Topic = z.infer<typeof TopicSchema>;
 
 export const NewsSourceSchema = z.object({
-  title: z.string(),
+  title: z.string().transform(stripMarkup),
   url: z.string(),
 });
 export type NewsSource = z.infer<typeof NewsSourceSchema>;
@@ -35,8 +36,11 @@ export type NewsSource = z.infer<typeof NewsSourceSchema>;
 export const NewsItemSchema = z.object({
   id: z.string(),
   topicId: z.string(),
-  title: z.string(),
-  summary: z.string(),
+  // Sanitized on read as well as on write: items stored before the parse-time
+  // strip existed still carry citation markup, and this cleans them the next
+  // time the data file is loaded rather than needing a migration.
+  title: z.string().transform(stripMarkup),
+  summary: z.string().transform(stripMarkup),
   sources: z.array(NewsSourceSchema),
   /** Normalized key used to deduplicate against stories already seen. */
   dedupeKey: z.string(),

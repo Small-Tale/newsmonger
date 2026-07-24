@@ -21,6 +21,14 @@ export interface AppState {
    * the DOM.
    */
   keys: KeysResp['keys'];
+  /**
+   * Whether `/api/keys` has answered yet.
+   *
+   * Without this the dialog asserts "no keychain is available" from its
+   * initial state — an alarming, usually wrong message that flashes every time
+   * the dialog opens, before the fetch has even resolved.
+   */
+  keysLoaded: boolean;
   keychainAvailable: boolean;
   keychainLabel: string;
   /** Error shown inside the dialog, kept separate from the page banner. */
@@ -71,6 +79,7 @@ export const appStore = defineStore({
     providers: [],
     settingsOpen: false,
     keys: [],
+    keysLoaded: false,
     keychainAvailable: false,
     keychainLabel: 'system keychain',
     keyError: null,
@@ -84,7 +93,13 @@ export const appStore = defineStore({
       set({ ...get(), settingsOpen, keyError: null });
     },
     setKeys: (resp: KeysResp) => {
-      set({ ...get(), keys: resp.keys, keychainAvailable: resp.keychainAvailable, keychainLabel: resp.keychainLabel });
+      set({
+        ...get(),
+        keys: resp.keys,
+        keysLoaded: true,
+        keychainAvailable: resp.keychainAvailable,
+        keychainLabel: resp.keychainLabel,
+      });
     },
     setKeyError: (keyError: string | null) => {
       set({ ...get(), keyError });

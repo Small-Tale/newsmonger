@@ -180,37 +180,30 @@ function feedJsx(items: NewsItem[], topicNames: Map<string, string>): SafeHtml[]
   ));
 }
 
-/** Compact "is the current source usable" line, shown in the topics panel. */
-function sourceJsx(): SafeHtml {
+/**
+ * "Is the current source usable" line.
+ *
+ * Lives in the settings dialog beside the provider picker rather than in the
+ * sidebar: the provider is chosen here, so this is where knowing whether it
+ * actually works is useful. A provider that can't run still surfaces on the
+ * page through the failed-check warning banner, so nothing is lost by not
+ * repeating it in the sidebar.
+ */
+function sourceStatusJsx(): SafeHtml {
   const s = appStore.state.value;
-  const provider = s.settings.provider;
-  const availability = s.providers.find((p) => p.name === provider)?.available ?? null;
+  // The provider's name is not repeated here — the picker directly above says
+  // it. This line carries only what the picker can't: whether it works.
+  const availability = s.providers.find((p) => p.name === s.settings.provider)?.available ?? null;
   const lastProvider = s.runs.find((r) => r.provider !== null)?.provider ?? null;
 
   return (
-    <div class="source">
-      <h2 class="eyebrow">Source</h2>
-      <p class="source-status">
-        <span class="source-name">{PROVIDER_INFO[provider].label}</span>
-        <span class="source-state">
-          {availability === false ? (
-            <span class="state warn">
-              {icon('warn', 12)} no API key — open Settings
-            </span>
-          ) : (
-            ''
-          )}
-          {availability === true ? (
-            <span class="state ok">
-              {icon('ok', 12)} ready
-            </span>
-          ) : (
-            ''
-          )}
-        </span>
-        <span class="source-last">{lastProvider !== null ? `last check via ${lastProvider}` : ''}</span>
-      </p>
-    </div>
+    <p class="source-status">
+      <span class="source-state">
+        {availability === false ? <span class="state warn">{icon('warn', 12)} no API key</span> : ''}
+        {availability === true ? <span class="state ok">{icon('ok', 12)} ready</span> : ''}
+      </span>
+      <span class="source-last">{lastProvider !== null ? `last check via ${lastProvider}` : ''}</span>
+    </p>
   );
 }
 
@@ -313,6 +306,8 @@ function settingsDialogJsx(): SafeHtml {
           </select>
         </label>
 
+        {sourceStatusJsx()}
+
         {/* Always-present container: conditional fields must not appear and
             disappear as siblings (kerf KF-377 — see docs/3-ui.md). */}
         <div class="source-fields">
@@ -357,7 +352,7 @@ function settingsDialogJsx(): SafeHtml {
 
         <div class="key-notes">
           {s.keyError !== null ? <p class="banner error">{s.keyError}</p> : ''}
-          {!s.keychainAvailable ? (
+          {s.keysLoaded && !s.keychainAvailable ? (
             <p class="note warn">
               No {s.keychainLabel} is available here, so keys can't be saved from the app. Set the environment
               variables above instead.
@@ -493,7 +488,6 @@ function appJsx(): SafeHtml {
       {/* Always rendered, hidden via CSS when collapsed: unmounting a sibling
           ahead of the keyed topics list is the kerf KF-377 hazard (docs/3-ui.md). */}
       <section id="topics-panel" class="topics-panel" aria-hidden={s.sidebarCollapsed ? 'true' : undefined}>
-        {sourceJsx()}
         <h2 class="eyebrow">Watching</h2>
         <ul class="topics">
           {each(

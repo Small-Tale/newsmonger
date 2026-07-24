@@ -23,6 +23,7 @@ src/
     types.ts          NewsService + NewsProvider interfaces, PROVIDER_NAMES/INFO, FoundNewsItem, KnownItem
     prompt.ts         searchingSystemPrompt, buildUserPrompt, parseNewsResult, NEWS_JSON_SCHEMA
     api-keys.ts       resolveApiKey/saveApiKey/deleteApiKey — env then keychain, never data.json
+    sanitize.ts       stripMarkup — strips model citation markup (<cite>) from prose, idempotent
     dedupe.ts         normalizeUrl/normalizeTitle/dedupeKeyFor/filterNewItems
     providers/
       index.ts        PROVIDERS/FACTORIES, AUTO_ORDER, resolveProvider, unavailableMessage
@@ -52,7 +53,7 @@ scripts/
 .github/              CI: gate job (test:all) + rust job (fmt + clippy, BOTH profiles); dependabot
 tests/
   helpers/            tmp.ts (tmp data dirs), provider.ts (asResolver/fakeProvider)
-  unit/               vitest: dedupe, store, checks, scheduler, config, parse-result, providers, openai, api, api-keys, api-keys-routes, attendance
+  unit/               vitest: dedupe, store, checks, scheduler, config, parse-result, providers, openai, api, api-keys, api-keys-routes, attendance, catch-up, sanitize
   e2e/                playwright, serial, mock AI (--ai-test), port 4189: app.spec.ts, keys.spec.ts, topics.spec.ts
 docs/                 numbered requirements (1–7), ai/ summaries, manual-test-plan.md
 ```

@@ -73,7 +73,7 @@ each(s.topics, (t) => topicRowJsx(...), (t) => `${selected.has(t.id)}|${solo.has
 
 ## Settings dialog
 
-Settings (check interval, provider, model, endpoint, API keys) live in a modal opened from the header gear — see [7 — API Keys and Settings Dialog](7-api-keys.md). Two structural points belong here:
+Settings (check interval, provider, model, endpoint, API keys) live in a modal opened from the header gear. The **source status** — whether the chosen provider can actually run, and which provider last ran a check — sits under the provider picker here rather than in the sidebar: the provider is chosen here, so this is where knowing whether it works is useful, and it doesn't repeat the provider's name because the picker directly above states it. A provider that can't run still surfaces on the page through the failed-check warning banner, so nothing is lost by not duplicating it in the sidebar — see [7 — API Keys and Settings Dialog](7-api-keys.md). Two structural points belong here:
 
 - The dialog is a conditional sibling, so it renders inside an always-present `#settings-slot` container (the KF-377 rule below).
 - The backdrop and the close button use **different** actions. Delegation matches against the target's ancestors, and the backdrop wraps the dialog — so a shared `close-settings` action made every in-dialog click (including Save) match a closing ancestor and dismiss the dialog mid-submit. Backdrop click-away fires only when the click landed on the backdrop element itself.

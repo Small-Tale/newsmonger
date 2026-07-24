@@ -1,5 +1,6 @@
 import { z } from 'zod';
 
+import { stripMarkup } from './sanitize.js';
 import type { FoundNewsItem, KnownItem } from './types.js';
 
 const MAX_KNOWN_ITEMS = 60;
@@ -7,9 +8,11 @@ const MAX_KNOWN_ITEMS = 60;
 const ResultSchema = z.object({
   items: z.array(
     z.object({
-      title: z.string().min(1),
-      summary: z.string().min(1),
-      sources: z.array(z.object({ title: z.string(), url: z.string() })),
+      // Models emit their own citation markup inside these strings; strip it
+      // here so nothing downstream has to know that (see `sanitize.ts`).
+      title: z.string().min(1).transform(stripMarkup),
+      summary: z.string().min(1).transform(stripMarkup),
+      sources: z.array(z.object({ title: z.string().transform(stripMarkup), url: z.string() })),
     }),
   ),
 });
@@ -60,6 +63,7 @@ export function searchingSystemPrompt(): string {
     '  returning proportionally more stories.',
     '- Each summary should be 2-4 sentences, factual, and self-contained.',
     '- Each story must include at least one source link to a news article (not a homepage).',
+    '- Write plain prose. No markup, HTML tags, or citation tags in the title or summary.',
     '',
     'Respond with a JSON object of exactly this shape (and, if your output is free text, put it in a fenced ```json block):',
     '{"items": [{"title": "...", "summary": "...", "sources": [{"title": "...", "url": "https://..."}]}]}',
