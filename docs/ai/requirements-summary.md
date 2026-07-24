@@ -32,6 +32,8 @@ Flags, usage errors, readiness line (`running at ` — synced with Tauri shell),
 
 ## [6 — AI Providers](../6-providers.md) — Shipped
 
+- Model field is a combobox (datalist suggestions + free text) per provider (NEWS-37): **Shipped**
+
 Pluggable provider abstraction (`NewsProvider`), `FACTORIES`/`AUTO_ORDER`/`resolveProvider`, provider/model/endpoint as persisted settings seeded by CLI/env, provider recorded per `CheckRun`. **Shipped**: the abstraction, `anthropic`, `openai` (Responses API + hosted web search; live path needs a key to verify), and `mock` (test-only), plus the UI provider selector. **Scope decision (NEWS-18)**: only platforms that do their own web search are supported — Ollama/local providers and the whole search-grounding layer were removed as unnecessary complexity.
 
 

@@ -215,3 +215,32 @@ test('every icon is Lucide artwork, never a text glyph', async ({ page }) => {
   await expect(page.locator('[data-action=open-settings] svg.icon')).toHaveCount(1);
   await expect(page.locator('[data-action=toggle-sidebar] svg.icon')).toHaveCount(1);
 });
+
+test('the model field is a combobox with per-provider suggestions (NEWS-37)', async ({ page }) => {
+  await page.goto('/');
+  await openSettings(page);
+  await page.selectOption('[data-action=provider]', 'anthropic');
+
+  const model = page.locator('[data-action=model]');
+  // Still a free-text input, just backed by a datalist — custom gateways and
+  // models newer than the list must remain typeable.
+  await expect(model).toHaveAttribute('type', 'text');
+  await expect(model).toHaveAttribute('list', 'model-suggestions');
+  await expect(page.locator('#model-suggestions option').first()).toHaveAttribute('value', 'claude-opus-4-8');
+
+  // Suggestions track the provider.
+  await page.selectOption('[data-action=provider]', 'openai');
+  await expect(page.locator('#model-suggestions option').first()).toHaveAttribute('value', 'gpt-5');
+
+  // A value not in the list is still accepted and persists.
+  await model.fill('my-custom-model');
+  await model.blur();
+  await page.reload();
+  await openSettings(page);
+  await expect(page.locator('[data-action=model]')).toHaveValue('my-custom-model');
+
+  // Reset so later tests see a clean provider config.
+  await page.locator('[data-action=model]').fill('');
+  await page.locator('[data-action=model]').blur();
+  await page.selectOption('[data-action=provider]', 'auto');
+});

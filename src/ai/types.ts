@@ -27,6 +27,24 @@ export const PROVIDER_NAMES = ['auto', 'claude-cli', 'codex-cli', 'anthropic', '
 export type ProviderName = (typeof PROVIDER_NAMES)[number];
 export type ConcreteProviderName = Exclude<ProviderName, 'auto'>;
 
+/**
+ * Curated model suggestions per provider, for the Settings combobox.
+ *
+ * These populate a `<datalist>`, so they are *suggestions* — the field stays
+ * free-text, which a custom OpenAI-compatible gateway or a model newer than
+ * this list still needs. An empty list means "no suggestions", not "no models".
+ * Kept short and current rather than exhaustive; the default (empty model) uses
+ * each provider's own default, so the list is discovery, not a requirement.
+ */
+export const PROVIDER_MODELS: Record<ProviderName, readonly string[]> = {
+  auto: [],
+  'claude-cli': ['claude-opus-4-8', 'claude-sonnet-5', 'claude-haiku-4-5'],
+  'codex-cli': ['gpt-5', 'gpt-5-mini', 'o3'],
+  anthropic: ['claude-opus-4-8', 'claude-opus-4-7', 'claude-sonnet-5', 'claude-haiku-4-5'],
+  openai: ['gpt-5', 'gpt-5-mini', 'o3', 'o4-mini'],
+  mock: [],
+};
+
 /** Static, no-probe metadata for each selectable provider (for the UI). */
 export const PROVIDER_INFO: Record<ProviderName, { label: string; endpointConfigurable: boolean }> = {
   auto: { label: 'Auto', endpointConfigurable: false },

@@ -51,6 +51,8 @@ Provider-resolution failures are deliberately *not* swallowed by the gate: if re
 
 **Coverage note:** the gate decision is unit-tested (`tests/unit/attendance.test.ts`, including window boundaries and away→return→away sequences). E2E covers only the *client* half — that the heartbeat is sent on load and on regaining focus — because a Playwright page is always focused, so attendance can't be made stale through the browser.
 
+The Settings model field is a **combobox** (NEWS-37): an editable text input backed by a `<datalist>` of curated per-provider suggestions (`PROVIDER_MODELS` in `src/ai/types.ts`). It stays free-text — a custom OpenAI-compatible gateway, or a model newer than the list, is still typeable — so the suggestions are discovery, not a constraint. An empty value uses the provider's own default.
+
 See also: [2 — News Checks and Deduplication](2-news-checks-and-dedup.md), [4 — CLI, Server, and Storage](4-cli-server-storage.md).
 
 Key storage and the Settings dialog are covered in [7 — API Keys and Settings Dialog](7-api-keys.md).

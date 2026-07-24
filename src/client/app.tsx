@@ -2,7 +2,7 @@ import type { SafeHtml } from 'kerfjs';
 import { delegate, each, mount } from 'kerfjs';
 
 import type { ProviderName } from '../ai/types.js';
-import { PROVIDER_INFO, PROVIDER_NAMES } from '../ai/types.js';
+import { PROVIDER_INFO, PROVIDER_MODELS, PROVIDER_NAMES } from '../ai/types.js';
 import type { NewsItem, Topic } from '../db/schemas.js';
 import {
   addTopic,
@@ -412,9 +412,17 @@ function settingsDialogJsx(): SafeHtml {
                 value={s.settings.model}
                 placeholder="default"
                 autocomplete="off"
+                list="model-suggestions"
                 data-action="model"
                 data-morph-skip-children
               />
+              {/* Suggestions only — the field stays free-text for custom
+                  gateways and models newer than this list (NEWS-37). */}
+              <datalist id="model-suggestions">
+                {PROVIDER_MODELS[provider].map((m) => (
+                  <option value={m} data-key={m} />
+                ))}
+              </datalist>
             </label>
           ) : (
             ''
