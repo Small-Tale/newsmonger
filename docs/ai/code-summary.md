@@ -98,3 +98,4 @@ Data dir: `--data-dir` flag → `NEWS_DATA_DIR` → `~/.news`.
 | API keys / keychain | `src/keychain.ts` (OS layer) + `src/ai/api-keys.ts` (env→keychain precedence); `NEWS_FAKE_KEYCHAIN=1` for tests |
 | Foreground/attendance gate | `src/attendance.ts` + `CheckRunner.checkDue`; provider opts in via `attended: true` |
 | Settings dialog | `src/client/app.tsx` `settingsDialogJsx`/`keyRowJsx`; routes in `src/routes/api.ts` under `/api/keys` |
+| Sidebar collapse | `sidebarCollapsed` in `src/client/stores.ts` (localStorage `news:sidebar-collapsed`); `.shell.sidebar-collapsed` in `styles.scss` |

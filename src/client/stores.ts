@@ -25,6 +25,25 @@ export interface AppState {
   keychainLabel: string;
   /** Error shown inside the dialog, kept separate from the page banner. */
   keyError: string | null;
+  /** Whether the topics sidebar is collapsed (per-device, see `SIDEBAR_KEY`). */
+  sidebarCollapsed: boolean;
+}
+
+/**
+ * Persisted per device rather than in `data.json`: how you've sized your own
+ * window is a view preference, not something that belongs in the shared data
+ * file alongside topics and stories.
+ */
+const SIDEBAR_KEY = 'news:sidebar-collapsed';
+
+function readSidebarCollapsed(): boolean {
+  // Guarded so importing this module outside a browser can't throw.
+  if (typeof localStorage === 'undefined') return false;
+  try {
+    return localStorage.getItem(SIDEBAR_KEY) === '1';
+  } catch {
+    return false; // private mode / storage disabled
+  }
 }
 
 
@@ -43,6 +62,7 @@ export const appStore = defineStore({
     keychainAvailable: false,
     keychainLabel: 'system keychain',
     keyError: null,
+    sidebarCollapsed: readSidebarCollapsed(),
   }),
   actions: (set, get) => ({
     setSettingsOpen: (settingsOpen: boolean) => {
@@ -53,6 +73,16 @@ export const appStore = defineStore({
     },
     setKeyError: (keyError: string | null) => {
       set({ ...get(), keyError });
+    },
+    setSidebarCollapsed: (sidebarCollapsed: boolean) => {
+      if (typeof localStorage !== 'undefined') {
+        try {
+          localStorage.setItem(SIDEBAR_KEY, sidebarCollapsed ? '1' : '0');
+        } catch {
+          // Storage unavailable — the toggle still works for this session.
+        }
+      }
+      set({ ...get(), sidebarCollapsed });
     },
     update: (partial: Partial<AppState>) => {
       set({ ...get(), ...partial });

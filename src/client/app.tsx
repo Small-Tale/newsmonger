@@ -349,11 +349,26 @@ function appJsx(): SafeHtml {
   const lastFailure = s.runs.find((r) => r.status === 'failed');
 
   return (
-    <div class="shell">
+    <div class={`shell${s.sidebarCollapsed ? ' sidebar-collapsed' : ''}`}>
       <header class="app-header">
-        <h1 class="wordmark">
-          News<span class="mark-dot">.</span>
-        </h1>
+        <div class="header-left">
+          <button
+            class="btn icon"
+            data-action="toggle-sidebar"
+            aria-expanded={s.sidebarCollapsed ? 'false' : 'true'}
+            aria-controls="topics-panel"
+            aria-label={s.sidebarCollapsed ? 'Show topics' : 'Hide topics'}
+            title={s.sidebarCollapsed ? 'Show topics' : 'Hide topics'}
+          >
+            <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
+              <rect class="panel-frame" x="1.5" y="2.5" width="13" height="11" rx="2" />
+              <line class="panel-divider" x1="6" y1="2.5" x2="6" y2="13.5" />
+            </svg>
+          </button>
+          <h1 class="wordmark">
+            News<span class="mark-dot">.</span>
+          </h1>
+        </div>
         <div class="header-controls">
           <button class="btn icon" data-action="open-settings" aria-label="Settings" title="Settings">
             ⚙
@@ -381,7 +396,9 @@ function appJsx(): SafeHtml {
         )}
       </div>
 
-      <section id="topics-panel" class="topics-panel">
+      {/* Always rendered, hidden via CSS when collapsed: unmounting a sibling
+          ahead of the keyed topics list is the kerf KF-377 hazard (docs/3-ui.md). */}
+      <section id="topics-panel" class="topics-panel" aria-hidden={s.sidebarCollapsed ? 'true' : undefined}>
         {sourceJsx()}
         <h2 class="eyebrow">Watching</h2>
         <ul class="topics">
@@ -452,6 +469,10 @@ function wireEvents(root: HTMLElement): void {
 
   void delegate(root, 'click', '[data-action=check-all]', () => {
     void startCheck();
+  });
+
+  void delegate(root, 'click', '[data-action=toggle-sidebar]', () => {
+    appStore.actions.setSidebarCollapsed(!appStore.state.value.sidebarCollapsed);
   });
 
   void delegate(root, 'click', '[data-action=open-settings]', () => {

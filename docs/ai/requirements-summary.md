@@ -16,6 +16,8 @@ Default Anthropic provider (`claude-opus-4-8` + web search), prompt-level exclus
 
 ## [3 — Web UI](../3-ui.md) — Shipped
 
+- Collapsible topics sidebar (localStorage-persisted, panel stays mounted): **Shipped**
+
 Header/interval/check-all, topics panel with actions + confirm-delete, newest-first feed with source links, error + last-failure banners, 4 s visible-tab polling, empty states, light/dark. kerf structural conventions documented and E2E-regression-tested.
 
 ## [4 — CLI, Server, and Storage](../4-cli-server-storage.md) — Shipped

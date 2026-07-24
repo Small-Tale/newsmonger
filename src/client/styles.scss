@@ -65,7 +65,27 @@ body {
   align-items: start;
 }
 
+// Collapsed sidebar: the panel stays in the DOM (see app.tsx) and is taken out
+// of the layout, so the feed reflows to the full width.
+.shell.sidebar-collapsed {
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-areas:
+    'header'
+    'banners'
+    'feed';
+
+  .topics-panel {
+    display: none;
+  }
+}
+
 // ---------------------------------------------------------------- header ---
+
+.header-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
 
 .app-header {
   grid-area: header;
@@ -504,6 +524,23 @@ h2.eyebrow {
   .sources a {
     transition: none;
   }
+}
+
+// The sidebar toggle's panel glyph: the divider fills in when the panel is
+// showing, so the button reflects state rather than just naming an action.
+.panel-frame {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.4;
+}
+
+.panel-divider {
+  stroke: currentColor;
+  stroke-width: 1.4;
+}
+
+.shell:not(.sidebar-collapsed) .panel-divider {
+  stroke-width: 3.6;
 }
 
 // ------------------------------------------------------ settings dialog ---

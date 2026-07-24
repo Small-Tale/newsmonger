@@ -158,3 +158,33 @@ test('the client reports foreground so scheduled checks may run', async ({ page 
   await page.evaluate(() => { window.dispatchEvent(new Event('focus')); });
   await expect.poll(() => beats.length).toBeGreaterThan(afterLoad);
 });
+
+test('the topics sidebar collapses and the choice persists', async ({ page }) => {
+  await page.goto('/');
+  await expect(page.locator('.topics-panel')).toBeVisible();
+  const expandedFeed = (await page.locator('#feed').boundingBox())?.width ?? 0;
+  // Captured rather than hardcoded: the suite is serial and stateful, so the
+  // invariant is "the list is unchanged", not any particular count.
+  const topicCount = await page.locator('.topic').count();
+
+  await page.click('[data-action=toggle-sidebar]');
+  await expect(page.locator('.topics-panel')).toBeHidden();
+  await expect(page.locator('[data-action=toggle-sidebar]')).toHaveAttribute('aria-expanded', 'false');
+
+  // The feed takes the reclaimed width rather than leaving a gap.
+  const collapsedFeed = (await page.locator('#feed').boundingBox())?.width ?? 0;
+  expect(collapsedFeed).toBeGreaterThan(expandedFeed);
+
+  // Hidden, but still mounted: unmounting a sibling ahead of the keyed topics
+  // list is the kerf KF-377 hazard, so this asserts we didn't reintroduce it.
+  await expect(page.locator('#topics-panel')).toHaveCount(1);
+
+  await page.reload();
+  await expect(page.locator('.topics-panel')).toBeHidden();
+
+  // Restore, and confirm the keyed list survived the round trip — the failure
+  // mode KF-377 produces is a permanently empty list, not an error.
+  await page.click('[data-action=toggle-sidebar]');
+  await expect(page.locator('.topics-panel')).toBeVisible();
+  await expect(page.locator('.topic')).toHaveCount(topicCount);
+});
