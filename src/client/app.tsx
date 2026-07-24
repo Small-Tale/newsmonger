@@ -294,6 +294,58 @@ function providerIsAttended(provider: ProviderName): boolean {
   return provider === 'claude-cli' || provider === 'codex-cli';
 }
 
+/**
+ * In-app confirmation dialog. Replaces `window.confirm`, which is a silent
+ * no-op in the Tauri WKWebView — a native confirm returns falsy without ever
+ * showing, so every guarded action (delete a topic, remove a key) quietly did
+ * nothing in the desktop app. This works identically in a browser and in Tauri.
+ */
+function confirmDialogJsx(c: NonNullable<AppState['confirm']>): SafeHtml {
+  return (
+    <div class="dialog-backdrop" data-action="confirm-backdrop">
+      <div class="dialog confirm" role="alertdialog" aria-modal="true" aria-label="Confirm">
+        <p class="confirm-message">{c.message}</p>
+        <div class="confirm-actions">
+          <button class="btn" type="button" data-action="confirm-cancel">
+            Cancel
+          </button>
+          <button class={`btn ${c.danger ? 'danger-solid' : 'primary'}`} type="button" data-action="confirm-ok">
+            {c.confirmLabel}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Show the confirmation dialog and resolve with the user's choice.
+ *
+ * The resolver lives at module scope rather than in the store: it's a callback,
+ * not renderable state, and only ever one dialog is open. Opening a second
+ * before the first resolves cancels the first, so no promise is left dangling.
+ */
+let confirmResolver: ((ok: boolean) => void) | null = null;
+
+function confirm(message: string, opts: { confirmLabel?: string; danger?: boolean } = {}): Promise<boolean> {
+  confirmResolver?.(false);
+  appStore.actions.openConfirm({
+    message,
+    confirmLabel: opts.confirmLabel ?? 'OK',
+    danger: opts.danger ?? false,
+  });
+  return new Promise<boolean>((resolve) => {
+    confirmResolver = resolve;
+  });
+}
+
+function resolveConfirm(ok: boolean): void {
+  appStore.actions.closeConfirm();
+  const resolve = confirmResolver;
+  confirmResolver = null;
+  resolve?.(ok);
+}
+
 function settingsDialogJsx(): SafeHtml {
   const s = appStore.state.value;
   const provider = s.settings.provider;
@@ -497,6 +549,7 @@ function appJsx(): SafeHtml {
           its siblings (kerf KF-377 — see docs/3-ui.md). */}
       <div id="settings-slot">{s.settingsOpen ? settingsDialogJsx() : ''}</div>
       <div id="menu-slot">{s.contextMenu !== null ? contextMenuJsx(s.contextMenu, s.topics) : ''}</div>
+      <div id="confirm-slot">{s.confirm !== null ? confirmDialogJsx(s.confirm) : ''}</div>
 
       {/* Always-present container: banners coming and going must not shift the
           sections below (kerf KF-377 — see docs/3-ui.md). */}
@@ -620,9 +673,9 @@ function confirmDelete(ids: string[]): void {
   if (names.length === 0) return;
   const what =
     names.length === 1 ? `\u201c${names[0] ?? ''}\u201d` : `${String(names.length)} topics`;
-  if (!window.confirm(`Delete ${what} and all of their stories?`)) return;
-  appStore.actions.setSelection([]);
   void (async () => {
+    if (!(await confirm(`Delete ${what} and all of their stories?`, { confirmLabel: 'Delete', danger: true }))) return;
+    appStore.actions.setSelection([]);
     for (const id of ids) await deleteTopic(id);
   })();
 }
@@ -739,7 +792,11 @@ function wireEvents(root: HTMLElement): void {
     const provider = el.getAttribute('data-remove-key');
     if (provider === null) return;
     const label = appStore.state.value.keys.find((k) => k.provider === provider)?.label ?? provider;
-    if (window.confirm(`Remove the stored ${label} API key?`)) void deleteKey(provider);
+    void (async () => {
+      if (await confirm(`Remove the stored ${label} API key?`, { confirmLabel: 'Remove', danger: true })) {
+        await deleteKey(provider);
+      }
+    })();
   });
 
   // --- topic selection -----------------------------------------------------
@@ -788,6 +845,18 @@ function wireEvents(root: HTMLElement): void {
     appStore.actions.setSolo([]);
   });
 
+  void delegate(root, 'click', '[data-action=confirm-ok]', () => {
+    resolveConfirm(true);
+  });
+  void delegate(root, 'click', '[data-action=confirm-cancel]', () => {
+    resolveConfirm(false);
+  });
+  // Backdrop click-away cancels. Same nesting caveat as the settings dialog:
+  // only a click on the backdrop element itself, not a bubbled one from inside.
+  void delegate(root, 'click', '[data-action=confirm-backdrop]', (e, el) => {
+    if (e.target === el) resolveConfirm(false);
+  });
+
   void delegate(root, 'click', 'a[data-external]', (e, el) => {
     const url = el.getAttribute('href');
     if (url !== null && openExternalUrl(url)) e.preventDefault();
@@ -811,6 +880,10 @@ function wireGlobalKeysAndDismiss(): void {
 
   document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') {
+      if (appStore.state.value.confirm !== null) {
+        resolveConfirm(false);
+        return;
+      }
       appStore.actions.closeContextMenu();
       appStore.actions.setSelection([]);
       return;

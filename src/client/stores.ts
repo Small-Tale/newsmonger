@@ -47,6 +47,12 @@ export interface AppState {
   soloTopicIds: string[];
   /** Open context menu, positioned in viewport coordinates. */
   contextMenu: { x: number; y: number; topicIds: string[] } | null;
+  /**
+   * Open confirmation dialog, or null. In-app rather than `window.confirm`,
+   * which is a silent no-op in the Tauri WKWebView — so a native confirm made
+   * every guarded action (delete, key removal) do nothing in the desktop app.
+   */
+  confirm: { message: string; confirmLabel: string; danger: boolean } | null;
 }
 
 /**
@@ -87,6 +93,7 @@ export const appStore = defineStore({
     selectedTopicIds: [],
     soloTopicIds: [],
     contextMenu: null,
+    confirm: null,
   }),
   actions: (set, get) => ({
     setSettingsOpen: (settingsOpen: boolean) => {
@@ -115,6 +122,12 @@ export const appStore = defineStore({
     },
     closeContextMenu: () => {
       set({ ...get(), contextMenu: null });
+    },
+    openConfirm: (confirm: { message: string; confirmLabel: string; danger: boolean }) => {
+      set({ ...get(), confirm });
+    },
+    closeConfirm: () => {
+      set({ ...get(), confirm: null });
     },
     setSidebarCollapsed: (sidebarCollapsed: boolean) => {
       if (typeof localStorage !== 'undefined') {

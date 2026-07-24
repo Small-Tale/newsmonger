@@ -890,3 +890,33 @@ h2.eyebrow {
     object-fit: cover;
   }
 }
+
+// ------------------------------------------------------ confirm dialog ---
+
+.dialog.confirm {
+  max-width: 380px;
+  padding: 22px 24px 18px;
+}
+
+.confirm-message {
+  margin: 0 0 18px;
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--ink);
+}
+
+.confirm-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.btn.danger-solid {
+  background: #b4442f;
+  border-color: #b4442f;
+  color: #fff;
+
+  &:hover:not(:disabled) {
+    filter: brightness(1.08);
+  }
+}

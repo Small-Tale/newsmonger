@@ -1,4 +1,4 @@
-import { expect, test, topicAction } from './fixtures.js';
+import { acceptConfirm, cancelConfirm, expect, test, topicAction } from './fixtures.js';
 
 // Selection, the right-click menu, and solo (NEWS-29). Serial and stateful
 // like the rest of the suite: this spec creates its own topics up front and
@@ -195,36 +195,46 @@ test('Backspace while typing does not delete a topic', async ({ page }) => {
   await page.fill('.add-topic input', '');
 });
 
-test('the Delete key removes the selected topics after confirming', async ({ page }) => {
+test('delete uses an in-app dialog, not window.confirm', async ({ page }) => {
+  // NEWS-39: window.confirm is a silent no-op in the Tauri WKWebView, so a
+  // native confirm made delete do nothing in the desktop app. The dialog must
+  // be a real in-DOM element. A stray native dialog here fails the test.
+  let nativeDialogs = 0;
+  page.on('dialog', (d) => {
+    nativeDialogs++;
+    void d.dismiss();
+  });
   await page.goto('/');
-  page.on('dialog', (d) => void d.accept());
-  const before = await page.locator('.topic').count();
 
   await row(page, 'Delta Topic').click();
   await page.keyboard.press('Delete');
-  await expect(page.locator('.topic')).toHaveCount(before - 1);
+  await expect(page.locator('.dialog.confirm')).toBeVisible();
+  await expect(page.locator('.confirm-message')).toContainText('Delta Topic');
+  expect(nativeDialogs).toBe(0);
+
+  await acceptConfirm(page);
   await expect(row(page, 'Delta Topic')).toHaveCount(0);
 });
 
 test('a cancelled confirmation deletes nothing', async ({ page }) => {
   await page.goto('/');
-  page.on('dialog', (d) => void d.dismiss());
   const before = await page.locator('.topic').count();
 
   await row(page, 'Gamma Topic').click();
   await page.keyboard.press('Delete');
-  await page.waitForTimeout(300);
+  await cancelConfirm(page);
   await expect(page.locator('.topic')).toHaveCount(before);
+  await expect(row(page, 'Gamma Topic')).toBeVisible();
 });
 
 test('clean up the topics this spec created', async ({ page }) => {
   await page.goto('/');
-  page.on('dialog', (d) => void d.accept());
   for (const name of NAMES) {
     const target = row(page, name);
     if ((await target.count()) === 0) continue;
     await target.click();
     await page.keyboard.press('Delete');
+    await acceptConfirm(page);
     await expect(target).toHaveCount(0);
   }
 });

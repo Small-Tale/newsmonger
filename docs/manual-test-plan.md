@@ -24,6 +24,7 @@ Verified against the live API (NEWS-3): real current stories with citations that
 1. `npm run tauri:dev` — window shows the loading spinner, then the app once the server prints its readiness line.
 2. Click a source link — it should open in the system browser, not inside the webview.
 3. Quit the app — the spawned `node` server process must exit too (`pgrep -f cli.ts`).
+4. **Delete a topic (NEWS-39)**: select it and press Delete, or right-click → Delete. The **in-app** confirmation must appear (not a native OS dialog), and confirming must actually remove the topic. This is the case that failed with `window.confirm`, which no-ops in the WKWebView — and which no headless test can catch, since Playwright auto-accepts native dialogs. Also verify **Remove** on a stored API key confirms and removes.
 
 ## Tauri release bundle (needs Rust toolchain) — ✅ macOS verified 2026-07-24
 

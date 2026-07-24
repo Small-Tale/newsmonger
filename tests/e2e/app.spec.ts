@@ -105,7 +105,6 @@ test('a failing topic surfaces a warning banner', async ({ page }) => {
   await topicAction(page, row, 'check');
   await expect(page.locator('.banner.warn')).toContainText('failed', { timeout: 15_000 });
   // Clean up so later tests aren't affected.
-  page.on('dialog', (d) => void d.accept());
   await topicAction(page, row, 'delete');
   await expect(page.locator('.topic')).toHaveCount(2);
 });
@@ -131,7 +130,6 @@ test('the provider picker persists a choice across reload', async ({ page }) => 
 
 test('deleting a topic removes its stories from the feed', async ({ page }) => {
   await page.goto('/');
-  page.on('dialog', (d) => void d.accept());
   const row = page.locator('.topic', { hasText: 'Quantum Computing' });
   await topicAction(page, row, 'delete');
   await expect(page.locator('.topic')).toHaveCount(1);

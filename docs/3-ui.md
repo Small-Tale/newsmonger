@@ -25,6 +25,16 @@ Two rendering rules this UI depends on — regression-tested by the E2E suite:
 - Keep sibling structure around keyed lists stable: conditional elements (banners) live inside an always-present container (`#banners`). **This works around a confirmed kerfjs 2.0.0 bug (kerf KF-377)**: removing a conditional sibling rendered before a keyed `each()` list permanently empties the list (verified in a minimal standalone repro attached to that ticket).
 - Keep `each()` containers structurally stable: empty-state messages render *alongside* the list, not instead of it. The pure container swap (`<p>` ↔ `<ul>{each(...)}</ul>`) tested OK in isolation on 2.0.0, so this one is defensive convention rather than a confirmed trigger — but the app's original failures involved the combination, and the stable shape is regression-covered here and flagged for a pinning test in KF-377.
 
+## Confirmations (never `window.confirm`)
+
+Destructive actions — deleting topics, removing a stored key — confirm through an **in-app dialog** (`confirmDialogJsx` + the `confirm()` promise helper in `app.tsx`), never `window.confirm`.
+
+`window.confirm`, `window.alert`, and `window.prompt` are **silent no-ops in the Tauri WKWebView**: the webview returns a falsy value without ever showing anything. Because delete was guarded by `if (!window.confirm(...)) return;`, that made **delete (and key removal) do nothing at all in the desktop app** while working fine in a browser — the NEWS-39 bug. The same trap hit the sibling glassbox/hotsheet projects, which is where the pattern is documented.
+
+The in-app dialog uses the same `delegate()` click handling as every other control, so it works identically in a browser and in Tauri. It lives in an always-present `#confirm-slot` (KF-377), cancels on backdrop-click and Escape, and its backdrop uses a distinct action from its buttons for the reason spelled out under the context menu above.
+
+**Never reintroduce `window.confirm/alert/prompt`.** An E2E test registers a native-dialog listener and asserts it never fires during a delete — a stray `window.confirm` fails it. Note that Playwright *auto-accepts* native dialogs in headless, so a native confirm would pass every headless test while being broken in the actual app; the in-DOM dialog is what makes the test exercise the real path.
+
 ## Icons
 
 **Every icon comes from `src/client/icons.tsx`. No emoji, and no hand-drawn glyphs.** An emoji renders as someone else's artwork at someone else's weight and colour, and no amount of CSS brings it into line with a stroked icon set — the gear, the close ✕, and the source-link arrow were all previously text characters and all three sat visibly wrong next to real icons.

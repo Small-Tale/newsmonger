@@ -8,6 +8,26 @@ import { expect, test as base } from '@playwright/test';
 export { expect } from '@playwright/test';
 
 /**
+ * Accept the in-app confirmation dialog (NEWS-39).
+ *
+ * The app no longer uses `window.confirm`, which is a silent no-op in the Tauri
+ * WKWebView — and which Playwright would auto-accept in headless, hiding that
+ * very bug. Driving the real in-DOM dialog makes the test take the same path a
+ * user does.
+ */
+export async function acceptConfirm(page: Page): Promise<void> {
+  await expect(page.locator('.dialog.confirm')).toBeVisible();
+  await page.locator('[data-action=confirm-ok]').click();
+  await expect(page.locator('.dialog.confirm')).toHaveCount(0);
+}
+
+export async function cancelConfirm(page: Page): Promise<void> {
+  await expect(page.locator('.dialog.confirm')).toBeVisible();
+  await page.locator('[data-action=confirm-cancel]').click();
+  await expect(page.locator('.dialog.confirm')).toHaveCount(0);
+}
+
+/**
  * Run a topic action through the right-click menu.
  *
  * Topic actions moved out of always-visible row buttons and into a context
@@ -23,6 +43,8 @@ export async function topicAction(
   await expect(page.locator('.menu')).toBeVisible();
   await page.locator(`[data-menu-action=${action}]`).click();
   await expect(page.locator('.menu')).toHaveCount(0);
+  // Delete now raises an in-app confirmation; accept it so the action completes.
+  if (action === 'delete') await acceptConfirm(page);
 }
 
 const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');

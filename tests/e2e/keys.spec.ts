@@ -1,6 +1,6 @@
 import type { Page } from '@playwright/test';
 
-import { expect, test, topicAction } from './fixtures.js';
+import { acceptConfirm, expect, test, topicAction } from './fixtures.js';
 
 // Runs against the shared server from playwright.config.ts, which sets
 // NEWS_FAKE_KEYCHAIN=1 — the save/remove flows below are real all the way to
@@ -89,10 +89,10 @@ test('the stored key survives a reload', async ({ page }) => {
 
 test('removing a key restores the input', async ({ page }) => {
   await page.goto('/');
-  page.on('dialog', (d) => void d.accept());
   await openSettings(page);
 
   await page.click(`${ANTHROPIC_ROW} [data-remove-key]`);
+  await acceptConfirm(page);
   await expect(page.locator(`${ANTHROPIC_ROW} .key-input`)).toBeVisible();
   await expect(page.locator(`${ANTHROPIC_ROW} .key-state`)).toHaveCount(0);
 });
@@ -112,7 +112,6 @@ test('saving, removing and re-saving leaves a working key', async ({ page }) => 
   // The transition a single save test never reaches: the row has to move
   // through all three states and come back with the field wired up again.
   await page.goto('/');
-  page.on('dialog', (d) => void d.accept());
   await openSettings(page);
 
   await page.fill(`${OPENAI_ROW} .key-input`, 'sk-openai-first');
@@ -120,6 +119,7 @@ test('saving, removing and re-saving leaves a working key', async ({ page }) => 
   await expect(page.locator(`${OPENAI_ROW} .key-state`)).toContainText('stored in');
 
   await page.click(`${OPENAI_ROW} [data-remove-key]`);
+  await acceptConfirm(page);
   await expect(page.locator(`${OPENAI_ROW} .key-input`)).toBeVisible();
 
   await page.fill(`${OPENAI_ROW} .key-input`, 'sk-openai-second');
@@ -127,6 +127,7 @@ test('saving, removing and re-saving leaves a working key', async ({ page }) => 
   await expect(page.locator(`${OPENAI_ROW} .key-state`)).toContainText('stored in');
 
   await page.click(`${OPENAI_ROW} [data-remove-key]`);
+  await acceptConfirm(page);
   await expect(page.locator(`${OPENAI_ROW} .key-input`)).toBeVisible();
 });
 
@@ -158,7 +159,6 @@ test('the topics list survives opening and closing the dialog', async ({ page })
   }
   await expect(page.locator('.topic')).toHaveCount(before);
 
-  page.on('dialog', (d) => void d.accept());
   await topicAction(page, page.locator('.topic', { hasText: 'Dialog Structural Check' }), 'delete');
   await expect(page.locator('.topic')).toHaveCount(before - 1);
 });

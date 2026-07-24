@@ -106,3 +106,4 @@ Data dir: `--data-dir` flag → `NEWS_DATA_DIR` → `~/.news`.
 | Settings dialog | `src/client/app.tsx` `settingsDialogJsx`/`keyRowJsx`; routes in `src/routes/api.ts` under `/api/keys` |
 | Sidebar collapse | `sidebarCollapsed` in `src/client/stores.ts` (localStorage `news:sidebar-collapsed`); `.shell.sidebar-collapsed` in `styles.scss` |
 | Topic selection / context menu / solo | `src/client/app.tsx` (`contextMenuJsx`, `selectTopic`, `runTopicAction`); state in `stores.ts`. **Row state outside the topic object needs `each()`'s cacheKey** |
+| Confirm a destructive action | `confirm()` helper + `confirmDialogJsx` in `app.tsx`. **Never `window.confirm` — a silent no-op in Tauri's WKWebView** |
