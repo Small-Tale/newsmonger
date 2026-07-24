@@ -67,3 +67,12 @@ Subscription-backed providers (`attended: true`) run *scheduled* checks only whi
 - FR-8.6–8.11 SSRF guards (protocol, host, post-DNS address, re-validated image URL, cache-only route, size/type caps): **Shipped**
 - FR-8.12 fixed-ratio media slot, collapses when absent: **Shipped**
 - Cache pruning on topic delete: **Not implemented** (NEWS-36)
+
+## [9 — Subscription Providers](../9-subscription-providers.md) — `claude-cli` shipped; `codex-cli` pending (NEWS-28)
+
+- FR-9.1–9.2 CLI rather than API or the 243 MB Agent SDK: **Shipped**
+- FR-9.3–9.5 shared prompts, WebSearch-only tools, `--json-schema` structured output: **Shipped**
+- FR-9.6 availability = binary + credential-file shape, no quota-spending probe: **Shipped**
+- FR-9.7 `attended: true`, so the foreground gate applies: **Shipped**
+- FR-9.9–9.11 subscription-first `AUTO_ORDER`, no key row, startup warning probes properly: **Shipped**
+- Live path: **manual only** (unit tests inject a fake runner)

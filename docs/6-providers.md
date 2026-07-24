@@ -20,6 +20,7 @@ News checks run through a pluggable provider abstraction so you can choose which
 
 | Provider | Config | Status |
 |---|---|---|
+| `claude-cli` | Claude Pro/Max subscription via the Claude Code CLI; no key — see [9](9-subscription-providers.md) | **Shipped** |
 | `anthropic` | key from Settings or `ANTHROPIC_API_KEY`; default model `claude-opus-4-8` | **Shipped** |
 | `openai` | key from Settings or `OPENAI_API_KEY`, plus `OPENAI_BASE_URL`; default model `gpt-5` | **Shipped** (live path needs a key to verify) |
 | `mock` | none (`--ai-test` / `--provider mock`) | **Shipped** (tests / offline) |

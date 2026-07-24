@@ -284,6 +284,16 @@ function keyRowJsx(key: AppState['keys'][number], keychainLabel: string, keychai
   );
 }
 
+/**
+ * Whether a provider spends a personal subscription rather than a metered key.
+ *
+ * Kept as a small client-side list rather than plumbed through `/api/providers`:
+ * it's static metadata, and the dialog only needs it to decide what to explain.
+ */
+function providerIsAttended(provider: ProviderName): boolean {
+  return provider === 'claude-cli';
+}
+
 function settingsDialogJsx(): SafeHtml {
   const s = appStore.state.value;
   const provider = s.settings.provider;
@@ -323,6 +333,19 @@ function settingsDialogJsx(): SafeHtml {
         </label>
 
         {sourceStatusJsx()}
+
+        {/* Always-present slot: the note appears only for subscription-backed
+            providers (kerf KF-377 — see docs/3-ui.md). */}
+        <div class="source-note">
+          {providerIsAttended(s.settings.provider) ? (
+            <p class="note">
+              Signed in through Claude Code — checks use your subscription, not an API key. Scheduled checks run only
+              while News is open; “Check now” always works.
+            </p>
+          ) : (
+            ''
+          )}
+        </div>
 
         {/* Always-present container: conditional fields must not appear and
             disappear as siblings (kerf KF-377 — see docs/3-ui.md). */}

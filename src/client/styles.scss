@@ -764,6 +764,14 @@ h2.eyebrow {
   }
 }
 
+.source-note:empty {
+  display: none;
+}
+
+.source-note .note {
+  margin-top: 10px;
+}
+
 .key-notes .banner {
   margin: 14px 0 0;
 }

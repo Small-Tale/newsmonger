@@ -50,6 +50,16 @@ The macOS path is verified (real Keychain round-trips, including long, non-ASCII
 4. **Long keys**: on each platform, save a key longer than 128 characters (an OpenAI project key) and confirm it round-trips exactly — this is the case that silently truncated on macOS before the write moved off stdin.
 5. **No credential store**: on a machine without one, confirm the dialog disables the inputs and names the environment variable instead.
 
+## Claude subscription provider (`claude-cli`, needs Claude Code signed in)
+
+Unit tests inject a fake runner and never spawn the CLI, so the live path is manual.
+
+1. With `claude` installed and logged in, and **no** `ANTHROPIC_API_KEY` set, open Settings and pick "Claude subscription (Claude Code)". The status line should read ready, and a note should explain that scheduled checks run only while News is open.
+2. Check a topic with active coverage — expect real current stories with working links. Takes minutes, not seconds (a measured run was 161 s / 21 turns).
+3. Run `claude logout`, then check again — expect an actionable "Claude Code is not signed in" error rather than a hang.
+4. With `auto` selected and both a subscription and an API key available, confirm the run uses the subscription (the feed's "last check via" says `claude-cli`).
+5. Background the app and confirm scheduled checks don't fire; return to it and confirm the due check runs.
+
 ## Automated Coverage Summary
 
 - Topics CRUD, scheduling logic, dedup, parsing, API validation, and full UI flows are covered by `npm test` + `npm run test:e2e` (mock AI service).

@@ -1,8 +1,6 @@
 import v8 from 'node:v8';
 
-import { resolveApiKey } from './ai/api-keys.js';
 import { createMockProvider, resolveProvider } from './ai/providers/index.js';
-import { KEYED_PROVIDERS } from './ai/types.js';
 import { Attendance } from './attendance.js';
 import type { ProviderResolver } from './checks.js';
 import { CheckRunner } from './checks.js';
@@ -45,17 +43,15 @@ async function main(): Promise<void> {
       const s = store.getSettings();
       return resolveProvider({ provider: s.provider, model: s.model, endpoint: s.endpoint });
     };
-    // Warn only when nothing can authenticate. Checks the keychain too, not
-    // just the environment — otherwise every user who saved a key in Settings
-    // would be told at startup that they have none.
+    // Warn only when nothing can authenticate. Probes the same way a check
+    // will — which now includes a Claude Code subscription, not just keys, so
+    // a signed-in subscriber isn't told at startup that they have no key.
     const s = store.getSettings();
     if (s.provider !== 'mock') {
-      const candidates = s.provider === 'auto' ? KEYED_PROVIDERS : [s.provider];
-      const resolved = await Promise.all(candidates.map((p) => resolveApiKey(p)));
-      if (!resolved.some((r) => r.key !== null)) {
-        console.warn(
-          'news: warning: no API key found — add one in Settings, or set ANTHROPIC_API_KEY / OPENAI_API_KEY (or run with --ai-test)',
-        );
+      try {
+        await resolveProvider({ provider: s.provider, model: s.model, endpoint: s.endpoint });
+      } catch (err: unknown) {
+        console.warn(`news: warning: ${err instanceof Error ? err.message : String(err)} (or run with --ai-test)`);
       }
     }
   }

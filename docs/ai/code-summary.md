@@ -29,6 +29,7 @@ src/
     providers/
       index.ts        PROVIDERS/FACTORIES, AUTO_ORDER, resolveProvider, unavailableMessage
       anthropic.ts    createAnthropicProvider (opus-4-8, adaptive thinking, web_search_20260209, streamed)
+      claude-cli.ts   createClaudeCliProvider — Claude subscription via the Claude Code CLI; attended: true
       openai.ts       createOpenAIProvider (Responses API + hosted web_search, output_text); OPENAI_BASE_URL
       mock.ts         createMockProvider (--ai-test; deterministic; "fail"→throws, "empty"→[])
   api/

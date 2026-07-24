@@ -9,6 +9,10 @@ import { fakeProvider } from '../helpers/provider.js';
 function factoriesWith(available: Partial<Record<ConcreteProviderName, boolean>>) {
   const make = (name: ConcreteProviderName): NewsProvider => fakeProvider(() => Promise.resolve([]), { name });
   return {
+    'claude-cli': () => ({
+      ...make('claude-cli'),
+      isAvailable: () => Promise.resolve(available['claude-cli'] ?? false),
+    }),
     anthropic: () => ({ ...make('anthropic'), isAvailable: () => Promise.resolve(available.anthropic ?? false) }),
     openai: () => ({ ...make('openai'), isAvailable: () => Promise.resolve(available.openai ?? false) }),
     mock: () => make('mock'),
@@ -35,11 +39,29 @@ describe('resolveProvider', () => {
   it('auto throws an actionable error when nothing is available', async () => {
     await expect(
       resolveProvider({ provider: 'auto', model: '', endpoint: '' }, factoriesWith({})),
-    ).rejects.toThrow(/No AI provider has an API key/);
+    ).rejects.toThrow(/No AI provider is usable/);
   });
 
-  it('auto only tries web-searching providers', () => {
-    expect(AUTO_ORDER).toEqual(['anthropic', 'openai']);
+  it('auto prefers the subscription provider over API keys', () => {
+    // Someone holding a Claude subscription expects its quota to be spent
+    // before an API key they also happen to have configured.
+    expect(AUTO_ORDER).toEqual(['claude-cli', 'anthropic', 'openai']);
+  });
+
+  it('auto picks claude-cli ahead of an available anthropic key', async () => {
+    const p = await resolveProvider(
+      { provider: 'auto', model: '', endpoint: '' },
+      factoriesWith({ 'claude-cli': true, anthropic: true }),
+    );
+    expect(p.name).toBe('claude-cli');
+  });
+
+  it('auto falls back to an API key when Claude Code is not signed in', async () => {
+    const p = await resolveProvider(
+      { provider: 'auto', model: '', endpoint: '' },
+      factoriesWith({ 'claude-cli': false, anthropic: true }),
+    );
+    expect(p.name).toBe('anthropic');
   });
 
   it('explicit provider is returned when available', async () => {
