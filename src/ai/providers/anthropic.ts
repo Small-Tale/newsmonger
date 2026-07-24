@@ -30,6 +30,12 @@ function sdkRunner(getApiKey: () => Promise<string | null>): AnthropicRunner {
         model,
         max_tokens: 16000,
         thinking: { type: 'adaptive' },
+        // 8 searches is a digest-size choice, not a coverage one, and is
+        // deliberately NOT scaled with the size of the catch-up window: what
+        // bounds a useful check is how much a person will read, and that
+        // doesn't grow because they were away longer. The portable version of
+        // this rule lives in `searchingSystemPrompt()`, since OpenAI's hosted
+        // web_search takes no equivalent cap; this stays as a cost guard.
         tools: [{ type: 'web_search_20260209', name: 'web_search', max_uses: 8 }],
         system,
         messages: [{ role: 'user', content: prompt }],

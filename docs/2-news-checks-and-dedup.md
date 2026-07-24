@@ -20,6 +20,20 @@ Checks run through a pluggable **provider** abstraction (`src/ai/providers/`, se
 - **FR-2.9** Dedup scope is per-topic: the same story may legitimately appear under two different topics.
 - **FR-2.10** If the topic is deleted while its check is in flight, the results are discarded.
 
+## How much comes back
+
+A check returns a **digest, not an archive**: the handful of significant stories someone can read in one sitting. A longer gap means covering a **wider span of time, not proportionally more stories** — what bounds a useful check is how much a person will actually read, and that doesn't grow because they were away longer.
+
+That rule lives in the shared system prompt (`searchingSystemPrompt()`), which is the only layer every provider inherits:
+
+- `anthropic` also caps its server tool at `max_uses: 8` — a cost/latency guard, kept as belt-and-braces.
+- `openai`'s hosted `web_search` takes **no equivalent cap**, so without the prompt rule a long catch-up there would be unbounded.
+- The CLI providers (see [6 — AI Providers](6-providers.md)) run their own agentic loops and likewise have no tool-level ceiling.
+
+The existing anti-padding rule ("Do not pad with old or marginal stories") is a different constraint: it prevents **filler** when there's little news, whereas this bounds **volume** when there's a lot.
+
+The catch-up wording below restates the bound rather than relying on the system prompt alone. "Cover the whole period" is exactly the instruction that reads as an invitation to return proportionally more, so it has to be contradicted in the same breath.
+
 ## Describing the window to cover
 
 The prompt states the gap in words, not just a timestamp, and changes shape with its size:

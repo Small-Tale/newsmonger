@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { buildUserPrompt } from '../../src/ai/prompt.js';
+import { buildUserPrompt, searchingSystemPrompt } from '../../src/ai/prompt.js';
 import { createMockProvider } from '../../src/ai/providers/index.js';
 import { Attendance } from '../../src/attendance.js';
 import { CheckRunner } from '../../src/checks.js';
@@ -44,7 +44,7 @@ describe('prompt window wording', () => {
     const line = windowLine(ago(5 * DAY));
     expect(line).toContain('5 days ago');
     expect(line).toMatch(/whole period/);
-    expect(line).toMatch(/not just the last day or two/);
+    expect(line).toMatch(/rather than just the last day or two/);
     expect(line).toMatch(/oldest to newest/);
   });
 
@@ -55,6 +55,37 @@ describe('prompt window wording', () => {
   it('always includes the exact timestamp to anchor the window', () => {
     const since = ago(3 * DAY);
     expect(windowLine(since)).toContain(since);
+  });
+});
+
+describe('digest-size bound', () => {
+  it('the system prompt bounds volume, not just filler', () => {
+    // The anti-padding rule stops marginal stories; this stops a genuinely
+    // news-rich window returning more than anyone will read. It lives in the
+    // shared prompt because OpenAI's hosted web_search takes no `max_uses`
+    // equivalent and the CLI providers run their own loops — the prompt is the
+    // only layer every provider inherits.
+    const sys = searchingSystemPrompt();
+    expect(sys).toMatch(/most significant stories/);
+    expect(sys).toMatch(/one sitting/);
+    expect(sys).toMatch(/wider span of time, NOT/);
+  });
+
+  it('the catch-up line contradicts "longer gap means longer list"', () => {
+    // "Cover the whole period" alone reads as an invitation to return
+    // proportionally more; the bound has to be restated where the span is
+    // announced.
+    const line = buildUserPrompt('fusion energy', [], ago(14 * DAY)).split('\n')[2] ?? '';
+    expect(line).toMatch(/most significant/);
+    expect(line).toMatch(/wider span, not a longer list/);
+  });
+
+  it('short-gap checks stay terse — no volume lecture needed', () => {
+    // The bound is already in the system prompt; repeating it on every routine
+    // check would just dilute the window instruction.
+    const line = buildUserPrompt('fusion energy', [], ago(3 * HOUR)).split('\n')[2] ?? '';
+    expect(line).not.toMatch(/longer list/);
+    expect(line).toContain('focus on developments since then');
   });
 });
 

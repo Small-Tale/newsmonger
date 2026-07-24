@@ -55,6 +55,9 @@ export function searchingSystemPrompt(): string {
     '- Report only stories that are NEW relative to the "already reported" list you are given. If a story is',
     '  substantially the same as one already reported (same event, minor follow-up detail), skip it.',
     '- If there is no genuinely new news, return an empty items list. Do not pad with old or marginal stories.',
+    '- Report only the most significant stories — the handful someone can read in one sitting, not an',
+    '  exhaustive list. A longer gap since the last check means covering a wider span of time, NOT',
+    '  returning proportionally more stories.',
     '- Each summary should be 2-4 sentences, factual, and self-contained.',
     '- Each story must include at least one source link to a news article (not a homepage).',
     '',
@@ -87,10 +90,14 @@ function windowLine(sinceIso: string | null, now: Date): string {
   // Two days is the threshold for catch-up phrasing: the default interval is
   // one day, so anything beyond two means at least one cycle was missed.
   if (days >= 2) {
+    // The volume bound is restated here, not just in the system prompt: this is
+    // the one place the model is told the span is long, and "cover the whole
+    // period" reads as an invitation to return proportionally more stories
+    // unless it's contradicted in the same breath.
     return (
       `Last checked ${days} days ago (${sinceIso}). Nothing has been reported for this topic in that time, ` +
-      `so cover the significant developments across the whole period — not just the last day or two. ` +
-      `Order them oldest to newest.`
+      `so span the whole period rather than just the last day or two. Still report only the most significant ` +
+      `developments — a longer gap means a wider span, not a longer list. Order them oldest to newest.`
     );
   }
   const span =
