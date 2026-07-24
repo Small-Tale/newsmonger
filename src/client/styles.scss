@@ -261,15 +261,25 @@ h2.eyebrow {
     color: var(--ink-soft);
   }
 
-  // Actions reveal on hover/focus; always shown on touch/narrow layouts.
-  .topic-actions {
-    opacity: 0;
-    transition: opacity 120ms ease;
+  // Actions moved to the right-click menu, so the full width goes to the name.
+  cursor: default;
+  user-select: none;
+  border-radius: 6px;
+  padding-inline: 6px;
+
+  &:hover {
+    background: var(--pine-soft);
   }
 
-  &:hover .topic-actions,
-  &:focus-within .topic-actions {
-    opacity: 1;
+  &.selected {
+    background: var(--pine-soft);
+    box-shadow: inset 2px 0 0 var(--pine);
+  }
+
+  // Solo dims the topics whose stories are hidden, so the sidebar explains the
+  // feed rather than leaving it looking mysteriously short.
+  &.solo-dimmed {
+    opacity: 0.45;
   }
 }
 
@@ -295,11 +305,14 @@ h2.eyebrow {
   letter-spacing: 0.02em;
 }
 
-.topic-actions {
-  display: flex;
-  gap: 2px;
-  flex-shrink: 0;
+.topic-flags {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  color: var(--pine);
+  min-width: 13px;
 }
+
 
 // The signature: a small ring that fills as the next check approaches.
 .dial {
@@ -504,8 +517,9 @@ h2.eyebrow {
     position: static;
   }
 
-  .topic .topic-actions {
-    opacity: 1; // no hover on touch
+  .topic {
+    // No right-click on touch: keep the row comfortable to tap.
+    padding-block: 12px;
   }
 }
 
@@ -731,4 +745,95 @@ h2.eyebrow {
 
 .key-notes .banner {
   margin: 14px 0 0;
+}
+
+// ------------------------------------------------------- context menu ---
+
+.icon {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  flex: 0 0 auto;
+}
+
+.menu-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 30;
+}
+
+.menu {
+  position: fixed;
+  min-width: 184px;
+  padding: 5px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  box-shadow: var(--shadow);
+}
+
+.menu-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 7px 9px;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  color: var(--ink);
+  font-family: var(--sans);
+  font-size: 13px;
+  text-align: left;
+
+  &:hover {
+    background: var(--pine-soft);
+  }
+
+  &.danger {
+    color: #b4442f;
+
+    &:hover {
+      background: var(--error-bg);
+    }
+  }
+
+  .icon {
+    color: var(--ink-soft);
+    stroke-width: 1.8;
+  }
+
+  &.danger .icon {
+    color: currentColor;
+  }
+}
+
+.menu-sep {
+  height: 1px;
+  margin: 5px 7px;
+  background: var(--line);
+}
+
+.banner.solo {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  background: var(--pine-soft);
+  color: var(--ink);
+
+  .icon {
+    color: var(--pine);
+  }
+
+  span {
+    flex: 1;
+  }
+}
+
+@media (prefers-color-scheme: dark) {
+  .menu-item.danger {
+    color: #e08a72;
+  }
 }

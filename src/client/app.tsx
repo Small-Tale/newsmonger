@@ -18,6 +18,7 @@ import {
   updateInterval,
   updateProviderSettings,
 } from './api.js';
+import { icon } from './icons.js';
 import type { AppState } from './stores.js';
 import { appStore } from './stores.js';
 import { openExternalUrl } from './tauri.js';
@@ -91,9 +92,30 @@ function dialJsx(topic: Topic, checking: boolean, intervalMs: number): SafeHtml 
   );
 }
 
-function topicRowJsx(topic: Topic, checking: boolean, intervalMs: number): SafeHtml {
+/**
+ * A topic row. Actions live in the right-click menu rather than inline
+ * buttons — those were hidden until hover but still reserved their width, so
+ * every topic name was truncated to pay for controls nobody could see.
+ */
+function topicRowJsx(
+  topic: Topic,
+  checking: boolean,
+  intervalMs: number,
+  selected: boolean,
+  soloed: boolean,
+  dimmed: boolean,
+): SafeHtml {
+  const classes = [
+    'topic',
+    topic.paused ? 'paused' : '',
+    selected ? 'selected' : '',
+    soloed ? 'soloed' : '',
+    dimmed ? 'solo-dimmed' : '',
+  ]
+    .filter(Boolean)
+    .join(' ');
   return (
-    <li class={`topic${topic.paused ? ' paused' : ''}`} data-key={topic.id}>
+    <li class={classes} data-key={topic.id} data-topic-row={topic.id} aria-selected={selected ? 'true' : 'false'}>
       {dialJsx(topic, checking, intervalMs)}
       <div class="topic-main">
         <span class="topic-name">{topic.name}</span>
@@ -107,17 +129,10 @@ function topicRowJsx(topic: Topic, checking: boolean, intervalMs: number): SafeH
                 : 'not checked yet'}
         </span>
       </div>
-      <div class="topic-actions">
-        <button class="chip" data-check-topic={topic.id} disabled={checking ? true : undefined} title="Check this topic now">
-          Check
-        </button>
-        <button class="chip" data-toggle-topic={topic.id} title={topic.paused ? 'Resume checks' : 'Pause checks'}>
-          {topic.paused ? 'Resume' : 'Pause'}
-        </button>
-        <button class="chip danger" data-delete-topic={topic.id} title="Delete this topic and its stories">
-          Delete
-        </button>
-      </div>
+      {/* Always-present slot so the badge appearing can't restructure the row. */}
+      <span class="topic-flags" title={soloed ? 'Solo — only this topic\u2019s stories are shown' : ''}>
+        {soloed ? icon('solo', 13) : ''}
+      </span>
     </li>
   );
 }
@@ -341,10 +356,59 @@ function settingsDialogJsx(): SafeHtml {
   );
 }
 
+/**
+ * Right-click menu for the topic rows.
+ *
+ * Acts on `topicIds`, which is the whole selection when the click landed on a
+ * selected row and just that row otherwise — the behaviour every OS file
+ * manager has, and the reason bulk actions need no separate affordance.
+ */
+function contextMenuJsx(menu: NonNullable<AppState['contextMenu']>, topics: Topic[]): SafeHtml {
+  const targets = topics.filter((t) => menu.topicIds.includes(t.id));
+  const count = targets.length;
+  const suffix = count > 1 ? ` ${String(count)} topics` : '';
+  // With a mixed selection, offer the action that changes the most rows.
+  const anyActive = targets.some((t) => !t.paused);
+  const solo = new Set(appStore.state.value.soloTopicIds);
+  const allSoloed = count > 0 && targets.every((t) => solo.has(t.id));
+
+  return (
+    <div class="menu-backdrop" data-action="close-menu">
+      <div class="menu" role="menu" style={`left:${String(menu.x)}px;top:${String(menu.y)}px`}>
+        <button class="menu-item" role="menuitem" type="button" data-menu-action="check">
+          {icon('check')}
+          <span>Check now{suffix}</span>
+        </button>
+        <button class="menu-item" role="menuitem" type="button" data-menu-action="pause">
+          {icon(anyActive ? 'pause' : 'play')}
+          <span>
+            {anyActive ? 'Pause' : 'Resume'}
+            {suffix}
+          </span>
+        </button>
+        <div class="menu-sep" role="separator" />
+        <button class="menu-item" role="menuitem" type="button" data-menu-action="solo">
+          {icon('solo')}
+          <span>{allSoloed ? 'Unsolo' : 'Solo'}{suffix}</span>
+        </button>
+        <div class="menu-sep" role="separator" />
+        <button class="menu-item danger" role="menuitem" type="button" data-menu-action="delete">
+          {icon('delete')}
+          <span>Delete{suffix}</span>
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function appJsx(): SafeHtml {
   const s = appStore.state.value;
   const topicNames = new Map(s.topics.map((t) => [t.id, t.name]));
-  const sortedItems = [...s.items].sort((a, b) => b.foundAt.localeCompare(a.foundAt));
+  const solo = new Set(s.soloTopicIds);
+  const selected = new Set(s.selectedTopicIds);
+  const allItems = [...s.items].sort((a, b) => b.foundAt.localeCompare(a.foundAt));
+  // Solo is a view filter: it hides stories, never deletes or unsubscribes.
+  const sortedItems = solo.size > 0 ? allItems.filter((i) => solo.has(i.topicId)) : allItems;
   const anyChecking = s.checking.length > 0;
   const lastFailure = s.runs.find((r) => r.status === 'failed');
 
@@ -382,10 +446,24 @@ function appJsx(): SafeHtml {
       {/* Always-present container — the dialog appearing must not restructure
           its siblings (kerf KF-377 — see docs/3-ui.md). */}
       <div id="settings-slot">{s.settingsOpen ? settingsDialogJsx() : ''}</div>
+      <div id="menu-slot">{s.contextMenu !== null ? contextMenuJsx(s.contextMenu, s.topics) : ''}</div>
 
       {/* Always-present container: banners coming and going must not shift the
           sections below (kerf KF-377 — see docs/3-ui.md). */}
       <div id="banners">
+        {solo.size > 0 ? (
+          <div class="banner solo">
+            {icon('solo', 14)}
+            <span>
+              Showing {String(solo.size)} of {String(s.topics.length)} topics
+            </span>
+            <button class="btn subtle" type="button" data-action="clear-solo">
+              Show all
+            </button>
+          </div>
+        ) : (
+          ''
+        )}
         {s.error !== null ? <div class="banner error">{s.error}</div> : ''}
         {lastFailure !== undefined && s.error === null ? (
           <div class="banner warn">
@@ -402,7 +480,26 @@ function appJsx(): SafeHtml {
         {sourceJsx()}
         <h2 class="eyebrow">Watching</h2>
         <ul class="topics">
-          {each(s.topics, (topic) => topicRowJsx(topic, s.checking.includes(topic.id), s.settings.checkIntervalMs))}
+          {each(
+            s.topics,
+            (topic) =>
+              topicRowJsx(
+                topic,
+                s.checking.includes(topic.id),
+                s.settings.checkIntervalMs,
+                selected.has(topic.id),
+                solo.has(topic.id),
+                solo.size > 0 && !solo.has(topic.id),
+              ),
+            // `each()` memoizes per row on object identity, and selection/solo
+            // live outside the topic object — so without this comparator a row
+            // keeps its cached HTML and selecting it appears to do nothing until
+            // the next poll happens to replace `topics` with fresh objects.
+            (topic) =>
+              `${String(selected.has(topic.id))}|${String(solo.has(topic.id))}|${String(solo.size)}|${String(
+                s.checking.includes(topic.id),
+              )}`,
+          )}
         </ul>
         <div class="empty-slot">
           {s.loaded && s.topics.length === 0 ? (
@@ -437,6 +534,84 @@ function appJsx(): SafeHtml {
       </section>
     </div>
   );
+}
+
+
+/** Anchor for shift-range selection — the last row clicked without shift. */
+let anchorId: string | null = null;
+
+function selectTopic(id: string, mods: { toggle: boolean; range: boolean }): void {
+  const { topics, selectedTopicIds } = appStore.state.value;
+  if (mods.range && anchorId !== null) {
+    const ids = topics.map((t) => t.id);
+    const from = ids.indexOf(anchorId);
+    const to = ids.indexOf(id);
+    if (from !== -1 && to !== -1) {
+      const [lo, hi] = from < to ? [from, to] : [to, from];
+      appStore.actions.setSelection(ids.slice(lo, hi + 1));
+      return;
+    }
+  }
+  if (mods.toggle) {
+    const next = selectedTopicIds.includes(id)
+      ? selectedTopicIds.filter((x) => x !== id)
+      : [...selectedTopicIds, id];
+    appStore.actions.setSelection(next);
+    anchorId = id;
+    return;
+  }
+  appStore.actions.setSelection([id]);
+  anchorId = id;
+}
+
+/** Prompt for and delete `ids`, naming what's about to go. */
+function confirmDelete(ids: string[]): void {
+  const { topics } = appStore.state.value;
+  const names = topics.filter((t) => ids.includes(t.id)).map((t) => t.name);
+  if (names.length === 0) return;
+  const what =
+    names.length === 1 ? `\u201c${names[0] ?? ''}\u201d` : `${String(names.length)} topics`;
+  if (!window.confirm(`Delete ${what} and all of their stories?`)) return;
+  appStore.actions.setSelection([]);
+  void (async () => {
+    for (const id of ids) await deleteTopic(id);
+  })();
+}
+
+/** Apply a context-menu action to every targeted topic. */
+function runTopicAction(action: string, ids: string[]): void {
+  const { topics, soloTopicIds } = appStore.state.value;
+  const targets = topics.filter((t) => ids.includes(t.id));
+  switch (action) {
+    case 'check':
+      for (const t of targets) void startCheck(t.id);
+      break;
+    case 'pause': {
+      // Mixed selections resolve toward the action that changes the most rows,
+      // matching the label the menu showed.
+      const pause = targets.some((t) => !t.paused);
+      for (const t of targets) {
+        if (t.paused === pause) continue;
+        void setTopicPaused(t.id, pause);
+      }
+      break;
+    }
+    case 'solo': {
+      const solo = new Set(soloTopicIds);
+      const allSoloed = targets.length > 0 && targets.every((t) => solo.has(t.id));
+      for (const t of targets) {
+        if (allSoloed) solo.delete(t.id);
+        else solo.add(t.id);
+      }
+      appStore.actions.setSolo([...solo]);
+      break;
+    }
+    case 'delete':
+      confirmDelete(ids);
+      break;
+    default:
+      break;
+  }
 }
 
 function wireEvents(root: HTMLElement): void {
@@ -518,30 +693,88 @@ function wireEvents(root: HTMLElement): void {
     if (window.confirm(`Remove the stored ${label} API key?`)) void deleteKey(provider);
   });
 
-  void delegate(root, 'click', '[data-check-topic]', (_e, el) => {
-    const id = el.getAttribute('data-check-topic');
-    if (id !== null) void startCheck(id);
+  // --- topic selection -----------------------------------------------------
+
+  void delegate(root, 'click', '[data-topic-row]', (e, el) => {
+    const id = el.getAttribute('data-topic-row');
+    if (id === null || !(e instanceof MouseEvent)) return;
+    // Cmd on macOS, Ctrl elsewhere — reading both is simpler and more forgiving
+    // than sniffing the platform, and no OS uses them for conflicting meanings.
+    selectTopic(id, { toggle: e.metaKey || e.ctrlKey, range: e.shiftKey });
   });
 
-  void delegate(root, 'click', '[data-toggle-topic]', (_e, el) => {
-    const id = el.getAttribute('data-toggle-topic');
-    if (id === null) return;
-    const topic = appStore.state.value.topics.find((t) => t.id === id);
-    if (topic) void setTopicPaused(id, !topic.paused);
-  });
-
-  void delegate(root, 'click', '[data-delete-topic]', (_e, el) => {
-    const id = el.getAttribute('data-delete-topic');
-    if (id === null) return;
-    const topic = appStore.state.value.topics.find((t) => t.id === id);
-    if (topic && window.confirm(`Delete “${topic.name}” and all of its stories?`)) {
-      void deleteTopic(id);
+  void delegate(root, 'contextmenu', '[data-topic-row]', (e, el) => {
+    const id = el.getAttribute('data-topic-row');
+    if (id === null || !(e instanceof MouseEvent)) return;
+    e.preventDefault();
+    const current = appStore.state.value.selectedTopicIds;
+    // Right-clicking inside the selection acts on all of it; right-clicking
+    // outside it selects that row first, so the menu never acts on rows the
+    // user can't see are targeted.
+    const topicIds = current.includes(id) ? current : [id];
+    if (!current.includes(id)) {
+      appStore.actions.setSelection([id]);
+      anchorId = id;
     }
+    appStore.actions.openContextMenu({ x: e.clientX, y: e.clientY, topicIds });
+  });
+
+  // Only a click that landed on the backdrop itself dismisses. The backdrop
+  // wraps the menu, so matching descendants too would close the menu before the
+  // item handler below could read `contextMenu` — the same trap the settings
+  // dialog hit (see docs/3-ui.md).
+  void delegate(root, 'click', '[data-action=close-menu]', (e, el) => {
+    if (e.target === el) appStore.actions.closeContextMenu();
+  });
+
+  void delegate(root, 'click', '[data-menu-action]', (_e, el) => {
+    const action = el.getAttribute('data-menu-action');
+    const menu = appStore.state.value.contextMenu;
+    if (action === null || menu === null) return;
+    appStore.actions.closeContextMenu();
+    runTopicAction(action, menu.topicIds);
+  });
+
+  void delegate(root, 'click', '[data-action=clear-solo]', () => {
+    appStore.actions.setSolo([]);
   });
 
   void delegate(root, 'click', 'a[data-external]', (e, el) => {
     const url = el.getAttribute('href');
     if (url !== null && openExternalUrl(url)) e.preventDefault();
+  });
+}
+
+/**
+ * Global interactions that aren't scoped to one element: dismissing the
+ * selection and menu, and the Delete key.
+ */
+function wireGlobalKeysAndDismiss(): void {
+  document.addEventListener('mousedown', (e) => {
+    if (!(e.target instanceof Element)) return;
+    // A click on a row, or inside the menu, is handled by its own delegate.
+    if (e.target.closest('[data-topic-row]') !== null) return;
+    if (e.target.closest('.menu') !== null) return;
+    const { selectedTopicIds, contextMenu } = appStore.state.value;
+    if (contextMenu !== null) appStore.actions.closeContextMenu();
+    if (selectedTopicIds.length > 0) appStore.actions.setSelection([]);
+  });
+
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') {
+      appStore.actions.closeContextMenu();
+      appStore.actions.setSelection([]);
+      return;
+    }
+    if (e.key !== 'Delete' && e.key !== 'Backspace') return;
+    // Never steal Backspace from the add-topic field — deleting a character
+    // must not delete a topic.
+    const active = document.activeElement;
+    if (active instanceof HTMLInputElement || active instanceof HTMLTextAreaElement) return;
+    const { selectedTopicIds } = appStore.state.value;
+    if (selectedTopicIds.length === 0) return;
+    e.preventDefault();
+    confirmDelete(selectedTopicIds);
   });
 }
 
@@ -577,6 +810,7 @@ const root = document.getElementById('app');
 if (root) {
   mount(root, () => appJsx());
   wireEvents(root);
+  wireGlobalKeysAndDismiss();
   void refreshState();
   void refreshProviders();
   startPolling();

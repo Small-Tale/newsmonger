@@ -27,6 +27,18 @@ export interface AppState {
   keyError: string | null;
   /** Whether the topics sidebar is collapsed (per-device, see `SIDEBAR_KEY`). */
   sidebarCollapsed: boolean;
+  /** Currently selected topic ids. Selection is transient — never persisted. */
+  selectedTopicIds: string[];
+  /**
+   * Topics that are solo'd: when non-empty, the feed shows only their stories.
+   *
+   * Deliberately in-memory and cleared on reload. A solo that survived a
+   * restart would silently hide news days later, and "the app stopped finding
+   * anything" is a much worse failure than re-applying a filter.
+   */
+  soloTopicIds: string[];
+  /** Open context menu, positioned in viewport coordinates. */
+  contextMenu: { x: number; y: number; topicIds: string[] } | null;
 }
 
 /**
@@ -63,6 +75,9 @@ export const appStore = defineStore({
     keychainLabel: 'system keychain',
     keyError: null,
     sidebarCollapsed: readSidebarCollapsed(),
+    selectedTopicIds: [],
+    soloTopicIds: [],
+    contextMenu: null,
   }),
   actions: (set, get) => ({
     setSettingsOpen: (settingsOpen: boolean) => {
@@ -73,6 +88,18 @@ export const appStore = defineStore({
     },
     setKeyError: (keyError: string | null) => {
       set({ ...get(), keyError });
+    },
+    setSelection: (selectedTopicIds: string[]) => {
+      set({ ...get(), selectedTopicIds });
+    },
+    setSolo: (soloTopicIds: string[]) => {
+      set({ ...get(), soloTopicIds });
+    },
+    openContextMenu: (menu: { x: number; y: number; topicIds: string[] }) => {
+      set({ ...get(), contextMenu: menu });
+    },
+    closeContextMenu: () => {
+      set({ ...get(), contextMenu: null });
     },
     setSidebarCollapsed: (sidebarCollapsed: boolean) => {
       if (typeof localStorage !== 'undefined') {
@@ -88,7 +115,18 @@ export const appStore = defineStore({
       set({ ...get(), ...partial });
     },
     setState: (state: StateResp) => {
-      set({ ...get(), loaded: true, ...state });
+      const current = get();
+      const live = new Set(state.topics.map((t) => t.id));
+      // Drop ids for topics that no longer exist: a stale solo id would keep
+      // the feed filtered against a topic that has been deleted, with nothing
+      // in the sidebar to explain why the feed is empty.
+      set({
+        ...current,
+        loaded: true,
+        ...state,
+        selectedTopicIds: current.selectedTopicIds.filter((id) => live.has(id)),
+        soloTopicIds: current.soloTopicIds.filter((id) => live.has(id)),
+      });
     },
     setProviders: (providers: ProviderInfo[]) => {
       set({ ...get(), providers });

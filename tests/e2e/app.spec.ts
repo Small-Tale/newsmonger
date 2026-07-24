@@ -1,6 +1,6 @@
 import type { Page } from '@playwright/test';
 
-import { expect, test } from './fixtures.js';
+import { expect, test, topicAction } from './fixtures.js';
 
 // Tests run serially against one shared server (see playwright.config.ts) and
 // build on each other's state where noted. The server runs with --ai-test, so
@@ -45,7 +45,7 @@ test('rejects a duplicate topic with an error banner', async ({ page }) => {
 
 test('check now finds stories with summaries and source links', async ({ page }) => {
   await page.goto('/');
-  await page.click('[data-check-topic]');
+  await topicAction(page, page.locator('.topic').first(), 'check');
   await expect(page.locator('.item')).toHaveCount(2, { timeout: 15_000 });
   const first = page.locator('.item').first();
   await expect(first.locator('h3')).toContainText('Fusion Energy');
@@ -59,9 +59,9 @@ test('check now finds stories with summaries and source links', async ({ page })
 test('a second check deduplicates already-seen stories', async ({ page }) => {
   await page.goto('/');
   await expect(page.locator('.item')).toHaveCount(2);
-  await page.click('[data-check-topic]');
+  await topicAction(page, page.locator('.topic').first(), 'check');
   // Wait for the check to finish (button re-enables), then confirm no new items.
-  await expect(page.locator('[data-check-topic]')).toBeEnabled({ timeout: 15_000 });
+  await expect(page.locator('.topic .dial.checking')).toHaveCount(0, { timeout: 15_000 });
   await page.waitForTimeout(500);
   await expect(page.locator('.item')).toHaveCount(2);
 });
@@ -78,10 +78,10 @@ test('changing the check interval persists across reload', async ({ page }) => {
 
 test('pausing a topic marks it paused', async ({ page }) => {
   await page.goto('/');
-  await page.click('[data-toggle-topic]');
+  await topicAction(page, page.locator('.topic').first(), 'pause');
   await expect(page.locator('.topic')).toHaveClass(/paused/);
   await expect(page.locator('.topic-meta').first()).toContainText('paused');
-  await page.click('[data-toggle-topic]');
+  await topicAction(page, page.locator('.topic').first(), 'pause');
   await expect(page.locator('.topic')).not.toHaveClass(/paused/);
 });
 
@@ -102,11 +102,11 @@ test('a failing topic surfaces a warning banner', async ({ page }) => {
   await page.fill('.add-topic input', 'this will fail');
   await page.click('.add-topic button[type=submit]');
   const row = page.locator('.topic', { hasText: 'this will fail' });
-  await row.locator('[data-check-topic]').click();
+  await topicAction(page, row, 'check');
   await expect(page.locator('.banner.warn')).toContainText('failed', { timeout: 15_000 });
   // Clean up so later tests aren't affected.
   page.on('dialog', (d) => void d.accept());
-  await row.locator('[data-delete-topic]').click();
+  await topicAction(page, row, 'delete');
   await expect(page.locator('.topic')).toHaveCount(2);
 });
 
@@ -133,7 +133,7 @@ test('deleting a topic removes its stories from the feed', async ({ page }) => {
   await page.goto('/');
   page.on('dialog', (d) => void d.accept());
   const row = page.locator('.topic', { hasText: 'Quantum Computing' });
-  await row.locator('[data-delete-topic]').click();
+  await topicAction(page, row, 'delete');
   await expect(page.locator('.topic')).toHaveCount(1);
   await expect(page.locator('.item')).toHaveCount(2);
   await expect(page.locator('.item-topic').first()).not.toContainText('Quantum');

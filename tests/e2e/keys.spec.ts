@@ -1,6 +1,6 @@
 import type { Page } from '@playwright/test';
 
-import { expect, test } from './fixtures.js';
+import { expect, test, topicAction } from './fixtures.js';
 
 // Runs against the shared server from playwright.config.ts, which sets
 // NEWS_FAKE_KEYCHAIN=1 — the save/remove flows below are real all the way to
@@ -159,6 +159,6 @@ test('the topics list survives opening and closing the dialog', async ({ page })
   await expect(page.locator('.topic')).toHaveCount(before);
 
   page.on('dialog', (d) => void d.accept());
-  await page.locator('.topic', { hasText: 'Dialog Structural Check' }).locator('[data-delete-topic]').click();
+  await topicAction(page, page.locator('.topic', { hasText: 'Dialog Structural Check' }), 'delete');
   await expect(page.locator('.topic')).toHaveCount(before - 1);
 });

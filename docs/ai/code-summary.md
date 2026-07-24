@@ -40,6 +40,7 @@ src/
     app.tsx           kerf UI: mount + delegates; header/banners/settings dialog/topics/feed
     stores.ts         appStore (defineStore)
     api.ts            fetch wrappers, refreshState (zod-validated), withRefresh
+    icons.tsx         Lucide paths inlined (lucide-static@1.26.0), no runtime dep
     tauri.ts          __TAURI__ detection, openExternalUrl
     styles.scss       styling (light/dark via prefers-color-scheme)
 src-tauri/            Tauri v2 shell; one spawn path, dev runs tsx + release runs the sidecar
@@ -52,7 +53,7 @@ scripts/
 tests/
   helpers/            tmp.ts (tmp data dirs), provider.ts (asResolver/fakeProvider)
   unit/               vitest: dedupe, store, checks, scheduler, config, parse-result, providers, openai, api, api-keys, api-keys-routes, attendance
-  e2e/                playwright, serial, mock AI (--ai-test), port 4189: app.spec.ts, keys.spec.ts
+  e2e/                playwright, serial, mock AI (--ai-test), port 4189: app.spec.ts, keys.spec.ts, topics.spec.ts
 docs/                 numbered requirements (1–7), ai/ summaries, manual-test-plan.md
 ```
 
@@ -99,3 +100,4 @@ Data dir: `--data-dir` flag → `NEWS_DATA_DIR` → `~/.news`.
 | Foreground/attendance gate | `src/attendance.ts` + `CheckRunner.checkDue`; provider opts in via `attended: true` |
 | Settings dialog | `src/client/app.tsx` `settingsDialogJsx`/`keyRowJsx`; routes in `src/routes/api.ts` under `/api/keys` |
 | Sidebar collapse | `sidebarCollapsed` in `src/client/stores.ts` (localStorage `news:sidebar-collapsed`); `.shell.sidebar-collapsed` in `styles.scss` |
+| Topic selection / context menu / solo | `src/client/app.tsx` (`contextMenuJsx`, `selectTopic`, `runTopicAction`); state in `stores.ts`. **Row state outside the topic object needs `each()`'s cacheKey** |

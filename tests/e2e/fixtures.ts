@@ -2,9 +2,28 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { test as base } from '@playwright/test';
+import type { Locator, Page } from '@playwright/test';
+import { expect, test as base } from '@playwright/test';
 
 export { expect } from '@playwright/test';
+
+/**
+ * Run a topic action through the right-click menu.
+ *
+ * Topic actions moved out of always-visible row buttons and into a context
+ * menu (NEWS-29), so specs drive them the way a user does. Lives here rather
+ * than in a spec because Playwright forbids one test file importing another.
+ */
+export async function topicAction(
+  page: Page,
+  row: Locator,
+  action: 'check' | 'pause' | 'solo' | 'delete',
+): Promise<void> {
+  await row.click({ button: 'right' });
+  await expect(page.locator('.menu')).toBeVisible();
+  await page.locator(`[data-menu-action=${action}]`).click();
+  await expect(page.locator('.menu')).toHaveCount(0);
+}
 
 const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const browserCovDir = path.join(projectRoot, '.coverage-tmp/browser');

@@ -25,6 +25,31 @@ Two rendering rules this UI depends on — regression-tested by the E2E suite:
 - Keep sibling structure around keyed lists stable: conditional elements (banners) live inside an always-present container (`#banners`). **This works around a confirmed kerfjs 2.0.0 bug (kerf KF-377)**: removing a conditional sibling rendered before a keyed `each()` list permanently empties the list (verified in a minimal standalone repro attached to that ticket).
 - Keep `each()` containers structurally stable: empty-state messages render *alongside* the list, not instead of it. The pure container swap (`<p>` ↔ `<ul>{each(...)}</ul>`) tested OK in isolation on 2.0.0, so this one is defensive convention rather than a confirmed trigger — but the app's original failures involved the combination, and the stable shape is regression-covered here and flagged for a pinning test in KF-377.
 
+## Topic selection, context menu, and solo
+
+Topic actions used to be three buttons per row, revealed on hover. They were invisible most of the time yet always reserved their width, so every topic name was truncated to pay for controls nobody could see. They now live in a right-click menu.
+
+- **Selection** — click selects; **Cmd/Ctrl-click** toggles a row; **Shift-click** selects a contiguous range anchored on the last plain click. Clicking anywhere else, or pressing **Escape**, clears it. Both `metaKey` and `ctrlKey` are accepted rather than sniffing the platform: no OS gives them conflicting meanings here.
+- **Context menu** — right-click opens Check now / Pause / Solo / Delete, with [Lucide](https://lucide.dev) icons and separators. Right-clicking *inside* the selection acts on all of it; right-clicking *outside* selects that row first, so the menu never acts on rows the user can't see are targeted. Labels reflect the count ("Check now 2 topics") and mixed selections resolve toward the action that changes the most rows.
+- **Delete key** — deletes the selection after a confirmation naming what's about to go. Ignored while a text field has focus, so Backspace in the add-topic box can never delete a topic.
+- **Solo** — shows only the solo'd topics' stories. Additive, with a "Showing N of M topics · Show all" banner and the non-solo'd rows dimmed, so a short feed is always explained.
+
+Icons are inlined from `lucide-static@1.26.0` in `src/client/icons.tsx` rather than taken as a dependency: six icons is a few hundred bytes against a package that would be staged into the desktop sidecar's `node_modules`.
+
+### Solo is deliberately ephemeral
+
+Solo lives in memory and is cleared on reload. A solo that survived a restart would silently hide news days later, and "the app stopped finding anything" is a far worse failure than having to re-apply a filter. It is also cleared for any topic that no longer exists, so a deleted topic can't leave the feed filtered against nothing.
+
+### Two structural gotchas this hit
+
+**`each()` memoizes rows on object identity, and selection lives outside the topic object.** Without a `cacheKey`, selecting a row appeared to do nothing — the cached row HTML was reused, and the change only showed up seconds later when the poll happened to replace `topics` with fresh objects. The fix is `each()`'s third argument, a comparator over the external state the row renders:
+
+```tsx
+each(s.topics, (t) => topicRowJsx(...), (t) => `${selected.has(t.id)}|${solo.has(t.id)}|…`)
+```
+
+**The menu backdrop wraps the menu, so a shared close action swallows the item click.** `[data-action=close-menu]` matches by ancestor walk, so a click on a menu item also matched the backdrop; the menu closed and cleared `contextMenu` before the item handler could read it, and the action silently did nothing. The handler now closes only when the click landed on the backdrop element itself. This is the same trap the settings dialog hit — worth checking on any future overlay.
+
 ## Collapsible topics sidebar
 
 - The topics sidebar (`#topics-panel`) collapses via a panel-glyph toggle at the left of the header. Collapsed, the grid drops to a single column and the feed reflows to the full width (measured: 652px → 1012px at a 1100px viewport).
