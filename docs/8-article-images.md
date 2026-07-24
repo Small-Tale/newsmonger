@@ -46,6 +46,10 @@ Downloads land via a temp file and an atomic rename, so a crash mid-download can
 - **FR-8.12** *(Shipped)* The image sits above the headline in a fixed 16:9 slot with `object-fit: cover`, so a publisher's tall or panoramic artwork can't disturb the feed's rhythm and cards don't reflow as images decode. Loading is lazy and decoding async. The `alt` is empty — the image is decorative next to a headline that already says what the story is.
 - The media slot is **always rendered** and collapses via `:empty`, per the kerf structural rule in [3 — UI](3-ui.md).
 
-## Not covered yet
+## Cache pruning (FR-8.13)
 
-The cache is never pruned — deleting a topic removes its stories but leaves their image files on disk.
+- **FR-8.13** *(Shipped, NEWS-36)* Orphaned cached images are reclaimed by a **mark-and-sweep**: `liveImageHashes(items)` collects every hash still referenced by a live item, and `pruneImageCache(dataDir, liveHashes)` deletes every `.bin` in `<data-dir>/images/` not in that set (plus stray `.tmp` files from interrupted downloads). It runs at **startup** and after a **topic delete** (`DELETE /api/topics/:id`).
+
+  The mark set *is* the reference count: an image shared by two stories (same URL → same hash) survives as long as either story does, so deleting one topic never orphans another's picture. The sweep is self-healing — it also reclaims orphans from a crash or an older version, not just the delete that triggered it — and best-effort: a cache it can't read simply isn't pruned that pass, and a failed prune never fails the delete.
+
+  Not wired to the scheduler tick: the only way the item set shrinks is a topic delete (a re-check only adds), and startup covers everything else. A size/age cap (option 3 in the ticket) was considered unnecessary — images are ≤5 MB and the mark-and-sweep bounds the directory to what's actually referenced.

@@ -16,7 +16,7 @@ import {
   UpdateSettingsReqSchema,
   UpdateTopicReqSchema,
 } from '../api/schemas.js';
-import { cachedImagePath, isValidHash, sniffImageType } from '../images/index.js';
+import { cachedImagePath, isValidHash, liveImageHashes, pruneImageCache, sniffImageType } from '../images/index.js';
 import { isKeychainAvailable, keychainLabel } from '../keychain.js';
 import type { AppEnv } from '../types.js';
 
@@ -82,12 +82,17 @@ export function registerApi(app: Hono<AppEnv>): void {
   });
 
   app.delete('/api/topics/:id', (c) => {
+    const store = c.get('store');
     try {
-      c.get('store').deleteTopic(c.req.param('id'));
-      return c.json({ ok: true });
+      store.deleteTopic(c.req.param('id'));
     } catch {
       return c.json({ error: 'no such topic' }, 404);
     }
+    // The topic's stories are gone; drop any image now referenced by nothing
+    // (a shared image survives via liveImageHashes). Best-effort — a failed
+    // prune must not fail the delete.
+    pruneImageCache(c.get('dataDir'), liveImageHashes(store.listItems()));
+    return c.json({ ok: true });
   });
 
   app.patch('/api/settings', async (c) => {

@@ -8,4 +8,4 @@ export function createImageFetcher(dataDir: string): ImageFetcher {
   return (articleUrl) => cacheArticleImage(articleUrl, dataDir);
 }
 
-export { cachedImagePath, isValidHash, sniffImageType } from './cache.js';
+export { cachedImagePath, isValidHash, liveImageHashes, pruneImageCache, sniffImageType } from './cache.js';

@@ -70,7 +70,7 @@ Subscription-backed providers (`attended: true`) run *scheduled* checks only whi
 - FR-8.4–8.5 proxied through `/api/image/:hash`, content-addressed cache, zero third-party browser requests: **Shipped**
 - FR-8.6–8.11 SSRF guards (protocol, host, post-DNS address, re-validated image URL, cache-only route, size/type caps): **Shipped**
 - FR-8.12 fixed-ratio media slot, collapses when absent: **Shipped**
-- Cache pruning on topic delete: **Not implemented** (NEWS-36)
+- FR-8.13 cache pruning (mark-and-sweep at startup + on topic delete; shared hashes ref-counted): **Shipped** (NEWS-36)
 
 ## [9 — Subscription Providers](../9-subscription-providers.md) — both shipped
 

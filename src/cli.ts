@@ -7,7 +7,7 @@ import { CheckRunner } from './checks.js';
 import { parseArgs } from './config.js';
 import type { Settings } from './db/schemas.js';
 import { Store } from './db/store.js';
-import { createImageFetcher } from './images/index.js';
+import { createImageFetcher, liveImageHashes, pruneImageCache } from './images/index.js';
 import { openInBrowser } from './routes/api.js';
 import { startScheduler } from './scheduler.js';
 import { createApp, startServer } from './server.js';
@@ -62,6 +62,10 @@ async function main(): Promise<void> {
   // No image fetching under --ai-test: the mock provider's URLs are fake, and
   // a test run must not reach out to the network.
   const fetchImage = options.aiTest ? null : createImageFetcher(options.dataDir);
+  // Reclaim any orphaned cached images at startup — from a topic deleted in a
+  // previous run, a crash mid-download, or an older version (NEWS-36).
+  const pruned = pruneImageCache(options.dataDir, liveImageHashes(store.listItems()));
+  if (pruned > 0) console.error(`news: pruned ${String(pruned)} orphaned cached image(s)`);
   const runner = new CheckRunner(store, resolve, attendance, fetchImage);
   const app = createApp({ store, runner, attendance, dataDir: options.dataDir });
 

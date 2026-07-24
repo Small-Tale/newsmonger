@@ -148,3 +148,52 @@ export function sniffImageType(bytes: Buffer): string {
   if (bytes.length >= 12 && bytes.subarray(4, 12).toString('ascii') === 'ftypavif') return 'image/avif';
   return 'application/octet-stream';
 }
+
+/**
+ * Collect every image hash still referenced by a live item.
+ *
+ * This IS the reference count: an image shared by two stories (same URL → same
+ * hash, the point of content addressing) is in the set as long as either story
+ * survives, so the sweep below never deletes a file another item still uses.
+ */
+export function liveImageHashes(items: readonly { image: { hash: string } | null }[]): Set<string> {
+  const hashes = new Set<string>();
+  for (const item of items) {
+    if (item.image !== null) hashes.add(item.image.hash);
+  }
+  return hashes;
+}
+
+/**
+ * Delete cached images no longer referenced by any live item.
+ *
+ * Mark-and-sweep against `liveHashes`: self-healing, so it also reclaims
+ * orphans left by a crash or an older version, not only ones from the delete
+ * that triggered it. Stray `.tmp` files from an interrupted download are swept
+ * too. Returns the number of files removed. Never throws — a cache that can't
+ * be read just isn't pruned this pass.
+ */
+export function pruneImageCache(dataDir: string, liveHashes: ReadonlySet<string>): number {
+  const dir = imagesDir(dataDir);
+  let entries: string[];
+  try {
+    entries = fs.readdirSync(dir);
+  } catch {
+    return 0; // no cache directory yet — nothing to prune
+  }
+  let removed = 0;
+  for (const name of entries) {
+    if (name.endsWith('.tmp')) {
+      fs.rmSync(path.join(dir, name), { force: true });
+      removed++;
+      continue;
+    }
+    if (!name.endsWith('.bin')) continue;
+    const hash = name.slice(0, -'.bin'.length);
+    if (!liveHashes.has(hash)) {
+      fs.rmSync(path.join(dir, name), { force: true });
+      removed++;
+    }
+  }
+  return removed;
+}
