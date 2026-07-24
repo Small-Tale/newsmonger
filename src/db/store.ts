@@ -64,6 +64,7 @@ export class Store {
       paused: false,
       createdAt: new Date().toISOString(),
       lastCheckedAt: null,
+      coveredThroughAt: null,
     };
     this.data.topics.push(topic);
     this.save();
@@ -78,10 +79,26 @@ export class Store {
     return topic;
   }
 
+  /**
+   * Record a check *attempt*. Call for successes and failures alike — it is
+   * what keeps the scheduler from retrying a broken provider every tick.
+   */
   markTopicChecked(id: string, when: Date): void {
     const topic = this.getTopic(id);
     if (!topic) return; // topic may have been deleted mid-check
     topic.lastCheckedAt = when.toISOString();
+    this.save();
+  }
+
+  /**
+   * Record that news is covered through `when`. Successes only — this is the
+   * point the next prompt asks from, so advancing it after a failure would
+   * discard however much news was pending.
+   */
+  markTopicCovered(id: string, when: Date): void {
+    const topic = this.getTopic(id);
+    if (!topic) return; // topic may have been deleted mid-check
+    topic.coveredThroughAt = when.toISOString();
     this.save();
   }
 

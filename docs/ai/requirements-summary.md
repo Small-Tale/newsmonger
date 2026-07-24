@@ -8,6 +8,9 @@ Add/delete/pause topics (unique, case-insensitive); global interval (default 1 d
 
 ## [2 — News Checks and Deduplication](../2-news-checks-and-dedup.md) — Shipped (real-API path untested)
 
+- Prompt window wording scales with the gap (first check / hours / 1 day / ≥2 days catch-up): **Shipped**
+- FR-1.10 `coveredThroughAt` separate from `lastCheckedAt` so a failure can't discard pending news: **Shipped**
+
 Default Anthropic provider (`claude-opus-4-8` + web search), prompt-level exclusion of known stories, fenced-JSON result parsing, URL/title dedupe keys, per-topic scope, mid-check-deletion safety, `--ai-test` mock — now behind the provider abstraction (see [6 — AI Providers](../6-providers.md)). **Caveat:** the live Anthropic/OpenAI request paths have not been exercised against the real APIs (no keys in the dev environment) — `parseNewsResult` and everything downstream is tested; the requests are follow-up verification (NEWS-3, manual test plan).
 
 ## [3 — Web UI](../3-ui.md) — Shipped

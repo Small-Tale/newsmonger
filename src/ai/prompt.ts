@@ -66,16 +66,45 @@ export function searchingSystemPrompt(): string {
 
 
 
+/**
+ * Describe the window to cover, in words the model can act on.
+ *
+ * A bare "focus on developments since <timestamp>" reads the same whether the
+ * gap is two hours or three weeks, and invites the model to report only the
+ * most recent day either way. Long gaps are routine now — subscription-backed
+ * providers only run scheduled checks while the app is open (see
+ * `src/attendance.ts`), so a user who doesn't open it all week genuinely needs
+ * the whole week — so the span is stated explicitly and the expectation set.
+ */
+function windowLine(sinceIso: string | null, now: Date): string {
+  if (sinceIso === null) {
+    return 'This is the first check for this topic — focus on notable news from roughly the past week.';
+  }
+  const elapsedMs = now.getTime() - Date.parse(sinceIso);
+  const hours = Math.floor(elapsedMs / 3_600_000);
+  const days = Math.floor(hours / 24);
+
+  // Two days is the threshold for catch-up phrasing: the default interval is
+  // one day, so anything beyond two means at least one cycle was missed.
+  if (days >= 2) {
+    return (
+      `Last checked ${days} days ago (${sinceIso}). Nothing has been reported for this topic in that time, ` +
+      `so cover the significant developments across the whole period — not just the last day or two. ` +
+      `Order them oldest to newest.`
+    );
+  }
+  const span =
+    days === 1 ? '1 day' : hours >= 1 ? `${hours} hour${hours === 1 ? '' : 's'}` : 'less than an hour';
+  return `Last checked ${span} ago (${sinceIso}) — focus on developments since then.`;
+}
+
 /** Build the user prompt shared by every provider. */
 export function buildUserPrompt(topicName: string, known: KnownItem[], sinceIso: string | null): string {
+  const now = new Date();
   const lines: string[] = [];
   lines.push(`Topic: ${topicName}`);
-  lines.push(`Current date: ${new Date().toISOString().slice(0, 10)}`);
-  lines.push(
-    sinceIso !== null
-      ? `Last checked: ${sinceIso} — focus on developments since then.`
-      : 'This is the first check for this topic — focus on notable news from roughly the past week.',
-  );
+  lines.push(`Current date: ${now.toISOString().slice(0, 10)}`);
+  lines.push(windowLine(sinceIso, now));
   const recentKnown = known.slice(-MAX_KNOWN_ITEMS);
   if (recentKnown.length > 0) {
     lines.push('');

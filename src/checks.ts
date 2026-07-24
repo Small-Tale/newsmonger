@@ -52,7 +52,9 @@ export class CheckRunner {
       const known: KnownItem[] = this.store
         .listItems(topicId)
         .map((i) => ({ title: i.title, foundAt: i.foundAt }));
-      const found = await provider.checkTopic(topic.name, known, topic.lastCheckedAt);
+      // Ask from what we've actually *covered*, not the last attempt: a run
+      // that failed with news pending must not shrink the next window.
+      const found = await provider.checkTopic(topic.name, known, topic.coveredThroughAt);
       const fresh = filterNewItems(found, this.store.dedupeKeysForTopic(topicId));
       // The topic may have been deleted while the check was in flight.
       if (this.store.getTopic(topicId)) {
@@ -67,13 +69,18 @@ export class CheckRunner {
             foundAt: now,
           })),
         );
-        this.store.markTopicChecked(topicId, new Date());
+        const checkedAt = new Date();
+        this.store.markTopicChecked(topicId, checkedAt);
+        // Succeeded, so news is now covered through this moment.
+        this.store.markTopicCovered(topicId, checkedAt);
       }
       this.store.finishRun(run.id, { status: 'succeeded', newItems: fresh.length, provider: providerName });
       return fresh.length;
     } catch (err) {
-      // Record the failure, but still advance lastCheckedAt so the scheduler
-      // waits a full interval before retrying instead of hammering the API.
+      // Advance the *attempt* clock so the scheduler waits a full interval
+      // before retrying instead of hammering a broken provider — but leave
+      // `coveredThroughAt` alone, so whatever news was pending is still asked
+      // for on the next successful check.
       this.store.markTopicChecked(topicId, new Date());
       this.store.finishRun(run.id, {
         status: 'failed',

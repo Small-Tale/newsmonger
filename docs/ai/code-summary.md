@@ -58,7 +58,7 @@ docs/                 numbered requirements (1–7), ai/ summaries, manual-test-
 
 ## Data schema (`<data-dir>/data.json`)
 
-- `topics[]`: id, name, paused, createdAt, lastCheckedAt
+- `topics[]`: id, name, paused, createdAt, lastCheckedAt (every attempt), coveredThroughAt (successes only — drives the prompt window)
 - `items[]`: id, topicId, title, summary, sources[{title,url}], dedupeKey, foundAt
 - `settings`: checkIntervalMs (default 1 day, min 5 min), provider (default `auto`, `.catch('auto')` for retired providers), model (''), endpoint ('')
 - `runs[]`: id, topicId, startedAt, finishedAt, status(running|succeeded|failed), newItems, error, provider (last 200)
@@ -86,6 +86,7 @@ Data dir: `--data-dir` flag → `NEWS_DATA_DIR` → `~/.news`.
 | Provider selection / auto order | `src/ai/providers/index.ts` (`resolveProvider`, `AUTO_ORDER`) |
 | Dedup behavior | `src/ai/dedupe.ts` (keys), `src/checks.ts` (application) |
 | Scheduling rules | `src/checks.ts` (`isDue`), `src/scheduler.ts` (tick) |
+| How far back a check asks | `coveredThroughAt` on the topic → `sinceIso` → `windowLine()` in `src/ai/prompt.ts`; **not** `lastCheckedAt` |
 | Persistence / schema change | `src/db/schemas.ts` + `src/db/store.ts` — **removing an enum value needs `.catch()`** or old files get reset (see the migration tests) |
 | UI change | `src/client/app.tsx` (+ `styles.scss`); mind the kerf structural rules in `docs/3-ui.md` |
 | New CLI flag | `src/config.ts` + `src/cli.ts` |

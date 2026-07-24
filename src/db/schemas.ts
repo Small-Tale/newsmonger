@@ -8,8 +8,20 @@ export const TopicSchema = z.object({
   name: z.string().min(1),
   paused: z.boolean(),
   createdAt: z.string(),
-  /** ISO timestamp of the last completed check (success or failure); null if never checked. */
+  /**
+   * ISO timestamp of the last check *attempt*, success or failure; null if
+   * never attempted. Drives scheduling — advancing it on failure is what stops
+   * a broken provider from being retried every tick.
+   */
   lastCheckedAt: z.string().nullable(),
+  /**
+   * ISO timestamp that news is *covered through* — the last check that
+   * actually succeeded. This is what the prompt asks from, so a failed check
+   * can't quietly swallow the pending window: fail at 09:00 with news pending
+   * since five days ago and the next successful check still asks for all five
+   * days. Null until the first success.
+   */
+  coveredThroughAt: z.string().nullable().default(null),
 });
 export type Topic = z.infer<typeof TopicSchema>;
 

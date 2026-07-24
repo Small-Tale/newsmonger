@@ -16,6 +16,14 @@ The core of the app: a list of topics the user follows, checked for news on a sc
 - **FR-1.7** A scheduler sweeps once per minute (plus once ~3 s after startup) and checks every unpaused topic whose last check is older than the interval, or that has never been checked.
 - **FR-1.8** Sweeps never overlap; topics are checked sequentially within a sweep; a topic is never checked concurrently with itself.
 - **FR-1.9** A failed check still advances `lastCheckedAt`, so a broken topic retries next interval instead of hammering the API every minute. The failure is recorded in the run history and surfaced in the UI.
+- **FR-1.10** *(Shipped)* A topic tracks **two** clocks, because they answer different questions:
+
+  | Field | Advances on | Drives |
+  |---|---|---|
+  | `lastCheckedAt` | every attempt, success **or** failure | `isDue()` — the retry throttle above |
+  | `coveredThroughAt` | successes only | `sinceIso` in the prompt — how far back to ask |
+
+  A single failed check used to move `lastCheckedAt` to now, and the prompt asked from there — so one rate-limit blip with five days of news pending discarded all five days, permanently and silently. Keeping the covered-through point separate means a failure delays the catch-up without shrinking it. An attendance deferral (see [6 — AI Providers](6-providers.md)) advances neither.
 - **FR-1.10** The user can trigger an immediate check for one topic or all unpaused topics ("Check all now").
 
 See also: [2 — News Checks and Deduplication](2-news-checks-and-dedup.md), [4 — CLI, Server, and Storage](4-cli-server-storage.md).

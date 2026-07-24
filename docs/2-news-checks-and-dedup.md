@@ -20,4 +20,18 @@ Checks run through a pluggable **provider** abstraction (`src/ai/providers/`, se
 - **FR-2.9** Dedup scope is per-topic: the same story may legitimately appear under two different topics.
 - **FR-2.10** If the topic is deleted while its check is in flight, the results are discarded.
 
+## Describing the window to cover
+
+The prompt states the gap in words, not just a timestamp, and changes shape with its size:
+
+| Gap | Line sent |
+|---|---|
+| never checked | "This is the first check for this topic — focus on notable news from roughly the past week." |
+| < 1 hour | "Last checked less than an hour ago (`<iso>`) — focus on developments since then." |
+| hours | "Last checked 5 hours ago (`<iso>`) — …" |
+| ~1 day | "Last checked 1 day ago (`<iso>`) — …" (the default interval; an ordinary cadence, not a backlog) |
+| ≥ 2 days | "Last checked 5 days ago (`<iso>`). Nothing has been reported for this topic in that time, so cover the significant developments across the whole period — not just the last day or two. Order them oldest to newest." |
+
+A bare "focus on developments since `<timestamp>`" reads identically whether the gap is two hours or three weeks, and invites the model to report only the most recent day either way. Long gaps stopped being exceptional once subscription-backed providers were gated on the app being foregrounded — a user who doesn't open the app all week genuinely needs the whole week — so past two days the span is named and the expectation set explicitly. Two days is the threshold because the default interval is one day, so anything beyond it means a cycle was missed.
+
 See also: [1 — Topics and Scheduling](1-topics-and-scheduling.md).
