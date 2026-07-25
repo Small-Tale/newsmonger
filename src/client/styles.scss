@@ -125,9 +125,9 @@ body {
   gap: 6px;
   height: 34px;
   width: 150px;
-  padding: 0 8px;
+  padding: 0 12px;
   border: 1px solid var(--line);
-  border-radius: 8px;
+  border-radius: 999px;
   background: var(--paper);
   color: var(--ink-soft);
   transition:
@@ -749,7 +749,7 @@ h2.eyebrow {
 
 .field {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 12px;
   margin-top: 14px;
 
@@ -777,14 +777,16 @@ h2.eyebrow {
 }
 
 .field-label {
-  flex: 0 0 120px;
+  flex: 0 0 132px;
+  padding-top: 8px; // align the label text with the select's text baseline
   font-size: 13px;
+  line-height: 1.35;
   color: var(--ink-soft);
 
   // The star that labels the high-priority interval field, inline with the text.
   .icon {
     vertical-align: -2px;
-    margin-right: 2px;
+    margin-right: 3px;
     color: var(--amber, #c8891b);
     fill: currentColor;
   }
@@ -1197,17 +1199,27 @@ button.off-topic-pill {
   }
 }
 
-// A flagged story collapsed to a dimmed one-liner in the normal feed.
+// A flagged story collapsed in the normal feed: topic + badge, then the title.
 .item.flagged-row {
   display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 9px 16px;
+  flex-direction: column;
+  gap: 7px;
+  padding: 12px 16px;
   opacity: 0.6;
   animation: none;
 
+  .flagged-head {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  // Badge to the right of the topic chip on the first line.
+  .flagged-head .off-topic-pill {
+    margin-left: auto;
+  }
+
   .flagged-title {
-    flex: 1 1 auto;
     min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;

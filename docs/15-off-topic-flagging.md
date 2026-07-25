@@ -8,11 +8,11 @@ Let the user mark specific stories as off-topic so the model can infer what a sh
 
 - **FR-15.1** *(Shipped)* Each story has an `offTopic` flag (persisted, default false), toggled via `PATCH /api/items/:id { offTopic }` (`setItemOffTopic`). Flagging/unflagging is reversible.
 
-- **FR-15.2** *(Shipped)* Every story card has a **right-click context menu** (`itemMenuJsx`): **Bookmark** (toggles), **Share**, and **Flag: Off topic** / **Unflag off topic**. The inline bookmark + share buttons stay in the card header for discoverability; flagging lives only in the menu, since it's rarer.
+- **FR-15.2** *(Shipped)* Every story card has a **right-click context menu** (`itemMenuJsx`): **Bookmark** (toggles), **Share**, and **Flag: Off topic**. The inline bookmark + share buttons stay in the card header for discoverability; flagging lives only in the menu, since it's rarer. A story that's **already flagged** offers **only Unflag** — bookmarking or sharing noise makes no sense (NEWS-70).
 
 ### Feed behaviour
 
-- **FR-15.3** *(Shipped)* A story flagged **this session** collapses to a **dimmed one-liner** — topic chip, title, and an "off topic" pill — so a misclick is visible and undoable. The pill is a button: hovering reveals an × and reddens it, and clicking it prompts (in-app confirm) to unflag. Right-clicking the row still opens the item menu.
+- **FR-15.3** *(Shipped)* A story flagged **this session** collapses to a **dimmed** row: the topic chip and "off topic" pill on the first line, the title on the line below (NEWS-71) — so a misclick is visible and undoable. The pill is a button: hovering reveals an × and reddens it, and clicking it prompts (in-app confirm) to unflag. Right-clicking the row still opens the item menu.
 
 - **FR-15.4** *(Shipped)* On **reload**, flagged stories are **hidden from the feed** entirely (the "show collapsed" state is tracked in the ephemeral `recentlyFlagged` set, empty after a reload). They remain in storage.
 

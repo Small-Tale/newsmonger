@@ -531,6 +531,13 @@ test('flag a story off-topic: collapse, hide on reload, review, unflag (NEWS-61)
   await expect(flaggedRow.locator('.off-topic-pill')).toBeVisible();
   await expect(cards).toHaveCount(1);
 
+  // A flagged story's menu offers ONLY Unflag — no bookmark/share (NEWS-70).
+  await flaggedRow.click({ button: 'right' });
+  await expect(page.locator('.menu .menu-item')).toHaveCount(1);
+  await expect(page.locator('.menu [data-item-menu-action=flag]')).toContainText('Unflag');
+  await page.keyboard.press('Escape');
+  await expect(page.locator('.menu')).toHaveCount(0);
+
   // Clicking the pill prompts to unflag; cancelling keeps it flagged.
   await flaggedRow.locator('.off-topic-pill').click();
   await expect(page.locator('.dialog.confirm')).toBeVisible();

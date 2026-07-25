@@ -10,7 +10,7 @@ Scope for now is **filtering the collected feed** — not a live web search that
 
 - **FR-14.2** *(Shipped)* Search **composes** with the Solo and Saved filters — it narrows within whatever they're already showing (the pipeline is Solo → Saved → search). The query is **ephemeral** (in-memory `searchQuery`, cleared on reload), like Solo.
 
-- **FR-14.3** *(Shipped)* The box is **compact by default and grows on focus or when it holds a query**, with an animated width transition. A clear (×) button appears while it has a query and empties it. The input is *uncontrolled* (no `value` binding) so re-rendering on each keystroke can't fight the cursor; the store drives only the filter and the expand/collapse class, and the clear button resets the DOM value directly.
+- **FR-14.3** *(Shipped)* The box is **compact by default and grows on focus or when it holds a query**, with an animated width transition. It's a fully-rounded pill (NEWS-69). A clear (×) button appears while it has a query and empties it. The input is *uncontrolled* (no `value` binding) so re-rendering on each keystroke can't fight the cursor; the store drives only the filter and the expand/collapse class, and the clear button resets the DOM value directly.
 
 - **FR-14.4** *(Shipped)* When a search matches nothing, the feed shows a "No stories match your search" empty state (it takes precedence over the Saved/"no stories yet" empty states).
 

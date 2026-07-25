@@ -195,9 +195,13 @@ function offTopicPill(itemId: string, interactive: boolean): SafeHtml {
 function flaggedRowJsx(item: NewsItem, topicName: string): SafeHtml {
   return (
     <article class="item flagged-row" data-key={`flag-${item.id}`} data-item-id={item.id}>
-      <span class="item-topic">{topicName}</span>
+      {/* Topic + badge on one line, the title below — a long topic name next to
+          the title read as cramped and confusing (NEWS-71). */}
+      <div class="flagged-head">
+        <span class="item-topic">{topicName}</span>
+        {offTopicPill(item.id, true)}
+      </div>
       <span class="flagged-title">{item.title}</span>
-      {offTopicPill(item.id, true)}
     </article>
   );
 }
@@ -671,18 +675,28 @@ function contextMenuJsx(menu: NonNullable<AppState['contextMenu']>, topics: Topi
 function itemMenuJsx(menu: NonNullable<AppState['itemMenu']>, items: NewsItem[]): SafeHtml {
   const item = items.find((i) => i.id === menu.itemId);
   if (item === undefined) return <div id="item-menu-empty" />;
+  // A flagged story only offers Unflag — bookmarking or sharing something you've
+  // marked as noise makes no sense (NEWS-70).
   return (
     <div class="menu-backdrop" data-action="close-item-menu">
       <div class="menu" role="menu" style={`left:${String(menu.x)}px;top:${String(menu.y)}px`}>
-        <button class="menu-item" role="menuitem" type="button" data-item-menu-action="bookmark">
-          {icon('bookmark')}
-          <span>{item.saved ? 'Remove bookmark' : 'Bookmark'}</span>
-        </button>
-        <button class="menu-item" role="menuitem" type="button" data-item-menu-action="share">
-          {icon('share')}
-          <span>Share</span>
-        </button>
-        <div class="menu-sep" role="separator" />
+        {item.offTopic ? (
+          ''
+        ) : (
+          <button class="menu-item" role="menuitem" type="button" data-item-menu-action="bookmark">
+            {icon('bookmark')}
+            <span>{item.saved ? 'Remove bookmark' : 'Bookmark'}</span>
+          </button>
+        )}
+        {item.offTopic ? (
+          ''
+        ) : (
+          <button class="menu-item" role="menuitem" type="button" data-item-menu-action="share">
+            {icon('share')}
+            <span>Share</span>
+          </button>
+        )}
+        {item.offTopic ? '' : <div class="menu-sep" role="separator" />}
         <button class="menu-item" role="menuitem" type="button" data-item-menu-action="flag">
           {icon('flag')}
           <span>{item.offTopic ? 'Unflag off topic' : 'Flag: Off topic'}</span>
