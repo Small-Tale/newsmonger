@@ -2,6 +2,15 @@ import { defineStore } from 'kerfjs';
 
 import type { KeysResp, ProviderInfo, StateResp } from '../api/schemas.js';
 
+/** Sidebar ordering options (NEWS-63). */
+export type TopicSort = 'alpha' | 'added' | 'priority';
+export const TOPIC_SORTS: readonly TopicSort[] = ['alpha', 'added', 'priority'];
+export const TOPIC_SORT_LABELS: Record<TopicSort, string> = {
+  alpha: 'A → Z',
+  added: 'Recently added',
+  priority: 'Priority first',
+};
+
 export interface AppState {
   loaded: boolean;
   /** Last error shown in the banner, or null. */
@@ -35,6 +44,8 @@ export interface AppState {
   keyError: string | null;
   /** Whether the topics sidebar is collapsed (per-device, see `SIDEBAR_KEY`). */
   sidebarCollapsed: boolean;
+  /** How the topics sidebar is ordered (per-device, NEWS-63). Default A→Z. */
+  topicSort: TopicSort;
   /** Currently selected topic ids. Selection is transient — never persisted. */
   selectedTopicIds: string[];
   /** When true, the feed shows only bookmarked stories (NEWS-42). Ephemeral. */
@@ -121,6 +132,18 @@ function readSidebarCollapsed(): boolean {
   }
 }
 
+const TOPIC_SORT_KEY = 'news:topic-sort';
+
+function readTopicSort(): TopicSort {
+  if (typeof localStorage === 'undefined') return 'alpha';
+  try {
+    const v = localStorage.getItem(TOPIC_SORT_KEY);
+    return v !== null && (TOPIC_SORTS as readonly string[]).includes(v) ? (v as TopicSort) : 'alpha';
+  } catch {
+    return 'alpha';
+  }
+}
+
 /**
  * The dismissed failed-run id is persisted (NEWS-41): the failure warning is
  * derived from server state that outlives a page reload, so an in-memory
@@ -165,6 +188,7 @@ export const appStore = defineStore({
     keychainLabel: 'system keychain',
     keyError: null,
     sidebarCollapsed: readSidebarCollapsed(),
+    topicSort: readTopicSort(),
     selectedTopicIds: [],
     savedFilter: false,
     searchQuery: '',
@@ -259,6 +283,16 @@ export const appStore = defineStore({
         }
       }
       set({ ...get(), sidebarCollapsed });
+    },
+    setTopicSort: (topicSort: TopicSort) => {
+      if (typeof localStorage !== 'undefined') {
+        try {
+          localStorage.setItem(TOPIC_SORT_KEY, topicSort);
+        } catch {
+          // Storage unavailable — the choice still applies for this session.
+        }
+      }
+      set({ ...get(), topicSort });
     },
     update: (partial: Partial<AppState>) => {
       set({ ...get(), ...partial });

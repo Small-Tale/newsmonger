@@ -306,6 +306,35 @@ h2.eyebrow {
   padding-top: 10px;
 }
 
+// "Watching" heading + the sort dropdown on one line (NEWS-63).
+.topics-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.sort-select {
+  flex: 0 0 auto;
+  border: 0;
+  background: none;
+  color: var(--ink-soft);
+  font-family: var(--sans);
+  font-size: 12px;
+  padding: 2px 4px;
+  border-radius: 5px;
+  cursor: pointer;
+
+  &:hover {
+    color: var(--ink);
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--pine);
+    outline-offset: 1px;
+  }
+}
+
 .source-name {
   color: var(--ink);
 }

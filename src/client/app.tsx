@@ -30,8 +30,9 @@ import { activeBehindWarnings } from './schedule.js';
 import { filterItemsByQuery } from './search.js';
 import { shareItem } from './share.js';
 import type { AppState } from './stores.js';
-import { appStore } from './stores.js';
+import { appStore, TOPIC_SORT_LABELS, TOPIC_SORTS } from './stores.js';
 import { openExternalUrl } from './tauri.js';
+import { sortTopics } from './topic-sort.js';
 
 const INTERVAL_OPTIONS: { label: string; ms: number }[] = [
   { label: 'Every hour', ms: 60 * 60 * 1000 },
@@ -896,10 +897,23 @@ function appJsx(): SafeHtml {
       {/* Always rendered, hidden via CSS when collapsed: unmounting a sibling
           ahead of the keyed topics list is the kerf KF-377 hazard (docs/3-ui.md). */}
       <section id="topics-panel" class="topics-panel" aria-hidden={s.sidebarCollapsed ? 'true' : undefined}>
-        <h2 class="eyebrow">Watching</h2>
+        <div class="topics-head">
+          <h2 class="eyebrow">Watching</h2>
+          {s.topics.length > 1 ? (
+            <select class="sort-select" data-action="topic-sort" aria-label="Sort topics">
+              {TOPIC_SORTS.map((opt) => (
+                <option value={opt} selected={opt === s.topicSort ? true : undefined}>
+                  {TOPIC_SORT_LABELS[opt]}
+                </option>
+              ))}
+            </select>
+          ) : (
+            ''
+          )}
+        </div>
         <ul class="topics">
           {each(
-            s.topics,
+            sortTopics(s.topics, s.topicSort),
             (topic) =>
               topicRowJsx(
                 topic,
@@ -967,9 +981,10 @@ function appJsx(): SafeHtml {
 let anchorId: string | null = null;
 
 function selectTopic(id: string, mods: { toggle: boolean; range: boolean }): void {
-  const { topics, selectedTopicIds } = appStore.state.value;
+  const { topics, selectedTopicIds, topicSort } = appStore.state.value;
   if (mods.range && anchorId !== null) {
-    const ids = topics.map((t) => t.id);
+    // Range is over the *displayed* order, which the sort determines (NEWS-63).
+    const ids = sortTopics(topics, topicSort).map((t) => t.id);
     const from = ids.indexOf(anchorId);
     const to = ids.indexOf(id);
     if (from !== -1 && to !== -1) {
@@ -1095,6 +1110,13 @@ function wireEvents(root: HTMLElement): void {
     if (Number.isNaN(ms)) return;
     appStore.actions.bumpBehindGrace();
     void updateHighPriorityInterval(ms);
+  });
+
+  void delegate(root, 'change', '[data-action=topic-sort]', (_e, el) => {
+    const value = (el as HTMLSelectElement).value;
+    if (TOPIC_SORTS.includes(value as (typeof TOPIC_SORTS)[number])) {
+      appStore.actions.setTopicSort(value as (typeof TOPIC_SORTS)[number]);
+    }
   });
 
   void delegate(root, 'change', '[data-action=provider]', (_e, el) => {

@@ -6,7 +6,7 @@ import { acceptConfirm, cancelConfirm, expect, test, topicAction } from './fixtu
 
 test.describe.configure({ mode: 'serial' });
 
-const NAMES = ['Alpha Topic', 'Beta Topic', 'Gamma Topic', 'Delta Topic'];
+const NAMES = ['Alpha Topic', 'Bravo Topic', 'Charlie Topic', 'Delta Topic'];
 const row = (page: Parameters<typeof topicAction>[0], name: string) =>
   page.locator('.topic', { hasText: name });
 
@@ -17,6 +17,27 @@ test('set up topics for the selection tests', async ({ page }) => {
     await page.press('.add-topic input', 'Enter');
     await expect(row(page, name)).toBeVisible();
   }
+});
+
+test('the sidebar sort order changes and persists (NEWS-63)', async ({ page }) => {
+  // Runs early, while all four topics exist (later tests delete some).
+  await page.goto('/');
+  const natoOrder = async (): Promise<string[]> => {
+    const all = (await page.locator('.topic-name').allTextContents()).map((t) => t.trim());
+    return all.filter((n) => NAMES.includes(n));
+  };
+
+  // Default is A→Z.
+  await expect.poll(natoOrder).toEqual(['Alpha Topic', 'Bravo Topic', 'Charlie Topic', 'Delta Topic']);
+
+  // Recently added → newest first (they were created Alpha → Delta).
+  await page.selectOption('[data-action=topic-sort]', 'added');
+  await expect.poll(natoOrder).toEqual(['Delta Topic', 'Charlie Topic', 'Bravo Topic', 'Alpha Topic']);
+
+  // The choice persists across a reload (per-device localStorage).
+  await page.reload();
+  await expect(page.locator('.topic').first()).toBeVisible();
+  await expect.poll(natoOrder).toEqual(['Delta Topic', 'Charlie Topic', 'Bravo Topic', 'Alpha Topic']);
 });
 
 test('rows carry no always-visible action buttons', async ({ page }) => {
@@ -40,11 +61,11 @@ test('clicking selects, and clicking away deselects', async ({ page }) => {
 test('cmd/ctrl-click toggles individual rows', async ({ page }) => {
   await page.goto('/');
   await row(page, 'Alpha Topic').click();
-  await row(page, 'Gamma Topic').click({ modifiers: ['Meta'] });
+  await row(page, 'Charlie Topic').click({ modifiers: ['Meta'] });
   await expect(page.locator('.topic.selected')).toHaveCount(2);
 
   // Toggling the same row off again is the half a naive implementation misses.
-  await row(page, 'Gamma Topic').click({ modifiers: ['Meta'] });
+  await row(page, 'Charlie Topic').click({ modifiers: ['Meta'] });
   await expect(page.locator('.topic.selected')).toHaveCount(1);
 });
 
@@ -56,7 +77,7 @@ test('shift-click selects a contiguous range', async ({ page }) => {
 
   // Anchored on the last plain click, so a second shift-click re-ranges rather
   // than accumulating.
-  await row(page, 'Beta Topic').click({ modifiers: ['Shift'] });
+  await row(page, 'Bravo Topic').click({ modifiers: ['Shift'] });
   await expect(page.locator('.topic.selected')).toHaveCount(2);
 });
 
@@ -91,12 +112,12 @@ test('right-click opens a menu with icons and separators', async ({ page }) => {
 test('right-clicking an unselected row targets just that row', async ({ page }) => {
   await page.goto('/');
   await row(page, 'Alpha Topic').click();
-  await row(page, 'Gamma Topic').click({ button: 'right' });
+  await row(page, 'Charlie Topic').click({ button: 'right' });
 
   // Selection follows the right-click, so the menu never acts on rows the user
   // can't see are targeted.
   await expect(page.locator('.menu-item span').first()).toHaveText('Check now');
-  await expect(row(page, 'Gamma Topic')).toHaveClass(/selected/);
+  await expect(row(page, 'Charlie Topic')).toHaveClass(/selected/);
   await expect(page.locator('.topic.selected')).toHaveCount(1);
   await page.keyboard.press('Escape');
 });
@@ -104,8 +125,8 @@ test('right-clicking an unselected row targets just that row', async ({ page }) 
 test('right-clicking inside a selection acts on all of it', async ({ page }) => {
   await page.goto('/');
   await row(page, 'Alpha Topic').click();
-  await row(page, 'Beta Topic').click({ modifiers: ['Meta'] });
-  await row(page, 'Beta Topic').click({ button: 'right' });
+  await row(page, 'Bravo Topic').click({ modifiers: ['Meta'] });
+  await row(page, 'Bravo Topic').click({ button: 'right' });
 
   await expect(page.locator('.menu-item span').first()).toHaveText('Check now 2 topics');
   await page.keyboard.press('Escape');
@@ -114,14 +135,14 @@ test('right-clicking inside a selection acts on all of it', async ({ page }) => 
 test('pause works in bulk from the menu', async ({ page }) => {
   await page.goto('/');
   await row(page, 'Alpha Topic').click();
-  await row(page, 'Beta Topic').click({ modifiers: ['Meta'] });
-  await topicAction(page, row(page, 'Beta Topic'), 'pause');
+  await row(page, 'Bravo Topic').click({ modifiers: ['Meta'] });
+  await topicAction(page, row(page, 'Bravo Topic'), 'pause');
 
   await expect(row(page, 'Alpha Topic')).toHaveClass(/paused/);
-  await expect(row(page, 'Beta Topic')).toHaveClass(/paused/);
+  await expect(row(page, 'Bravo Topic')).toHaveClass(/paused/);
 
   // The label flips to Resume once every target is paused.
-  await row(page, 'Beta Topic').click({ button: 'right' });
+  await row(page, 'Bravo Topic').click({ button: 'right' });
   await expect(page.locator('.menu-item span').nth(1)).toHaveText('Resume 2 topics');
   await page.locator('[data-menu-action=pause]').click();
   await expect(page.locator('.topic.paused')).toHaveCount(0);
@@ -158,12 +179,12 @@ test('solo is additive and Show all clears it', async ({ page }) => {
   await topicAction(page, row(page, 'Alpha Topic'), 'solo');
   await expect(page.locator('.topic.soloed')).toHaveCount(1);
 
-  await topicAction(page, row(page, 'Beta Topic'), 'solo');
+  await topicAction(page, row(page, 'Bravo Topic'), 'solo');
   await expect(page.locator('.topic.soloed')).toHaveCount(2);
   await expect(page.locator('.banner.solo')).toContainText('Showing 2 of');
 
   // Unsolo is the same menu item, flipped, once every target is solo'd.
-  await row(page, 'Beta Topic').click({ button: 'right' });
+  await row(page, 'Bravo Topic').click({ button: 'right' });
   // Menu order: Check, Pause, High priority, Solo, Delete — Solo is index 3.
   await expect(page.locator('.menu-item span').nth(3)).toHaveText('Unsolo');
   await page.keyboard.press('Escape');
@@ -222,11 +243,11 @@ test('a cancelled confirmation deletes nothing', async ({ page }) => {
   await page.goto('/');
   const before = await page.locator('.topic').count();
 
-  await row(page, 'Gamma Topic').click();
+  await row(page, 'Charlie Topic').click();
   await page.keyboard.press('Delete');
   await cancelConfirm(page);
   await expect(page.locator('.topic')).toHaveCount(before);
-  await expect(row(page, 'Gamma Topic')).toBeVisible();
+  await expect(row(page, 'Charlie Topic')).toBeVisible();
 });
 
 test('mark a topic high priority and show a star, then clear it (NEWS-56)', async ({ page }) => {
