@@ -37,8 +37,11 @@ export type CheckReq = z.infer<typeof CheckReqSchema>;
 export const OpenExternalReqSchema = z.object({ url: z.url() });
 export type OpenExternalReq = z.infer<typeof OpenExternalReqSchema>;
 
-/** Body of a bookmark toggle. */
-export const SaveItemReqSchema = z.object({ saved: z.boolean() });
+/** Body of an item update: bookmark and/or off-topic flag; at least one. */
+export const SaveItemReqSchema = z
+  .object({ saved: z.boolean(), offTopic: z.boolean() })
+  .partial()
+  .refine((v) => Object.keys(v).length > 0, { message: 'at least one field is required' });
 export type SaveItemReq = z.infer<typeof SaveItemReqSchema>;
 
 /** Body of a key save. The value is write-only — no endpoint ever returns it. */

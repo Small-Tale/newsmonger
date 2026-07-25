@@ -14,6 +14,7 @@ function item(over: Partial<NewsItem> = {}): NewsItem {
     title: 'Fusion reactor milestone',
     summary: 'A tokamak sustained net-positive output.',
     saved: false,
+    offTopic: false,
     sources: [],
     image: null,
     dedupeKey: `k${String(seq)}`,

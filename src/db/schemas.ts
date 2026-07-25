@@ -51,6 +51,12 @@ export const NewsItemSchema = z.object({
   summary: z.string().transform(stripMarkup),
   /** Whether the user bookmarked this story (NEWS-42). Defaults false. */
   saved: z.boolean().default(false),
+  /**
+   * Whether the user flagged this story as off-topic (NEWS-61). Hidden from the
+   * feed by default and fed to the topic's prompt as a negative example, so the
+   * model can infer what the user actually meant. Defaults false.
+   */
+  offTopic: z.boolean().default(false),
   sources: z.array(NewsSourceSchema),
   /**
    * Lead image, cached locally. `hash` names the file the image route serves;

@@ -49,8 +49,21 @@ export interface AppState {
    * anything" is a much worse failure than re-applying a filter.
    */
   soloTopicIds: string[];
-  /** Open context menu, positioned in viewport coordinates. */
+  /** Open topic context menu, positioned in viewport coordinates. */
   contextMenu: { x: number; y: number; topicIds: string[] } | null;
+  /** Open story context menu (bookmark / share / flag), viewport coords (NEWS-61). */
+  itemMenu: { x: number; y: number; itemId: string } | null;
+  /**
+   * Ids of stories flagged off-topic **this session** (NEWS-61). A just-flagged
+   * story stays visible as a dimmed one-liner so the user can undo a mistake;
+   * on reload this set is empty, so flagged stories are simply hidden.
+   */
+  recentlyFlagged: string[];
+  /**
+   * When non-empty, the feed is in "review flagged" mode (NEWS-61): it shows
+   * ONLY the off-topic stories for these topics. Ephemeral; a banner exits it.
+   */
+  reviewTopicIds: string[];
   /**
    * Open confirmation dialog, or null. In-app rather than `window.confirm`,
    * which is a silent no-op in the Tauri WKWebView — so a native confirm made
@@ -146,6 +159,9 @@ export const appStore = defineStore({
     searchQuery: '',
     soloTopicIds: [],
     contextMenu: null,
+    itemMenu: null,
+    recentlyFlagged: [],
+    reviewTopicIds: [],
     confirm: null,
     notifyPermissionDenied: false,
     dismissedRunId: readDismissedRunId(),
@@ -185,6 +201,20 @@ export const appStore = defineStore({
     },
     closeContextMenu: () => {
       set({ ...get(), contextMenu: null });
+    },
+    openItemMenu: (menu: { x: number; y: number; itemId: string }) => {
+      set({ ...get(), itemMenu: menu });
+    },
+    closeItemMenu: () => {
+      set({ ...get(), itemMenu: null });
+    },
+    markRecentlyFlagged: (id: string) => {
+      const s = get();
+      if (s.recentlyFlagged.includes(id)) return;
+      set({ ...s, recentlyFlagged: [...s.recentlyFlagged, id] });
+    },
+    setReviewTopicIds: (reviewTopicIds: string[]) => {
+      set({ ...get(), reviewTopicIds });
     },
     openConfirm: (confirm: { message: string; confirmLabel: string; danger: boolean }) => {
       set({ ...get(), confirm });

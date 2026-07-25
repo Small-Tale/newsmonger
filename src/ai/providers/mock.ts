@@ -13,17 +13,22 @@ import type { FoundNewsItem, KnownItem, NewsProvider } from '../types.js';
  * false, matching the API-key providers, so existing tests are unaffected.
  */
 export function createMockProvider(config: { attended?: boolean } = {}): NewsProvider & {
-  calls: { topicName: string; known: KnownItem[]; sinceIso: string | null }[];
+  calls: { topicName: string; known: KnownItem[]; sinceIso: string | null; offTopicTitles: string[] }[];
 } {
-  const calls: { topicName: string; known: KnownItem[]; sinceIso: string | null }[] = [];
+  const calls: { topicName: string; known: KnownItem[]; sinceIso: string | null; offTopicTitles: string[] }[] = [];
   return {
     name: 'mock',
     model: 'mock',
     attended: config.attended ?? false,
     calls,
     isAvailable: () => Promise.resolve(true),
-    checkTopic(topicName: string, known: KnownItem[], sinceIso: string | null): Promise<FoundNewsItem[]> {
-      calls.push({ topicName, known, sinceIso });
+    checkTopic(
+      topicName: string,
+      known: KnownItem[],
+      sinceIso: string | null,
+      offTopicTitles: string[] = [],
+    ): Promise<FoundNewsItem[]> {
+      calls.push({ topicName, known, sinceIso, offTopicTitles });
       const lower = topicName.toLowerCase();
       if (lower.includes('fail')) return Promise.reject(new Error('mock news service failure'));
       if (lower.includes('empty')) return Promise.resolve([]);

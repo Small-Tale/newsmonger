@@ -157,10 +157,15 @@ export function createCodexCliProvider(
     model: model !== '' ? model : 'codex default',
     attended: true,
     isAvailable: () => runner.available(),
-    async checkTopic(topicName: string, known: KnownItem[], sinceIso: string | null): Promise<FoundNewsItem[]> {
+    async checkTopic(
+      topicName: string,
+      known: KnownItem[],
+      sinceIso: string | null,
+      offTopicTitles: string[] = [],
+    ): Promise<FoundNewsItem[]> {
       const text = await runner.run(
         searchingSystemPrompt(),
-        buildUserPrompt(topicName, known, sinceIso),
+        buildUserPrompt(topicName, known, sinceIso, offTopicTitles),
         model !== '' ? model : undefined,
       );
       return parseNewsResult(text);

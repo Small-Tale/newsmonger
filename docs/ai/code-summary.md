@@ -63,13 +63,13 @@ tests/
   helpers/            tmp.ts (tmp data dirs), provider.ts (asResolver/fakeProvider)
   unit/               vitest: dedupe, store, checks, scheduler, config, parse-result, providers, openai, api, api-keys, api-keys-routes, attendance, catch-up, sanitize
   e2e/                playwright, serial, mock AI (--ai-test), port 4189: app.spec.ts, keys.spec.ts, topics.spec.ts
-docs/                 numbered requirements (1–14), ai/ summaries, manual-test-plan.md
+docs/                 numbered requirements (1–15), ai/ summaries, manual-test-plan.md
 ```
 
 ## Data schema (`<data-dir>/data.json`)
 
 - `topics[]`: id, name, paused, highPriority (checked on the shorter interval — NEWS-56), createdAt, lastCheckedAt (every attempt), coveredThroughAt (successes only — drives the prompt window)
-- `items[]`: id, topicId, title, summary, sources[{title,url}], image, saved (bookmark), dedupeKey, foundAt
+- `items[]`: id, topicId, title, summary, sources[{title,url}], image, saved (bookmark), offTopic (NEWS-61 flag), dedupeKey, foundAt
 - `settings`: checkIntervalMs (default 1 day, min 5 min), highPriorityIntervalMs (≤ checkIntervalMs, clamped on update+load — NEWS-56), provider (default `auto`, `.catch('auto')` for retired providers), model (''), endpoint ('')
 - `runs[]`: id, topicId, startedAt, finishedAt, status(running|succeeded|failed), newItems, error, provider (last 200)
 
@@ -117,4 +117,5 @@ Data dir: `--data-dir` flag → `NEWS_DATA_DIR` → `~/.news`.
 | Confirm a destructive action | `confirm()` helper + `confirmDialogJsx` in `app.tsx`. **Never `window.confirm` — a silent no-op in Tauri's WKWebView** |
 | Save/bookmark or share a story | `src/client/app.tsx` (bookmark + share buttons in `itemJsx`, `showToast`); `setItemSaved` in `store.ts` + `PATCH /api/items/:id`; `src/client/share.ts`. See `docs/11-story-actions.md` |
 | Feed filters (Solo / Saved / Search) | `src/client/app.tsx` feed pipeline (`soloItems` → `savedItems` → `filterItemsByQuery`); Solo/Saved/`searchQuery` state in `stores.ts`; `src/client/search.ts`. See `docs/14-search.md` |
+| Flag a story off-topic / review mode | `offTopic` on items + `setItemOffTopic`/`offTopicTitlesForTopic` in `store.ts`; `PATCH /api/items/:id`; item context menu (`itemMenuJsx`), `flaggedRowJsx`, `reviewTopicIds`/`recentlyFlagged` in `app.tsx`; prompt via `buildUserPrompt` offTopicTitles. See `docs/15-off-topic-flagging.md` |
 | Transient toast | `#toast-slot`/`.toast` + `showToast` in `app.tsx`; `toast` state in `stores.ts`. **Never `window.alert` — a WKWebView no-op** |

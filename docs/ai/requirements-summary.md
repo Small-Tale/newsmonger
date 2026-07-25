@@ -6,6 +6,13 @@ Status markers: **Shipped** · **Partial** · **Design only** · **Deferred**. S
 
 Add/delete/pause topics (unique, case-insensitive); global interval (default 1 day, min 5 min); minute-tick scheduler + startup sweep; sequential, non-overlapping checks; failures advance `lastCheckedAt` (retry next interval); manual per-topic and check-all triggers; **adding a topic checks it immediately** (manual-semantics, background-fired — FR-1.12, NEWS-54). All shipped and covered by unit + E2E tests.
 
+## [15 — Off-Topic Flagging](../15-off-topic-flagging.md) — Shipped
+
+- FR-15.1/15.2 `offTopic` flag on items; story right-click menu (bookmark/share/flag) — NEWS-61: **Shipped**
+- FR-15.3/15.4 just-flagged collapses to a dimmed pill row (hover ×, click to unflag); hidden on reload: **Shipped**
+- FR-15.5 topic-menu "Review Flagged" (count badge) → review mode with exit banner: **Shipped**
+- FR-15.6 flagged titles (capped 10) fed to the prompt as negative examples: **Shipped**
+
 ## [14 — Feed Search](../14-search.md) — Shipped
 
 - FR-14.1 live header search box; case-insensitive match on title/summary/topic name — NEWS-60: **Shipped**

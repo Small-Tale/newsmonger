@@ -109,8 +109,21 @@ function windowLine(sinceIso: string | null, now: Date): string {
   return `Last checked ${span} ago (${sinceIso}) — focus on developments since then.`;
 }
 
-/** Build the user prompt shared by every provider. */
-export function buildUserPrompt(topicName: string, known: KnownItem[], sinceIso: string | null): string {
+/**
+ * Build the user prompt shared by every provider.
+ *
+ * `offTopicTitles` are stories the user explicitly marked off-topic (NEWS-61):
+ * a short topic label like "Apple" can mean the company or the fruit, and these
+ * are the model's signal for which one the user did NOT mean. They're framed as
+ * a "prefer stories unlike these" list, not a hard exclusion, since the point is
+ * to infer intent rather than blacklist exact stories.
+ */
+export function buildUserPrompt(
+  topicName: string,
+  known: KnownItem[],
+  sinceIso: string | null,
+  offTopicTitles: string[] = [],
+): string {
   const now = new Date();
   const lines: string[] = [];
   lines.push(`Topic: ${topicName}`);
@@ -122,6 +135,16 @@ export function buildUserPrompt(topicName: string, known: KnownItem[], sinceIso:
     lines.push('Already reported (do NOT report these stories again):');
     for (const item of recentKnown) {
       lines.push(`- ${item.title} (reported ${item.foundAt.slice(0, 10)})`);
+    }
+  }
+  if (offTopicTitles.length > 0) {
+    lines.push('');
+    lines.push(
+      'The user marked these past stories as OFF-TOPIC — they are not what the user means by this topic. ' +
+        'Use them to infer the intended sense of the topic and prefer stories unlike these:',
+    );
+    for (const title of offTopicTitles) {
+      lines.push(`- ${title}`);
     }
   }
   lines.push('');

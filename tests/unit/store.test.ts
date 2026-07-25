@@ -88,6 +88,42 @@ describe('Store', () => {
     });
   });
 
+  it('flags a story off-topic and lists flagged titles for the prompt (NEWS-61)', () => {
+    const store = new Store(tmpDataDir());
+    const topic = store.addTopic('Apple');
+    const [a, b] = store.addItems([
+      { topicId: topic.id, title: 'Apple pie recipe', summary: 's', sources: [], dedupeKey: 'k1', foundAt: '2026-07-24T01:00:00Z' },
+      { topicId: topic.id, title: 'Apple orchard tour', summary: 's', sources: [], dedupeKey: 'k2', foundAt: '2026-07-24T02:00:00Z' },
+    ]);
+    expect(a.offTopic).toBe(false);
+
+    expect(store.setItemOffTopic(a.id, true)?.offTopic).toBe(true);
+    expect(store.setItemOffTopic(b.id, true)?.offTopic).toBe(true);
+    // Most-recent first.
+    expect(store.offTopicTitlesForTopic(topic.id)).toEqual(['Apple orchard tour', 'Apple pie recipe']);
+
+    // Survives a reload and is scoped to the topic.
+    expect(new Store(store.dataDir).offTopicTitlesForTopic(topic.id)).toHaveLength(2);
+    expect(store.setItemOffTopic('nope', true)).toBeNull();
+
+    // Unflagging drops it from the list.
+    store.setItemOffTopic(a.id, false);
+    expect(store.offTopicTitlesForTopic(topic.id)).toEqual(['Apple orchard tour']);
+  });
+
+  it('caps the off-topic titles list (NEWS-61)', () => {
+    const store = new Store(tmpDataDir());
+    const topic = store.addTopic('Apple');
+    for (let i = 0; i < 15; i++) {
+      const [item] = store.addItems([
+        { topicId: topic.id, title: `fruit ${String(i)}`, summary: 's', sources: [], dedupeKey: `k${String(i)}`, foundAt: `2026-07-24T00:${String(i).padStart(2, '0')}:00Z` },
+      ]);
+      store.setItemOffTopic(item.id, true);
+    }
+    expect(store.offTopicTitlesForTopic(topic.id)).toHaveLength(10);
+    expect(store.offTopicTitlesForTopic(topic.id, 3)).toHaveLength(3);
+  });
+
   it('rejects empty and duplicate topic names (case-insensitive)', () => {
     const store = new Store(tmpDataDir());
     expect(() => store.addTopic('   ')).toThrow(/empty/);

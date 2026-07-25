@@ -114,8 +114,12 @@ export function registerApi(app: Hono<AppEnv>): void {
 
   app.patch('/api/items/:id', async (c) => {
     const body = await parseBody(c, SaveItemReqSchema);
-    if (!body) return c.json({ error: 'invalid request: expected { saved }' }, 400);
-    const item = c.get('store').setItemSaved(c.req.param('id'), body.saved);
+    if (!body) return c.json({ error: 'invalid request: expected { saved?, offTopic? }' }, 400);
+    const store = c.get('store');
+    const id = c.req.param('id');
+    let item = null;
+    if (body.saved !== undefined) item = store.setItemSaved(id, body.saved);
+    if (body.offTopic !== undefined) item = store.setItemOffTopic(id, body.offTopic);
     if (item === null) return c.json({ error: 'no such item' }, 404);
     return c.json({ ok: true });
   });

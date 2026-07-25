@@ -511,6 +511,74 @@ test('warns when checks fall behind the chosen interval (NEWS-59)', async ({ pag
   await page.locator('.dialog [data-action=close-settings]').click();
 });
 
+test('flag a story off-topic: collapse, hide on reload, review, unflag (NEWS-61)', async ({ page }) => {
+  await page.goto('/');
+  await page.fill('.add-topic input', 'Apple Probe');
+  await page.press('.add-topic input', 'Enter');
+  const row = page.locator('.topic', { hasText: 'Apple Probe' });
+  await expect(row).toBeVisible();
+  const cards = page.locator('.item:not(.flagged-row)', { has: page.locator('.item-topic', { hasText: 'Apple Probe' }) });
+  await expect(cards).toHaveCount(2, { timeout: 15_000 });
+
+  // Right-click the first story → the item context menu → Flag: Off topic.
+  await cards.first().click({ button: 'right' });
+  await expect(page.locator('.menu [data-item-menu-action=flag]')).toContainText('Flag: Off topic');
+  await page.locator('[data-item-menu-action=flag]').click();
+
+  // It collapses to a dimmed one-liner with the pill; one full card remains.
+  const flaggedRow = page.locator('.item.flagged-row', { hasText: 'Apple Probe' });
+  await expect(flaggedRow).toHaveCount(1);
+  await expect(flaggedRow.locator('.off-topic-pill')).toBeVisible();
+  await expect(cards).toHaveCount(1);
+
+  // Clicking the pill prompts to unflag; cancelling keeps it flagged.
+  await flaggedRow.locator('.off-topic-pill').click();
+  await expect(page.locator('.dialog.confirm')).toBeVisible();
+  await page.locator('[data-action=confirm-cancel]').click();
+  await expect(flaggedRow).toHaveCount(1);
+
+  // Enter review WITHOUT reloading first — the collapsed row must morph into a
+  // full card cleanly (a distinct data-key makes kerf swap, not reshape).
+  await row.click({ button: 'right' });
+  await page.locator('[data-menu-action=review-flagged]').click();
+  await expect(page.locator('.banner.review')).toBeVisible();
+  await expect(cards).toHaveCount(1);
+  await expect(page.locator('.item .off-topic-pill.label')).toHaveCount(1);
+  await page.locator('[data-action=exit-review]').click();
+  await expect(page.locator('.banner.review')).toHaveCount(0);
+  await expect(flaggedRow).toHaveCount(1); // back to the collapsed row
+
+  // On reload the flagged story is hidden entirely (not just collapsed).
+  await page.reload();
+  await expect(row).toBeVisible();
+  await expect(page.locator('.item.flagged-row')).toHaveCount(0);
+  await expect(cards).toHaveCount(1);
+
+  // Enter review mode from the topic menu; the badge shows the flagged count.
+  await row.click({ button: 'right' });
+  const reviewItem = page.locator('[data-menu-action=review-flagged]');
+  await expect(reviewItem).toBeEnabled();
+  await expect(reviewItem.locator('.count-badge')).toHaveText('1');
+  await reviewItem.click();
+
+  // Review shows the banner and ONLY the flagged story, as a card with a pill.
+  await expect(page.locator('.banner.review')).toBeVisible();
+  await expect(cards).toHaveCount(1);
+  await expect(page.locator('.item .off-topic-pill.label')).toHaveCount(1);
+
+  // Unflag it from the item menu; exit review; both stories are back.
+  await cards.first().click({ button: 'right' });
+  await expect(page.locator('[data-item-menu-action=flag]')).toContainText('Unflag');
+  await page.locator('[data-item-menu-action=flag]').click();
+  await page.locator('[data-action=exit-review]').click();
+  await expect(page.locator('.banner.review')).toHaveCount(0);
+  await expect(cards).toHaveCount(2);
+
+  // Clean up.
+  await topicAction(page, row, 'delete');
+  await expect(row).toHaveCount(0);
+});
+
 test('search filters the feed live, and clearing restores it (NEWS-60)', async ({ page }) => {
   await page.goto('/');
   await page.fill('.add-topic input', 'Search Probe');

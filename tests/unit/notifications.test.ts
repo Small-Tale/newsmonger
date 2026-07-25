@@ -29,6 +29,7 @@ function state(itemIds: string[]): StateResp {
       sources: [],
       image: null,
       saved: false,
+      offTopic: false,
       dedupeKey: id,
       foundAt: '2026-07-24T00:00:00.000Z',
     })),

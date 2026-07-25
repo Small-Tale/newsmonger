@@ -144,6 +144,12 @@ export function setItemSaved(id: string, saved: boolean): Promise<void> {
   );
 }
 
+export function setItemOffTopic(id: string, offTopic: boolean): Promise<void> {
+  return withRefresh(() =>
+    request(`/api/items/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify({ offTopic }) }),
+  );
+}
+
 export function startCheck(topicId?: string): Promise<void> {
   return withRefresh(() =>
     request('/api/check', { method: 'POST', body: JSON.stringify(topicId !== undefined ? { topicId } : {}) }),

@@ -1137,6 +1137,127 @@ h2.eyebrow {
   }
 }
 
+// Wrapper keeps the two action buttons as header flex items (display:contents
+// removes its own box) so the existing layout/adjacency rules still apply.
+.item-actions {
+  display: contents;
+}
+
+// --- Off-topic flagging (NEWS-61) ---
+
+// The "off topic" pill: a plain label in review mode; a click-to-unflag button
+// on a collapsed row, where hover swaps the flag for an × and reddens it.
+.off-topic-pill {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 9px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--panel);
+  color: var(--ink-soft);
+  font-family: var(--sans);
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+
+  .icon {
+    flex: 0 0 auto;
+    fill: none;
+  }
+}
+
+button.off-topic-pill {
+  cursor: pointer;
+  transition:
+    background 120ms ease,
+    color 120ms ease,
+    border-color 120ms ease;
+
+  // × hidden until hover; the flag shows by default.
+  .icon:first-child {
+    display: none;
+  }
+
+  &:hover {
+    background: var(--error-bg);
+    border-color: #b4442f;
+    color: #b4442f;
+
+    .icon:first-child {
+      display: inline-flex;
+    }
+
+    .icon:nth-child(2) {
+      display: none;
+    }
+  }
+}
+
+// A flagged story collapsed to a dimmed one-liner in the normal feed.
+.item.flagged-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 16px;
+  opacity: 0.6;
+  animation: none;
+
+  .flagged-title {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-family: var(--serif);
+    font-size: 15px;
+    color: var(--ink);
+  }
+}
+
+// The "Review flagged items" count badge in the topic menu.
+.count-badge {
+  margin-left: auto;
+  min-width: 18px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: var(--pine);
+  color: var(--paper);
+  font-size: 11px;
+  font-weight: 600;
+  text-align: center;
+}
+
+.menu-item[disabled] {
+  opacity: 0.4;
+  cursor: default;
+
+  &:hover {
+    background: none;
+  }
+}
+
+// Review-mode banner (amber, distinct from the pine Solo/Saved banners).
+.banner.review {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  background: rgba(200, 137, 27, 0.14);
+  color: var(--ink);
+
+  .icon {
+    color: var(--amber, #c8891b);
+    fill: currentColor;
+  }
+
+  .banner-text {
+    flex: 1;
+  }
+}
+
 // The header Saved-filter toggle, when active.
 .btn.icon.active {
   color: var(--pine);

@@ -76,10 +76,15 @@ export function createAnthropicProvider(config: {
     // Metered and billed per token — safe to run on a schedule unattended.
     attended: false,
     isAvailable: async () => (await getApiKey()) !== null,
-    async checkTopic(topicName: string, known: KnownItem[], sinceIso: string | null): Promise<FoundNewsItem[]> {
+    async checkTopic(
+      topicName: string,
+      known: KnownItem[],
+      sinceIso: string | null,
+      offTopicTitles: string[] = [],
+    ): Promise<FoundNewsItem[]> {
       const text = await runner.run(
         searchingSystemPrompt(),
-        buildUserPrompt(topicName, known, sinceIso),
+        buildUserPrompt(topicName, known, sinceIso, offTopicTitles),
         model,
       );
       return parseNewsResult(text);

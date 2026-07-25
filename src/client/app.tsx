@@ -13,6 +13,7 @@ import {
   refreshState,
   reportForeground,
   saveKey,
+  setItemOffTopic,
   setItemSaved,
   setNotifyOnNewItems,
   setTopicHighPriority,
@@ -167,32 +168,75 @@ function topicRowJsx(
   );
 }
 
-function itemJsx(item: NewsItem, topicName: string): SafeHtml {
+/** The "off topic" pill. As a button it prompts to unflag (hover reveals an ×
+ *  and reddens); as a plain label (review mode) it just marks the card. */
+function offTopicPill(itemId: string, interactive: boolean): SafeHtml {
+  if (interactive) {
+    return (
+      <button class="off-topic-pill" type="button" data-unflag-prompt={itemId} title="Off topic — click to unflag">
+        {icon('clear', 12)}
+        {icon('flag', 12)}
+        <span>off topic</span>
+      </button>
+    );
+  }
   return (
-    <article class={`item${item.saved ? ' saved' : ''}`} data-key={item.id}>
+    <span class="off-topic-pill label">
+      {icon('flag', 12)}
+      <span>off topic</span>
+    </span>
+  );
+}
+
+/** A flagged story in the normal feed: a dimmed one-liner the user can undo.
+ *  Its `data-key` is deliberately distinct from the full card's (`flag-` prefix)
+ *  so kerf morph *swaps* the two structures rather than trying to reshape one
+ *  into the other in place — which it botches, given how different they are. */
+function flaggedRowJsx(item: NewsItem, topicName: string): SafeHtml {
+  return (
+    <article class="item flagged-row" data-key={`flag-${item.id}`} data-item-id={item.id}>
+      <span class="item-topic">{topicName}</span>
+      <span class="flagged-title">{item.title}</span>
+      {offTopicPill(item.id, true)}
+    </article>
+  );
+}
+
+function itemJsx(item: NewsItem, topicName: string, variant: 'normal' | 'review' = 'normal'): SafeHtml {
+  // A just-flagged story collapses to a dimmed one-liner in the normal feed.
+  if (variant === 'normal' && item.offTopic) return flaggedRowJsx(item, topicName);
+  const review = variant === 'review';
+  return (
+    <article class={`item${item.saved ? ' saved' : ''}`} data-key={item.id} data-item-id={item.id}>
       <header>
         <span class="item-topic">{topicName}</span>
         <span class="item-time">{relativeTime(item.foundAt)}</span>
-        <button
-          class={`item-action bookmark${item.saved ? ' on' : ''}`}
-          type="button"
-          data-save-item={item.id}
-          data-saved={item.saved ? 'true' : 'false'}
-          aria-pressed={item.saved ? 'true' : 'false'}
-          aria-label={item.saved ? 'Remove bookmark' : 'Save story'}
-          title={item.saved ? 'Saved — click to remove' : 'Save story'}
-        >
-          {icon('bookmark', 15)}
-        </button>
-        <button
-          class="item-action share"
-          type="button"
-          data-share-item={item.id}
-          aria-label="Share story"
-          title="Share story"
-        >
-          {icon('share', 15)}
-        </button>
+        {review ? (
+          offTopicPill(item.id, false)
+        ) : (
+          <span class="item-actions">
+            <button
+              class={`item-action bookmark${item.saved ? ' on' : ''}`}
+              type="button"
+              data-save-item={item.id}
+              data-saved={item.saved ? 'true' : 'false'}
+              aria-pressed={item.saved ? 'true' : 'false'}
+              aria-label={item.saved ? 'Remove bookmark' : 'Save story'}
+              title={item.saved ? 'Saved — click to remove' : 'Save story'}
+            >
+              {icon('bookmark', 15)}
+            </button>
+            <button
+              class="item-action share"
+              type="button"
+              data-share-item={item.id}
+              aria-label="Share story"
+              title="Share story"
+            >
+              {icon('share', 15)}
+            </button>
+          </span>
+        )}
       </header>
       {/* Always-present slot: the picture coming and going must not restructure
           the card (kerf KF-377 — see docs/3-ui.md). Roughly a third of articles
@@ -228,7 +272,7 @@ function itemJsx(item: NewsItem, topicName: string): SafeHtml {
   );
 }
 
-function feedJsx(items: NewsItem[], topicNames: Map<string, string>): SafeHtml[] {
+function feedJsx(items: NewsItem[], topicNames: Map<string, string>, variant: 'normal' | 'review' = 'normal'): SafeHtml[] {
   // Group by local calendar day, newest first. Groups are dynamic, so plain
   // `.map()` (no memoization); items keep data-key for keyed morphing.
   const groups = new Map<string, NewsItem[]>();
@@ -241,7 +285,7 @@ function feedJsx(items: NewsItem[], topicNames: Map<string, string>): SafeHtml[]
   return [...groups.entries()].map(([dateKey, dayItems]) => (
     <section class="day" data-key={`day-${dateKey}`}>
       <h2 class="eyebrow">{dayLabel(dateKey)}</h2>
-      {dayItems.map((item) => itemJsx(item, topicNames.get(item.topicId) ?? 'unknown topic'))}
+      {dayItems.map((item) => itemJsx(item, topicNames.get(item.topicId) ?? 'unknown topic', variant))}
     </section>
   ));
 }
@@ -572,6 +616,9 @@ function contextMenuJsx(menu: NonNullable<AppState['contextMenu']>, topics: Topi
   const anyNormal = targets.some((t) => !t.highPriority);
   const solo = new Set(appStore.state.value.soloTopicIds);
   const allSoloed = count > 0 && targets.every((t) => solo.has(t.id));
+  // Flagged-story count across the targeted topics, for "Review Flagged" (NEWS-61).
+  const targetIds = new Set(menu.topicIds);
+  const flaggedCount = appStore.state.value.items.filter((i) => i.offTopic && targetIds.has(i.topicId)).length;
 
   return (
     <div class="menu-backdrop" data-action="close-menu">
@@ -599,10 +646,46 @@ function contextMenuJsx(menu: NonNullable<AppState['contextMenu']>, topics: Topi
           {icon('solo')}
           <span>{allSoloed ? 'Unsolo' : 'Solo'}{suffix}</span>
         </button>
+        <button
+          class="menu-item"
+          role="menuitem"
+          type="button"
+          data-menu-action="review-flagged"
+          disabled={flaggedCount === 0 ? true : undefined}
+        >
+          {icon('flag')}
+          <span>Review Flagged News Items</span>
+          {flaggedCount > 0 ? <span class="count-badge">{String(flaggedCount)}</span> : ''}
+        </button>
         <div class="menu-sep" role="separator" />
         <button class="menu-item danger" role="menuitem" type="button" data-menu-action="delete">
           {icon('delete')}
           <span>Delete{suffix}</span>
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/** Right-click menu for a story card: bookmark, share, and the off-topic flag. */
+function itemMenuJsx(menu: NonNullable<AppState['itemMenu']>, items: NewsItem[]): SafeHtml {
+  const item = items.find((i) => i.id === menu.itemId);
+  if (item === undefined) return <div id="item-menu-empty" />;
+  return (
+    <div class="menu-backdrop" data-action="close-item-menu">
+      <div class="menu" role="menu" style={`left:${String(menu.x)}px;top:${String(menu.y)}px`}>
+        <button class="menu-item" role="menuitem" type="button" data-item-menu-action="bookmark">
+          {icon('bookmark')}
+          <span>{item.saved ? 'Remove bookmark' : 'Bookmark'}</span>
+        </button>
+        <button class="menu-item" role="menuitem" type="button" data-item-menu-action="share">
+          {icon('share')}
+          <span>Share</span>
+        </button>
+        <div class="menu-sep" role="separator" />
+        <button class="menu-item" role="menuitem" type="button" data-item-menu-action="flag">
+          {icon('flag')}
+          <span>{item.offTopic ? 'Unflag off topic' : 'Flag: Off topic'}</span>
         </button>
       </div>
     </div>
@@ -616,11 +699,22 @@ function appJsx(): SafeHtml {
   const selected = new Set(s.selectedTopicIds);
   const allItems = [...s.items].sort((a, b) => b.foundAt.localeCompare(a.foundAt));
   // Solo is a view filter: it hides stories, never deletes or unsubscribes.
+  // Review mode (NEWS-61) overrides the normal filters: it shows ONLY the
+  // flagged stories for the topics under review.
+  const reviewSet = new Set(s.reviewTopicIds);
+  const reviewMode = reviewSet.size > 0;
+  const recentFlagged = new Set(s.recentlyFlagged);
   const soloItems = solo.size > 0 ? allItems.filter((i) => solo.has(i.topicId)) : allItems;
   const savedItems = s.savedFilter ? soloItems.filter((i) => i.saved) : soloItems;
   // Search narrows within whatever Solo/Saved is showing (NEWS-60).
-  const sortedItems = filterItemsByQuery(savedItems, topicNames, s.searchQuery);
+  const searchedItems = filterItemsByQuery(savedItems, topicNames, s.searchQuery);
   const searching = s.searchQuery.trim() !== '';
+  const feedVariant: 'normal' | 'review' = reviewMode ? 'review' : 'normal';
+  const feedItems = reviewMode
+    ? allItems.filter((i) => i.offTopic && reviewSet.has(i.topicId))
+    : // Flagged stories are hidden from the normal feed, except ones flagged this
+      // session — those show collapsed so a misclick can be undone (NEWS-61).
+      searchedItems.filter((i) => !i.offTopic || recentFlagged.has(i.id));
   const savedCount = allItems.filter((i) => i.saved).length;
   const anyChecking = s.checking.length > 0;
   // Only warn about a topic whose *latest* run failed — not a stale failure from
@@ -688,6 +782,7 @@ function appJsx(): SafeHtml {
           its siblings (kerf KF-377 — see docs/3-ui.md). */}
       <div id="settings-slot">{s.settingsOpen ? settingsDialogJsx() : ''}</div>
       <div id="menu-slot">{s.contextMenu !== null ? contextMenuJsx(s.contextMenu, s.topics) : ''}</div>
+      <div id="item-menu-slot">{s.itemMenu !== null ? itemMenuJsx(s.itemMenu, s.items) : ''}</div>
       <div id="confirm-slot">{s.confirm !== null ? confirmDialogJsx(s.confirm) : ''}</div>
       {/* Always-present slot: the toast coming and going must not restructure
           its siblings (kerf KF-377 — see docs/3-ui.md). */}
@@ -767,6 +862,21 @@ function appJsx(): SafeHtml {
         ) : (
           ''
         )}
+        {reviewMode ? (
+          <div class="banner review">
+            {icon('flag', 14)}
+            <span class="banner-text">
+              Reviewing {String(feedItems.length)} flagged{' '}
+              {feedItems.length === 1 ? 'story' : 'stories'}
+              {reviewSet.size === 1 ? ` for ${topicNames.get(s.reviewTopicIds[0] ?? '') ?? 'a topic'}` : ''}
+            </span>
+            <button class="btn subtle" type="button" data-action="exit-review">
+              Exit review
+            </button>
+          </div>
+        ) : (
+          ''
+        )}
       </div>
 
       {/* Always rendered, hidden via CSS when collapsed: unmounting a sibling
@@ -819,13 +929,15 @@ function appJsx(): SafeHtml {
       </section>
 
       <section id="feed" class="feed">
-        {feedJsx(sortedItems, topicNames)}
+        {feedJsx(feedItems, topicNames, feedVariant)}
         <div class="empty-slot">
-          {s.loaded && sortedItems.length === 0 && searching ? (
+          {s.loaded && feedItems.length === 0 && reviewMode ? (
+            <p class="empty">No flagged stories for these topics.</p>
+          ) : s.loaded && feedItems.length === 0 && searching ? (
             <p class="empty">No stories match your search.</p>
-          ) : s.loaded && sortedItems.length === 0 && s.savedFilter ? (
+          ) : s.loaded && feedItems.length === 0 && s.savedFilter ? (
             <p class="empty">No saved stories yet. Use the bookmark button on a story to keep it here.</p>
-          ) : s.loaded && sortedItems.length === 0 && s.topics.length > 0 ? (
+          ) : s.loaded && feedItems.length === 0 && s.topics.length > 0 ? (
             <p class="empty">No stories yet. Check now, or let the next scheduled check run — only genuinely new news lands here.</p>
           ) : (
             ''
@@ -878,6 +990,21 @@ function confirmDelete(ids: string[]): void {
   })();
 }
 
+/** Share one story, toasting only when it fell back to the clipboard/failed. */
+async function shareOne(item: NewsItem): Promise<void> {
+  const result = await shareItem(item);
+  // The OS share sheet is its own feedback, and a cancelled share needs none.
+  if (result === 'copied') showToast('Copied to clipboard');
+  else if (result === 'failed') showToast("Couldn't share this story");
+}
+
+/** Flag/unflag a story off-topic (NEWS-61). Flagging keeps it visible-but-collapsed
+ *  this session (via `recentlyFlagged`) so a misclick can be undone. */
+function flagItem(id: string, offTopic: boolean): void {
+  if (offTopic) appStore.actions.markRecentlyFlagged(id);
+  void setItemOffTopic(id, offTopic);
+}
+
 /** Apply a context-menu action to every targeted topic. */
 function runTopicAction(action: string, ids: string[]): void {
   const { topics, soloTopicIds } = appStore.state.value;
@@ -915,6 +1042,11 @@ function runTopicAction(action: string, ids: string[]): void {
       appStore.actions.setSolo([...solo]);
       break;
     }
+    case 'review-flagged':
+      // Enter review mode for the targeted topics (the menu item is disabled
+      // when none of them have flagged stories).
+      appStore.actions.setReviewTopicIds(ids);
+      break;
     case 'delete':
       confirmDelete(ids);
       break;
@@ -1053,6 +1185,41 @@ function wireEvents(root: HTMLElement): void {
     runTopicAction(action, menu.topicIds);
   });
 
+  // --- Story context menu (bookmark / share / flag), NEWS-61 ---
+  void delegate(root, 'contextmenu', '[data-item-id]', (e, el) => {
+    const id = el.getAttribute('data-item-id');
+    if (id === null || !(e instanceof MouseEvent)) return;
+    e.preventDefault();
+    appStore.actions.openItemMenu({ x: e.clientX, y: e.clientY, itemId: id });
+  });
+  void delegate(root, 'click', '[data-action=close-item-menu]', (e, el) => {
+    if (e.target === el) appStore.actions.closeItemMenu();
+  });
+  void delegate(root, 'click', '[data-item-menu-action]', (_e, el) => {
+    const action = el.getAttribute('data-item-menu-action');
+    const menu = appStore.state.value.itemMenu;
+    if (action === null || menu === null) return;
+    const item = appStore.state.value.items.find((i) => i.id === menu.itemId);
+    appStore.actions.closeItemMenu();
+    if (item === undefined) return;
+    if (action === 'bookmark') void setItemSaved(item.id, !item.saved);
+    else if (action === 'share') void shareOne(item);
+    else if (action === 'flag') flagItem(item.id, !item.offTopic);
+  });
+  // Clicking the "off topic" pill on a collapsed row prompts to unflag.
+  void delegate(root, 'click', '[data-unflag-prompt]', (_e, el) => {
+    const id = el.getAttribute('data-unflag-prompt');
+    if (id === null) return;
+    void (async () => {
+      if (await confirm('Unflag this story? It will return to the feed.', { confirmLabel: 'Unflag' })) {
+        await setItemOffTopic(id, false);
+      }
+    })();
+  });
+  void delegate(root, 'click', '[data-action=exit-review]', () => {
+    appStore.actions.setReviewTopicIds([]);
+  });
+
   void delegate(root, 'click', '[data-action=clear-solo]', () => {
     appStore.actions.setSolo([]);
   });
@@ -1067,13 +1234,7 @@ function wireEvents(root: HTMLElement): void {
     const id = el.getAttribute('data-share-item');
     if (id === null) return;
     const item = appStore.state.value.items.find((i) => i.id === id);
-    if (item === undefined) return;
-    void shareItem(item).then((result) => {
-      // The OS share sheet is its own feedback, and a cancelled share needs
-      // none — only the clipboard fallback and a failure warrant a toast.
-      if (result === 'copied') showToast('Copied to clipboard');
-      else if (result === 'failed') showToast("Couldn't share this story");
-    });
+    if (item !== undefined) void shareOne(item);
   });
   void delegate(root, 'click', '[data-action=toggle-saved-filter]', () => {
     appStore.actions.setSavedFilter(!appStore.state.value.savedFilter);
@@ -1164,8 +1325,9 @@ function wireGlobalKeysAndDismiss(): void {
     // A click on a row, or inside the menu, is handled by its own delegate.
     if (e.target.closest('[data-topic-row]') !== null) return;
     if (e.target.closest('.menu') !== null) return;
-    const { selectedTopicIds, contextMenu } = appStore.state.value;
+    const { selectedTopicIds, contextMenu, itemMenu } = appStore.state.value;
     if (contextMenu !== null) appStore.actions.closeContextMenu();
+    if (itemMenu !== null && e.target.closest('[data-item-id]') === null) appStore.actions.closeItemMenu();
     if (selectedTopicIds.length > 0) appStore.actions.setSelection([]);
   });
 
@@ -1176,6 +1338,7 @@ function wireGlobalKeysAndDismiss(): void {
         return;
       }
       appStore.actions.closeContextMenu();
+      appStore.actions.closeItemMenu();
       appStore.actions.setSelection([]);
       return;
     }

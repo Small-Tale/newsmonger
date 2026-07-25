@@ -13,7 +13,17 @@ export interface KnownItem {
 
 /** Abstraction over "ask an LLM for news" so tests can substitute a mock. */
 export interface NewsService {
-  checkTopic(topicName: string, known: KnownItem[], sinceIso: string | null): Promise<FoundNewsItem[]>;
+  /**
+   * `offTopicTitles` are stories the user flagged as off-topic (NEWS-61), passed
+   * to the prompt as negative examples so the model can infer the topic's
+   * intended sense. Optional so existing callers/tests need not supply it.
+   */
+  checkTopic(
+    topicName: string,
+    known: KnownItem[],
+    sinceIso: string | null,
+    offTopicTitles?: string[],
+  ): Promise<FoundNewsItem[]>;
 }
 
 /**

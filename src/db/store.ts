@@ -106,6 +106,27 @@ export class Store {
     return item;
   }
 
+  /** Flag or un-flag a story as off-topic (NEWS-61). Null if the item is gone. */
+  setItemOffTopic(id: string, offTopic: boolean): NewsItem | null {
+    const item = this.data.items.find((i) => i.id === id);
+    if (!item) return null;
+    item.offTopic = offTopic;
+    this.save();
+    return item;
+  }
+
+  /**
+   * Titles of a topic's off-topic stories, most recent first, for the prompt's
+   * negative-example list (NEWS-61). Capped by `limit` to keep the prompt bounded.
+   */
+  offTopicTitlesForTopic(topicId: string, limit = 10): string[] {
+    return this.data.items
+      .filter((i) => i.topicId === topicId && i.offTopic)
+      .sort((a, b) => b.foundAt.localeCompare(a.foundAt))
+      .slice(0, limit)
+      .map((i) => i.title);
+  }
+
   markTopicChecked(id: string, when: Date): void {
     const topic = this.getTopic(id);
     if (!topic) return; // topic may have been deleted mid-check
@@ -145,9 +166,15 @@ export class Store {
     return new Set(this.data.items.filter((i) => i.topicId === topicId).map((i) => i.dedupeKey));
   }
 
-  /** `image`/`saved` are optional: a new story has no picture and isn't saved. */
-  addItems(items: (Omit<NewsItem, 'id' | 'image' | 'saved'> & { image?: NewsItem['image']; saved?: boolean })[]): NewsItem[] {
-    const added = items.map((item) => ({ image: null, saved: false, ...item, id: randomUUID() }));
+  /** `image`/`saved`/`offTopic` are optional: a new story has no picture, isn't saved, and isn't flagged. */
+  addItems(
+    items: (Omit<NewsItem, 'id' | 'image' | 'saved' | 'offTopic'> & {
+      image?: NewsItem['image'];
+      saved?: boolean;
+      offTopic?: boolean;
+    })[],
+  ): NewsItem[] {
+    const added = items.map((item) => ({ image: null, saved: false, offTopic: false, ...item, id: randomUUID() }));
     this.data.items.push(...added);
     this.save();
     return added;

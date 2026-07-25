@@ -168,6 +168,29 @@ describe('API', () => {
     expect(res.status).toBe(404);
   });
 
+  it('flags and unflags a story off-topic over HTTP (NEWS-61)', async () => {
+    const { app, store } = makeApp();
+    const topic = store.addTopic('Apple');
+    const [item] = store.addItems([
+      { topicId: topic.id, title: 'Apple pie', summary: 's', sources: [], dedupeKey: 'k', foundAt: '2026-07-24T00:00:00Z' },
+    ]);
+    const id = item.id;
+
+    let res = await app.request(`/api/items/${id}`, { method: 'PATCH', body: JSON.stringify({ offTopic: true }) });
+    expect(res.status).toBe(200);
+    expect(store.listItems()[0]?.offTopic).toBe(true);
+
+    res = await app.request(`/api/items/${id}`, { method: 'PATCH', body: JSON.stringify({ offTopic: false }) });
+    expect(res.status).toBe(200);
+    expect(store.listItems()[0]?.offTopic).toBe(false);
+
+    // Empty body rejected; unknown item 404s.
+    expect((await app.request(`/api/items/${id}`, { method: 'PATCH', body: '{}' })).status).toBe(400);
+    expect(
+      (await app.request('/api/items/nope', { method: 'PATCH', body: JSON.stringify({ offTopic: true }) })).status,
+    ).toBe(404);
+  });
+
   it('toggles a topic high-priority over HTTP (NEWS-56)', async () => {
     const { app, store } = makeApp();
     const topic = store.addTopic('Fusion');

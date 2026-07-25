@@ -65,9 +65,12 @@ export class CheckRunner {
       const known: KnownItem[] = this.store
         .listItems(topicId)
         .map((i) => ({ title: i.title, foundAt: i.foundAt }));
+      // Stories the user flagged off-topic become negative examples in the
+      // prompt, so the model can infer the topic's intended sense (NEWS-61).
+      const offTopicTitles = this.store.offTopicTitlesForTopic(topicId);
       // Ask from what we've actually *covered*, not the last attempt: a run
       // that failed with news pending must not shrink the next window.
-      const found = await provider.checkTopic(topic.name, known, topic.coveredThroughAt);
+      const found = await provider.checkTopic(topic.name, known, topic.coveredThroughAt, offTopicTitles);
       const fresh = filterNewItems(found, this.store.dedupeKeysForTopic(topicId));
       // Fetch lead images before storing, so an item never appears without one
       // and then pops a picture in a moment later. Failures are silent by

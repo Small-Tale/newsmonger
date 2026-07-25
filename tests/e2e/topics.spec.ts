@@ -73,8 +73,9 @@ test('right-click opens a menu with icons and separators', async ({ page }) => {
   await row(page, 'Alpha Topic').click({ button: 'right' });
   await expect(page.locator('.menu')).toBeVisible();
 
-  await expect(page.locator('.menu-item')).toHaveCount(5);
-  await expect(page.locator('.menu .icon')).toHaveCount(5);
+  // Check, Pause, High priority, Solo, Review Flagged, Delete (NEWS-61 added the fifth).
+  await expect(page.locator('.menu-item')).toHaveCount(6);
+  await expect(page.locator('.menu .icon')).toHaveCount(6);
   await expect(page.locator('.menu-sep')).toHaveCount(2);
   await expect(page.locator('.menu-item span').first()).toHaveText('Check now');
 
