@@ -10,7 +10,7 @@ Add/delete/pause topics (unique, case-insensitive); global interval (default 1 d
 
 - FR-16.1/16.2/16.3 client cap of 100 + "Show more" + reset-per-view — NEWS-62: **Shipped**
 - FR-16.4 virtualized scrolling — evaluated and **rejected** (cap makes it unnecessary)
-- Server-side payload pagination (needs server-side filtering): **Deferred** (NEWS-73)
+- Server-side payload pagination (needs server-side filtering): **Design only** — see [17 — Server-Side Pagination](../17-server-pagination.md); phased as NEWS-74 (endpoint) + NEWS-75 (client rewire)
 
 ## [15 — Off-Topic Flagging](../15-off-topic-flagging.md) — Shipped
 
