@@ -59,6 +59,15 @@ export const StateRespSchema = z.object({
 });
 export type StateResp = z.infer<typeof StateRespSchema>;
 
+/** A feed page (server-side pagination, NEWS-74). */
+export const ItemCursorSchema = z.object({ foundAt: z.string(), id: z.string() });
+export const ItemsRespSchema = z.object({
+  items: z.array(NewsItemSchema),
+  nextCursor: ItemCursorSchema.nullable(),
+  total: z.number().int(),
+});
+export type ItemsResp = z.infer<typeof ItemsRespSchema>;
+
 export const ProviderInfoSchema = z.object({
   name: z.enum(PROVIDER_NAMES),
   label: z.string(),

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { createMockProvider } from '../../src/ai/providers/index.js';
-import { ProvidersRespSchema, StateRespSchema } from '../../src/api/schemas.js';
+import { ItemsRespSchema, ProvidersRespSchema, StateRespSchema } from '../../src/api/schemas.js';
 import { Attendance } from '../../src/attendance.js';
 import { CheckRunner } from '../../src/checks.js';
 import { Store } from '../../src/db/store.js';
@@ -166,6 +166,35 @@ describe('API', () => {
     expect(res.status).toBe(404);
     res = await app.request(`/api/topics/${topic.id}`, { method: 'PATCH', body: JSON.stringify({ paused: true }) });
     expect(res.status).toBe(404);
+  });
+
+  it('serves a page of items with filters, cursor, and total (NEWS-74)', async () => {
+    const { app, store } = makeApp();
+    const topic = store.addTopic('Apple');
+    for (let i = 0; i < 3; i++) {
+      store.addItems([
+        { topicId: topic.id, title: `story ${String(i)}`, summary: 's', sources: [], dedupeKey: `k${String(i)}`, foundAt: `2026-07-24T00:0${String(i)}:00Z` },
+      ]);
+    }
+    const parse = async (url: string) =>
+      ItemsRespSchema.parse(await json(await app.request(url)));
+
+    const page1 = await parse('/api/items?limit=2');
+    expect(page1.items).toHaveLength(2);
+    expect(page1.total).toBe(3);
+    expect(page1.nextCursor).not.toBeNull();
+
+    const cursor = page1.nextCursor;
+    const page2 = await parse(
+      `/api/items?limit=2&beforeAt=${encodeURIComponent(cursor?.foundAt ?? '')}&beforeId=${encodeURIComponent(cursor?.id ?? '')}`,
+    );
+    expect(page2.items).toHaveLength(1);
+    expect(page2.nextCursor).toBeNull();
+
+    // A search narrows the total.
+    const searched = await parse('/api/items?q=story%201');
+    expect(searched.items.map((i) => i.title)).toEqual(['story 1']);
+    expect(searched.total).toBe(1);
   });
 
   it('flags and unflags a story off-topic over HTTP (NEWS-61)', async () => {

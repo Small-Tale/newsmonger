@@ -7,6 +7,28 @@ import { DataFileSchema, emptyDataFile } from './schemas.js';
 
 const MAX_RUNS_KEPT = 200;
 
+/** A feed cursor: the last item of a page, for fetching the next (NEWS-74). */
+export interface ItemCursor {
+  foundAt: string;
+  id: string;
+}
+
+/** A feed query for `Store.queryItems` (NEWS-74). */
+export interface ItemQuery {
+  mode: 'normal' | 'review';
+  /** Solo topics (normal), or the reviewed topics (review). Empty = all. */
+  topicIds?: string[];
+  saved?: boolean;
+  q?: string;
+  limit: number;
+  before?: ItemCursor | null;
+}
+
+/** Descending string compare: later/greater first. */
+function cmpDesc(a: string, b: string): number {
+  return a < b ? 1 : a > b ? -1 : 0;
+}
+
 /**
  * JSON-file-backed store for topics, news items, settings, and check runs.
  *
@@ -160,6 +182,62 @@ export class Store {
   listItems(topicId?: string): NewsItem[] {
     const items = topicId === undefined ? this.data.items : this.data.items.filter((i) => i.topicId === topicId);
     return [...items];
+  }
+
+  /**
+   * Query the feed for a page (server-side pagination, NEWS-74).
+   *
+   * Filters, sorts newest-first, and cursor-paginates in one place so the
+   * server is the single source of truth for what the feed shows. The filter
+   * predicates mirror the client's view logic:
+   *  - `mode: 'review'` → only off-topic stories for `topicIds` (the reviewed
+   *    topics); nothing else applies.
+   *  - `mode: 'normal'` → exclude off-topic stories, then apply Solo (`topicIds`),
+   *    Saved, and Search (title / summary / topic name).
+   *
+   * The cursor is the last item of the previous page `(foundAt, id)`; the page is
+   * the items strictly *older* than it, so paging is stable as new items arrive.
+   */
+  queryItems(query: ItemQuery): { items: NewsItem[]; nextCursor: ItemCursor | null; total: number } {
+    const topicNames = new Map(this.data.topics.map((t) => [t.id, t.name]));
+    const topicSet = query.topicIds && query.topicIds.length > 0 ? new Set(query.topicIds) : null;
+    const q = (query.q ?? '').trim().toLowerCase();
+
+    const filtered = this.data.items.filter((item) => {
+      if (query.mode === 'review') {
+        return item.offTopic && topicSet !== null && topicSet.has(item.topicId);
+      }
+      if (item.offTopic) return false;
+      if (topicSet !== null && !topicSet.has(item.topicId)) return false;
+      if (query.saved === true && !item.saved) return false;
+      if (q !== '') {
+        const name = topicNames.get(item.topicId) ?? '';
+        const hit =
+          item.title.toLowerCase().includes(q) ||
+          item.summary.toLowerCase().includes(q) ||
+          name.toLowerCase().includes(q);
+        if (!hit) return false;
+      }
+      return true;
+    });
+
+    // Newest first; tie-break on id so a shared timestamp still gives a total,
+    // stable order for the cursor.
+    filtered.sort((a, b) =>
+      a.foundAt === b.foundAt ? cmpDesc(a.id, b.id) : cmpDesc(a.foundAt, b.foundAt),
+    );
+
+    const total = filtered.length;
+    const c = query.before;
+    const afterCursor =
+      c === undefined || c === null
+        ? filtered
+        : filtered.filter((i) => i.foundAt < c.foundAt || (i.foundAt === c.foundAt && i.id < c.id));
+    const items = afterCursor.slice(0, query.limit);
+    // More remain iff the filtered-after-cursor set exceeded the page.
+    const last = afterCursor.length > items.length ? items[items.length - 1] : undefined;
+    const nextCursor = last ? { foundAt: last.foundAt, id: last.id } : null;
+    return { items, nextCursor, total };
   }
 
   dedupeKeysForTopic(topicId: string): Set<string> {

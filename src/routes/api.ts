@@ -7,7 +7,7 @@ import type { z } from 'zod';
 import { deleteApiKey, resolveApiKey, saveApiKey } from '../ai/api-keys.js';
 import { probeProviders } from '../ai/providers/index.js';
 import { isKeyedProvider, KEY_ENV_VARS, KEYED_PROVIDERS, PROVIDER_INFO } from '../ai/types.js';
-import type { KeysResp, ProvidersResp, StateResp } from '../api/schemas.js';
+import type { ItemsResp, KeysResp, ProvidersResp, StateResp } from '../api/schemas.js';
 import {
   CheckReqSchema,
   CreateTopicReqSchema,
@@ -44,6 +44,31 @@ export function registerApi(app: Hono<AppEnv>): void {
       checking: runner.checking(),
     };
     return c.json(state);
+  });
+
+  // A page of the feed (server-side pagination, NEWS-74). Filters + sorts +
+  // cursor-paginates server-side so the payload is bounded and correct for
+  // every view. `/api/state` still carries items for now; the client moves to
+  // this endpoint in phase 2 (NEWS-75).
+  app.get('/api/items', (c) => {
+    const limit = Math.min(200, Math.max(1, Number.parseInt(c.req.query('limit') ?? '100', 10) || 100));
+    const mode = c.req.query('mode') === 'review' ? 'review' : 'normal';
+    const topicIds = (c.req.query('topics') ?? '')
+      .split(',')
+      .map((s) => s.trim())
+      .filter((s) => s !== '');
+    const beforeAt = c.req.query('beforeAt');
+    const beforeId = c.req.query('beforeId');
+    const before = beforeAt !== undefined && beforeId !== undefined ? { foundAt: beforeAt, id: beforeId } : null;
+    const resp: ItemsResp = c.get('store').queryItems({
+      mode,
+      topicIds,
+      saved: c.req.query('saved') === '1',
+      q: c.req.query('q') ?? '',
+      limit,
+      before,
+    });
+    return c.json(resp);
   });
 
   // Providers + availability, for the settings picker. Probing is cheap today
