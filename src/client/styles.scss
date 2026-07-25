@@ -117,6 +117,16 @@ body {
   gap: 12px;
 }
 
+// "Show more" pagination button, centred below the feed (NEWS-62).
+.show-more-slot {
+  display: flex;
+  justify-content: center;
+}
+
+.btn.show-more {
+  margin-top: 6px;
+}
+
 // Feed search (NEWS-60): compact by default, widens on focus or when it holds a
 // query, with an animated width so the growth reads as intentional.
 .search {

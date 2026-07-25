@@ -30,7 +30,7 @@ import { activeBehindWarnings } from './schedule.js';
 import { filterItemsByQuery } from './search.js';
 import { shareItem } from './share.js';
 import type { AppState } from './stores.js';
-import { appStore, TOPIC_SORT_LABELS, TOPIC_SORTS } from './stores.js';
+import { appStore, FEED_PAGE, TOPIC_SORT_LABELS, TOPIC_SORTS } from './stores.js';
 import { openExternalUrl } from './tauri.js';
 import { sortTopics } from './topic-sort.js';
 
@@ -725,11 +725,16 @@ function appJsx(): SafeHtml {
   const searchedItems = filterItemsByQuery(savedItems, topicNames, s.searchQuery);
   const searching = s.searchQuery.trim() !== '';
   const feedVariant: 'normal' | 'review' = reviewMode ? 'review' : 'normal';
-  const feedItems = reviewMode
+  const filteredItems = reviewMode
     ? allItems.filter((i) => i.offTopic && reviewSet.has(i.topicId))
     : // Flagged stories are hidden from the normal feed, except ones flagged this
       // session — those show collapsed so a misclick can be undone (NEWS-61).
       searchedItems.filter((i) => !i.offTopic || recentFlagged.has(i.id));
+  // Paginate the final filtered list: render at most `feedLimit`, with a "Show
+  // more" button for the rest (NEWS-62). Capping after all filters keeps it
+  // correct for every view; the limit resets to a page when the view changes.
+  const feedItems = filteredItems.slice(0, s.feedLimit);
+  const moreCount = filteredItems.length - feedItems.length;
   const savedCount = allItems.filter((i) => i.saved).length;
   const anyChecking = s.checking.length > 0;
   // Only warn about a topic whose *latest* run failed — not a stale failure from
@@ -881,8 +886,8 @@ function appJsx(): SafeHtml {
           <div class="banner review">
             {icon('flag', 14)}
             <span class="banner-text">
-              Reviewing {String(feedItems.length)} flagged{' '}
-              {feedItems.length === 1 ? 'story' : 'stories'}
+              Reviewing {String(filteredItems.length)} flagged{' '}
+              {filteredItems.length === 1 ? 'story' : 'stories'}
               {reviewSet.size === 1 ? ` for ${topicNames.get(s.reviewTopicIds[0] ?? '') ?? 'a topic'}` : ''}
             </span>
             <button class="btn subtle" type="button" data-action="exit-review">
@@ -967,6 +972,18 @@ function appJsx(): SafeHtml {
             <p class="empty">No saved stories yet. Use the bookmark button on a story to keep it here.</p>
           ) : s.loaded && feedItems.length === 0 && s.topics.length > 0 ? (
             <p class="empty">No stories yet. Check now, or let the next scheduled check run — only genuinely new news lands here.</p>
+          ) : (
+            ''
+          )}
+        </div>
+        {/* Always-present slot so the button appearing can't shift a keyed list
+            above it (kerf KF-377). */}
+        <div class="show-more-slot">
+          {moreCount > 0 ? (
+            <button class="btn show-more" type="button" data-action="show-more">
+              Show {String(Math.min(moreCount, FEED_PAGE))} more
+              {moreCount > FEED_PAGE ? ` (${String(moreCount)} left)` : ''}
+            </button>
           ) : (
             ''
           )}
@@ -1292,6 +1309,10 @@ function wireEvents(root: HTMLElement): void {
   void delegate(root, 'input', '[data-action=search]', (_e, el) => {
     appStore.actions.setSearchQuery((el as HTMLInputElement).value);
   });
+  void delegate(root, 'click', '[data-action=show-more]', () => {
+    appStore.actions.showMoreFeed();
+  });
+
   void delegate(root, 'click', '[data-action=clear-search]', (_e, el) => {
     // Clear the store AND the uncontrolled input's live value, then refocus it.
     appStore.actions.setSearchQuery('');

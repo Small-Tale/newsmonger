@@ -2,6 +2,9 @@ import { defineStore } from 'kerfjs';
 
 import type { KeysResp, ProviderInfo, StateResp } from '../api/schemas.js';
 
+/** How many stories the feed reveals per "Show more" page (NEWS-62). */
+export const FEED_PAGE = 100;
+
 /** Sidebar ordering options (NEWS-63). */
 export type TopicSort = 'alpha' | 'added' | 'priority';
 export const TOPIC_SORTS: readonly TopicSort[] = ['alpha', 'added', 'priority'];
@@ -52,6 +55,8 @@ export interface AppState {
   savedFilter: boolean;
   /** Live feed search query (NEWS-60). Ephemeral, composes with Solo/Saved. */
   searchQuery: string;
+  /** How many stories the feed currently shows; grows by `FEED_PAGE` (NEWS-62). */
+  feedLimit: number;
   /**
    * Topics that are solo'd: when non-empty, the feed shows only their stories.
    *
@@ -192,6 +197,7 @@ export const appStore = defineStore({
     selectedTopicIds: [],
     savedFilter: false,
     searchQuery: '',
+    feedLimit: FEED_PAGE,
     soloTopicIds: [],
     contextMenu: null,
     itemMenu: null,
@@ -223,14 +229,19 @@ export const appStore = defineStore({
     setSelection: (selectedTopicIds: string[]) => {
       set({ ...get(), selectedTopicIds });
     },
+    // The four view-changing actions reset the feed page: a different view is a
+    // fresh list, shown from the top (NEWS-62).
     setSolo: (soloTopicIds: string[]) => {
-      set({ ...get(), soloTopicIds });
+      set({ ...get(), soloTopicIds, feedLimit: FEED_PAGE });
     },
     setSavedFilter: (savedFilter: boolean) => {
-      set({ ...get(), savedFilter });
+      set({ ...get(), savedFilter, feedLimit: FEED_PAGE });
     },
     setSearchQuery: (searchQuery: string) => {
-      set({ ...get(), searchQuery });
+      set({ ...get(), searchQuery, feedLimit: FEED_PAGE });
+    },
+    showMoreFeed: () => {
+      set({ ...get(), feedLimit: get().feedLimit + FEED_PAGE });
     },
     openContextMenu: (menu: { x: number; y: number; topicIds: string[] }) => {
       set({ ...get(), contextMenu: menu });
@@ -250,7 +261,7 @@ export const appStore = defineStore({
       set({ ...s, recentlyFlagged: [...s.recentlyFlagged, id] });
     },
     setReviewTopicIds: (reviewTopicIds: string[]) => {
-      set({ ...get(), reviewTopicIds });
+      set({ ...get(), reviewTopicIds, feedLimit: FEED_PAGE });
     },
     openConfirm: (confirm: { message: string; confirmLabel: string; danger: boolean }) => {
       set({ ...get(), confirm });

@@ -6,6 +6,12 @@ Status markers: **Shipped** · **Partial** · **Design only** · **Deferred**. S
 
 Add/delete/pause topics (unique, case-insensitive); global interval (default 1 day, min 5 min); minute-tick scheduler + startup sweep; sequential, non-overlapping checks; failures advance `lastCheckedAt` (retry next interval); manual per-topic and check-all triggers; **adding a topic checks it immediately** (manual-semantics, background-fired — FR-1.12, NEWS-54). All shipped and covered by unit + E2E tests.
 
+## [16 — Feed Pagination](../16-pagination.md) — Client-side shipped; server-side deferred
+
+- FR-16.1/16.2/16.3 client cap of 100 + "Show more" + reset-per-view — NEWS-62: **Shipped**
+- FR-16.4 virtualized scrolling — evaluated and **rejected** (cap makes it unnecessary)
+- Server-side payload pagination (needs server-side filtering): **Deferred** (NEWS-73)
+
 ## [15 — Off-Topic Flagging](../15-off-topic-flagging.md) — Shipped
 
 - FR-15.1/15.2 `offTopic` flag on items; story right-click menu (bookmark/share/flag) — NEWS-61: **Shipped**
