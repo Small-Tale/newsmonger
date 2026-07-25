@@ -25,7 +25,7 @@ import {
 } from './api.js';
 import { currentFailure } from './failure.js';
 import { icon } from './icons.js';
-import { ensureNotificationPermission } from './notifications.js';
+import { ensureNotificationPermission, syncTauriNotificationPermission } from './notifications.js';
 import { activeBehindWarnings } from './schedule.js';
 import { filterItemsByQuery } from './search.js';
 import { shareItem } from './share.js';
@@ -1410,6 +1410,9 @@ if (root) {
   wireGlobalKeysAndDismiss();
   void refreshState();
   void refreshProviders();
+  // Learn the OS notification permission up front in the desktop shell, so a
+  // session that already had notifications on keeps firing them (NEWS-66).
+  void syncTauriNotificationPermission();
   startPolling();
   startForegroundHeartbeat();
 }

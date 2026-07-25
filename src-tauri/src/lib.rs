@@ -27,6 +27,11 @@ const READY_MARKER: &str = "running at ";
 
 pub fn run() {
     tauri::Builder::default()
+        // Native OS notifications (NEWS-66): the web Notification API's
+        // permission request doesn't raise the real OS prompt inside the
+        // WKWebView, so the client routes notifications through this plugin,
+        // whose requestPermission() shows the system dialog.
+        .plugin(tauri_plugin_notification::init())
         .manage(ServerPid(Mutex::new(None)))
         .setup(|app| {
             let window = app

@@ -8,7 +8,7 @@ See also: [3 — UI](3-ui.md), [6 — AI Providers](6-providers.md) (the attenda
 
 ## When it fires
 
-- **FR-10.1** *(Shipped)* Off by default. A checkbox in the Settings dialog (`notifyOnNewItems`, persisted in `data.json`) enables it. Enabling requests browser notification permission on the spot — that request must ride the click, so it lives in the toggle's change handler.
+- **FR-10.1** *(Shipped)* Off by default. A checkbox in the Settings dialog (`notifyOnNewItems`, persisted in `data.json`) enables it. Enabling requests notification permission on the spot — that request must ride the click, so it lives in the toggle's change handler. In the **Tauri desktop shell** the request goes through the notification plugin, whose `requestPermission()` raises the real OS dialog; in a browser it uses the web `Notification.requestPermission()` (NEWS-66).
 
 - **FR-10.2** *(Shipped)* **Only when the app is not focused.** If the window is visible and focused when new stories land, the feed updating in front of you is enough — a notification would be noise. `focusProbe.isFocused()` (visible AND focused) gates it.
 
@@ -20,7 +20,7 @@ See also: [3 — UI](3-ui.md), [6 — AI Providers](6-providers.md) (the attenda
 
 ## What it does
 
-- **FR-10.5** *(Shipped)* A web `Notification` ("New story" / "N new stories"), whose click focuses the app window.
+- **FR-10.5** *(Shipped)* A notification ("New story" / "N new stories"). In Tauri it's posted via the notification plugin's `sendNotification`; in a browser it's a web `Notification` whose click focuses the app window (NEWS-66). The permission-granted state for the Tauri path is cached (`tauriGranted`) — set on the toggle and re-synced on startup (`syncTauriNotificationPermission`) so a session that had notifications on keeps firing without re-toggling.
 - **FR-10.6** *(Shipped)* A **dock bounce** (macOS) / **taskbar flash** (Windows/Linux) via the Tauri window's `requestUserAttention`, reached through the global Tauri API so the browser build pulls in no Tauri packages. This is separate from the notification on purpose: it still draws the eye when notifications are suppressed by Do Not Disturb, and it's the desktop-only half. A no-op in a browser.
 
 ## Structure
@@ -32,4 +32,4 @@ See also: [3 — UI](3-ui.md), [6 — AI Providers](6-providers.md) (the attenda
 ## Verified vs manual
 
 - **Browser: verified.** Toggle persists across reload; permission grant/deny handled; a notification fires (captured via a stubbed `Notification`) when new items arrive while unfocused, and not while focused; throttle and first-load seeding are unit-tested (10 cases).
-- **Tauri native: manual.** The web `Notification` API and `requestUserAttention` could not be exercised in a live WKWebView in this environment (the window can't be scripted here). The `window.confirm` bug in NEWS-39 is a reminder that a web API can behave differently in the WKWebView, so **whether the web Notification API works there is unconfirmed** — if it doesn't, the fallback is the Tauri notification plugin (a native path, filed as a follow-up). Dock bounce likewise needs a real desktop run. See the manual test plan.
+- **Tauri native: needs a device.** The desktop shell now routes permission + firing through the **notification plugin** (`tauri-plugin-notification`, registered in `src-tauri/src/lib.rs`, `notification:default` capability) precisely because the web Notification API's request was a silent "denied" in the WKWebView with no OS prompt (NEWS-66). The Rust side **compiles**, and both the Tauri and web client paths are **unit-tested** (13 cases, the Tauri path via a stubbed `window.__TAURI__.notification`). What can't be checked here is the actual runtime: whether `requestPermission()` raises the OS dialog and `sendNotification()` posts on a real machine — that's a manual desktop run (dovetails with NEWS-40). Dock bounce likewise needs a real desktop run. See the manual test plan.

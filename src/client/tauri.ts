@@ -5,9 +5,22 @@ interface TauriWindow {
   setFocus?: () => Promise<unknown>;
 }
 
+/** The notification plugin's guest API, exposed on the global by `withGlobalTauri`. */
+interface TauriNotification {
+  isPermissionGranted?: () => Promise<boolean>;
+  requestPermission?: () => Promise<string>;
+  sendNotification?: (options: { title: string; body?: string }) => void;
+}
+
 interface TauriGlobal {
   core?: { invoke?: (cmd: string) => Promise<unknown> };
   window?: { getCurrentWindow?: () => TauriWindow };
+  notification?: TauriNotification;
+}
+
+/** The Tauri notification plugin API, or undefined outside the desktop shell. */
+export function tauriNotification(): TauriNotification | undefined {
+  return getTauriGlobal()?.notification;
 }
 
 /** The Tauri global injected into the webview when running as a desktop app. */

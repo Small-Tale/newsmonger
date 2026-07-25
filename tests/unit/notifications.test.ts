@@ -4,6 +4,7 @@ import type { StateResp } from '../../src/api/schemas.js';
 import {
   __resetNotificationsForTests,
   clock,
+  ensureNotificationPermission,
   focusProbe,
   noteState,
 } from '../../src/client/notifications.js';
@@ -156,5 +157,58 @@ describe('noteState', () => {
     noteState(state(['a']));
     noteState(state(['a', 'b']));
     expect(typeof FakeNotification.instances[0]?.onclick).toBe('function');
+  });
+});
+
+describe('Tauri notification path (NEWS-66)', () => {
+  interface FakePlugin {
+    isPermissionGranted: () => Promise<boolean>;
+    requestPermission: () => Promise<string>;
+    sendNotification: (o: { title: string; body?: string }) => void;
+  }
+  const sent: { title: string; body?: string }[] = [];
+  let plugin: FakePlugin;
+
+  function installTauri(over: Partial<FakePlugin> = {}): void {
+    plugin = {
+      isPermissionGranted: () => Promise.resolve(false),
+      requestPermission: () => Promise.resolve('granted'),
+      sendNotification: (o) => sent.push(o),
+      ...over,
+    };
+    // The unit env is Node (no window); fake one so `isTauri()` sees the global.
+    (globalThis as unknown as Record<string, unknown>)['window'] = { __TAURI__: { notification: plugin } };
+  }
+
+  beforeEach(() => {
+    sent.length = 0;
+    installTauri();
+  });
+  afterEach(() => {
+    delete (globalThis as unknown as Record<string, unknown>)['window'];
+  });
+
+  it('requests OS permission through the plugin (the real prompt)', async () => {
+    let asked = 0;
+    installTauri({ requestPermission: () => { asked += 1; return Promise.resolve('granted'); } });
+    expect(await ensureNotificationPermission()).toBe(true);
+    expect(asked).toBe(1);
+  });
+
+  it('fires via the plugin, not the web Notification API', async () => {
+    await ensureNotificationPermission(); // grants
+    noteState(state(['a']));
+    noteState(state(['a', 'b']));
+    expect(sent).toHaveLength(1);
+    expect(sent[0]?.title).toBe('New story');
+    expect(FakeNotification.instances).toHaveLength(0);
+  });
+
+  it('does not fire when the OS denied permission', async () => {
+    installTauri({ requestPermission: () => Promise.resolve('denied') });
+    expect(await ensureNotificationPermission()).toBe(false);
+    noteState(state(['a']));
+    noteState(state(['a', 'b']));
+    expect(sent).toHaveLength(0);
   });
 });
