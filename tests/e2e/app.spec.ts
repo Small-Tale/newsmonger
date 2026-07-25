@@ -648,3 +648,31 @@ test('search filters the feed live, and clearing restores it (NEWS-60)', async (
   await topicAction(page, row, 'delete');
   await expect(row).toHaveCount(0);
 });
+
+test('the feed lays out as a multi-column grid on a wide display (NEWS-64)', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.goto('/');
+  await page.fill('.add-topic input', 'Grid Probe');
+  await page.press('.add-topic input', 'Enter');
+  const row = page.locator('.topic', { hasText: 'Grid Probe' });
+  await expect(row).toBeVisible();
+  await expect(page.locator('.item:not(.flagged-row)').first()).toBeVisible({ timeout: 15_000 });
+
+  const trackCount = async (): Promise<number> =>
+    page.locator('#feed .day').first().evaluate((el) => getComputedStyle(el).gridTemplateColumns.split(' ').length);
+
+  // Sidebar shown: the feed is narrow → a single column.
+  if ((await page.locator('.shell.sidebar-collapsed').count()) > 0) {
+    await page.locator('[data-action=toggle-sidebar]').click();
+  }
+  await expect.poll(trackCount).toBe(1);
+
+  // Hide the sidebar: the feed widens → two columns.
+  await page.locator('[data-action=toggle-sidebar]').click();
+  await expect.poll(trackCount).toBe(2);
+
+  // Clean up (also restores the sidebar for good measure).
+  await page.locator('[data-action=toggle-sidebar]').click();
+  await topicAction(page, row, 'delete');
+  await expect(row).toHaveCount(0);
+});

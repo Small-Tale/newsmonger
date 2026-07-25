@@ -559,12 +559,30 @@ h2.eyebrow {
   padding-top: 10px;
 }
 
+// Stories lay out in a responsive grid (NEWS-64): one column when the feed is
+// narrow (sidebar shown), two-plus when it's wide (sidebar hidden). Grid rows
+// stretch every card to the tallest on that line, so a row reads as a unit.
 .day {
   margin-bottom: 26px;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 460px), 1fr));
+  gap: 12px;
 
   h2 {
+    grid-column: 1 / -1;
+    margin-bottom: 2px;
     padding-bottom: 6px;
     border-bottom: 1px solid var(--line);
+  }
+
+  // Grid `gap` handles spacing; the stacked-list top margin would double it.
+  .item {
+    margin-top: 0;
+  }
+
+  // A flagged one-liner stays full width rather than sitting in a column.
+  .item.flagged-row {
+    grid-column: 1 / -1;
   }
 }
 

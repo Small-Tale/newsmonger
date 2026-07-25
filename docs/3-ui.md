@@ -79,6 +79,10 @@ each(s.topics, (t) => topicRowJsx(...), (t) => `${selected.has(t.id)}|${solo.has
 
 **The menu backdrop wraps the menu, so a shared close action swallows the item click.** `[data-action=close-menu]` matches by ancestor walk, so a click on a menu item also matched the backdrop; the menu closed and cleared `contextMenu` before the item handler could read it, and the action silently did nothing. The handler now closes only when the click landed on the backdrop element itself. This is the same trap the settings dialog hit — worth checking on any future overlay.
 
+## Feed grid on wide displays (NEWS-64)
+
+Stories lay out in a **responsive CSS grid** (per day group), not a single column: `repeat(auto-fill, minmax(min(100%, 460px), 1fr))`. The feed is one column when narrow (sidebar shown) and two-plus when wide (sidebar hidden), with no JS or media query — the column count follows the available width. Grid rows **stretch every card to the tallest on that line**, so a row reads as one unit. The day header and a flagged one-liner span all columns (`grid-column: 1 / -1`).
+
 ## Collapsible topics sidebar
 
 - The topics sidebar (`#topics-panel`) collapses via a panel-glyph toggle at the left of the header. Collapsed, the grid drops to a single column and the feed reflows to the full width (measured: 652px → 1012px at a 1100px viewport).
