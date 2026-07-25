@@ -79,6 +79,13 @@ export interface AppState {
    */
   dismissedBehind: boolean;
   /**
+   * Timestamp until which the "falling behind" banner is suppressed (NEWS-67).
+   * Set on startup and bumped on an interval change, so shortening the interval
+   * doesn't warn before the scheduler has had a chance to re-check topics that
+   * were fresh under the old interval.
+   */
+  behindGraceUntil: number;
+  /**
    * Transient one-line notice shown at the bottom of the screen, or null.
    * In-app rather than `window.alert` (a WKWebView no-op), used to confirm a
    * share landed on the clipboard when there's no OS share sheet (NEWS-43).
@@ -98,6 +105,10 @@ export interface AppState {
  * window is a view preference, not something that belongs in the shared data
  * file alongside topics and stories.
  */
+/** Grace after startup / an interval change before the falling-behind banner
+ *  may appear — long enough for the scheduler to run a sweep (NEWS-67). */
+const BEHIND_GRACE_MS = 30 * 60 * 1000;
+
 const SIDEBAR_KEY = 'news:sidebar-collapsed';
 
 function readSidebarCollapsed(): boolean {
@@ -166,6 +177,7 @@ export const appStore = defineStore({
     notifyPermissionDenied: false,
     dismissedRunId: readDismissedRunId(),
     dismissedBehind: false,
+    behindGraceUntil: Date.now() + BEHIND_GRACE_MS,
     toast: null,
   }),
   actions: (set, get) => ({
@@ -231,6 +243,9 @@ export const appStore = defineStore({
     },
     dismissBehind: () => {
       set({ ...get(), dismissedBehind: true });
+    },
+    bumpBehindGrace: () => {
+      set({ ...get(), behindGraceUntil: Date.now() + BEHIND_GRACE_MS });
     },
     setToast: (toast: string | null) => {
       set({ ...get(), toast });

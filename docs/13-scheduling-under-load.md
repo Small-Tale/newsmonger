@@ -22,6 +22,8 @@ The baseline was already safe: the `sweeping` re-entry guard means a long sweep 
 
   A topic counts as behind when it's not paused, has been checked at least once, and is now overdue by **more than a full extra interval** (`now − lastCheckedAt > 2 × effectiveInterval` — `isBehindSchedule` in `src/client/schedule.ts`). The 2× bar is deliberately conservative: a topic is always slightly past due at the moment it's checked, so flagging the first minor overrun would cry wolf. Never-checked topics are excluded (new, not behind). Dismissal is session-level and reappears on reload if the condition persists.
 
+  **Grace window (NEWS-67).** The banner is suppressed for a grace period (30 min) after **startup** and after any **interval change** (`activeBehindWarnings` + `behindGraceUntil`). Without it, *shortening* the interval instantly reclassified topics that were fresh under the old, longer interval as "behind" — before the scheduler had any chance to re-check them. The grace gives the scheduler a sweep to catch up; a topic still overdue after it is genuinely behind.
+
   The client reimplements `effectiveInterval` (rather than importing `src/checks.ts`, which pulls in Node-only deps).
 
 ## Practical ceiling

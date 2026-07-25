@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import type { StateResp } from '../../src/api/schemas.js';
-import { isBehindSchedule, topicsBehindSchedule } from '../../src/client/schedule.js';
+import { activeBehindWarnings, isBehindSchedule, topicsBehindSchedule } from '../../src/client/schedule.js';
 
 type Topic = StateResp['topics'][number];
 
@@ -28,6 +28,25 @@ function topic(over: Partial<Topic> = {}): Topic {
     ...over,
   };
 }
+
+describe('activeBehindWarnings grace (NEWS-67)', () => {
+  // A topic 3h stale against a 1h interval — genuinely behind, absent the grace.
+  const behindTopic = topic({ lastCheckedAt: '2026-07-24T09:00:00Z' });
+
+  it('suppresses warnings during the grace window', () => {
+    // Grace ends in the future → nothing reported, even for an overdue topic.
+    expect(activeBehindWarnings([behindTopic], SETTINGS, NOW, NOW + 60_000)).toEqual([]);
+  });
+
+  it('reports behind topics once the grace has passed', () => {
+    expect(activeBehindWarnings([behindTopic], SETTINGS, NOW, NOW - 1)).toHaveLength(1);
+  });
+
+  it('reports nothing when nothing is behind, grace or not', () => {
+    const fresh = topic({ lastCheckedAt: '2026-07-24T11:30:00Z' }); // 30 min ago
+    expect(activeBehindWarnings([fresh], SETTINGS, NOW, NOW - 1)).toEqual([]);
+  });
+});
 
 describe('isBehindSchedule (NEWS-59)', () => {
   it('is not behind when checked within 2x the interval', () => {

@@ -31,3 +31,21 @@ export function isBehindSchedule(topic: Topic, settings: Settings, nowMs: number
 export function topicsBehindSchedule(topics: Topic[], settings: Settings, nowMs: number): Topic[] {
   return topics.filter((t) => isBehindSchedule(t, settings, nowMs));
 }
+
+/**
+ * Topics to actually warn about (NEWS-67). During the grace window — just after
+ * startup or an interval change — nothing is reported, so shortening the
+ * interval doesn't fire the "falling behind" banner *before the scheduler has
+ * had a chance to re-check* topics that were perfectly fresh under the old,
+ * longer interval. Once the grace passes, a topic that's still overdue is
+ * genuinely behind.
+ */
+export function activeBehindWarnings(
+  topics: Topic[],
+  settings: Settings,
+  nowMs: number,
+  graceUntilMs: number,
+): Topic[] {
+  if (nowMs < graceUntilMs) return [];
+  return topicsBehindSchedule(topics, settings, nowMs);
+}

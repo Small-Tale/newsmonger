@@ -26,7 +26,7 @@ import {
 import { currentFailure } from './failure.js';
 import { icon } from './icons.js';
 import { ensureNotificationPermission } from './notifications.js';
-import { topicsBehindSchedule } from './schedule.js';
+import { activeBehindWarnings } from './schedule.js';
 import { filterItemsByQuery } from './search.js';
 import { shareItem } from './share.js';
 import type { AppState } from './stores.js';
@@ -737,7 +737,7 @@ function appJsx(): SafeHtml {
   // Topics whose real cadence has fallen well behind the interval the user set
   // (NEWS-59). Informational only — the scheduler already cycles as fast as it
   // can; this just explains why freshness may lag.
-  const behind = topicsBehindSchedule(s.topics, s.settings, Date.now());
+  const behind = activeBehindWarnings(s.topics, s.settings, Date.now(), s.behindGraceUntil);
 
   return (
     <div class={`shell${s.sidebarCollapsed ? ' sidebar-collapsed' : ''}`}>
@@ -1082,12 +1082,19 @@ function wireEvents(root: HTMLElement): void {
 
   void delegate(root, 'change', '[data-action=interval]', (_e, el) => {
     const ms = Number.parseInt((el as HTMLSelectElement).value, 10);
-    if (!Number.isNaN(ms)) void updateInterval(ms);
+    if (Number.isNaN(ms)) return;
+    // Give the scheduler a grace before the falling-behind banner may fire —
+    // a just-shortened interval otherwise flags topics that are merely awaiting
+    // their next check (NEWS-67).
+    appStore.actions.bumpBehindGrace();
+    void updateInterval(ms);
   });
 
   void delegate(root, 'change', '[data-action=hp-interval]', (_e, el) => {
     const ms = Number.parseInt((el as HTMLSelectElement).value, 10);
-    if (!Number.isNaN(ms)) void updateHighPriorityInterval(ms);
+    if (Number.isNaN(ms)) return;
+    appStore.actions.bumpBehindGrace();
+    void updateHighPriorityInterval(ms);
   });
 
   void delegate(root, 'change', '[data-action=provider]', (_e, el) => {

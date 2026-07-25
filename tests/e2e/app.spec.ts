@@ -511,6 +511,36 @@ test('warns when checks fall behind the chosen interval (NEWS-59)', async ({ pag
   await page.locator('.dialog [data-action=close-settings]').click();
 });
 
+test('shortening the interval does not immediately warn (NEWS-67)', async ({ page }) => {
+  const HOUR = 60 * 60 * 1000;
+  await page.clock.install({ time: Date.now() });
+  await page.goto('/');
+  await page.fill('.add-topic input', 'Grace Probe');
+  await page.press('.add-topic input', 'Enter');
+  const row = page.locator('.topic', { hasText: 'Grace Probe' });
+  await expect(row).toBeVisible();
+  await expect(row.locator('.topic-meta')).toContainText('checked', { timeout: 15_000 });
+
+  // Age the topic 7h. The default interval is 1 day, so it isn't behind yet.
+  await page.clock.fastForward(7 * HOUR);
+  const banner = page.locator('.banner.warn', { hasText: 'falling behind' });
+  await expect(banner).toHaveCount(0);
+
+  // Shorten to 3h. 7h > 2×3h, so without the grace this would fire instantly —
+  // but the topic just hasn't been re-checked yet, so it must stay quiet.
+  await page.click('[data-action=open-settings]');
+  await page.selectOption('[data-action=interval]', String(3 * HOUR));
+  await page.locator('.dialog [data-action=close-settings]').click();
+  await page.waitForTimeout(500);
+  await expect(banner).toHaveCount(0);
+
+  // Clean up.
+  await topicAction(page, row, 'delete');
+  await page.click('[data-action=open-settings]');
+  await page.selectOption('[data-action=interval]', String(24 * HOUR));
+  await page.locator('.dialog [data-action=close-settings]').click();
+});
+
 test('flag a story off-topic: collapse, hide on reload, review, unflag (NEWS-61)', async ({ page }) => {
   await page.goto('/');
   await page.fill('.add-topic input', 'Apple Probe');
