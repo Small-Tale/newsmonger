@@ -53,6 +53,12 @@ export type SaveKeyReq = z.infer<typeof SaveKeyReqSchema>;
 export const StateRespSchema = z.object({
   topics: z.array(TopicSchema),
   items: z.array(NewsItemSchema),
+  /**
+   * Newest item ids across all topics, newest first (NEWS-75). The
+   * notification detector reads this — not the (soon paginated) `items` — so a
+   * new story notifies regardless of the feed's current filtered page.
+   */
+  latestItemIds: z.array(z.string()).default([]),
   settings: SettingsSchema,
   runs: z.array(CheckRunSchema),
   checking: z.array(z.string()),

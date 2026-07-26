@@ -133,7 +133,9 @@ function fire(count: number): void {
  * re-fire for the same stories once the window passes.
  */
 export function noteState(state: StateResp): void {
-  const ids = state.items.map((i) => i.id);
+  // The newest ids across all topics (NEWS-75), not the current feed page — so a
+  // new story notifies even in a topic the feed isn't currently showing.
+  const ids = state.latestItemIds;
   if (seenIds === null) {
     seenIds = new Set(ids);
     return;

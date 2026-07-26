@@ -31,9 +31,11 @@ Until the dataset is actually large, do nothing more: the client cap already kee
 - **Live updates while paginated.** New stories arriving during a poll must prepend to page 1 without disturbing already-loaded lower pages or the scroll position.
 - **Empty-state and "Show more" counts** become server-provided (`total`) per filtered view.
 
-## Phased implementation (sub-tickets)
+## Phased implementation (status)
 
-1. **Server item query + `/api/items`** — `Store` filter/sort/paginate + total; the endpoint; unit tests. (`slim /api/state` behind the same change.)
-2. **Client rewire** — feed from fetched pages, view→params, cursor "Show more", debounced search, poll reconciliation, and the `recentlyFlagged` overlay merge; update the filter E2E suite.
+1. **Server item query + `/api/items`** — *(Shipped, NEWS-74)* `Store.queryItems` (filter/sort/cursor-paginate + total) + the endpoint. Additive; `/api/state` untouched.
+2. **Client rewire** — split for safety:
+   - **2a** *(Shipped, NEWS-75)* — `latestItemIds` on `/api/state` and notifications moved onto it (`noteState` no longer reads the full item list), so a later feed-slim can't break notifications. Non-breaking.
+   - **2b** *(Deferred, NEWS-76)* — the atomic flip: slim `/api/state` (drop `items`, add `flaggedByTopic`), feed from `/api/items` per view, debounced search, the `recentlyFlagged` overlay, server-provided counts, and the filter/search/flag E2E rewrite.
 
-The search-UX decision (server-side debounced, per the recommendation above) should be **confirmed** before Phase 2, since it shapes the client.
+The search-UX decision is settled: **server-side, debounced** (confirmed when phase 2 was scheduled).

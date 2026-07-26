@@ -244,6 +244,21 @@ export class Store {
     return new Set(this.data.items.filter((i) => i.topicId === topicId).map((i) => i.dedupeKey));
   }
 
+  /**
+   * The newest `n` item ids across all topics, newest first (NEWS-75, phase 2a).
+   *
+   * Small enough to ride the `/api/state` poll: it's the signal the client uses
+   * to detect *new* stories for notifications, independent of whatever filtered
+   * page the feed is showing — so a new story in a topic you aren't looking at
+   * still notifies, once the feed itself moves off `/api/state` (phase 2b).
+   */
+  latestItemIds(n = 50): string[] {
+    return [...this.data.items]
+      .sort((a, b) => (a.foundAt === b.foundAt ? cmpDesc(a.id, b.id) : cmpDesc(a.foundAt, b.foundAt)))
+      .slice(0, n)
+      .map((i) => i.id);
+  }
+
   /** `image`/`saved`/`offTopic` are optional: a new story has no picture, isn't saved, and isn't flagged. */
   addItems(
     items: (Omit<NewsItem, 'id' | 'image' | 'saved' | 'offTopic'> & {

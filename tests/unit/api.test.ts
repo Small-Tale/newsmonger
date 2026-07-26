@@ -119,6 +119,8 @@ describe('API', () => {
 
     let state = StateRespSchema.parse(await json(await app.request('/api/state')));
     expect(state.items).toHaveLength(2);
+    // The newest-ids field for notifications tracks the same items (NEWS-75).
+    expect([...state.latestItemIds].sort()).toEqual(state.items.map((i) => i.id).sort());
     expect(state.runs[0]?.status).toBe('succeeded');
     expect(state.topics[0]?.lastCheckedAt).not.toBeNull();
 

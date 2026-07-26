@@ -39,6 +39,7 @@ export function registerApi(app: Hono<AppEnv>): void {
     const state: StateResp = {
       topics: store.listTopics(),
       items: store.listItems(),
+      latestItemIds: store.latestItemIds(50),
       settings,
       runs: store.listRuns(20),
       checking: runner.checking(),

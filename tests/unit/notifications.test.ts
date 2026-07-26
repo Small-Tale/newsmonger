@@ -22,18 +22,9 @@ const BASE_SETTINGS: StateResp['settings'] = {
 function state(itemIds: string[]): StateResp {
   return {
     topics: [],
-    items: itemIds.map((id) => ({
-      id,
-      topicId: 't1',
-      title: 'x',
-      summary: 'y',
-      sources: [],
-      image: null,
-      saved: false,
-      offTopic: false,
-      dedupeKey: id,
-      foundAt: '2026-07-24T00:00:00.000Z',
-    })),
+    items: [],
+    // noteState reads latestItemIds (NEWS-75), not items.
+    latestItemIds: itemIds,
     settings: BASE_SETTINGS,
     runs: [],
     checking: [],
