@@ -19,18 +19,55 @@ async function request(path: string, init?: RequestInit): Promise<unknown> {
   return body;
 }
 
+/**
+ * Monotonic guards so a slower, older response can't overwrite a newer one
+ * (NEWS-104).
+ *
+ * Refreshes run concurrently by design: a 4-second poll, plus one after every
+ * mutation (`withRefresh`). Without a guard the store simply takes whichever
+ * response *resolves* last, which is not the same as the one issued last. The
+ * visible symptom is a setting appearing to revert — change an interval, and a
+ * poll that was already in flight answers with the pre-PATCH value and rewrites
+ * the `<select>` until the next tick, up to 4 seconds later.
+ *
+ * A sequence number rather than an `AbortController`: the older request's
+ * *answer* is what's unwanted, not the request itself, and cancelling a poll
+ * that a mutation happened to overlap would throw away a legitimate refresh.
+ *
+ * Counters are module-scoped because there is exactly one store and one poll
+ * per page. `refreshFeed` needs its own — the two endpoints are independent, and
+ * a shared counter would let a feed response suppress a state one.
+ */
+let stateSeq = 0;
+let stateApplied = 0;
+let feedSeq = 0;
+let feedApplied = 0;
+
 export async function refreshState(): Promise<void> {
+  const seq = ++stateSeq;
   try {
     const body = await request('/api/state');
     const state = StateRespSchema.parse(body);
+    // Errors are gated by the same check: a stale failure must not raise a
+    // banner over state that a newer, successful response already applied.
+    if (seq < stateApplied) return;
+    stateApplied = seq;
     appStore.actions.setState(state);
     // Fire an OS notification if new stories arrived while unfocused (NEWS-38).
+    // Inside the guard deliberately — it diffs against the last state it saw, so
+    // feeding it a stale one would mis-report what's new.
     noteState(state);
   } catch (err) {
+    if (seq < stateApplied) return;
+    stateApplied = seq;
     appStore.actions.setError(err instanceof Error ? err.message : String(err));
+  } finally {
+    // The feed lives on its own endpoint now (NEWS-76); refresh it in step.
+    // In `finally` so a stale response returning early still refreshes it —
+    // `refreshFeed` has its own guard, and skipping it here would drop the feed
+    // refresh that `withRefresh` is relying on.
+    await refreshFeed();
   }
-  // The feed lives on its own endpoint now (NEWS-76); refresh it in step.
-  await refreshFeed();
 }
 
 /**
@@ -53,10 +90,19 @@ export async function refreshFeed(): Promise<void> {
     const q = s.searchQuery.trim();
     if (q !== '') params.set('q', q);
   }
+  const seq = ++feedSeq;
   try {
     const resp = ItemsRespSchema.parse(await request(`/api/items?${params.toString()}`));
+    // Same ordering guard as `refreshState`, and it matters more here: the query
+    // is built from the *current* view, so a response for the previous search
+    // term or Solo set landing late would repopulate the feed with rows the
+    // filters have already excluded.
+    if (seq < feedApplied) return;
+    feedApplied = seq;
     appStore.actions.setFeed({ items: resp.items, total: resp.total });
   } catch (err) {
+    if (seq < feedApplied) return;
+    feedApplied = seq;
     appStore.actions.setError(err instanceof Error ? err.message : String(err));
   }
 }
