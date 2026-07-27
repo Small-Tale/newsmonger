@@ -1,3 +1,4 @@
+import type { KeyVerifier } from './ai/verify-key.js';
 import type { Attendance } from './attendance.js';
 import type { CheckRunner } from './checks.js';
 import type { Store } from './db/store.js';
@@ -10,5 +11,7 @@ export interface AppEnv {
     attendance: Attendance;
     /** Data directory, for locating the on-disk image cache. */
     dataDir: string;
+    /** Vendor-side key check before saving (NEWS-78); null skips it. */
+    verifyKey: KeyVerifier | null;
   };
 }

@@ -2,7 +2,7 @@
 export interface FoundNewsItem {
   title: string;
   summary: string;
-  sources: { title: string; url: string }[];
+  sources: { title: string; url: string; outlet?: string | null; publishedAt?: string | null }[];
 }
 
 /** A previously-seen story, passed to the service so it can avoid re-reporting. */
@@ -11,19 +11,63 @@ export interface KnownItem {
   foundAt: string;
 }
 
+/**
+ * What one check consumed (NEWS-79). Counts only — money is derived from these
+ * at display time via `src/ai/pricing.ts`, so a price change can never make a
+ * stored record wrong.
+ */
+export interface TokenUsage {
+  inputTokens: number;
+  /** Input tokens served from the prompt cache (billed at a fraction of input). */
+  cacheReadTokens: number;
+  /** Input tokens written to the prompt cache (billed at a premium). */
+  cacheWriteTokens: number;
+  outputTokens: number;
+  /** Server-side web searches, billed per search on top of tokens. */
+  webSearches: number;
+}
+
+/**
+ * What a provider returns from a check.
+ *
+ * `usage` is null when the provider cannot report it — the subscription CLIs
+ * spend plan quota rather than metered dollars, and they say nothing about
+ * tokens. Null means "unknown", never "zero"; see `estimateCostUsd`.
+ */
+export interface CheckResult {
+  items: FoundNewsItem[];
+  usage: TokenUsage | null;
+}
+
+/**
+ * What the user has told us about a topic beyond its name.
+ *
+ * The two halves are deliberately different in kind: `guidance` is what the
+ * user *said* they want, `offTopicTitles` is what their behaviour revealed they
+ * didn't. Both steer the same prompt, so they travel together.
+ */
+export interface TopicContext {
+  /**
+   * The user's own free-text steer for this topic (NEWS-80) — "regulatory news
+   * only, not stock moves". Empty or absent means the topic name alone.
+   */
+  guidance?: string;
+  /**
+   * Stories the user flagged as off-topic (NEWS-61), passed to the prompt as
+   * negative examples so the model can infer the topic's intended sense.
+   */
+  offTopicTitles?: string[];
+}
+
 /** Abstraction over "ask an LLM for news" so tests can substitute a mock. */
 export interface NewsService {
-  /**
-   * `offTopicTitles` are stories the user flagged as off-topic (NEWS-61), passed
-   * to the prompt as negative examples so the model can infer the topic's
-   * intended sense. Optional so existing callers/tests need not supply it.
-   */
+  /** `context` is optional so callers and tests need not supply it. */
   checkTopic(
     topicName: string,
     known: KnownItem[],
     sinceIso: string | null,
-    offTopicTitles?: string[],
-  ): Promise<FoundNewsItem[]>;
+    context?: TopicContext,
+  ): Promise<CheckResult>;
 }
 
 /**

@@ -1,4 +1,12 @@
-import type { FoundNewsItem, KnownItem, NewsProvider } from '../types.js';
+import type { CheckResult, KnownItem, NewsProvider, TokenUsage, TopicContext } from '../types.js';
+
+/** One recorded call, so tests can assert on what the runner passed through. */
+interface MockCall {
+  topicName: string;
+  known: KnownItem[];
+  sinceIso: string | null;
+  context: TopicContext;
+}
 
 /**
  * Deterministic provider for tests and offline development (`--ai-test` /
@@ -12,10 +20,16 @@ import type { FoundNewsItem, KnownItem, NewsProvider } from '../types.js';
  * tested end to end without a real subscription-backed CLI. It defaults to
  * false, matching the API-key providers, so existing tests are unaffected.
  */
-export function createMockProvider(config: { attended?: boolean } = {}): NewsProvider & {
-  calls: { topicName: string; known: KnownItem[]; sinceIso: string | null; offTopicTitles: string[] }[];
-} {
-  const calls: { topicName: string; known: KnownItem[]; sinceIso: string | null; offTopicTitles: string[] }[] = [];
+export function createMockProvider(
+  config: { attended?: boolean; usage?: TokenUsage | null } = {},
+): NewsProvider & { calls: MockCall[] } {
+  // Deterministic and small, so cost assertions read as arithmetic rather than
+  // magic. Null is settable so the unknown-usage path is testable too.
+  const usage: TokenUsage | null =
+    config.usage === undefined
+      ? { inputTokens: 1000, cacheReadTokens: 0, cacheWriteTokens: 0, outputTokens: 500, webSearches: 2 }
+      : config.usage;
+  const calls: MockCall[] = [];
   return {
     name: 'mock',
     model: 'mock',
@@ -26,14 +40,16 @@ export function createMockProvider(config: { attended?: boolean } = {}): NewsPro
       topicName: string,
       known: KnownItem[],
       sinceIso: string | null,
-      offTopicTitles: string[] = [],
-    ): Promise<FoundNewsItem[]> {
-      calls.push({ topicName, known, sinceIso, offTopicTitles });
+      context: TopicContext = {},
+    ): Promise<CheckResult> {
+      calls.push({ topicName, known, sinceIso, context });
       const lower = topicName.toLowerCase();
       if (lower.includes('fail')) return Promise.reject(new Error('mock news service failure'));
-      if (lower.includes('empty')) return Promise.resolve([]);
+      if (lower.includes('empty')) return Promise.resolve({ items: [], usage });
       const slug = lower.replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
-      return Promise.resolve([
+      return Promise.resolve({
+        usage,
+        items: [
         {
           title: `Major development in ${topicName}`,
           summary: `A significant new development related to ${topicName} was reported today. Analysts describe it as an important shift. Further details are expected soon.`,
@@ -44,7 +60,8 @@ export function createMockProvider(config: { attended?: boolean } = {}): NewsPro
           summary: `Experts following ${topicName} outlined the key open questions for the coming weeks. Several indicators are being tracked closely.`,
           sources: [{ title: 'Example Times', url: `https://times.example.com/${slug}/experts-watching` }],
         },
-      ]);
+        ],
+      });
     },
   };
 }

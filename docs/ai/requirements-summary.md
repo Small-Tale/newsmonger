@@ -4,6 +4,9 @@ Status markers: **Shipped** · **Partial** · **Design only** · **Deferred**. S
 
 ## [1 — Topics and Scheduling](../1-topics-and-scheduling.md) — Shipped
 
+- FR-1.14 **two schedule modes** — `interval` (default) or `daily` at fixed local times — NEWS-84: **Shipped**. A missed slot stays outstanding rather than skipping to tomorrow; before the first slot the obligation is yesterday's last; high-priority topics stay on their interval.
+- FR-1.13 optional per-topic free-text guidance — see [18](../18-topic-guidance.md)
+
 Add/delete/pause topics (unique, case-insensitive); global interval (default 1 day, min 5 min); minute-tick scheduler + startup sweep; sequential, non-overlapping checks; failures advance `lastCheckedAt` (retry next interval); manual per-topic and check-all triggers; **adding a topic checks it immediately** (manual-semantics, background-fired — FR-1.12, NEWS-54). All shipped and covered by unit + E2E tests.
 
 ## [16 — Feed Pagination](../16-pagination.md) — Client-side shipped; server-side deferred
@@ -11,6 +14,35 @@ Add/delete/pause topics (unique, case-insensitive); global interval (default 1 d
 - FR-16.1/16.2/16.3 client cap of 100 + "Show more" + reset-per-view — NEWS-62: **Shipped**
 - FR-16.4 virtualized scrolling — evaluated and **rejected** (cap makes it unnecessary)
 - Server-side pagination + filtering (feed on `/api/items`, `/api/state` slimmed, debounced search) — NEWS-74/75/76: **Shipped** — see [17 — Server-Side Pagination](../17-server-pagination.md)
+
+## [21 — Export and Feed](../21-export-and-feed.md) — Shipped (off-machine reach deferred)
+
+- FR-21.1–21.2 shared `scope=all|saved|topic` selection, newest-first, capped at 2000; off-topic stories excluded — NEWS-85: **Shipped**
+- FR-21.3–21.5 Markdown (grouped by topic), JSON (topic names, not ids), and **Atom** at `/feed.xml` — entries keyed on item id, everything XML-escaped: **Shipped**
+- FR-21.6 same-origin guarded; the "absent Origin is allowed" rule is what lets an RSS reader subscribe while a web page still gets 403: **Shipped**
+- FR-21.7 reaching the feed from **another device**: **Deferred** — needs a bearer token + non-loopback bind, coupled to the NEWS-46 mobile line
+
+## [20 — First-Run Onboarding](../20-onboarding.md) — Shipped
+
+- FR-20.1–20.3 auto-opens only with no topics **and** no provider, only after both `/api/state` and `/api/providers` answer; dismissal remembered per device — NEWS-78: **Shipped**
+- FR-20.4–20.8 four skippable steps (welcome → source → topics → schedule); a detected subscription CLI is offered **first**, since it needs no key at all: **Shipped**
+- FR-20.9–20.11 keys checked with the vendor before saving (models-list probe, not a completion); **only 401/403 blocks the save** — offline is "unknown", not "wrong key"; verifier injected, null under `--ai-test`: **Shipped**
+- Auto-open on a genuinely fresh install is **manual** — the shared E2E server can never be in that state
+
+## [19 — Cost Visibility](../19-cost-visibility.md) — Shipped
+
+- FR-19.1–19.3 providers return `{items, usage}`; token+search counts persisted on the `CheckRun` with the model. **null usage = unknown, never zero** — NEWS-79: **Shipped**
+- FR-19.4–19.6 counts stored, money derived at display time from a dated, never-guessed rate table; a model with no published price yields **no estimate** rather than a wrong one: **Shipped**
+- FR-19.5a **rates updatable without a build** — NEWS-93: **Shipped**. `<data-dir>/prices.json` is the live table (seeded from built-ins, hand edits apply with no restart); an optional https `priceManifestUrl` is fetched daily and replaces it; built-ins are the floor. Every failure costs the *update*, never the estimate.
+- FR-19.7–19.9 `spend` block on `/api/state`; Settings shows the month's estimate *with* the count of checks it couldn't price: **Shipped**
+- FR-19.10–19.13 optional monthly cap pausing **scheduled** checks only (manual always runs), tripping on `>=`: **Shipped**
+
+## [18 — Topic Guidance](../18-topic-guidance.md) — Shipped
+
+- FR-18.1–18.4 optional `guidance` on the topic (trimmed, capped at 1000, defaulted on load) — NEWS-80: **Shipped**
+- FR-18.5–18.8 edited from the topic menu (single target only), muted sidebar badge, "applies from the next check" toast: **Shipped**
+- FR-18.9–18.11 injected into the prompt as an instruction that outranks the model's own newsworthiness judgement, placed **ahead of** the off-topic examples; applies from the next check only: **Shipped**
+- `checkTopic`'s 4th parameter is now a `TopicContext` object (guidance + offTopicTitles) rather than a bare title list
 
 ## [15 — Off-Topic Flagging](../15-off-topic-flagging.md) — Shipped
 
@@ -32,6 +64,7 @@ Add/delete/pause topics (unique, case-insensitive); global interval (default 1 d
 - FR-13.1 overrun cycle restarts immediately (scheduler drains; `checkDue` returns a count) — NEWS-57: **Shipped**
 - FR-13.2 due topics serviced most-overdue-first, high-priority ahead (`byCheckOrder`) — NEWS-58: **Shipped**
 - FR-13.3 dismissible "falling behind" banner when cadence lags ≥2× the interval — NEWS-59: **Shipped**
+- FR-13.4–13.7 **bounded-concurrency sweeps** (`checkConcurrency`, default 3, 1 = old behaviour); shared cursor so a slow topic doesn't block a worker; `byCheckOrder` still decides who *starts*; attendance still stamped per topic — NEWS-81: **Shipped**
 
 ## [12 — Topic Priority](../12-topic-priority.md) — Shipped
 
@@ -47,6 +80,7 @@ Add/delete/pause topics (unique, case-insensitive); global interval (default 1 d
 - Model output sanitized (citation markup stripped) on both write and read: **Shipped**
 - Digest-size bound in the shared system prompt (wider span, not longer list) — portable across all providers, since only `anthropic` has a tool-level cap: **Shipped**
 - FR-1.10 `coveredThroughAt` separate from `lastCheckedAt` so a failure can't discard pending news: **Shipped**
+- FR-2.6–2.10 **citation verification** (HEAD → ranged GET, dedup'd + bounded, SSRF-vetted): dead sources pruned, story dropped only if nothing resolves, run **before** dedup so a dropped story can't burn its key; best-effort — NEWS-83: **Shipped**
 
 Default Anthropic provider (`claude-opus-4-8` + web search), prompt-level exclusion of known stories, fenced-JSON result parsing, URL/title dedupe keys, per-topic scope, mid-check-deletion safety, `--ai-test` mock — now behind the provider abstraction (see [6 — AI Providers](../6-providers.md)). **Caveat:** the live Anthropic/OpenAI request paths have not been exercised against the real APIs (no keys in the dev environment) — `parseNewsResult` and everything downstream is tested; the requests are follow-up verification (NEWS-3, manual test plan).
 
@@ -61,11 +95,18 @@ Default Anthropic provider (`claude-opus-4-8` + web search), prompt-level exclus
 - Error/warning banners are dismissable; the failure warning's dismissal is remembered by run id so a new failure reappears (NEWS-41): **Shipped**
 - Destructive confirmations via an in-app dialog, never `window.confirm` (a WKWebView no-op that broke delete in the desktop app — NEWS-39): **Shipped**
 
+- FR-3.29–3.32 source attribution: optional `outlet` + `publishedAt` per source, domain fallback for the outlet, date shown **only when it differs from the found day** — NEWS-82: **Shipped**
+- FR-3.25–3.28 in-app diagnostics: recent-checks list + copy-diagnostics bundle; **topic names redacted by default**, endpoint reported as set/not-set, never its URL — NEWS-88: **Shipped**
+- FR-3.20–3.24 accessibility pass — NEWS-90: **Shipped**. Topics list is a real multi-select listbox (Enter/Space selects, **Shift+F10 opens the menu** — the whole topic action set was mouse-only); Escape closes dialogs innermost-first; Tab trapped in the frontmost dialog; banners `aria-live`; visible focus ring everywhere. axe-core runs in the E2E suite over **both themes** (0 violations / 22 rules).
+
 Header/interval/check-all, topics panel with actions + confirm-delete, newest-first feed with source links, error + last-failure banners, 4 s visible-tab polling, empty states, light/dark. kerf structural conventions documented and E2E-regression-tested.
 
 ## [4 — CLI, Server, and Storage](../4-cli-server-storage.md) — Shipped
 
 Flags, usage errors, readiness line (`running at ` — synced with Tauri shell), clean shutdown, localhost-only Hono server with port fallback, zod-validated API, atomic single-file JSON store with corrupt-file recovery.
+
+- FR-4.11 story retention (default 365 days, 0 = forever; bookmarked and flagged stories exempt; prunes at startup + after each check, reclaiming images) — NEWS-87 phase 1: **Shipped**. SQLite (phase 2) is **NEWS-94**.
+- FR-4.5a cross-origin/DNS-rebinding guard (Host + Origin checked on every route, 403 otherwise) — NEWS-86: **Shipped**. Scope is the user's browser, not the machine — an absent `Origin` is allowed, so it is not authentication.
 
 ## [6 — AI Providers](../6-providers.md) — Shipped
 
@@ -99,6 +140,7 @@ Subscription-backed providers (`attended: true`) run *scheduled* checks only whi
 - FR-7.10 three key-row states; no input when a key exists: **Shipped**
 - FR-7.11 disabled inputs + env-var guidance with no keychain: **Shipped** (rendering path untested — needs a machine without a credential store)
 - FR-7.12 `NEWS_FAKE_KEYCHAIN=1` in-memory store for tests: **Shipped**
+- FR-7.13 privacy disclosure (what's sent / stored locally / never collected), in Settings + README + onboarding — NEWS-91: **Shipped**. A unit test pins the "sent" claim to `buildUserPrompt`, so a change that starts sending more fails rather than making the note quietly untrue.
 
 ## [8 — Article Images](../8-article-images.md) — Shipped (verified against live sites)
 

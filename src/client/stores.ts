@@ -16,6 +16,23 @@ export const TOPIC_SORT_LABELS: Record<TopicSort, string> = {
   priority: 'Priority first',
 };
 
+/** Steps of the first-run flow, in order (NEWS-78). */
+export const ONBOARDING_STEPS = ['welcome', 'source', 'topics', 'schedule'] as const;
+export type OnboardingStep = (typeof ONBOARDING_STEPS)[number];
+
+/**
+ * Suggested starter topics (NEWS-78) — broad enough that any of them returns
+ * something on the first check, so the first feed is never empty.
+ */
+export const STARTER_TOPICS = [
+  'Artificial intelligence',
+  'Climate and energy',
+  'Space exploration',
+  'Global economy',
+  'Public health',
+  'Cybersecurity',
+] as const;
+
 export interface AppState {
   loaded: boolean;
   /** Last error shown in the banner, or null. */
@@ -30,10 +47,29 @@ export interface AppState {
   settings: StateResp['settings'];
   runs: StateResp['runs'];
   checking: string[];
+  /** Estimated spend this month + the budget cap (NEWS-79). */
+  spend: StateResp['spend'];
+  /** App version, for the diagnostics bundle (NEWS-88). */
+  appVersion: string;
+  /** Live model rates, so the client can price runs the same way (NEWS-93). */
+  prices: StateResp['prices'];
+  /** Whether a copied diagnostics bundle includes topic names (NEWS-88). */
+  diagIncludeTopics: boolean;
   /** Provider list + availability (fetched on demand, not every poll). */
   providers: ProviderInfo[];
   /** Whether the settings dialog is open. */
   settingsOpen: boolean;
+  /**
+   * First-run flow (NEWS-78): the step being shown, or null when closed.
+   *
+   * `'auto'` is the not-yet-decided state — it opens itself once state and
+   * providers have both loaded and the app turns out to be unusable. Without
+   * that tri-state the wizard flashes open on every reload before the provider
+   * probe has answered.
+   */
+  onboarding: 'auto' | OnboardingStep | null;
+  /** Starter topics ticked in the onboarding flow, before they're created. */
+  onboardingTopics: string[];
   /**
    * Per-provider key status. Never holds a key value — the server doesn't
    * return one (see `KeyStatusSchema`), so there is nothing here to leak into
@@ -95,6 +131,12 @@ export interface AppState {
    * every guarded action (delete, key removal) do nothing in the desktop app.
    */
   confirm: { message: string; confirmLabel: string; danger: boolean } | null;
+  /**
+   * Id of the topic whose guidance is being edited (NEWS-80), or null. Only the
+   * id is held: the text itself comes from the topic in server state, so the
+   * dialog can't drift from what was saved.
+   */
+  guidanceTopicId: string | null;
   /** True when the user tried to enable notifications but permission was refused. */
   notifyPermissionDenied: boolean;
   /**
@@ -133,6 +175,31 @@ export interface AppState {
 /** Grace after startup / an interval change before the falling-behind banner
  *  may appear — long enough for the scheduler to run a sweep (NEWS-67). */
 const BEHIND_GRACE_MS = 30 * 60 * 1000;
+
+/**
+ * Whether the first-run flow has been dismissed (NEWS-78). Per-device, like the
+ * other view preferences: it records what *this* browser has already shown, not
+ * anything about the account's data.
+ */
+const ONBOARDING_KEY = 'news:onboarding-seen';
+
+export function readOnboardingSeen(): boolean {
+  if (typeof localStorage === 'undefined') return false;
+  try {
+    return localStorage.getItem(ONBOARDING_KEY) === '1';
+  } catch {
+    return false;
+  }
+}
+
+export function writeOnboardingSeen(): void {
+  if (typeof localStorage === 'undefined') return;
+  try {
+    localStorage.setItem(ONBOARDING_KEY, '1');
+  } catch {
+    // private mode / storage disabled — the flow just reappears next launch
+  }
+}
 
 const SIDEBAR_KEY = 'news:sidebar-collapsed';
 
@@ -193,11 +260,37 @@ export const appStore = defineStore({
     feedItems: [],
     feedTotal: 0,
     flaggedByTopic: {},
-    settings: { checkIntervalMs: 24 * 60 * 60 * 1000, highPriorityIntervalMs: 24 * 60 * 60 * 1000, provider: 'auto', model: '', endpoint: '', notifyOnNewItems: false },
+    settings: {
+      checkIntervalMs: 24 * 60 * 60 * 1000,
+      highPriorityIntervalMs: 24 * 60 * 60 * 1000,
+      provider: 'auto',
+      model: '',
+      endpoint: '',
+      notifyOnNewItems: false,
+      monthlyBudgetUsd: 0,
+      itemRetentionDays: 365,
+      scheduleMode: 'interval',
+      dailyTimes: ['08:00'],
+      checkConcurrency: 3,
+      priceManifestUrl: '',
+    },
     runs: [],
     checking: [],
+    spend: {
+      usd: 0,
+      pricedRuns: 0,
+      unpricedRuns: 0,
+      monthlyBudgetUsd: 0,
+      overBudget: false,
+      pricesVerifiedOn: '',
+    },
+    appVersion: '',
+    prices: {},
+    diagIncludeTopics: false,
     providers: [],
     settingsOpen: false,
+    onboarding: 'auto',
+    onboardingTopics: [],
     keys: [],
     keysLoaded: false,
     keychainAvailable: false,
@@ -215,6 +308,7 @@ export const appStore = defineStore({
     recentlyFlaggedItems: [],
     reviewTopicIds: [],
     confirm: null,
+    guidanceTopicId: null,
     notifyPermissionDenied: false,
     dismissedRunId: readDismissedRunId(),
     dismissedBehind: false,
@@ -222,6 +316,19 @@ export const appStore = defineStore({
     toast: null,
   }),
   actions: (set, get) => ({
+    setDiagIncludeTopics: (diagIncludeTopics: boolean) => {
+      set({ ...get(), diagIncludeTopics });
+    },
+    setOnboarding: (onboarding: 'auto' | OnboardingStep | null) => {
+      set({ ...get(), onboarding });
+    },
+    toggleOnboardingTopic: (name: string) => {
+      const current = get();
+      const chosen = current.onboardingTopics.includes(name)
+        ? current.onboardingTopics.filter((t) => t !== name)
+        : [...current.onboardingTopics, name];
+      set({ ...current, onboardingTopics: chosen });
+    },
     setSettingsOpen: (settingsOpen: boolean) => {
       set({ ...get(), settingsOpen, keyError: null });
     },
@@ -288,6 +395,12 @@ export const appStore = defineStore({
     },
     closeConfirm: () => {
       set({ ...get(), confirm: null });
+    },
+    openGuidance: (guidanceTopicId: string) => {
+      set({ ...get(), guidanceTopicId });
+    },
+    closeGuidance: () => {
+      set({ ...get(), guidanceTopicId: null });
     },
     setNotifyPermissionDenied: (notifyPermissionDenied: boolean) => {
       set({ ...get(), notifyPermissionDenied });

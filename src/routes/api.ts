@@ -1,13 +1,15 @@
 import { spawn } from 'node:child_process';
 import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
-import type { Hono } from 'hono';
+import type { Context, Hono } from 'hono';
 import type { z } from 'zod';
 
 import { deleteApiKey, resolveApiKey, saveApiKey } from '../ai/api-keys.js';
 import { probeProviders } from '../ai/providers/index.js';
 import { isKeyedProvider, KEY_ENV_VARS, KEYED_PROVIDERS, PROVIDER_INFO } from '../ai/types.js';
-import type { ItemsResp, KeysResp, ProvidersResp, StateResp } from '../api/schemas.js';
+import type { ItemsResp, KeysResp, ProvidersResp, SpendResp, StateResp } from '../api/schemas.js';
 import {
   CheckReqSchema,
   CreateTopicReqSchema,
@@ -17,6 +19,10 @@ import {
   UpdateSettingsReqSchema,
   UpdateTopicReqSchema,
 } from '../api/schemas.js';
+import { isOverBudget } from '../checks.js';
+import type { Settings } from '../db/schemas.js';
+import type { Store } from '../db/store.js';
+import { toAtom, toJson, toMarkdown } from '../export.js';
 import { cachedImagePath, isValidHash, liveImageHashes, pruneImageCache, sniffImageType } from '../images/index.js';
 import { isKeychainAvailable, keychainLabel } from '../keychain.js';
 import type { AppEnv } from '../types.js';
@@ -31,6 +37,55 @@ async function parseBody<T extends z.ZodType>(c: { req: { json(): Promise<unknow
   }
 }
 
+/**
+ * The app's own version, for diagnostics (NEWS-88).
+ *
+ * Read from the nearest `package.json` and cached. Returns '' rather than
+ * throwing when it can't be found — a diagnostics bundle that says "version
+ * unknown" is far better than one that fails to render.
+ */
+let cachedVersion: string | undefined;
+function appVersion(): string {
+  if (cachedVersion !== undefined) return cachedVersion;
+  cachedVersion = '';
+  let dir = path.dirname(fileURLToPath(import.meta.url));
+  for (let i = 0; i < 5; i++) {
+    const candidate = path.join(dir, 'package.json');
+    if (fs.existsSync(candidate)) {
+      try {
+        const parsed: unknown = JSON.parse(fs.readFileSync(candidate, 'utf8'));
+        if (typeof parsed === 'object' && parsed !== null && 'version' in parsed && typeof parsed.version === 'string') {
+          cachedVersion = parsed.version;
+        }
+      } catch {
+        // unreadable or not JSON — leave it as ''
+      }
+      break;
+    }
+    dir = path.dirname(dir);
+  }
+  return cachedVersion;
+}
+
+/** Build the spend block for `/api/state` (NEWS-79). */
+function spendResp(store: Store, settings: Settings, now: Date): SpendResp {
+  const spend = store.spendThisMonth(now);
+  return {
+    ...spend,
+    monthlyBudgetUsd: settings.monthlyBudgetUsd,
+    overBudget: isOverBudget(spend, settings),
+    // From the *live* table, so the date shown is the one the estimate used
+    // rather than whenever the build happened to be cut (NEWS-93).
+    pricesVerifiedOn: store.prices.table().verifiedOn,
+  };
+}
+
+/**
+ * Ceiling on one export or feed (NEWS-85). Generous for a document, bounded so
+ * an install with a year of retained stories can't build a 40 MB response.
+ */
+const EXPORT_LIMIT = 2000;
+
 export function registerApi(app: Hono<AppEnv>): void {
   app.get('/api/state', (c) => {
     const store = c.get('store');
@@ -43,6 +98,11 @@ export function registerApi(app: Hono<AppEnv>): void {
       settings,
       runs: store.listRuns(20),
       checking: runner.checking(),
+      spend: spendResp(store, settings, new Date()),
+      // The client prices individual runs for the diagnostics list, so it needs
+      // the same table the server used.
+      prices: store.prices.table().models,
+      appVersion: appVersion(),
     };
     return c.json(state);
   });
@@ -111,13 +171,16 @@ export function registerApi(app: Hono<AppEnv>): void {
 
   app.patch('/api/topics/:id', async (c) => {
     const body = await parseBody(c, UpdateTopicReqSchema);
-    if (!body) return c.json({ error: 'invalid request: expected { paused?, highPriority? }' }, 400);
+    if (!body) {
+      return c.json({ error: 'invalid request: expected { paused?, highPriority?, guidance? }' }, 400);
+    }
     const store = c.get('store');
     const id = c.req.param('id');
     try {
       let topic;
       if (body.paused !== undefined) topic = store.setTopicPaused(id, body.paused);
       if (body.highPriority !== undefined) topic = store.setTopicHighPriority(id, body.highPriority);
+      if (body.guidance !== undefined) topic = store.setTopicGuidance(id, body.guidance);
       return c.json(topic);
     } catch {
       return c.json({ error: 'no such topic' }, 404);
@@ -255,6 +318,15 @@ export function registerApi(app: Hono<AppEnv>): void {
     if (!body) return c.json({ error: 'invalid request: expected { key }' }, 400);
     const key = body.key.trim();
     if (key === '') return c.json({ error: 'invalid request: expected { key }' }, 400);
+    // Check the key with the vendor before storing it (NEWS-78), so a typo
+    // surfaces now rather than as a failed check hours later. Only an
+    // *authentication* failure blocks the save: an offline machine or a vendor
+    // outage must not be reported to the user as a bad key.
+    const verifyKey = c.get('verifyKey');
+    if (verifyKey !== null) {
+      const verdict = await verifyKey(provider, key);
+      if (verdict.status === 'invalid') return c.json({ error: verdict.message }, 400);
+    }
     try {
       await saveApiKey(provider, key);
     } catch (err: unknown) {
@@ -289,6 +361,59 @@ export function registerApi(app: Hono<AppEnv>): void {
     openInBrowser(parsed.toString());
     return c.json({ ok: true });
   });
+
+  /**
+   * Export the current selection, or serve it as an Atom feed (NEWS-85).
+   *
+   * `scope=all|saved|topic&topic=<id>` mirrors the feed's own views. The
+   * **feed** deliberately has no `Origin`-bearing caller — a desktop RSS reader
+   * is not a browser page — so the cross-origin guard's "absent Origin is
+   * allowed" rule (FR-4.5a) is exactly what lets a reader subscribe while a web
+   * page still can't read it.
+   */
+  const exportHandler = (kind: 'md' | 'json' | 'atom') => (c: Context<AppEnv>) => {
+    const store = c.get('store');
+    const scope = c.req.query('scope') ?? 'all';
+    const topicId = c.req.query('topic') ?? '';
+    const all = store.listItems().filter((i) => !i.offTopic);
+    const items = all
+      .filter((i) => (scope === 'saved' ? i.saved : true))
+      .filter((i) => (scope === 'topic' && topicId !== '' ? i.topicId === topicId : true))
+      .sort((a, b) => (a.foundAt < b.foundAt ? 1 : a.foundAt > b.foundAt ? -1 : 0))
+      .slice(0, EXPORT_LIMIT);
+    const topics = store.listTopics();
+    const label =
+      scope === 'saved'
+        ? 'Saved stories'
+        : scope === 'topic'
+          ? (topics.find((t) => t.id === topicId)?.name ?? 'Unknown topic')
+          : 'All stories';
+    const input = {
+      items,
+      topics,
+      title: label,
+      baseUrl: new URL(c.req.url).origin,
+      now: new Date(),
+    };
+    const slug = label.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+    if (kind === 'atom') {
+      return c.body(toAtom(input), 200, { 'Content-Type': 'application/atom+xml; charset=utf-8' });
+    }
+    if (kind === 'json') {
+      return c.body(toJson(input), 200, {
+        'Content-Type': 'application/json; charset=utf-8',
+        'Content-Disposition': `attachment; filename="news-${slug}.json"`,
+      });
+    }
+    return c.body(toMarkdown(input), 200, {
+      'Content-Type': 'text/markdown; charset=utf-8',
+      'Content-Disposition': `attachment; filename="news-${slug}.md"`,
+    });
+  };
+
+  app.get('/api/export.md', exportHandler('md'));
+  app.get('/api/export.json', exportHandler('json'));
+  app.get('/feed.xml', exportHandler('atom'));
 
   app.get('/healthz', (c) => c.json({ ok: true }));
 }

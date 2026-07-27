@@ -19,6 +19,12 @@ describe('Store', () => {
       model: '',
       endpoint: '',
       notifyOnNewItems: false,
+      monthlyBudgetUsd: 0,
+      itemRetentionDays: 365,
+      scheduleMode: 'interval',
+      dailyTimes: ['08:00'],
+      checkConcurrency: 3,
+      priceManifestUrl: '',
     });
   });
 
@@ -140,7 +146,7 @@ describe('Store', () => {
         topicId: topic.id,
         title: 'Launch',
         summary: 'A rocket launched.',
-        sources: [{ title: 'src', url: 'https://ex.com/a' }],
+        sources: [{ title: 'src', url: 'https://ex.com/a', outlet: null, publishedAt: null }],
         dedupeKey: 'url:ex.com/a',
         foundAt: new Date().toISOString(),
       },
@@ -232,6 +238,12 @@ describe('Store', () => {
       model: '',
       endpoint: '',
       notifyOnNewItems: false,
+      monthlyBudgetUsd: 0,
+      itemRetentionDays: 365,
+      scheduleMode: 'interval',
+      dailyTimes: ['08:00'],
+      checkConcurrency: 3,
+      priceManifestUrl: '',
     });
   });
 

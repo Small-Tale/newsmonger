@@ -13,7 +13,9 @@ describe('buildUserPrompt off-topic examples (NEWS-61)', () => {
   });
 
   it('lists flagged titles as negative examples', () => {
-    const prompt = buildUserPrompt('Apple', [], null, ['Apple pie recipe', 'Apple orchard tour']);
+    const prompt = buildUserPrompt('Apple', [], null, {
+      offTopicTitles: ['Apple pie recipe', 'Apple orchard tour'],
+    });
     expect(prompt).toMatch(/OFF-TOPIC/);
     expect(prompt).toContain('- Apple pie recipe');
     expect(prompt).toContain('- Apple orchard tour');
@@ -34,7 +36,7 @@ describe('CheckRunner feeds flagged titles to the provider (NEWS-61)', () => {
     await runner.checkTopic(topic.id);
 
     expect(service.calls).toHaveLength(1);
-    expect(service.calls[0]?.offTopicTitles).toEqual(['Apple pie recipe']);
+    expect(service.calls[0]?.context.offTopicTitles).toEqual(['Apple pie recipe']);
   });
 
   it('passes an empty list when nothing is flagged', async () => {
@@ -44,6 +46,6 @@ describe('CheckRunner feeds flagged titles to the provider (NEWS-61)', () => {
     const topic = store.addTopic('Apple');
 
     await runner.checkTopic(topic.id);
-    expect(service.calls[0]?.offTopicTitles).toEqual([]);
+    expect(service.calls[0]?.context.offTopicTitles).toEqual([]);
   });
 });

@@ -12,7 +12,9 @@ import { tmpDataDir } from '../helpers/tmp.js';
 function makeApp() {
   const store = new Store(tmpDataDir());
   const runner = new CheckRunner(store, asResolver(createMockProvider()));
-  return { app: createApp({ store, runner }), store };
+  // No vendor check: these tests are about the keychain path, and a real probe
+  // would hit the network. Verification has its own tests (`key-verify`).
+  return { app: createApp({ store, runner, verifyKey: null }), store };
 }
 
 async function json(res: Response): Promise<unknown> {

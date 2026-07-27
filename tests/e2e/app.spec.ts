@@ -676,3 +676,225 @@ test('the feed lays out as a multi-column grid on a wide display (NEWS-64)', asy
   await topicAction(page, row, 'delete');
   await expect(row).toHaveCount(0);
 });
+
+test('the local API refuses requests from a page on another origin (NEWS-86)', async ({ request }) => {
+  // Straight HTTP against the running server, not through the page: the point
+  // is that the middleware is wired into what actually gets served, and a
+  // Playwright page is always same-origin so it cannot forge this itself.
+  const created = await request.post('/api/topics', { data: { name: 'Origin Guard Probe' } });
+  expect(created.ok()).toBeTruthy();
+  const topic = (await created.json()) as { id: string };
+
+  const evil = { origin: 'https://evil.com' };
+
+  const read = await request.get('/api/state', { headers: evil });
+  expect(read.status()).toBe(403);
+
+  // A no-CORS DELETE still reaches the server even though the attacking page
+  // could never read the reply — so it has to be refused before it acts.
+  const destroy = await request.delete(`/api/topics/${topic.id}`, { headers: evil });
+  expect(destroy.status()).toBe(403);
+
+  // ...and burning API credit is just as much of an attack as deleting data.
+  const check = await request.post('/api/check', { headers: evil, data: { topicId: topic.id } });
+  expect(check.status()).toBe(403);
+
+  const state = (await (await request.get('/api/state')).json()) as { topics: { id: string }[] };
+  expect(state.topics.map((t) => t.id)).toContain(topic.id);
+
+  expect((await request.delete(`/api/topics/${topic.id}`)).ok()).toBeTruthy();
+});
+
+test('the settings dialog shows spend and accepts a monthly budget (NEWS-79)', async ({ page, request }) => {
+  await page.goto('/');
+  await openSettings(page);
+
+  // The mock provider's model has no published price, so nothing is priceable —
+  // which is exactly the case the UI must not render as "$0.00 spent".
+  await expect(page.locator('.spend')).toBeVisible();
+  await expect(page.locator('.spend-total strong')).toHaveText('—');
+
+  const budget = page.locator('[data-action=budget]');
+  await expect(budget).toHaveValue('');
+  await budget.fill('25');
+  await budget.blur();
+  await expect
+    .poll(async () => {
+      const state = (await (await request.get('/api/state')).json()) as {
+        settings: { monthlyBudgetUsd: number };
+      };
+      return state.settings.monthlyBudgetUsd;
+    })
+    .toBe(25);
+
+  // Clearing it turns the cap off again — blank means no limit, not zero spend.
+  await budget.fill('');
+  await budget.blur();
+  await expect
+    .poll(async () => {
+      const state = (await (await request.get('/api/state')).json()) as {
+        settings: { monthlyBudgetUsd: number };
+      };
+      return state.settings.monthlyBudgetUsd;
+    })
+    .toBe(0);
+
+  await closeSettings(page);
+});
+
+test('the first-run guide walks through setup and is re-openable (NEWS-78)', async ({ page }) => {
+  // By this point the suite has topics and a working (mock) provider, so the
+  // guide must NOT auto-open — that is the assertion protecting every existing
+  // user from a wizard on every reload.
+  await page.goto('/');
+  await expect(page.locator('.dialog.onboarding')).toHaveCount(0);
+
+  // Settings reopens it on demand.
+  await openSettings(page);
+  await page.locator('[data-action=rerun-onboarding]').click();
+  const wizard = page.locator('.dialog.onboarding');
+  await expect(wizard).toBeVisible();
+  await expect(page.locator('.dialog:not(.onboarding)')).toHaveCount(0);
+
+  // Welcome → source → topics.
+  await expect(wizard.locator('h2')).toHaveText('News watches topics, not feeds.');
+  await wizard.locator('[data-action=onboarding-next]').click();
+  await expect(wizard.locator('h2')).toHaveText('Where should the news come from?');
+  await wizard.locator('[data-action=onboarding-next]').click();
+  await expect(wizard.locator('h2')).toHaveText('What should News watch?');
+
+  // Starter topics toggle, and the count reflects it.
+  const first = wizard.locator('.chip.starter').first();
+  await first.click();
+  await expect(first).toHaveAttribute('aria-pressed', 'true');
+  await expect(wizard.locator('.note')).toContainText('1 chosen');
+  await first.click();
+  await expect(first).toHaveAttribute('aria-pressed', 'false');
+
+  // Schedule is the last step; skipping there closes without creating anything.
+  await wizard.locator('[data-action=onboarding-next]').click();
+  await expect(wizard.locator('h2')).toHaveText('How often should it check?');
+  const before = await page.locator('.topic').count();
+  await wizard.locator('[data-action=onboarding-skip]').click();
+  await expect(wizard).toHaveCount(0);
+  await expect(page.locator('.topic')).toHaveCount(before);
+});
+
+test('Settings discloses what leaves the machine (NEWS-91)', async ({ page }) => {
+  await page.goto('/');
+  await openSettings(page);
+  const privacy = page.locator('.privacy');
+  await expect(privacy).toBeVisible();
+  // The three claims the note has to make, each load-bearing: what is sent,
+  // what is stored locally, and that keys are not in the data file.
+  await expect(privacy).toContainText('Sent on every check');
+  await expect(privacy).toContainText('~/.news');
+  await expect(privacy).toContainText('API keys are not stored there');
+  await expect(privacy).toContainText('no telemetry');
+  await closeSettings(page);
+});
+
+test('Settings shows recent checks and copies a diagnostics bundle (NEWS-88)', async ({ page, context }) => {
+  await context.grantPermissions(['clipboard-read', 'clipboard-write']);
+  await page.goto('/');
+
+  // Self-sufficient rather than relying on earlier specs: adding a topic fires
+  // its own first check (FR-1.12), which is the run this asserts on.
+  await page.fill('.add-topic input', 'Diagnostics Probe');
+  await page.press('.add-topic input', 'Enter');
+  const row = page.locator('.topic', { hasText: 'Diagnostics Probe' });
+  await expect(row).toBeVisible();
+
+  await openSettings(page);
+  await expect(page.locator('.diagnostics .run').first()).toBeVisible({ timeout: 15_000 });
+
+  await page.locator('[data-action=copy-diagnostics]').click();
+  await expect(page.locator('.toast')).toContainText('Diagnostics copied');
+
+  const copied = await page.evaluate(() => navigator.clipboard.readText());
+  expect(copied).toContain('# News diagnostics');
+  expect(copied).toContain('provider setting:');
+  expect(copied).toContain('## Recent checks');
+  // Redacted by default: the run lines refer to "topic N", never a real name.
+  expect(copied).toContain('Topic names redacted');
+  expect(copied).toMatch(/- .* (succeeded|failed|running) topic \d+/);
+  expect(copied).not.toContain('Diagnostics Probe');
+
+  await closeSettings(page);
+  await topicAction(page, row, 'delete');
+  await expect(row).toHaveCount(0);
+});
+
+test('the feed and exports are served over HTTP (NEWS-85)', async ({ page, request }) => {
+  await page.goto('/');
+  await openSettings(page);
+  await expect(page.locator('.export-row')).toBeVisible();
+  // The download links are real hrefs, not JS handlers — so they work in the
+  // Tauri webview too, where a blob download would have nowhere to go.
+  await expect(page.locator('.export-row a').first()).toHaveAttribute('href', /export\.md/);
+  await closeSettings(page);
+
+  const feed = await request.get('/feed.xml');
+  expect(feed.status()).toBe(200);
+  expect(feed.headers()['content-type']).toContain('application/atom+xml');
+  const xml = await feed.text();
+  expect(xml).toContain('<feed xmlns="http://www.w3.org/2005/Atom">');
+  expect(xml).toContain('</feed>');
+
+  const md = await request.get('/api/export.md?scope=all');
+  expect(md.headers()['content-disposition']).toContain('attachment');
+  expect(await md.text()).toContain('# All stories');
+});
+
+test('the schedule can be switched to set times of day (NEWS-84)', async ({ page, request }) => {
+  await page.goto('/');
+  await openSettings(page);
+
+  // Interval mode is the default and shows the "Check every" dropdown.
+  await expect(page.locator('[data-action=interval]')).toBeVisible();
+  await expect(page.locator('[data-action=daily-times]')).toHaveCount(0);
+
+  await page.locator('[data-action=schedule-mode]').selectOption('daily');
+  const times = page.locator('[data-action=daily-times]');
+  await expect(times).toBeVisible();
+  await expect(page.locator('[data-action=interval]')).toHaveCount(0);
+
+  await times.fill('18:30, 07:15');
+  await times.blur();
+  await expect
+    .poll(async () => {
+      const s = (await (await request.get('/api/state')).json()) as { settings: { dailyTimes: string[] } };
+      return s.settings.dailyTimes;
+    })
+    // Sorted server-side, so every reader sees the same canonical list.
+    .toEqual(['07:15', '18:30']);
+
+  // Garbage is refused and the saved value is put back, rather than silently
+  // clearing the schedule out from under the user.
+  await times.fill('lunchtime');
+  await times.blur();
+  await expect(page.locator('.toast')).toContainText('Times must look like 08:00');
+  await expect(times).toHaveValue('07:15, 18:30');
+
+  // Restore interval mode so later specs are unaffected.
+  await page.locator('[data-action=schedule-mode]').selectOption('interval');
+  await expect(page.locator('[data-action=interval]')).toBeVisible();
+  await closeSettings(page);
+});
+
+test('stories show the outlet they came from (NEWS-82)', async ({ page }) => {
+  await page.goto('/');
+  await page.fill('.add-topic input', 'Attribution Probe');
+  await page.press('.add-topic input', 'Enter');
+  const row = page.locator('.topic', { hasText: 'Attribution Probe' });
+  await expect(row).toBeVisible();
+
+  const outlet = page.locator('.item .source-outlet').first();
+  await expect(outlet).toBeVisible({ timeout: 15_000 });
+  // The mock supplies no outlet, so this is the domain fallback doing its job —
+  // which is the branch that runs for most real sources too.
+  await expect(outlet).toHaveText(/example\.com/);
+
+  await topicAction(page, row, 'delete');
+  await expect(row).toHaveCount(0);
+});

@@ -18,6 +18,8 @@ function run(topicId: string, status: CheckRun['status']): CheckRun {
     newItems: 0,
     error: status === 'failed' ? 'boom' : null,
     provider: 'mock',
+    model: null,
+    usage: null,
   };
 }
 

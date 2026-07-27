@@ -92,9 +92,58 @@ export function setTopicHighPriority(id: string, highPriority: boolean): Promise
   );
 }
 
+/** Set (or clear, with '') a topic's free-text guidance (NEWS-80). */
+export function setTopicGuidance(id: string, guidance: string): Promise<void> {
+  return withRefresh(() =>
+    request(`/api/topics/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify({ guidance }) }),
+  );
+}
+
 export function setNotifyOnNewItems(notifyOnNewItems: boolean): Promise<void> {
   return withRefresh(() =>
     request('/api/settings', { method: 'PATCH', body: JSON.stringify({ notifyOnNewItems }) }),
+  );
+}
+
+/** Set the monthly spend cap in USD; 0 turns it off (NEWS-79). */
+export function updateMonthlyBudget(monthlyBudgetUsd: number): Promise<void> {
+  return withRefresh(() =>
+    request('/api/settings', { method: 'PATCH', body: JSON.stringify({ monthlyBudgetUsd }) }),
+  );
+}
+
+/** Set the story-retention window in days; 0 keeps everything (NEWS-87). */
+export function updateRetention(itemRetentionDays: number): Promise<void> {
+  return withRefresh(() =>
+    request('/api/settings', { method: 'PATCH', body: JSON.stringify({ itemRetentionDays }) }),
+  );
+}
+
+/** Switch between interval and time-of-day scheduling (NEWS-84). */
+export function updateScheduleMode(scheduleMode: 'interval' | 'daily'): Promise<void> {
+  return withRefresh(() =>
+    request('/api/settings', { method: 'PATCH', body: JSON.stringify({ scheduleMode }) }),
+  );
+}
+
+/** Set the local times of day checks run at, in `HH:MM` form (NEWS-84). */
+export function updateDailyTimes(dailyTimes: string[]): Promise<void> {
+  return withRefresh(() =>
+    request('/api/settings', { method: 'PATCH', body: JSON.stringify({ dailyTimes }) }),
+  );
+}
+
+/** How many topics a sweep checks at once (NEWS-81). */
+export function updateConcurrency(checkConcurrency: number): Promise<void> {
+  return withRefresh(() =>
+    request('/api/settings', { method: 'PATCH', body: JSON.stringify({ checkConcurrency }) }),
+  );
+}
+
+/** Point price updates at a published manifest; '' turns it off (NEWS-93). */
+export function updatePriceManifestUrl(priceManifestUrl: string): Promise<void> {
+  return withRefresh(() =>
+    request('/api/settings', { method: 'PATCH', body: JSON.stringify({ priceManifestUrl }) }),
   );
 }
 

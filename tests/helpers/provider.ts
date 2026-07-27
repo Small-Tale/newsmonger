@@ -1,4 +1,4 @@
-import type { NewsProvider, NewsService } from '../../src/ai/types.js';
+import type { CheckResult, FoundNewsItem, NewsProvider, NewsService } from '../../src/ai/types.js';
 import type { ProviderResolver } from '../../src/checks.js';
 
 /** Wrap a fixed provider as a resolver (the shape CheckRunner expects). */
@@ -18,4 +18,9 @@ export function fakeProvider(
     isAvailable: () => Promise.resolve(true),
     checkTopic,
   };
+}
+
+/** Wrap bare items as a provider result with no usage reported (NEWS-79). */
+export function noUsage(items: FoundNewsItem[]): CheckResult {
+  return { items, usage: null };
 }

@@ -474,6 +474,12 @@ h2.eyebrow {
     display: inline-flex;
   }
 
+  // Guidance is a quieter signal than priority — it says "this topic is
+  // narrowed", not "this topic is urgent", so it stays unfilled and muted.
+  .flag.guided {
+    color: var(--muted);
+  }
+
   // The high-priority star is filled to read as a "starred" state at a glance.
   .flag.high-priority {
     color: var(--amber, #c8891b);
@@ -1091,6 +1097,270 @@ h2.eyebrow {
   &:hover:not(:disabled) {
     filter: brightness(1.08);
   }
+}
+
+// A visible focus ring on every interactive surface, including the ones that
+// carry no default one (topic rows, story cards, menu items) — NEWS-90.
+:where(a, button, input, select, textarea, [tabindex]):focus-visible {
+  outline: 2px solid var(--pine);
+  outline-offset: 1px;
+  border-radius: 4px;
+}
+
+// ------------------------------------------------------------ onboarding ---
+
+// Deliberately not dismissable by backdrop click: this is the one dialog whose
+// whole job is to be read, and a stray click behind it shouldn't end setup.
+.onboarding-backdrop {
+  align-items: center;
+}
+
+.dialog.onboarding {
+  max-width: 520px;
+  padding: 28px 30px 20px;
+
+  h2 {
+    margin: 0 0 10px;
+    font-family: var(--serif);
+    font-size: 24px;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+  }
+}
+
+.onboarding-lead {
+  margin: 0 0 14px;
+  font-size: 14.5px;
+  line-height: 1.6;
+  color: var(--ink);
+}
+
+.onboarding-body {
+  // Fixed floor so the dialog doesn't jump between a one-line step and a
+  // six-chip one; the dots below then stay put as the user advances.
+  min-height: 220px;
+}
+
+.onboarding-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding-top: 16px;
+  border-top: 1px solid var(--line);
+}
+
+.onboarding-dots {
+  display: inline-flex;
+  gap: 6px;
+
+  .dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--line);
+  }
+
+  .dot.on {
+    background: var(--pine);
+  }
+}
+
+.onboarding-actions {
+  display: inline-flex;
+  gap: 10px;
+}
+
+.starter-topics {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0 0 14px;
+}
+
+.chip.starter {
+  border-color: var(--line);
+  padding: 6px 12px;
+  font-size: 13px;
+
+  &.on {
+    background: var(--pine-soft);
+    border-color: var(--pine);
+    color: var(--ink);
+  }
+}
+
+.detected {
+  list-style: none;
+  margin: 0 0 14px;
+  padding: 0;
+
+  li {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: var(--pine);
+  }
+}
+
+// Source attribution: outlet and, when it differs from the day the story was
+// found, the publication date (NEWS-82). Quiet — it's provenance, not headline.
+.source-meta {
+  display: inline-flex;
+  gap: 6px;
+  margin-left: 8px;
+  font-size: 11.5px;
+  color: var(--ink-soft);
+}
+
+.source-date::before {
+  content: '·';
+  margin-right: 6px;
+}
+
+.source-date:empty {
+  display: none;
+}
+
+// ---------------------------------------------------------------- export ---
+
+.export-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0 0 10px;
+
+  // The download links are <a>s styled as buttons; without this they inherit
+  // the anchor underline and sit a pixel off the real buttons beside them.
+  .btn {
+    text-decoration: none;
+    line-height: 1.2;
+  }
+}
+
+// ----------------------------------------------------------- diagnostics ---
+
+.diagnostics .runs {
+  list-style: none;
+  margin: 0 0 12px;
+  padding: 0;
+  font-size: 12.5px;
+}
+
+.run {
+  display: grid;
+  // Fixed first two columns so the times and topics line up into scannable
+  // rulers; the message takes whatever is left and truncates.
+  grid-template-columns: 74px 1fr 1.4fr;
+  gap: 10px;
+  align-items: baseline;
+  padding: 4px 0;
+  border-bottom: 1px solid var(--line);
+
+  &:last-child {
+    border-bottom: 0;
+  }
+}
+
+.run-when {
+  color: var(--ink-soft);
+  font-family: var(--mono);
+  font-size: 11px;
+}
+
+.run-topic,
+.run-meta {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.run-meta {
+  color: var(--ink-soft);
+}
+
+.run.failed .run-meta {
+  color: #b3423a;
+}
+
+@media (prefers-color-scheme: dark) {
+  .run.failed .run-meta {
+    color: #e08a7e;
+  }
+}
+
+// -------------------------------------------------------------- spending ---
+
+.spend {
+  margin: 0 0 14px;
+}
+
+.spend-total {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin: 0 0 4px;
+
+  strong {
+    font-size: 22px;
+    font-variant-numeric: tabular-nums;
+    color: var(--ink);
+  }
+}
+
+.spend-label {
+  font-size: 12.5px;
+  color: var(--muted);
+}
+
+.budget-input {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+
+  .budget-currency {
+    color: var(--muted);
+  }
+
+  input {
+    // Wide enough for a four-figure budget, no wider — this is a small number
+    // sitting in a settings row, not a primary field.
+    width: 7ch;
+  }
+}
+
+// ------------------------------------------------------ guidance dialog ---
+
+.dialog.guidance {
+  max-width: 460px;
+
+  h2 {
+    margin: 0 0 6px;
+    font-size: 16px;
+  }
+
+  textarea {
+    width: 100%;
+    margin: 0 0 18px;
+    padding: 10px 12px;
+    font: inherit;
+    font-size: 13px;
+    line-height: 1.5;
+    color: var(--ink);
+    background: var(--field, var(--panel));
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    // Free text, not code — and a fixed height keeps the dialog from jumping
+    // as the user types.
+    resize: vertical;
+  }
+}
+
+.dialog-hint {
+  margin: 0 0 14px;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--muted);
 }
 
 // ------------------------------------------------------- notifications ---

@@ -34,6 +34,7 @@ export type IconName =
   | 'share'
   | 'star'
   | 'search'
+  | 'guidance'
   | 'flag';
 
 function paths(name: IconName): SafeHtml {
@@ -144,6 +145,16 @@ function paths(name: IconName): SafeHtml {
         <g>
           <circle cx="11" cy="11" r="8" />
           <path d="m21 21-4.3-4.3" />
+        </g>
+      );
+    case 'guidance': // crosshair — a topic narrowed to what the user actually wants
+      return (
+        <g>
+          <circle cx="12" cy="12" r="10" />
+          <line x1="22" x2="18" y1="12" y2="12" />
+          <line x1="6" x2="2" y1="12" y2="12" />
+          <line x1="12" x2="12" y1="6" y2="2" />
+          <line x1="12" x2="12" y1="22" y2="18" />
         </g>
       );
     case 'flag':

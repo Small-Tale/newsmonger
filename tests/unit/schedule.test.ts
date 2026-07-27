@@ -12,6 +12,12 @@ const SETTINGS: StateResp['settings'] = {
   model: '',
   endpoint: '',
   notifyOnNewItems: false,
+  monthlyBudgetUsd: 0,
+  itemRetentionDays: 365,
+  scheduleMode: 'interval',
+  dailyTimes: ['08:00'],
+  checkConcurrency: 3,
+  priceManifestUrl: '',
 };
 
 const NOW = Date.parse('2026-07-24T12:00:00Z');
@@ -22,6 +28,7 @@ function topic(over: Partial<Topic> = {}): Topic {
     name: 'T',
     paused: false,
     highPriority: false,
+    guidance: '',
     createdAt: '2026-07-01T00:00:00Z',
     lastCheckedAt: '2026-07-24T11:00:00Z',
     coveredThroughAt: null,

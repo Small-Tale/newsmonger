@@ -2,13 +2,32 @@ import OpenAI from 'openai';
 
 import { resolveApiKey } from '../api-keys.js';
 import { buildUserPrompt, parseNewsResult, searchingSystemPrompt } from '../prompt.js';
-import type { FoundNewsItem, KnownItem, NewsProvider } from '../types.js';
+import type { CheckResult, KnownItem, NewsProvider, TokenUsage, TopicContext } from '../types.js';
 
 export const DEFAULT_OPENAI_MODEL = 'gpt-5';
 
 /** Minimal seam over the OpenAI SDK so tests can inject a fake. */
 export interface OpenAIRunner {
-  run(system: string, prompt: string, model: string): Promise<string>;
+  run(system: string, prompt: string, model: string): Promise<{ text: string; usage: TokenUsage | null }>;
+}
+
+/**
+ * Map the Responses API usage block onto our shape (NEWS-79).
+ *
+ * OpenAI does not report hosted-web-search counts in `usage`, so `webSearches`
+ * stays 0 — an undercount, but the alternative is inventing a number. It is
+ * moot today anyway: no OpenAI model is in the price table, so no estimate is
+ * produced for this provider at all (see `src/ai/pricing.ts`).
+ */
+function readUsage(usage: OpenAI.Responses.ResponseUsage | undefined): TokenUsage | null {
+  if (usage === undefined) return null;
+  return {
+    inputTokens: usage.input_tokens,
+    cacheReadTokens: usage.input_tokens_details.cached_tokens,
+    cacheWriteTokens: 0,
+    outputTokens: usage.output_tokens,
+    webSearches: 0,
+  };
 }
 
 function sdkRunner(getApiKey: () => Promise<string | null>, baseURL: string | undefined): OpenAIRunner {
@@ -34,7 +53,7 @@ function sdkRunner(getApiKey: () => Promise<string | null>, baseURL: string | un
         tools: [{ type: 'web_search' }],
         max_output_tokens: 16000,
       });
-      return response.output_text;
+      return { text: response.output_text, usage: readUsage(response.usage) };
     },
   };
 }
@@ -67,14 +86,14 @@ export function createOpenAIProvider(config: {
       topicName: string,
       known: KnownItem[],
       sinceIso: string | null,
-      offTopicTitles: string[] = [],
-    ): Promise<FoundNewsItem[]> {
-      const text = await runner.run(
+      context: TopicContext = {},
+    ): Promise<CheckResult> {
+      const { text, usage } = await runner.run(
         searchingSystemPrompt(),
-        buildUserPrompt(topicName, known, sinceIso, offTopicTitles),
+        buildUserPrompt(topicName, known, sinceIso, context),
         model,
       );
-      return parseNewsResult(text);
+      return { items: parseNewsResult(text), usage };
     },
   };
 }

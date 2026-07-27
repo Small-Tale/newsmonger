@@ -1,16 +1,28 @@
 import { z } from 'zod';
 
+import { ModelPriceSchema } from '../ai/price-schema.js';
 import { KEYED_PROVIDERS, PROVIDER_NAMES } from '../ai/types.js';
-import { CheckRunSchema, NewsItemSchema, SettingsSchema, TopicSchema } from '../db/schemas.js';
+import {
+  CheckRunSchema,
+  MAX_GUIDANCE_LENGTH,
+  NewsItemSchema,
+  SettingsSchema,
+  TopicSchema,
+} from '../db/schemas.js';
 
 // Request schemas (validated server-side).
 
 export const CreateTopicReqSchema = z.object({ name: z.string().min(1).max(200) });
 export type CreateTopicReq = z.infer<typeof CreateTopicReqSchema>;
 
-// A topic PATCH may toggle pause and/or high-priority; at least one is required.
+// A topic PATCH may toggle pause / high-priority and/or set guidance; at least
+// one is required. Guidance accepts '' — that is how the user clears it.
 export const UpdateTopicReqSchema = z
-  .object({ paused: z.boolean(), highPriority: z.boolean() })
+  .object({
+    paused: z.boolean(),
+    highPriority: z.boolean(),
+    guidance: z.string().max(MAX_GUIDANCE_LENGTH),
+  })
   .partial()
   .refine((v) => Object.keys(v).length > 0, { message: 'at least one field is required' });
 export type UpdateTopicReq = z.infer<typeof UpdateTopicReqSchema>;
@@ -26,6 +38,16 @@ export const UpdateSettingsReqSchema = z
     model: z.string().max(200),
     endpoint: z.string().max(500),
     notifyOnNewItems: z.boolean(),
+    scheduleMode: z.enum(['interval', 'daily']),
+    checkConcurrency: z.number().int().min(1).max(8),
+    // '' clears it. Non-empty must be https — a plaintext manifest could be
+    // swapped in transit, and it decides what the budget cap acts on.
+    priceManifestUrl: z.union([z.literal(''), z.url().startsWith('https://').max(500)]),
+    // Capped at 8: this is "a few times a day", and each slot is a full sweep.
+    dailyTimes: z.array(z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/)).max(8),
+    monthlyBudgetUsd: z.number().nonnegative().max(10_000),
+    // 0 = keep forever; the 10-year ceiling is a sanity bound, not a policy.
+    itemRetentionDays: z.number().int().nonnegative().max(3650),
   })
   .partial()
   .refine((v) => Object.keys(v).length > 0, { message: 'at least one setting is required' });
@@ -50,6 +72,26 @@ export type SaveKeyReq = z.infer<typeof SaveKeyReqSchema>;
 
 // Response schemas (shared with the client, which validates on receipt).
 
+/**
+ * Estimated spend for a period (NEWS-79).
+ *
+ * `unpricedRuns` travels with the total on purpose: a bare number would read as
+ * complete, and a run whose provider reported no usage (or whose model has no
+ * published price) is genuinely *unknown*, not zero. The UI says so.
+ */
+export const SpendRespSchema = z.object({
+  usd: z.number(),
+  pricedRuns: z.number().int(),
+  unpricedRuns: z.number().int(),
+  /** The user's cap, echoed so the client doesn't have to re-derive it. 0 = off. */
+  monthlyBudgetUsd: z.number(),
+  /** Whether scheduled checks are currently paused by the cap. */
+  overBudget: z.boolean(),
+  /** When the price table was last verified, and against what. */
+  pricesVerifiedOn: z.string(),
+});
+export type SpendResp = z.infer<typeof SpendRespSchema>;
+
 export const StateRespSchema = z.object({
   topics: z.array(TopicSchema),
   /**
@@ -63,6 +105,15 @@ export const StateRespSchema = z.object({
   settings: SettingsSchema,
   runs: z.array(CheckRunSchema),
   checking: z.array(z.string()),
+  /** Estimated spend so far this calendar month (NEWS-79). */
+  spend: SpendRespSchema,
+  /** App version, for diagnostics bundles (NEWS-88). '' if it can't be read. */
+  appVersion: z.string().default(''),
+  /**
+   * The live model rate table (NEWS-93), so the client can price individual
+   * runs with exactly what the server used. Small — a dozen entries.
+   */
+  prices: z.record(z.string(), ModelPriceSchema).default({}),
 });
 export type StateResp = z.infer<typeof StateRespSchema>;
 

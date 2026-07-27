@@ -34,3 +34,23 @@ The maximum workable topic count depends on provider speed: a subscription provi
 
 - **Unit**: `byCheckOrder` (priority, never-checked, staleness, and a mixed-set sort); `checkDue` services in that order and returns a count; the scheduler drains an overrun cycle and doesn't busy-loop when idle; `isBehindSchedule` / `topicsBehindSchedule` (the 2× bar, high-priority interval, paused/never-checked exclusions).
 - **E2E**: the falling-behind banner appears after fast-forwarding the clock past 2× the interval and is dismissible (`tests/e2e/app.spec.ts`).
+
+## Parallel checks (NEWS-81)
+
+A real check takes minutes (the manual test plan records ~4 at default effort), so a strictly sequential sweep over 20 topics runs for over an hour — during which the spinner walks down the sidebar and, on an attended provider, the whole sweep depends on the user staying at the machine.
+
+- **FR-13.4** *(Shipped)* Sweeps run with **bounded concurrency**, `settings.checkConcurrency` (default 3, range 1–8, settable in Settings). Applies to both `checkDue` and `checkAll`. A cap of 1 is exactly the old behaviour.
+
+  Deliberately modest rather than unbounded: too high just converts a slow sweep into provider rate-limit errors, and the point is to finish sooner, not to finish with 429s.
+
+- **FR-13.5** *(Shipped)* Workers pull from a **shared cursor** rather than the list being sliced into fixed chunks, so a slow topic never leaves a worker idle behind it — which is the whole point when one check can take minutes.
+
+- **FR-13.6** *(Shipped)* **`byCheckOrder` still decides who begins** (FR-13.2): workers start topics in most-overdue-first, high-priority-ahead order. They may *finish* in any order, which doesn't matter — nothing downstream depends on completion order. `checkDue` still returns the count `checkDue`'s caller needs to drain an overrun cycle (FR-13.1).
+
+- **FR-13.7** *(Shipped)* **Attendance is still stamped per topic** in a manual sweep, not once at the start — a sweep can outlast the 5-minute window, and a scheduler tick firing mid-sweep must not defer the topics still queued (NEWS-44).
+
+### Why the single-file store is safe under this
+
+Every `Store` mutation is **synchronous**: a check's `addItems` runs to completion, `save()` included, before the event loop can hand control to another check. The awaits inside `checkTopic` are all in the provider call, the link probe, and image fetches — never inside a read-modify-write. Dedup keys are read per topic, so two concurrent checks on different topics don't contend for them either.
+
+That is a property worth stating rather than assuming, so a test drives six concurrent completions and asserts none of the writes are lost. It is also the reason NEWS-94 (SQLite) needs to preserve the same guarantee.

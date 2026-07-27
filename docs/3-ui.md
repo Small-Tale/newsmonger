@@ -101,3 +101,55 @@ Settings (check interval, provider, model, endpoint, API keys) live in a modal o
 
 
 See also: [1 — Topics and Scheduling](1-topics-and-scheduling.md), [5 — Desktop App](5-desktop-app.md).
+
+## Accessibility (NEWS-90)
+
+The UI grew mouse-first: right-click menus for every topic and story action, Cmd/Shift-click selection, hover-revealed controls. Icon-only buttons already carried `aria-label`s, so what axe could see was largely fine — the real gaps were the ones a scanner can't see.
+
+- **FR-3.20** *(Shipped)* **The topics list is a multi-select listbox.** Rows are `role="option"` with `tabindex="0"` and `aria-selected`; **Enter/Space** selects (honouring Cmd/Ctrl and Shift, as clicking does) and **Shift+F10 / the Menu key** opens the same context menu the right-click does. Before this, check / pause / priority / guidance / solo / delete were reachable only with a mouse — the entire topic action set.
+
+  The menu is anchored to the row's own box when opened by keyboard: the mouse path positions at the cursor, and a keyboard has no cursor, so a shared `openTopicMenuFor` keeps the selection rules identical between the two.
+
+  Every row is tabbable rather than using a roving `tabindex` — the list is a short sidebar, and roving focus would need arrow-key handling the app doesn't otherwise have.
+
+- **FR-3.21** *(Shipped)* **Escape closes dialogs innermost-first** (confirm → guidance → settings → onboarding), then falls through to closing menus and clearing selection. Previously only the confirm dialog listened.
+
+- **FR-3.22** *(Shipped)* **Tab is trapped inside the frontmost dialog.** Focus outside it (including on `<body>` right after it opens) is pulled to an end of the cycle. The focusable set is read from the DOM rather than mirrored in the store — what is actually focusable is a DOM question (a disabled Save button isn't), and a second model of it would drift.
+
+- **FR-3.23** *(Shipped)* The banner container is `role="status" aria-live="polite"`, and the check-all button announces its `Checking…` state. Banners appear in response to background events — a failed check, a blown budget — so they have to announce rather than wait to be found. (The toast slot was already `aria-live`.)
+
+- **FR-3.24** *(Shipped)* A visible focus ring on every interactive surface via a `:focus-visible` rule, including those with no default one.
+
+### Regression net
+
+`tests/e2e/a11y.spec.ts` runs **axe-core** (`wcag2a/2aa/21a/21aa`, failing on serious/critical) against the main view in **both light and dark** — contrast is theme-specific, so a single-theme scan proves half the point — and against the settings dialog. It currently reports **0 violations across 22 applicable rules**, which also validates the listbox structure (`aria-required-parent` / `aria-required-children` are among the rules that pass).
+
+The same spec covers what axe cannot: focus + Enter + Shift+F10 on a topic row, Escape closing each dialog, and 40 consecutive Tab presses never escaping an open dialog.
+
+## Diagnostics (NEWS-88)
+
+The store has kept the last 200 `CheckRun` records all along — status, timing, provider, error text — and the UI showed a spinner and one dismissable failure banner. For anyone who isn't the author, "it stopped working" had nowhere to go.
+
+- **FR-3.25** *(Shipped)* A **Diagnostics** section in Settings lists the ten most recent checks: when, topic, and either the outcome (new items, duration, estimated cost) or the error text. Failures are coloured, and a deleted topic reads as "deleted topic" rather than a bare id.
+
+- **FR-3.26** *(Shipped)* **Copy diagnostics** puts a Markdown bundle on the clipboard: app version, user agent, provider/model/interval settings, topic and spend counts, and the recent run outcomes with **verbatim error text** — the error is the whole point, so it is never truncated.
+
+- **FR-3.27** *(Shipped)* **Topic names are redacted by default**, behind an explicit opt-in checkbox: a topic name is user content (see [7 — API Keys](7-api-keys.md) FR-7.13) and a bug report usually gets pasted somewhere public. The bundle says which mode produced it, and — when redacted — warns that **error text is verbatim and may still mention a topic**. Honest beats reassuring.
+
+- **FR-3.28** *(Shipped)* The endpoint setting is reported as `set: yes/no`, never as its URL (it may be an internal gateway). **API keys cannot leak here by construction**: no key value exists in client state at all (`KeyStatusSchema`), so there is nothing to filter.
+
+The bundle is built by a pure function (`src/client/diagnostics.ts`) so it is unit-testable without a browser.
+
+## Source attribution (NEWS-82)
+
+`NewsSourceSchema` was `{ title, url }`. Readers judge news by *when* and *who*, and neither was on screen — while the feed's day headings group by the day the story was **found**, which after a catch-up check files week-old articles under today.
+
+- **FR-3.29** *(Shipped)* Sources carry an optional `outlet` and `publishedAt` (`YYYY-MM-DD`), both defaulting to null so existing data files load unchanged. The prompt asks for both and says explicitly that **a guessed date is worse than no date** — recency is exactly what the reader is judging.
+
+- **FR-3.30** *(Shipped)* Both parse with `.catch(null)`: a model that writes "last Tuesday" costs one date, not the whole batch of stories. `outlet` goes through `stripMarkup` like every other prose field.
+
+- **FR-3.31** *(Shipped)* The outlet shown is the model's answer when it gave one, otherwise **the URL's registrable domain minus `www.`** — close enough to be useful and never wrong in a misleading way, which a guess would be.
+
+- **FR-3.32** *(Shipped)* The date is shown **only when it differs from the day the story was found**, which is exactly when the day heading is misleading. Same day → nothing (the heading already says it). Under a week → "published 3 days earlier". A week or more → the absolute date, because "published 23 days earlier" is arithmetic the reader shouldn't have to do. A date *after* the found date is nonsense from the model and renders as nothing rather than a negative count.
+
+`outletFor` and `publishedLabel` live in `src/client/attribution.ts` rather than `app.tsx` — they are pure, and `app.tsx` touches `document` at import time, so keeping them there would make them untestable outside a browser (same reason `search.ts` / `share.ts` / `schedule.ts` are separate).

@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest';
 
 import { createMockProvider } from '../../src/ai/providers/index.js';
-import type { FoundNewsItem } from '../../src/ai/types.js';
+import type { CheckResult } from '../../src/ai/types.js';
 import { byCheckOrder, CheckRunner, effectiveInterval, isDue } from '../../src/checks.js';
 import { Store } from '../../src/db/store.js';
-import { asResolver, fakeProvider } from '../helpers/provider.js';
+import { asResolver, fakeProvider, noUsage } from '../helpers/provider.js';
 import { tmpDataDir } from '../helpers/tmp.js';
 
 
@@ -137,11 +137,11 @@ describe('CheckRunner', () => {
 
   it('ignores a second concurrent check for the same topic', async () => {
     const store = new Store(tmpDataDir());
-    let release: (items: FoundNewsItem[]) => void = () => undefined;
+    let release: (result: CheckResult) => void = () => undefined;
     let callCount = 0;
     const blocking = fakeProvider(() => {
       callCount += 1;
-      return new Promise<FoundNewsItem[]>((resolve) => {
+      return new Promise<CheckResult>((resolve) => {
         release = resolve;
       });
     });
@@ -154,17 +154,17 @@ describe('CheckRunner', () => {
     expect(second).toBeNull();
     expect(callCount).toBe(1);
 
-    release([]);
+    release(noUsage([]));
     expect(await first).toBe(0);
     expect(runner.checking()).toEqual([]);
   });
 
   it('drops results when the topic was deleted mid-check', async () => {
     const store = new Store(tmpDataDir());
-    let release: (items: FoundNewsItem[]) => void = () => undefined;
+    let release: (result: CheckResult) => void = () => undefined;
     const blocking = fakeProvider(
       () =>
-        new Promise<FoundNewsItem[]>((resolve) => {
+        new Promise<CheckResult>((resolve) => {
           release = resolve;
         }),
     );
@@ -176,7 +176,7 @@ describe('CheckRunner', () => {
     // (where `release` gets assigned) before we delete + release.
     await new Promise((r) => setTimeout(r, 0));
     store.deleteTopic(topic.id);
-    release([{ title: 'late', summary: 's', sources: [] }]);
+    release(noUsage([{ title: 'late', summary: 's', sources: [] }]));
     await pending;
     expect(store.listItems()).toEqual([]);
   });

@@ -11,18 +11,25 @@ src/
   cli.ts              entry: arg parse → Store/service/runner → server → scheduler → open browser
   config.ts           CLI flags (--port --data-dir --provider --model --endpoint --no-open --strict-port --ai-test) + env
   server.ts           createApp (Hono, DI via middleware) + startServer (127.0.0.1, port fallback), /static handler
+  export.ts           toMarkdown/toJson/toAtom + escapeXml — export & feed rendering, pure (NEWS-85)
+  origin-guard.ts     Host/Origin check on every route — cross-origin + DNS-rebinding guard (NEWS-86)
   scheduler.ts        startScheduler: 60s tick + 3s startup sweep, non-overlapping; drains an overrun cycle (NEWS-57)
-  checks.ts           CheckRunner (checkTopic/checkDue/checkAll, in-flight guard) + isDue() + effectiveInterval() + byCheckOrder() (most-overdue-first, NEWS-58)
+  checks.ts           CheckRunner (checkTopic/checkDue/checkAll, in-flight guard) + isDue()/isDueDaily()/isDueUnderSchedule()/lastSlotBefore() (NEWS-84) + effectiveInterval() + byCheckOrder() (most-overdue-first, NEWS-58) + isOverBudget() (NEWS-79)
   types.ts            Hono AppEnv (store, runner injected)
   keychain.ts         OS credential store via platform CLI (security/secret-tool/cmdkey)
   images/             og:image scrape + local cache; safety.ts holds the SSRF guards
   attendance.ts       Attendance: in-memory lastSeenAt + 5 min window; gates attended providers
   db/
-    schemas.ts        zod: Topic, NewsItem, Settings, CheckRun, DataFile; DEFAULT_CHECK_INTERVAL_MS
+    schemas.ts        zod: Topic, NewsItem, Settings, CheckRun, DataFile; DEFAULT_CHECK_INTERVAL_MS, MAX_GUIDANCE_LENGTH
     store.ts          Store: single data.json, atomic writes, corrupt-file backup+reset
   ai/
-    types.ts          NewsService + NewsProvider interfaces, PROVIDER_NAMES/INFO, FoundNewsItem, KnownItem
+    types.ts          NewsService + NewsProvider interfaces, TopicContext, CheckResult/TokenUsage, PROVIDER_NAMES/INFO, FoundNewsItem, KnownItem
     prompt.ts         searchingSystemPrompt, buildUserPrompt, parseNewsResult, NEWS_JSON_SCHEMA
+    pricing.ts        BUILTIN_PRICES (seed/fallback) + estimateCostUsd/formatUsd — cost derived at display time (NEWS-79)
+    price-schema.ts   ModelPrice/PriceTable zod shapes — browser-safe, no node built-ins (NEWS-93)
+    price-store.ts    PriceStore (<data-dir>/prices.json, mtime-cached) + refreshPricesFromManifest (NEWS-93)
+    verify-links.ts   probeLink/verifyItemLinks — citation checking before storage (NEWS-83)
+    verify-key.ts     verifyApiKey — vendor-side key check before saving; 401/403 = invalid, else unknown (NEWS-78)
     api-keys.ts       resolveApiKey/saveApiKey/deleteApiKey — env then keychain, never data.json
     sanitize.ts       stripMarkup — strips model citation markup (<cite>) from prose, idempotent
     dedupe.ts         normalizeUrl/normalizeTitle/dedupeKeyFor/filterNewItems
@@ -36,7 +43,7 @@ src/
   api/
     schemas.ts        zod request schemas + StateResp (shared client/server)
   routes/
-    api.ts            /api/state (topics/settings/runs/checking + latestItemIds + flaggedByTopic; NO items), /api/items (paginated feed: filter+sort+cursor), /api/providers, /api/topics, /api/items/:id (save/flag), /api/settings, /api/keys, /api/foreground, /api/check, /api/open-external, /healthz
+    api.ts            /api/state (topics/settings/runs/checking + latestItemIds + flaggedByTopic; NO items), /api/items (paginated feed: filter+sort+cursor), /api/providers, /api/topics, /api/items/:id (save/flag), /api/settings, /api/keys, /api/foreground, /api/check, /api/open-external, /api/export.md, /api/export.json, /feed.xml, /healthz
     pages.tsx         GET / — SSR shell
   components/
     layout.tsx        HTML shell
@@ -51,6 +58,8 @@ src/
     schedule.ts       isBehindSchedule/topicsBehindSchedule — falling-behind detection for the banner (NEWS-59)
     failure.ts        currentFailure — the topic-currently-failing warning source (NEWS-41); dismissal persisted in localStorage
     search.ts         itemMatchesQuery/filterItemsByQuery — live feed search filter (NEWS-60)
+    attribution.ts    outletFor/publishedLabel — source outlet + publication date display (NEWS-82)
+    diagnostics.ts    runRows/formatDuration/buildDiagnostics — redacted bug-report bundle (NEWS-88)
     styles.scss       styling (light/dark via prefers-color-scheme)
 src-tauri/            Tauri v2 shell; one spawn path, dev runs tsx + release runs the sidecar
   src/lib.rs          server_command() picks the command; spawn_server() watches stdout + navigates
@@ -61,19 +70,19 @@ scripts/
 .github/              CI: gate job (test:all) + rust job (fmt + clippy, BOTH profiles); dependabot
 tests/
   helpers/            tmp.ts (tmp data dirs), provider.ts (asResolver/fakeProvider)
-  unit/               vitest: dedupe, store, checks, scheduler, config, parse-result, providers, openai, api, api-keys, api-keys-routes, attendance, catch-up, sanitize
-  e2e/                playwright, serial, mock AI (--ai-test), port 4189: app.spec.ts, keys.spec.ts, topics.spec.ts
-docs/                 numbered requirements (1–16), ai/ summaries, manual-test-plan.md
+  unit/               vitest: dedupe, store, checks, scheduler, config, parse-result, providers, openai, api, api-keys, api-keys-routes, attendance, catch-up, sanitize, origin-guard, guidance, cost, key-verify, diagnostics, retention, export, daily-schedule, verify-links, attribution, concurrency, price-store
+  e2e/                playwright, serial, mock AI (--ai-test), port 4189: app.spec.ts, keys.spec.ts, topics.spec.ts, a11y.spec.ts (axe-core, both themes)
+docs/                 numbered requirements (1–21), ai/ summaries, manual-test-plan.md
 ```
 
 ## Data schema (`<data-dir>/data.json`)
 
-- `topics[]`: id, name, paused, highPriority (checked on the shorter interval — NEWS-56), createdAt, lastCheckedAt (every attempt), coveredThroughAt (successes only — drives the prompt window)
-- `items[]`: id, topicId, title, summary, sources[{title,url}], image, saved (bookmark), offTopic (NEWS-61 flag), dedupeKey, foundAt
-- `settings`: checkIntervalMs (default 1 day, min 5 min), highPriorityIntervalMs (≤ checkIntervalMs, clamped on update+load — NEWS-56), provider (default `auto`, `.catch('auto')` for retired providers), model (''), endpoint ('')
-- `runs[]`: id, topicId, startedAt, finishedAt, status(running|succeeded|failed), newItems, error, provider (last 200)
+- `topics[]`: id, name, paused, highPriority (checked on the shorter interval — NEWS-56), guidance (free-text steer fed to the prompt — NEWS-80), createdAt, lastCheckedAt (every attempt), coveredThroughAt (successes only — drives the prompt window)
+- `items[]`: id, topicId, title, summary, sources[{title,url,outlet,publishedAt — NEWS-82}], image, saved (bookmark), offTopic (NEWS-61 flag), dedupeKey, foundAt
+- `settings`: itemRetentionDays (default 365, 0 = forever — NEWS-87), checkIntervalMs (default 1 day, min 5 min), highPriorityIntervalMs (≤ checkIntervalMs, clamped on update+load — NEWS-56), provider (default `auto`, `.catch('auto')` for retired providers), model (''), endpoint (''), notifyOnNewItems, monthlyBudgetUsd (0 = no cap — NEWS-79)
+- `runs[]`: id, topicId, startedAt, finishedAt, status(running|succeeded|failed), newItems, error, provider, model, usage (tokens+searches, null = unknown — NEWS-79) (last 200)
 
-Data dir: `--data-dir` flag → `NEWS_DATA_DIR` → `~/.news`.
+Data dir: `--data-dir` flag → `NEWS_DATA_DIR` → `~/.news`. Also holds `prices.json` (live model rates, user-editable — NEWS-93) and the image cache.
 
 ## Build / run / test
 
@@ -95,7 +104,9 @@ Data dir: `--data-dir` flag → `NEWS_DATA_DIR` → `~/.news`.
 | Change prompts / result parsing | `src/ai/prompt.ts` |
 | Provider selection / auto order | `src/ai/providers/index.ts` (`resolveProvider`, `AUTO_ORDER`) |
 | Dedup behavior | `src/ai/dedupe.ts` (keys), `src/checks.ts` (application) |
-| Scheduling rules | `src/checks.ts` (`isDue`, `effectiveInterval`, `byCheckOrder`), `src/scheduler.ts` (tick + overrun drain). **Adding a topic checks it immediately** — `POST /api/topics` fires `checkTopic({manual:true})` in the background (NEWS-54, FR-1.12) |
+| Dead / hallucinated source links | `src/ai/verify-links.ts`, called from `CheckRunner.verifyLinks` **before** dedup. Reuses `images/safety.ts` SSRF vetting; null probe under `--ai-test`. See `docs/2-news-checks-and-dedup.md` FR-2.6–2.10 |
+| Scheduling rules | `src/checks.ts` (`isDueUnderSchedule` picks interval vs daily — NEWS-84; `isDue`, `effectiveInterval`, `byCheckOrder`), `src/scheduler.ts` (tick + overrun drain). **Adding a topic checks it immediately** — `POST /api/topics` fires `checkTopic({manual:true})` in the background (NEWS-54, FR-1.12) |
+| How many checks run at once | `checkConcurrency` setting + `CheckRunner.runPool` (shared cursor, `byCheckOrder` start order). See `docs/13-scheduling-under-load.md` FR-13.4–13.7 |
 | Behaviour under load (overrun, ordering, falling-behind) | `src/scheduler.ts` drain (NEWS-57), `byCheckOrder` in `src/checks.ts` (NEWS-58), `src/client/schedule.ts` + the "falling behind" banner in `app.tsx` (NEWS-59). See `docs/13-scheduling-under-load.md` |
 | Topic priority (high-priority interval) | `highPriority` on the topic + `highPriorityIntervalMs` in settings; `effectiveInterval` in `src/checks.ts`; clamp in `store.updateSettings` + `SettingsSchema` transform; menu action `priority` + star icon in `app.tsx`. See `docs/12-topic-priority.md` |
 | How far back a check asks | `coveredThroughAt` on the topic → `sinceIso` → `windowLine()` in `src/ai/prompt.ts`; **not** `lastCheckedAt` |
@@ -119,5 +130,15 @@ Data dir: `--data-dir` flag → `NEWS_DATA_DIR` → `~/.news`.
 | Feed filters (Solo / Saved / Search) | **Server-side** now (NEWS-76): `Store.queryItems` filters; client sends view params via `refreshFeed` (`src/client/api.ts`). Search is debounced. `feedItems`/`feedTotal` in `stores.ts`. See `docs/14-search.md` + `docs/17-server-pagination.md` |
 | Feed pagination ("Show more") | `feedLimit`/`FEED_PAGE`/`showMoreFeed` in `stores.ts` (reset per view) → `/api/items?limit=`; `moreCount` from server `total`. See `docs/16-pagination.md` |
 | The feed data / where items come from | `/api/items` via `refreshFeed`, NOT `/api/state` (slimmed). Just-flagged overlay: `recentlyFlaggedItems` merged in `app.tsx`. Notifications read `latestItemIds`. See `docs/17-server-pagination.md` |
+| Export / the Atom feed | `src/export.ts` (pure renderers) + `/api/export.md`, `/api/export.json`, `/feed.xml` in `routes/api.ts`; Settings "Export & feed" block. `scope=all\|saved\|topic`. See `docs/21-export-and-feed.md` |
+| Story retention / data-file growth | `Store.pruneOldItems` + `itemRetentionDays` setting; called from `cli.ts` at startup and `CheckRunner.pruneAfterCheck` after each success. Bookmarked + flagged items exempt. See `docs/4-cli-server-storage.md` FR-4.11 |
+| Diagnostics / "why did a check fail" | `src/client/diagnostics.ts` (pure, unit-tested) + the Settings Diagnostics section; `appVersion` on `/api/state`. Topic names redacted unless opted in. See `docs/3-ui.md` FR-3.25–3.28 |
+| Accessibility (keyboard, ARIA, focus) | `trapTabInDialog` + the global `keydown` handler + `openTopicMenuFor` in `app.tsx`; `role=listbox/option` on the topics list; `:focus-visible` rule in `styles.scss`. Guarded by `tests/e2e/a11y.spec.ts`. See `docs/3-ui.md` FR-3.20–3.24 |
+| The privacy disclosure | `privacyNoteJsx` in `app.tsx` (Settings → Privacy), README "Privacy", onboarding welcome step; pinned by a test in `tests/unit/guidance.test.ts`. See `docs/7-api-keys.md` FR-7.13 |
+| First-run onboarding | `onboarding`/`onboardingTopics`/`STARTER_TOPICS` in `stores.ts`; `onboardingJsx` + `maybeOpenOnboarding` in `app.tsx`; dismissal in localStorage `news:onboarding-seen`. Key check: `src/ai/verify-key.ts`, injected via `createApp({verifyKey})` (null under `--ai-test`). See `docs/20-onboarding.md` |
+| Changing a model's price | **Edit `<data-dir>/prices.json`** — applies with no restart, no rebuild. Seeded from `BUILTIN_PRICES`; an https `priceManifestUrl` setting refreshes it daily. `src/ai/price-store.ts`, `docs/19-cost-visibility.md` FR-19.5a |
+| Cost / token usage / the budget cap | `src/ai/pricing.ts` (rates + `estimateCostUsd`); `usage`+`model` on `CheckRun`; `Store.spendThisMonth`/`spendSince`; `isOverBudget` in `checks.ts` gating `checkDue`; `spend` on `/api/state`; Settings "Spending" block in `app.tsx`. **Counts are stored, money is derived** — see `docs/19-cost-visibility.md` |
+| Per-topic guidance (free-text steer) | `guidance` on the topic + `setTopicGuidance` in `store.ts`; `PATCH /api/topics/:id`; `TopicContext` → `buildUserPrompt` in `src/ai/prompt.ts`; menu action `guidance` + `guidanceDialogJsx`/`guidanceTopicId` in the client. See `docs/18-topic-guidance.md` |
 | Flag a story off-topic / review mode | `offTopic` on items + `setItemOffTopic`/`offTopicTitlesForTopic` in `store.ts`; `PATCH /api/items/:id`; item context menu (`itemMenuJsx`), `flaggedRowJsx`, `reviewTopicIds`/`recentlyFlagged` in `app.tsx`; prompt via `buildUserPrompt` offTopicTitles. See `docs/15-off-topic-flagging.md` |
 | Transient toast | `#toast-slot`/`.toast` + `showToast` in `app.tsx`; `toast` state in `stores.ts`. **Never `window.alert` — a WKWebView no-op** |
+| Who is allowed to call the API | `src/origin-guard.ts`, mounted first in `createApp`. Loopback binding is not a fence against the user's *own* browser — Host + Origin are. Absent `Origin` is allowed on purpose (curl / `app.request`); it is not authentication. See `docs/4-cli-server-storage.md` FR-4.5a |

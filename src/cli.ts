@@ -1,6 +1,8 @@
 import v8 from 'node:v8';
 
+import { refreshPricesFromManifest } from './ai/price-store.js';
 import { createMockProvider, resolveProvider } from './ai/providers/index.js';
+import { probeLink } from './ai/verify-links.js';
 import { Attendance } from './attendance.js';
 import type { ProviderResolver } from './checks.js';
 import { CheckRunner } from './checks.js';
@@ -62,12 +64,27 @@ async function main(): Promise<void> {
   // No image fetching under --ai-test: the mock provider's URLs are fake, and
   // a test run must not reach out to the network.
   const fetchImage = options.aiTest ? null : createImageFetcher(options.dataDir);
+  // Apply the retention window at startup too (NEWS-87): an install that has
+  // been closed for months should come back trimmed, not with a year of
+  // backlog waiting for the first check to clear it.
+  const dropped = store.pruneOldItems(new Date());
+  if (dropped > 0) console.error(`news: pruned ${String(dropped)} stories past the retention window`);
   // Reclaim any orphaned cached images at startup — from a topic deleted in a
   // previous run, a crash mid-download, or an older version (NEWS-36).
   const pruned = pruneImageCache(options.dataDir, liveImageHashes(store.listItems()));
   if (pruned > 0) console.error(`news: pruned ${String(pruned)} orphaned cached image(s)`);
-  const runner = new CheckRunner(store, resolve, attendance, fetchImage);
-  const app = createApp({ store, runner, attendance, dataDir: options.dataDir });
+  // No link probing under --ai-test either: the mock's URLs are fictional, so
+  // every story would be dropped as unreachable.
+  const runner = new CheckRunner(store, resolve, attendance, fetchImage, options.aiTest ? null : probeLink);
+  const app = createApp({
+    store,
+    runner,
+    attendance,
+    dataDir: options.dataDir,
+    // Under --ai-test nothing talks to a vendor, so a live key check would only
+    // reject the obviously-fake keys the E2E suite saves on purpose.
+    verifyKey: options.aiTest ? null : undefined,
+  });
 
   const server = await startServer(app, {
     port: options.port ?? undefined,
@@ -78,6 +95,21 @@ async function main(): Promise<void> {
   console.log(`news running at ${url}`);
 
   const stopScheduler = startScheduler(runner);
+  // Refresh model rates from the configured manifest at startup and daily
+  // (NEWS-93), so a price change reaches installs without a new build. Failure
+  // is silent by design: an unreachable manifest means the *update* didn't
+  // happen, which is a different thing from the prices being wrong.
+  const refreshPrices = (): void => {
+    const url = store.getSettings().priceManifestUrl;
+    if (url === '') return;
+    void refreshPricesFromManifest(store.prices, url).then((updated) => {
+      if (updated) console.error(`news: model prices updated from ${url}`);
+      return updated;
+    });
+  };
+  refreshPrices();
+  const priceTimer = setInterval(refreshPrices, 24 * 60 * 60 * 1000);
+  priceTimer.unref();
   if (options.open) openInBrowser(url);
 
   // Under E2E coverage collection the test runner may kill us without letting
@@ -89,6 +121,7 @@ async function main(): Promise<void> {
   }
 
   const shutdown = (): void => {
+    clearInterval(priceTimer);
     stopScheduler();
     server.close();
     if ((process.env['NODE_V8_COVERAGE'] ?? '') !== '') v8.takeCoverage();

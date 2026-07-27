@@ -1,7 +1,7 @@
 import { z } from 'zod';
 
 import { stripMarkup } from './sanitize.js';
-import type { FoundNewsItem, KnownItem } from './types.js';
+import type { FoundNewsItem, KnownItem, TopicContext } from './types.js';
 
 const MAX_KNOWN_ITEMS = 60;
 
@@ -12,7 +12,22 @@ const ResultSchema = z.object({
       // here so nothing downstream has to know that (see `sanitize.ts`).
       title: z.string().min(1).transform(stripMarkup),
       summary: z.string().min(1).transform(stripMarkup),
-      sources: z.array(z.object({ title: z.string().transform(stripMarkup), url: z.string() })),
+      sources: z.array(
+        z.object({
+          title: z.string().transform(stripMarkup),
+          url: z.string(),
+          // Both optional and nullable: the model often can't tell, and
+          // `.catch(null)` means a malformed value degrades to "unknown"
+          // rather than failing the parse and losing the whole batch.
+          outlet: z.string().transform(stripMarkup).nullish().catch(null).transform((v) => v ?? null),
+          publishedAt: z
+            .string()
+            .regex(/^\d{4}-\d{2}-\d{2}$/)
+            .nullish()
+            .catch(null)
+            .transform((v) => v ?? null),
+        }),
+      ),
     }),
   ),
 });
@@ -35,7 +50,12 @@ export const NEWS_JSON_SCHEMA = {
             items: {
               type: 'object',
               additionalProperties: false,
-              properties: { title: { type: 'string' }, url: { type: 'string' } },
+              properties: {
+                title: { type: 'string' },
+                url: { type: 'string' },
+                outlet: { type: ['string', 'null'] },
+                publishedAt: { type: ['string', 'null'] },
+              },
               required: ['title', 'url'],
             },
           },
@@ -63,10 +83,13 @@ export function searchingSystemPrompt(): string {
     '  returning proportionally more stories.',
     '- Each summary should be 2-4 sentences, factual, and self-contained.',
     '- Each story must include at least one source link to a news article (not a homepage).',
+    '- For each source, give the publishing outlet as "outlet" (e.g. "Reuters") and the article\'s',
+    '  publication date as "publishedAt" in YYYY-MM-DD form. If you are not certain of either, use null.',
+    '  A guessed date is worse than no date — readers judge news by how recent it is.',
     '- Write plain prose. No markup, HTML tags, or citation tags in the title or summary.',
     '',
     'Respond with a JSON object of exactly this shape (and, if your output is free text, put it in a fenced ```json block):',
-    '{"items": [{"title": "...", "summary": "...", "sources": [{"title": "...", "url": "https://..."}]}]}',
+    '{"items": [{"title": "...", "summary": "...", "sources": [{"title": "...", "url": "https://...", "outlet": "...", "publishedAt": "YYYY-MM-DD"}]}]}',
   ].join('\n');
 }
 
@@ -112,23 +135,40 @@ function windowLine(sinceIso: string | null, now: Date): string {
 /**
  * Build the user prompt shared by every provider.
  *
- * `offTopicTitles` are stories the user explicitly marked off-topic (NEWS-61):
- * a short topic label like "Apple" can mean the company or the fruit, and these
- * are the model's signal for which one the user did NOT mean. They're framed as
- * a "prefer stories unlike these" list, not a hard exclusion, since the point is
- * to infer intent rather than blacklist exact stories.
+ * Two kinds of steer, stated separately because they carry different authority:
+ *
+ * - `context.guidance` is what the user *wrote* about this topic (NEWS-80) —
+ *   "regulatory news only, not stock moves". It is an instruction, and it is
+ *   placed ahead of the negative examples because it should win where the two
+ *   seem to disagree.
+ * - `context.offTopicTitles` are stories the user marked off-topic (NEWS-61): a
+ *   short label like "Apple" can mean the company or the fruit, and these show
+ *   which sense the user did NOT mean. Framed as "prefer stories unlike these"
+ *   rather than a hard exclusion — the point is to infer intent, not to
+ *   blacklist exact stories.
  */
 export function buildUserPrompt(
   topicName: string,
   known: KnownItem[],
   sinceIso: string | null,
-  offTopicTitles: string[] = [],
+  context: TopicContext = {},
 ): string {
+  const guidance = (context.guidance ?? '').trim();
+  const offTopicTitles = context.offTopicTitles ?? [];
   const now = new Date();
   const lines: string[] = [];
   lines.push(`Topic: ${topicName}`);
   lines.push(`Current date: ${now.toISOString().slice(0, 10)}`);
   lines.push(windowLine(sinceIso, now));
+  if (guidance !== '') {
+    lines.push('');
+    lines.push(
+      'The user gave these instructions for what they want from this topic. Follow them — they take ' +
+        'precedence over your own judgement about what is newsworthy here, and a story that does not fit ' +
+        'them should be left out even if it is significant:',
+    );
+    lines.push(guidance);
+  }
   const recentKnown = known.slice(-MAX_KNOWN_ITEMS);
   if (recentKnown.length > 0) {
     lines.push('');

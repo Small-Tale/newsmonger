@@ -2,8 +2,11 @@ import { randomUUID } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 
+import { PriceStore } from '../ai/price-store.js';
+import { estimateCostUsd } from '../ai/pricing.js';
+import type { TokenUsage } from '../ai/types.js';
 import type { CheckRun, DataFile, NewsItem, Settings, Topic } from './schemas.js';
-import { DataFileSchema, emptyDataFile } from './schemas.js';
+import { DataFileSchema, emptyDataFile, MAX_GUIDANCE_LENGTH } from './schemas.js';
 
 const MAX_RUNS_KEPT = 200;
 
@@ -42,11 +45,18 @@ export class Store {
   /** Where the data file and image cache live. */
   readonly dataDir: string;
 
+  /**
+   * Live model rates (NEWS-93). Lives here because spend is computed here, and
+   * it reads `<data-dir>/prices.json` — editable without rebuilding the app.
+   */
+  readonly prices: PriceStore;
+
   constructor(dataDir: string) {
     this.dataDir = dataDir;
     fs.mkdirSync(dataDir, { recursive: true });
     this.filePath = path.join(dataDir, 'data.json');
     this.data = this.load();
+    this.prices = new PriceStore(dataDir);
   }
 
   private load(): DataFile {
@@ -89,6 +99,7 @@ export class Store {
       name: trimmed,
       paused: false,
       highPriority: false,
+      guidance: '',
       createdAt: new Date().toISOString(),
       lastCheckedAt: null,
       coveredThroughAt: null,
@@ -111,6 +122,21 @@ export class Store {
     const topic = this.getTopic(id);
     if (!topic) throw new Error(`no such topic: ${id}`);
     topic.highPriority = highPriority;
+    this.save();
+    return topic;
+  }
+
+  /**
+   * Set (or clear, with '') the topic's free-text guidance (NEWS-80).
+   *
+   * Trimmed on the way in so whitespace-only input reads as "no guidance"
+   * everywhere downstream — the prompt, the UI indicator, and the API response
+   * all key off emptiness, and they should agree.
+   */
+  setTopicGuidance(id: string, guidance: string): Topic {
+    const topic = this.getTopic(id);
+    if (!topic) throw new Error(`no such topic: ${id}`);
+    topic.guidance = guidance.trim().slice(0, MAX_GUIDANCE_LENGTH);
     this.save();
     return topic;
   }
@@ -306,6 +332,11 @@ export class Store {
         next.highPriorityIntervalMs = Math.min(next.highPriorityIntervalMs, next.checkIntervalMs);
       }
     }
+    // Sorted and de-duplicated once, here, so every reader — the scheduler, the
+    // UI, the "next check" hint — sees the same canonical list (NEWS-84).
+    if (patch.dailyTimes !== undefined) {
+      next.dailyTimes = [...new Set(next.dailyTimes)].sort((a, b) => a.localeCompare(b));
+    }
     this.data.settings = next;
     this.save();
     return this.getSettings();
@@ -327,6 +358,8 @@ export class Store {
       newItems: 0,
       error: null,
       provider: null,
+      model: null,
+      usage: null,
     };
     this.data.runs.push(run);
     if (this.data.runs.length > MAX_RUNS_KEPT) {
@@ -343,6 +376,8 @@ export class Store {
       newItems: number;
       error?: string;
       provider?: string | null;
+      model?: string | null;
+      usage?: TokenUsage | null;
     },
   ): void {
     const run = this.data.runs.find((r) => r.id === runId);
@@ -352,6 +387,67 @@ export class Store {
     run.newItems = result.newItems;
     run.error = result.error ?? null;
     if (result.provider !== undefined) run.provider = result.provider;
+    if (result.model !== undefined) run.model = result.model;
+    if (result.usage !== undefined) run.usage = result.usage;
     this.save();
+  }
+
+  /**
+   * Estimated spend, in USD, over the runs recorded since `sinceIso` (NEWS-79).
+   *
+   * Returns both the total and how many runs could **not** be priced, because a
+   * total alone would quietly read as complete. Runs whose provider reported no
+   * usage, or whose model has no published price, are counted as unknown rather
+   * than as zero — see `estimateCostUsd`.
+   *
+   * Note the horizon is `MAX_RUNS_KEPT` runs, not all of history: this is what
+   * the app can still see, which for a busy install may be less than a month.
+   */
+  /**
+   * Drop stories older than the retention window (NEWS-87). Returns how many
+   * went, so the caller can log it and prune the images they referenced.
+   *
+   * Two things are deliberately exempt: **bookmarked** stories, which the user
+   * marked as worth keeping, and **off-topic flagged** ones, whose titles feed
+   * the prompt's negative-example list — pruning those would quietly un-teach
+   * the model what the user meant by a topic.
+   */
+  pruneOldItems(now: Date): number {
+    const days = this.data.settings.itemRetentionDays;
+    if (days <= 0) return 0;
+    const cutoff = new Date(now.getTime() - days * 24 * 60 * 60 * 1000).toISOString();
+    const before = this.data.items.length;
+    this.data.items = this.data.items.filter(
+      (item) => item.saved || item.offTopic || item.foundAt >= cutoff,
+    );
+    const removed = before - this.data.items.length;
+    if (removed > 0) this.save();
+    return removed;
+  }
+
+  /** Estimated spend so far in `now`'s calendar month, in the local timezone. */
+  spendThisMonth(now: Date): { usd: number; pricedRuns: number; unpricedRuns: number } {
+    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+    return this.spendSince(monthStart.toISOString());
+  }
+
+  spendSince(sinceIso: string): { usd: number; pricedRuns: number; unpricedRuns: number } {
+    // Read once per call, not per run: the file's mtime check is cheap but not
+    // free, and every run in a sweep is priced against the same table.
+    const table = this.prices.table().models;
+    let usd = 0;
+    let pricedRuns = 0;
+    let unpricedRuns = 0;
+    for (const run of this.data.runs) {
+      if (run.startedAt < sinceIso) continue;
+      if (run.status === 'running') continue;
+      const cost = estimateCostUsd(run.model ?? '', run.usage, table);
+      if (cost === null) unpricedRuns += 1;
+      else {
+        usd += cost;
+        pricedRuns += 1;
+      }
+    }
+    return { usd, pricedRuns, unpricedRuns };
   }
 }

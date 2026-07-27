@@ -5,9 +5,12 @@ import { fileURLToPath } from 'node:url';
 import { serve } from '@hono/node-server';
 import { Hono } from 'hono';
 
+import type { KeyVerifier } from './ai/verify-key.js';
+import { verifyApiKey } from './ai/verify-key.js';
 import { Attendance } from './attendance.js';
 import type { CheckRunner } from './checks.js';
 import type { Store } from './db/store.js';
+import { originGuard } from './origin-guard.js';
 import { registerApi } from './routes/api.js';
 import { registerPages } from './routes/pages.js';
 import type { AppEnv } from './types.js';
@@ -38,16 +41,24 @@ export function createApp(deps: {
   runner: CheckRunner;
   attendance?: Attendance;
   dataDir?: string;
+  /**
+   * Checks a key against its vendor before storing it (NEWS-78). Null disables
+   * the check — what `--ai-test` passes, so E2E can save obviously-fake keys.
+   */
+  verifyKey?: KeyVerifier | null;
 }): Hono<AppEnv> {
   const app = new Hono<AppEnv>();
   // Same instance the CheckRunner consults, when the caller passes one; tests
   // that don't care get a standalone tracker.
   const attendance = deps.attendance ?? new Attendance();
+  // First, before anything reads a body or touches state (NEWS-86).
+  app.use('*', originGuard());
   app.use('*', async (c, next) => {
     c.set('store', deps.store);
     c.set('runner', deps.runner);
     c.set('attendance', attendance);
     c.set('dataDir', deps.dataDir ?? deps.store.dataDir);
+    c.set('verifyKey', deps.verifyKey === undefined ? verifyApiKey : deps.verifyKey);
     // Debug aid (e.g. verifying the Tauri webview actually hits the server).
     if (process.env['NEWS_LOG_REQUESTS'] === '1') {
       console.error(`[req] ${c.req.method} ${c.req.path}`);

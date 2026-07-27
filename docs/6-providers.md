@@ -55,4 +55,4 @@ The Settings model field is a **combobox** (NEWS-37): an editable text input bac
 
 See also: [2 — News Checks and Deduplication](2-news-checks-and-dedup.md), [4 — CLI, Server, and Storage](4-cli-server-storage.md).
 
-Key storage and the Settings dialog are covered in [7 — API Keys and Settings Dialog](7-api-keys.md).
+Key storage and the Settings dialog are covered in [7 — API Keys and Settings Dialog](7-api-keys.md). What a check *costs* — token usage capture, the price table, and the monthly budget cap — is covered in [19 — Cost Visibility](19-cost-visibility.md).

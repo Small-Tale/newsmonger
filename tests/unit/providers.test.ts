@@ -4,10 +4,10 @@ import { createAnthropicProvider } from '../../src/ai/providers/anthropic.js';
 import { AUTO_ORDER, resolveProvider } from '../../src/ai/providers/index.js';
 import { createMockProvider } from '../../src/ai/providers/mock.js';
 import type { ConcreteProviderName, NewsProvider } from '../../src/ai/types.js';
-import { fakeProvider } from '../helpers/provider.js';
+import { fakeProvider, noUsage } from '../helpers/provider.js';
 
 function factoriesWith(available: Partial<Record<ConcreteProviderName, boolean>>) {
-  const make = (name: ConcreteProviderName): NewsProvider => fakeProvider(() => Promise.resolve([]), { name });
+  const make = (name: ConcreteProviderName): NewsProvider => fakeProvider(() => Promise.resolve(noUsage([])), { name });
   return {
     'claude-cli': () => ({
       ...make('claude-cli'),
@@ -106,30 +106,33 @@ describe('createMockProvider', () => {
 
   it('returns two deterministic stories and records calls', async () => {
     const p = createMockProvider();
-    const items = await p.checkTopic('Fusion', [], null);
-    expect(items).toHaveLength(2);
+    const result = await p.checkTopic('Fusion', [], null);
+    expect(result.items).toHaveLength(2);
     expect(p.calls).toHaveLength(1);
   });
 });
 
 describe('createAnthropicProvider', () => {
   it('reports availability from the key check', async () => {
-    const withKey = createAnthropicProvider({ runner: { run: () => Promise.resolve('') }, getApiKey: () => Promise.resolve('test-key') });
+    const withKey = createAnthropicProvider({ runner: { run: () => Promise.resolve({ text: '', usage: null }) }, getApiKey: () => Promise.resolve('test-key') });
     expect(withKey.model).toBe('claude-opus-4-8');
     expect(await withKey.isAvailable()).toBe(true);
 
-    const noKey = createAnthropicProvider({ runner: { run: () => Promise.resolve('') }, getApiKey: () => Promise.resolve(null) });
+    const noKey = createAnthropicProvider({ runner: { run: () => Promise.resolve({ text: '', usage: null }) }, getApiKey: () => Promise.resolve(null) });
     expect(await noKey.isAvailable()).toBe(false);
   });
 
   it('parses the fenced-JSON result from the injected runner', async () => {
     const runner = {
       run: () =>
-        Promise.resolve('Here you go:\n```json\n{"items":[{"title":"T","summary":"S","sources":[]}]}\n```'),
+        Promise.resolve({
+          text: 'Here you go:\n```json\n{"items":[{"title":"T","summary":"S","sources":[]}]}\n```',
+          usage: null,
+        }),
     };
     const p = createAnthropicProvider({ runner, getApiKey: () => Promise.resolve('test-key') });
-    const items = await p.checkTopic('AI', [], null);
-    expect(items).toEqual([{ title: 'T', summary: 'S', sources: [] }]);
+    const result = await p.checkTopic('AI', [], null);
+    expect(result.items).toEqual([{ title: 'T', summary: 'S', sources: [] }]);
   });
 
   it('surfaces a refusal as an error', async () => {

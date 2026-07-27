@@ -76,9 +76,9 @@ describe('createClaudeCliProvider', () => {
 
   it('parses stories out of a successful run', async () => {
     const p = createClaudeCliProvider({ runner: fakeRunner() });
-    const items = await p.checkTopic('fusion energy', [], null);
-    expect(items).toHaveLength(1);
-    expect(items[0]?.title).toBe('Fusion milestone');
+    const result = await p.checkTopic('fusion energy', [], null);
+    expect(result.items).toHaveLength(1);
+    expect(result.items[0]?.title).toBe('Fusion milestone');
   });
 
   it('passes the shared system and user prompts through', async () => {
@@ -144,7 +144,7 @@ describe('createClaudeCliProvider', () => {
       ],
     });
     const p = createClaudeCliProvider({ runner: fakeRunner({ run: () => Promise.resolve(withCite) }) });
-    const items = await p.checkTopic('t', [], null);
-    expect(items[0]?.summary).toBe('Body. Cited bit.');
+    const result = await p.checkTopic('t', [], null);
+    expect(result.items[0]?.summary).toBe('Body. Cited bit.');
   });
 });

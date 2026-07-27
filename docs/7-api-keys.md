@@ -90,3 +90,14 @@ The backdrop and the ✕ deliberately use **different** actions (`settings-backd
 ## Testing
 
 - **FR-7.12** *(Shipped)* `NEWS_FAKE_KEYCHAIN=1` swaps in an in-memory store. The E2E suite drives real save/remove flows through the UI, and those must not reach into the keychain of whoever runs the tests — leaving entries behind, or blocking a headless run on an OS authorization prompt. Same idea as `--ai-test` for the AI provider. `playwright.config.ts` sets it for the shared server; the unit tests set it per-file.
+
+## What leaves the machine (FR-7.13) — NEWS-91
+
+The app sends the user's topic names to a third party on a schedule. That is what they asked for by using it, but nothing said so anywhere, and "assume it's obvious" is not a disclosure.
+
+- **FR-7.13** *(Shipped)* A **Privacy** section in the settings dialog, mirrored in the README and summarised on the onboarding welcome step, states three things:
+  1. **Sent on every check**, to the active provider: the topic's name, its guidance, the titles already reported for that topic (how repeats are avoided), and the titles flagged off-topic (how intent is inferred). Nothing else — not the feed, not other topics, not bookmarks.
+  2. **Stored locally only**, under `~/.news`: topics, stories, cached images. **Keys are not there** — they are in the OS keychain (FR-7.2).
+  3. **No servers, no telemetry.** The only other outbound traffic is image fetching (proxied — see [8 — Article Images](8-article-images.md)) and opening links the user clicks.
+
+  A unit test pins claim (1) to `buildUserPrompt` — it asserts the prompt carries the disclosed fields and **no URLs, bookmarks, or other topics' stories** — so a future change that starts sending more fails the test rather than silently making the note untrue.

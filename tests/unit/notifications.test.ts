@@ -17,6 +17,12 @@ const BASE_SETTINGS: StateResp['settings'] = {
   model: '',
   endpoint: '',
   notifyOnNewItems: true,
+  monthlyBudgetUsd: 0,
+  itemRetentionDays: 365,
+  scheduleMode: 'interval',
+  dailyTimes: ['08:00'],
+  checkConcurrency: 3,
+  priceManifestUrl: '',
 };
 
 function state(itemIds: string[]): StateResp {
@@ -28,6 +34,16 @@ function state(itemIds: string[]): StateResp {
     settings: BASE_SETTINGS,
     runs: [],
     checking: [],
+    spend: {
+      usd: 0,
+      pricedRuns: 0,
+      unpricedRuns: 0,
+      monthlyBudgetUsd: 0,
+      overBudget: false,
+      pricesVerifiedOn: '2026-07-27',
+    },
+    appVersion: '0.1.0',
+    prices: {},
   };
 }
 

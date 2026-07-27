@@ -40,9 +40,9 @@ describe('createCodexCliProvider', () => {
   });
 
   it('parses stories out of a successful run', async () => {
-    const items = await createCodexCliProvider({ runner: fakeRunner() }).checkTopic('fusion energy', [], null);
-    expect(items).toHaveLength(1);
-    expect(items[0]?.title).toBe('Fusion milestone');
+    const result = await createCodexCliProvider({ runner: fakeRunner() }).checkTopic('fusion energy', [], null);
+    expect(result.items).toHaveLength(1);
+    expect(result.items[0]?.title).toBe('Fusion milestone');
   });
 
   it('passes the shared prompts through, including the dedup list', async () => {
@@ -116,6 +116,6 @@ describe('createCodexCliProvider', () => {
       ],
     });
     const p = createCodexCliProvider({ runner: fakeRunner({ run: () => Promise.resolve(withCite) }) });
-    expect((await p.checkTopic('t', [], null))[0]?.summary).toBe('Body. Cited bit.');
+    expect((await p.checkTopic('t', [], null)).items[0]?.summary).toBe('Body. Cited bit.');
   });
 });

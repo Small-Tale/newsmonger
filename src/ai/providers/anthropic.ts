@@ -2,13 +2,24 @@ import Anthropic from '@anthropic-ai/sdk';
 
 import { resolveApiKey } from '../api-keys.js';
 import { buildUserPrompt, parseNewsResult, searchingSystemPrompt } from '../prompt.js';
-import type { FoundNewsItem, KnownItem, NewsProvider } from '../types.js';
+import type { CheckResult, KnownItem, NewsProvider, TokenUsage, TopicContext } from '../types.js';
 
 export const DEFAULT_ANTHROPIC_MODEL = 'claude-opus-4-8';
 
 /** Minimal seam over the Anthropic SDK so tests can inject a fake. */
 export interface AnthropicRunner {
-  run(system: string, prompt: string, model: string): Promise<string>;
+  run(system: string, prompt: string, model: string): Promise<{ text: string; usage: TokenUsage | null }>;
+}
+
+/** Map the SDK's usage block onto our provider-neutral shape (NEWS-79). */
+function readUsage(usage: Anthropic.Usage): TokenUsage {
+  return {
+    inputTokens: usage.input_tokens,
+    cacheReadTokens: usage.cache_read_input_tokens ?? 0,
+    cacheWriteTokens: usage.cache_creation_input_tokens ?? 0,
+    outputTokens: usage.output_tokens,
+    webSearches: usage.server_tool_use?.web_search_requests ?? 0,
+  };
 }
 
 function sdkRunner(getApiKey: () => Promise<string | null>): AnthropicRunner {
@@ -44,10 +55,11 @@ function sdkRunner(getApiKey: () => Promise<string | null>): AnthropicRunner {
       if (message.stop_reason === 'refusal') {
         throw new Error('Claude declined to research this topic');
       }
-      return message.content
+      const text = message.content
         .filter((block): block is Anthropic.TextBlock => block.type === 'text')
         .map((block) => block.text)
         .join('\n');
+      return { text, usage: readUsage(message.usage) };
     },
   };
 }
@@ -80,14 +92,14 @@ export function createAnthropicProvider(config: {
       topicName: string,
       known: KnownItem[],
       sinceIso: string | null,
-      offTopicTitles: string[] = [],
-    ): Promise<FoundNewsItem[]> {
-      const text = await runner.run(
+      context: TopicContext = {},
+    ): Promise<CheckResult> {
+      const { text, usage } = await runner.run(
         searchingSystemPrompt(),
-        buildUserPrompt(topicName, known, sinceIso, offTopicTitles),
+        buildUserPrompt(topicName, known, sinceIso, context),
         model,
       );
-      return parseNewsResult(text);
+      return { items: parseNewsResult(text), usage };
     },
   };
 }

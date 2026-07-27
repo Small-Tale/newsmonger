@@ -1,9 +1,12 @@
 import type { SafeHtml } from 'kerfjs';
 import { delegate, each, mount } from 'kerfjs';
 
+import { formatUsd } from '../ai/pricing.js';
 import type { ProviderName } from '../ai/types.js';
 import { PROVIDER_INFO, PROVIDER_MODELS, PROVIDER_NAMES } from '../ai/types.js';
+import type { StateResp } from '../api/schemas.js';
 import type { NewsItem, Topic } from '../db/schemas.js';
+import { MAX_GUIDANCE_LENGTH } from '../db/schemas.js';
 import {
   addTopic,
   deleteKey,
@@ -17,21 +20,39 @@ import {
   setItemOffTopic,
   setItemSaved,
   setNotifyOnNewItems,
+  setTopicGuidance,
   setTopicHighPriority,
   setTopicPaused,
   startCheck,
+  updateConcurrency,
+  updateDailyTimes,
   updateHighPriorityInterval,
   updateInterval,
+  updateMonthlyBudget,
+  updatePriceManifestUrl,
   updateProviderSettings,
+  updateRetention,
+  updateScheduleMode,
 } from './api.js';
+import { outletFor, publishedLabel } from './attribution.js';
+import { buildDiagnostics, formatDuration, runRows } from './diagnostics.js';
 import { currentFailure } from './failure.js';
 import { icon } from './icons.js';
 import { ensureNotificationPermission, syncTauriNotificationPermission } from './notifications.js';
 import { activeBehindWarnings } from './schedule.js';
 import { itemMatchesQuery } from './search.js';
 import { shareItem } from './share.js';
-import type { AppState } from './stores.js';
-import { appStore, FEED_PAGE, TOPIC_SORT_LABELS, TOPIC_SORTS } from './stores.js';
+import type { AppState, OnboardingStep } from './stores.js';
+import {
+  appStore,
+  FEED_PAGE,
+  ONBOARDING_STEPS,
+  readOnboardingSeen,
+  STARTER_TOPICS,
+  TOPIC_SORT_LABELS,
+  TOPIC_SORTS,
+  writeOnboardingSeen,
+} from './stores.js';
 import { openExternalUrl } from './tauri.js';
 import { sortTopics } from './topic-sort.js';
 
@@ -43,6 +64,15 @@ const INTERVAL_OPTIONS: { label: string; ms: number }[] = [
   { label: 'Every day', ms: 24 * 60 * 60 * 1000 },
   { label: 'Every 2 days', ms: 48 * 60 * 60 * 1000 },
   { label: 'Every week', ms: 7 * 24 * 60 * 60 * 1000 },
+];
+
+/** Story-retention choices (NEWS-87). 0 = keep everything. */
+const RETENTION_OPTIONS: { label: string; days: number }[] = [
+  { label: '3 months', days: 90 },
+  { label: '6 months', days: 180 },
+  { label: '1 year', days: 365 },
+  { label: '2 years', days: 730 },
+  { label: 'Forever', days: 0 },
 ];
 
 /** How long a toast stays up before it fades out on its own. */
@@ -145,7 +175,17 @@ function topicRowJsx(
     .filter(Boolean)
     .join(' ');
   return (
-    <li class={classes} data-key={topic.id} data-topic-row={topic.id} aria-selected={selected ? 'true' : 'false'}>
+    <li
+      class={classes}
+      data-key={topic.id}
+      data-topic-row={topic.id}
+      role="option"
+      // Every row is tabbable rather than a roving tabindex: the list is short
+      // (a sidebar of topics), and roving focus would need the arrow-key
+      // handling this app doesn't otherwise have.
+      tabindex="0"
+      aria-selected={selected ? 'true' : 'false'}
+    >
       {dialJsx(topic, checking, intervalMs)}
       <div class="topic-main">
         <span class="topic-name">{topic.name}</span>
@@ -161,6 +201,13 @@ function topicRowJsx(
       </div>
       {/* Always-present slot so the badge appearing can't restructure the row. */}
       <span class="topic-flags">
+        {topic.guidance !== '' ? (
+          <span class="flag guided" title={`Guidance: ${topic.guidance}`}>
+            {icon('guidance', 13)}
+          </span>
+        ) : (
+          ''
+        )}
         {topic.highPriority ? (
           <span class="flag high-priority" title="High priority: checked on the shorter interval">
             {icon('star', 13)}
@@ -275,6 +322,16 @@ function itemJsx(item: NewsItem, topicName: string, variant: 'normal' | 'review'
               {icon('arrow', 13)}
               {source.title !== '' ? source.title : source.url}
             </a>
+            <span class="source-meta">
+              <span class="source-outlet">{outletFor(source)}</span>
+              {source.publishedAt !== null ? (
+                <span class="source-date" title={`Published ${source.publishedAt}`}>
+                  {publishedLabel(source.publishedAt, item.foundAt)}
+                </span>
+              ) : (
+                ''
+              )}
+            </span>
           </li>
         ))}
       </ul>
@@ -450,6 +507,319 @@ function resolveConfirm(ok: boolean): void {
   resolve?.(ok);
 }
 
+/**
+ * Editor for a topic's guidance (NEWS-80).
+ *
+ * The textarea is uncontrolled — `defaultValue` seeds it from server state and
+ * nothing re-renders it while the user types. Binding it to a signal would fight
+ * the 4 s state poll for the cursor, and there is nothing to derive from the
+ * draft until it's saved.
+ */
+function guidanceDialogJsx(topic: Topic): SafeHtml {
+  return (
+    <div class="dialog-backdrop" data-action="guidance-backdrop">
+      <div class="dialog guidance" role="dialog" aria-modal="true" aria-label={`Guidance for ${topic.name}`}>
+        <form data-save-guidance={topic.id}>
+          <h2>Guidance for “{topic.name}”</h2>
+          <p class="dialog-hint">
+            Say what you want from this topic — and what you don’t. It’s sent with every check, so the
+            model narrows to your sense of the topic instead of guessing from the name alone.
+          </p>
+          <textarea
+            name="guidance"
+            rows={5}
+            maxLength={MAX_GUIDANCE_LENGTH}
+            placeholder="e.g. Regulatory and safety news only — not stock price moves or product rumours."
+          >
+            {topic.guidance}
+          </textarea>
+          <div class="confirm-actions">
+            <button class="btn" type="button" data-action="close-guidance">
+              Cancel
+            </button>
+            <button class="btn primary" type="submit">
+              Save
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * This month's estimated spend (NEWS-79).
+ *
+ * The unpriced-run count is shown *next to* the total rather than folded into
+ * it. A bare number reads as complete, and a check whose provider reported no
+ * usage — every subscription CLI — is genuinely unknown rather than free.
+ */
+function spendSectionJsx(spend: StateResp['spend']): SafeHtml {
+  const nothingPriced = spend.pricedRuns === 0;
+  return (
+    <div class="spend">
+      <p class="spend-total">
+        <strong>{nothingPriced ? '—' : formatUsd(spend.usd)}</strong>
+        <span class="spend-label">estimated this month</span>
+      </p>
+      <p class="note">
+        {nothingPriced && spend.unpricedRuns === 0
+          ? 'No checks have run yet this month.'
+          : spend.unpricedRuns > 0
+            ? `${String(spend.unpricedRuns)} of ${String(spend.unpricedRuns + spend.pricedRuns)} checks can’t be priced — a subscription provider reports no token usage, and some models have no published rate. Those are missing from the total, not free.`
+            : `Based on ${String(spend.pricedRuns)} priced ${spend.pricedRuns === 1 ? 'check' : 'checks'}. Rates last verified ${spend.pricesVerifiedOn}; treat it as an estimate, not your bill.`}
+      </p>
+    </div>
+  );
+}
+
+
+/**
+ * First-run flow (NEWS-78).
+ *
+ * Four steps, because a new user has four things to learn or decide and no
+ * reason to guess at any of them: what the app does, how it authenticates,
+ * what to watch, and how often. Skippable at every step — an onboarding you
+ * can't escape is worse than none.
+ */
+function onboardingJsx(step: OnboardingStep): SafeHtml {
+  const s = appStore.state.value;
+  const index = ONBOARDING_STEPS.indexOf(step);
+  return (
+    <div class="dialog-backdrop onboarding-backdrop">
+      <div class="dialog onboarding" role="dialog" aria-modal="true" aria-label="Set up News">
+        <div class="onboarding-body">{onboardingStepJsx(step, s)}</div>
+        <div class="onboarding-foot">
+          <span class="onboarding-dots" aria-hidden="true">
+            {ONBOARDING_STEPS.map((name) => (
+              <span class={`dot ${name === step ? 'on' : ''}`} />
+            ))}
+          </span>
+          <span class="onboarding-actions">
+            <button class="btn subtle" type="button" data-action="onboarding-skip">
+              {index === ONBOARDING_STEPS.length - 1 ? 'Close' : 'Skip setup'}
+            </button>
+            <button class="btn primary" type="button" data-action="onboarding-next">
+              {index === ONBOARDING_STEPS.length - 1 ? 'Start watching' : 'Continue'}
+            </button>
+          </span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function onboardingStepJsx(step: OnboardingStep, s: AppState): SafeHtml {
+  if (step === 'welcome') {
+    return (
+      <div>
+        <h2>News watches topics, not feeds.</h2>
+        <p class="onboarding-lead">
+          Name the things you want to keep up with. On a schedule you choose, News asks an AI — with live web
+          search — whether anything genuinely new has happened, and shows you only that, with links to the
+          sources.
+        </p>
+        <p class="note">
+          Nothing is scraped or subscribed to. Each check is a fresh look, and stories you have already been
+          shown are never repeated.
+        </p>
+        <p class="note">
+          A check sends the topic’s name and the titles already reported for it — nothing else leaves this
+          machine, and News has no servers of its own. The full note is in Settings → Privacy.
+        </p>
+      </div>
+    );
+  }
+  if (step === 'source') return onboardingSourceJsx(s);
+  if (step === 'topics') {
+    return (
+      <div>
+        <h2>What should News watch?</h2>
+        <p class="onboarding-lead">
+          Pick a few to start with — you can add your own, rename them, or delete them at any time.
+        </p>
+        <div class="starter-topics">
+          {STARTER_TOPICS.map((name) => (
+            <button
+              class={`chip starter ${s.onboardingTopics.includes(name) ? 'on' : ''}`}
+              type="button"
+              data-starter-topic={name}
+              aria-pressed={s.onboardingTopics.includes(name) ? 'true' : 'false'}
+            >
+              {name}
+            </button>
+          ))}
+        </div>
+        <p class="note">
+          {s.onboardingTopics.length === 0
+            ? 'None chosen — that’s fine, you can add topics from the sidebar.'
+            : `${String(s.onboardingTopics.length)} chosen. Each is checked on its own, so more topics means more checks.`}
+        </p>
+      </div>
+    );
+  }
+  return (
+    <div>
+      <h2>How often should it check?</h2>
+      <p class="onboarding-lead">
+        Every check costs a little — in API credit, or in your subscription’s quota — so this is the dial that
+        matters most. Once a day suits most topics.
+      </p>
+      <label class="field">
+        <span>Check every</span>
+        <select data-action="interval">
+          {INTERVAL_OPTIONS.map((o) => (
+            <option value={String(o.ms)} selected={o.ms === s.settings.checkIntervalMs ? true : undefined}>
+              {o.label}
+            </option>
+          ))}
+        </select>
+      </label>
+      <p class="note">You can change this, and set a spending cap, in Settings later.</p>
+    </div>
+  );
+}
+
+/**
+ * The "how do you want to pay for this" step.
+ *
+ * Subscription providers come first when they're actually available: someone
+ * already paying for Claude or ChatGPT needs no key at all, and that is by far
+ * the shortest path to a working app. Burying it under two key fields would
+ * hide the easy answer behind the hard one.
+ */
+function onboardingSourceJsx(s: AppState): SafeHtml {
+  const ready = s.providers.filter((p) => p.name !== 'auto' && p.name !== 'mock' && p.available === true);
+  const subscriptions = ready.filter((p) => p.name === 'claude-cli' || p.name === 'codex-cli');
+  return (
+    <div>
+      <h2>Where should the news come from?</h2>
+      {subscriptions.length > 0 ? (
+        <div>
+          <p class="onboarding-lead">
+            Found a signed-in subscription on this machine — nothing else to set up. Checks will use it, and
+            run while News is open.
+          </p>
+          <ul class="detected">
+            {subscriptions.map((p) => (
+              <li>
+                {icon('ok', 14)}
+                <span>{p.label}</span>
+              </li>
+            ))}
+          </ul>
+          <p class="note">Prefer to use an API key instead? Add one in Settings — it takes precedence.</p>
+        </div>
+      ) : ready.length > 0 ? (
+        <div>
+          <p class="onboarding-lead">A provider is already configured on this machine. You’re ready to go.</p>
+          <ul class="detected">
+            {ready.map((p) => (
+              <li>
+                {icon('ok', 14)}
+                <span>{p.label}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : (
+        <div>
+          <p class="onboarding-lead">
+            News needs an AI that can search the web. Either sign in to the Claude or Codex CLI on this
+            machine, or paste an API key below — it’s stored in your {s.keychainLabel}, never in a file.
+          </p>
+          <div class="keys">{s.keys.map((k) => keyRowJsx(k, s.keychainLabel, s.keychainAvailable))}</div>
+          <div class="key-notes">{s.keyError !== null ? <p class="banner error">{s.keyError}</p> : ''}</div>
+          <p class="note">
+            Keys are checked with the provider before they’re saved, so a typo shows up here rather than as a
+            failed check tomorrow.
+          </p>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/**
+ * What leaves this machine, stated plainly (NEWS-91).
+ *
+ * Checking a topic means sending its name to a third party — the user asks for
+ * that by using the app, but nowhere did the app actually say so. This is the
+ * disclosure, written to be read rather than to be technically sufficient, and
+ * it names the *unobvious* parts: the flagged titles and the already-reported
+ * titles both go too, because that is how dedup and steering work.
+ */
+/**
+ * Recent check history (NEWS-88).
+ *
+ * The store has kept the last 200 runs all along — status, timing, provider,
+ * error text — and the UI showed a spinner and one dismissable banner. When
+ * something breaks for someone who isn't the author, this is the difference
+ * between "it stopped working" and a report anyone can act on.
+ */
+function diagnosticsJsx(s: AppState): SafeHtml {
+  const rows = runRows(s);
+  return (
+    <div class="diagnostics">
+      {rows.length === 0 ? (
+        <p class="note">No checks have run yet.</p>
+      ) : (
+        <ul class="runs">
+          {rows.slice(0, 10).map((row) => (
+            <li class={`run ${row.status}`}>
+              <span class="run-when" title={row.startedAt}>
+                {relativeTime(row.startedAt)}
+              </span>
+              <span class="run-topic">{row.topicName}</span>
+              <span class="run-meta">
+                {row.status === 'running'
+                  ? 'running…'
+                  : row.status === 'failed'
+                    ? (row.error ?? 'failed')
+                    : `${String(row.newItems)} new · ${formatDuration(row.durationMs)}` +
+                      (row.costUsd === null ? '' : ` · ${formatUsd(row.costUsd)}`)}
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
+      <label class="field checkbox-field">
+        <input type="checkbox" data-action="diag-topics" checked={s.diagIncludeTopics ? true : undefined} />
+        <span>Include topic names when copying</span>
+      </label>
+      <p class="note">
+        <button class="btn subtle" type="button" data-action="copy-diagnostics">
+          Copy diagnostics
+        </button>{' '}
+        Puts versions, settings and the recent check outcomes on the clipboard for a bug report. Topic names are
+        left out unless you tick the box; error text is copied verbatim and may still mention one.
+      </p>
+    </div>
+  );
+}
+
+function privacyNoteJsx(s: AppState): SafeHtml {
+  const provider = PROVIDER_INFO[s.settings.provider].label;
+  return (
+    <div class="privacy">
+      <p class="note">
+        <strong>Sent on every check</strong>, to {s.settings.provider === 'auto' ? 'whichever provider is active' : provider}:
+        the topic’s name, its guidance if you wrote any, the titles of stories already reported for it (that is
+        how repeats are avoided), and the titles of stories you flagged off-topic (that is how it learns what
+        you meant). Nothing else — not the feed, not your other topics, not anything you bookmarked.
+      </p>
+      <p class="note">
+        <strong>Stored on this machine only</strong>, in ~/.news: your topics, the stories found, and cached
+        article images. <strong>API keys are not stored there</strong> — they live in your {s.keychainLabel}.
+      </p>
+      <p class="note">
+        <strong>News has no servers and collects no telemetry.</strong> The only outbound traffic is the check
+        itself, fetching article images, and opening links you click.
+      </p>
+    </div>
+  );
+}
+
 function settingsDialogJsx(): SafeHtml {
   const s = appStore.state.value;
   const provider = s.settings.provider;
@@ -466,15 +836,44 @@ function settingsDialogJsx(): SafeHtml {
         </div>
 
         <label class="field">
-          <span class="field-label">Check every</span>
-          <select data-action="interval">
-            {INTERVAL_OPTIONS.map((opt) => (
-              <option value={String(opt.ms)} selected={opt.ms === s.settings.checkIntervalMs ? true : undefined}>
-                {opt.label}
-              </option>
-            ))}
+          <span class="field-label">Schedule</span>
+          <select data-action="schedule-mode">
+            <option value="interval" selected={s.settings.scheduleMode === 'interval' ? true : undefined}>
+              Every so often
+            </option>
+            <option value="daily" selected={s.settings.scheduleMode === 'daily' ? true : undefined}>
+              At set times of day
+            </option>
           </select>
         </label>
+
+        {/* Always-present container: swapping the two controls must not
+            restructure the fields around them (kerf KF-377). */}
+        <div id="schedule-slot">
+          {s.settings.scheduleMode === 'daily' ? (
+            <div>
+              <label class="field">
+                <span class="field-label">Check at</span>
+                <input type="text" data-action="daily-times" value={s.settings.dailyTimes.join(', ')} placeholder="08:00, 18:00" />
+              </label>
+              <p class="note">
+                Local times, 24-hour, comma separated. A slot missed while News was closed is served when it
+                next opens rather than skipped — so a morning briefing is still there at lunchtime.
+              </p>
+            </div>
+          ) : (
+            <label class="field">
+              <span class="field-label">Check every</span>
+              <select data-action="interval">
+                {INTERVAL_OPTIONS.map((opt) => (
+                  <option value={String(opt.ms)} selected={opt.ms === s.settings.checkIntervalMs ? true : undefined}>
+                    {opt.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
+        </div>
 
         <label class="field">
           <span class="field-label">
@@ -587,6 +986,43 @@ function settingsDialogJsx(): SafeHtml {
           )}
         </div>
 
+        <h3 class="eyebrow">Spending</h3>
+        {spendSectionJsx(s.spend)}
+        <label class="field">
+          <span>Monthly budget</span>
+          <span class="budget-input">
+            <span class="budget-currency">$</span>
+            <input
+              type="number"
+              min="0"
+              step="1"
+              data-action="budget"
+              value={s.spend.monthlyBudgetUsd > 0 ? String(s.spend.monthlyBudgetUsd) : ''}
+              placeholder="No limit"
+            />
+          </span>
+        </label>
+        <p class="note">
+          When the month’s estimated spend reaches this, scheduled checks pause. Check-now still works, so a
+          reached budget never locks you out — leave it blank for no limit.
+        </p>
+
+        <label class="field">
+          <span class="field-label">Price updates</span>
+          <input
+            type="url"
+            data-action="price-manifest"
+            value={s.settings.priceManifestUrl}
+            placeholder="https://… (optional)"
+          />
+        </label>
+        <p class="note">
+          Rates change on the vendors’ schedule, not ours. The ones in use live in{' '}
+          <code>~/.news/prices.json</code> — edit that file at any time and the change applies immediately, no
+          restart and no update. Point this at a published manifest (same format) to have them refreshed daily
+          instead.
+        </p>
+
         <h3 class="eyebrow">API keys</h3>
         <div class="keys">{s.keys.map((k) => keyRowJsx(k, s.keychainLabel, s.keychainAvailable))}</div>
 
@@ -604,6 +1040,69 @@ function settingsDialogJsx(): SafeHtml {
         <p class="note">
           Keys are stored in your {s.keychainLabel} — never in ~/.news/data.json, and never sent anywhere but the
           provider you chose.
+        </p>
+
+        <label class="field">
+          <span class="field-label">Check at once</span>
+          <select data-action="concurrency">
+            {[1, 2, 3, 4, 6, 8].map((n) => (
+              <option value={String(n)} selected={n === s.settings.checkConcurrency ? true : undefined}>
+                {n === 1 ? 'One topic at a time' : `${String(n)} topics`}
+              </option>
+            ))}
+          </select>
+        </label>
+        <p class="note">
+          A real check takes minutes, so a sweep over many topics runs for a long time one at a time. Raising
+          this finishes sooner — up to a point: too high and the provider starts refusing requests instead.
+        </p>
+
+        <label class="field">
+          <span>Keep stories for</span>
+          <select data-action="retention">
+            {RETENTION_OPTIONS.map((o) => (
+              <option value={String(o.days)} selected={o.days === s.settings.itemRetentionDays ? true : undefined}>
+                {o.label}
+              </option>
+            ))}
+          </select>
+        </label>
+        <p class="note">
+          Older stories are dropped so the data file doesn’t grow without bound. Bookmarked stories are always
+          kept, and so are ones you flagged off-topic — those still teach each topic what you meant.
+        </p>
+
+        <h3 class="eyebrow">Export &amp; feed</h3>
+        <div class="export-row">
+          <a class="btn" href="/api/export.md?scope=all" download="">
+            All stories (.md)
+          </a>
+          <a class="btn" href="/api/export.json?scope=all" download="">
+            All stories (.json)
+          </a>
+          <a class="btn" href="/api/export.md?scope=saved" download="">
+            Saved only (.md)
+          </a>
+        </div>
+        <p class="note">
+          Nothing here is trapped in the app. Markdown is for pasting into notes; JSON is the escape hatch.
+        </p>
+        <p class="note">
+          Subscribe in any feed reader: <code>{`${location.origin}/feed.xml`}</code> (add{' '}
+          <code>?scope=saved</code> for bookmarks only). It works from this machine — the app listens on
+          localhost, so a reader on another device can’t reach it.
+        </p>
+
+        <h3 class="eyebrow">Diagnostics</h3>
+        {diagnosticsJsx(s)}
+
+        <h3 class="eyebrow">Privacy</h3>
+        {privacyNoteJsx(s)}
+
+        <p class="note">
+          <button class="btn subtle" type="button" data-action="rerun-onboarding">
+            Show the setup guide again
+          </button>
         </p>
       </div>
     </div>
@@ -626,6 +1125,9 @@ function contextMenuJsx(menu: NonNullable<AppState['contextMenu']>, topics: Topi
   const anyNormal = targets.some((t) => !t.highPriority);
   const solo = new Set(appStore.state.value.soloTopicIds);
   const allSoloed = count > 0 && targets.every((t) => solo.has(t.id));
+  // Guidance is a paragraph about *one* topic, so it's offered only when
+  // exactly one is targeted — there is nothing sensible to write across a mix.
+  const only = count === 1 ? targets[0] : undefined;
   // Flagged-story count across the targeted topics, for "Review Flagged"
   // (NEWS-61) — from the server aggregate now that the feed is paginated (NEWS-76).
   const flaggedByTopic = appStore.state.value.flaggedByTopic;
@@ -651,6 +1153,16 @@ function contextMenuJsx(menu: NonNullable<AppState['contextMenu']>, topics: Topi
             {anyNormal ? 'High priority' : 'Normal priority'}
             {suffix}
           </span>
+        </button>
+        <button
+          class="menu-item"
+          role="menuitem"
+          type="button"
+          data-menu-action="guidance"
+          disabled={only === undefined ? true : undefined}
+        >
+          {icon('guidance')}
+          <span>{only !== undefined && only.guidance !== '' ? 'Edit guidance' : 'Add guidance'}</span>
         </button>
         <div class="menu-sep" role="separator" />
         <button class="menu-item" role="menuitem" type="button" data-menu-action="solo">
@@ -744,6 +1256,9 @@ function appJsx(): SafeHtml {
   // session overlay is separate and always shown).
   const moreCount = Math.max(0, s.feedTotal - s.feedItems.length);
   const savedCount = s.feedTotal; // meaningful only while the Saved filter is on
+  // Resolved from server state, so a topic deleted while its dialog is open
+  // simply closes it rather than rendering a stale name.
+  const guidanceTarget = s.topics.find((t) => t.id === s.guidanceTopicId);
   const anyChecking = s.checking.length > 0;
   // Only warn about a topic whose *latest* run failed — not a stale failure from
   // one that has since recovered (NEWS-41).
@@ -800,7 +1315,12 @@ function appJsx(): SafeHtml {
           <button class="btn icon" data-action="open-settings" aria-label="Settings" title="Settings">
             {icon('settings', 17)}
           </button>
-          <button class="btn primary" data-action="check-all" disabled={anyChecking ? true : undefined}>
+          <button
+            class="btn primary"
+            data-action="check-all"
+            disabled={anyChecking ? true : undefined}
+            aria-live="polite"
+          >
             {anyChecking ? 'Checking…' : 'Check all now'}
           </button>
         </div>
@@ -808,10 +1328,12 @@ function appJsx(): SafeHtml {
 
       {/* Always-present container — the dialog appearing must not restructure
           its siblings (kerf KF-377 — see docs/3-ui.md). */}
+      <div id="onboarding-slot">{s.onboarding !== null && s.onboarding !== 'auto' ? onboardingJsx(s.onboarding) : ''}</div>
       <div id="settings-slot">{s.settingsOpen ? settingsDialogJsx() : ''}</div>
       <div id="menu-slot">{s.contextMenu !== null ? contextMenuJsx(s.contextMenu, s.topics) : ''}</div>
       <div id="item-menu-slot">{s.itemMenu !== null ? itemMenuJsx(s.itemMenu, feedAndFlagged()) : ''}</div>
       <div id="confirm-slot">{s.confirm !== null ? confirmDialogJsx(s.confirm) : ''}</div>
+      <div id="guidance-slot">{guidanceTarget !== undefined ? guidanceDialogJsx(guidanceTarget) : ''}</div>
       {/* Always-present slot: the toast coming and going must not restructure
           its siblings (kerf KF-377 — see docs/3-ui.md). */}
       <div id="toast-slot" aria-live="polite">
@@ -820,7 +1342,23 @@ function appJsx(): SafeHtml {
 
       {/* Always-present container: banners coming and going must not shift the
           sections below (kerf KF-377 — see docs/3-ui.md). */}
-      <div id="banners">
+      {/* Banners appear in response to background events (a failed check, a
+          blown budget), so they have to announce rather than wait to be found. */}
+      <div id="banners" role="status" aria-live="polite">
+        {s.spend.overBudget ? (
+          <div class="banner warn">
+            {icon('warn', 14)}
+            <span class="banner-text">
+              Scheduled checks are paused — this month’s estimated spend has reached your{' '}
+              {formatUsd(s.spend.monthlyBudgetUsd)} budget. Check now still works.
+            </span>
+            <button class="btn subtle" type="button" data-action="open-settings">
+              Settings
+            </button>
+          </div>
+        ) : (
+          ''
+        )}
         {s.savedFilter ? (
           <div class="banner saved">
             {icon('bookmark', 14)}
@@ -925,7 +1463,9 @@ function appJsx(): SafeHtml {
             ''
           )}
         </div>
-        <ul class="topics">
+        {/* A multi-select listbox: rows are the options, so a screen reader
+            announces selection state and roving focus works (NEWS-90). */}
+        <ul class="topics" role="listbox" aria-multiselectable="true" aria-label="Topics">
           {each(
             sortTopics(s.topics, s.topicSort),
             (topic) =>
@@ -1069,6 +1609,43 @@ function flagItem(item: NewsItem, offTopic: boolean): void {
   void setItemOffTopic(item.id, offTopic).then(refreshFeed);
 }
 
+/**
+ * Open the topic menu anchored to a row rather than to a pointer (NEWS-90).
+ *
+ * The mouse path positions the menu at the cursor; a keyboard has no cursor, so
+ * it is anchored to the row's own box. Shared with the mouse handler's
+ * selection rules so the two can't drift apart.
+ */
+function openTopicMenuFor(id: string, row: Element): void {
+  const current = appStore.state.value.selectedTopicIds;
+  const topicIds = current.includes(id) ? current : [id];
+  if (!current.includes(id)) appStore.actions.setSelection([id]);
+  const box = row.getBoundingClientRect();
+  appStore.actions.openContextMenu({ x: box.left + 24, y: box.bottom - 4, topicIds });
+}
+
+/** Dismiss the first-run flow and remember that it has been seen. */
+function closeOnboarding(): void {
+  appStore.actions.setOnboarding(null);
+  writeOnboardingSeen();
+}
+
+/**
+ * Open the first-run flow the first time the app is plainly unusable.
+ *
+ * Gated on *both* `/api/state` and `/api/providers` having answered: the
+ * provider list starts empty, so acting before it loads would flash the wizard
+ * at every existing user on every reload. Once dismissed it is remembered
+ * per-device and only Settings reopens it.
+ */
+function maybeOpenOnboarding(): void {
+  const s = appStore.state.value;
+  if (s.onboarding !== 'auto') return;
+  if (!s.loaded || s.providers.length === 0) return;
+  const usable = s.providers.some((p) => p.name !== 'auto' && p.name !== 'mock' && p.available === true);
+  appStore.actions.setOnboarding(s.topics.length === 0 && !usable && !readOnboardingSeen() ? 'welcome' : null);
+}
+
 /** Apply a context-menu action to every targeted topic. */
 function runTopicAction(action: string, ids: string[]): void {
   const { topics, soloTopicIds } = appStore.state.value;
@@ -1105,6 +1682,12 @@ function runTopicAction(action: string, ids: string[]): void {
       }
       appStore.actions.setSolo([...solo]);
       void refreshFeed();
+      break;
+    }
+    case 'guidance': {
+      // Single-target only; the menu item is disabled for a multi-selection.
+      const only = targets.length === 1 ? targets[0] : undefined;
+      if (only !== undefined) appStore.actions.openGuidance(only.id);
       break;
     }
     case 'review-flagged':
@@ -1176,6 +1759,13 @@ function wireEvents(root: HTMLElement): void {
     appStore.actions.setSidebarCollapsed(!appStore.state.value.sidebarCollapsed);
   });
 
+  void delegate(root, 'click', '[data-action=rerun-onboarding]', () => {
+    appStore.actions.setSettingsOpen(false);
+    appStore.actions.setOnboarding('welcome');
+    void refreshKeys();
+    void refreshProviders();
+  });
+
   void delegate(root, 'click', '[data-action=open-settings]', () => {
     appStore.actions.setSettingsOpen(true);
     // Status can go stale while the dialog is closed — a key added in another
@@ -1223,6 +1813,147 @@ function wireEvents(root: HTMLElement): void {
     })();
   });
 
+  // Budget is committed on `change` (blur / Enter), not `input` — a PATCH per
+  // keystroke would round-trip "1", "12", "125" and fight the 4 s state poll
+  // for the field. Blank means no limit.
+  void delegate(root, 'change', '[data-action=budget]', (_e, el) => {
+    if (!(el instanceof HTMLInputElement)) return;
+    const raw = el.value.trim();
+    const value = raw === '' ? 0 : Number.parseFloat(raw);
+    if (!Number.isFinite(value) || value < 0) return;
+    void updateMonthlyBudget(value);
+  });
+
+  void delegate(root, 'change', '[data-action=schedule-mode]', (_e, el) => {
+    if (el instanceof HTMLSelectElement && (el.value === 'interval' || el.value === 'daily')) {
+      void updateScheduleMode(el.value);
+    }
+  });
+
+  // Committed on `change`, not per keystroke: "08:0" is not a time, and a PATCH
+  // per character would fight the 4 s poll for the field.
+  void delegate(root, 'change', '[data-action=daily-times]', (_e, el) => {
+    if (!(el instanceof HTMLInputElement)) return;
+    const times = el.value
+      .split(',')
+      .map((t) => t.trim())
+      .filter((t) => /^([01]\d|2[0-3]):[0-5]\d$/.test(t));
+    if (times.length === 0) {
+      // Nothing parseable — put the saved value back rather than silently
+      // clearing the schedule out from under the user.
+      el.value = appStore.state.value.settings.dailyTimes.join(', ');
+      showToast('Times must look like 08:00 — nothing changed');
+      return;
+    }
+    void updateDailyTimes(times);
+  });
+
+  void delegate(root, 'change', '[data-action=price-manifest]', (_e, el) => {
+    if (!(el instanceof HTMLInputElement)) return;
+    const url = el.value.trim();
+    if (url !== '' && !url.startsWith('https://')) {
+      el.value = appStore.state.value.settings.priceManifestUrl;
+      showToast('The manifest URL must start with https://');
+      return;
+    }
+    void updatePriceManifestUrl(url);
+  });
+
+  void delegate(root, 'change', '[data-action=concurrency]', (_e, el) => {
+    if (el instanceof HTMLSelectElement) void updateConcurrency(Number(el.value));
+  });
+
+  void delegate(root, 'change', '[data-action=retention]', (_e, el) => {
+    if (el instanceof HTMLSelectElement) void updateRetention(Number(el.value));
+  });
+
+  void delegate(root, 'change', '[data-action=diag-topics]', (_e, el) => {
+    if (el instanceof HTMLInputElement) appStore.actions.setDiagIncludeTopics(el.checked);
+  });
+
+  void delegate(root, 'click', '[data-action=copy-diagnostics]', () => {
+    const s = appStore.state.value;
+    const text = buildDiagnostics(
+      { ...s, latestItemIds: [] },
+      {
+        includeTopicNames: s.diagIncludeTopics,
+        userAgent: navigator.userAgent,
+        appVersion: s.appVersion === '' ? 'unknown' : s.appVersion,
+      },
+    );
+    void navigator.clipboard
+      .writeText(text)
+      .then(() => {
+        showToast('Diagnostics copied');
+      })
+      .catch(() => {
+        showToast('Could not copy — clipboard unavailable');
+      });
+  });
+
+  // --- first-run flow (NEWS-78) ---------------------------------------------
+
+  void delegate(root, 'click', '[data-starter-topic]', (_e, el) => {
+    const name = el.getAttribute('data-starter-topic');
+    if (name !== null) appStore.actions.toggleOnboardingTopic(name);
+  });
+
+  void delegate(root, 'click', '[data-action=onboarding-skip]', () => {
+    closeOnboarding();
+  });
+
+  void delegate(root, 'click', '[data-action=onboarding-next]', () => {
+    const current = appStore.state.value.onboarding;
+    if (current === null || current === 'auto') return;
+    // Past the end means "done" — indexing a readonly tuple past its length is
+    // typed as never-undefined, so the bound is checked explicitly.
+    const at = ONBOARDING_STEPS.indexOf(current) + 1;
+    if (at >= ONBOARDING_STEPS.length) {
+      // Last step: create whatever was chosen, then get out of the way. Topics
+      // are added one at a time because each POST fires its own first check.
+      const chosen = appStore.state.value.onboardingTopics;
+      closeOnboarding();
+      void (async () => {
+        for (const name of chosen) await addTopic(name);
+      })();
+      return;
+    }
+    const next = ONBOARDING_STEPS[at];
+    appStore.actions.setOnboarding(next);
+    // Entering the source step, re-read what's actually configured: a key may
+    // have been added in another window since load.
+    if (next === 'source') {
+      void refreshKeys();
+      void refreshProviders();
+    }
+  });
+
+  // --- topic guidance (NEWS-80) --------------------------------------------
+
+  void delegate(root, 'submit', '[data-save-guidance]', (e, form) => {
+    e.preventDefault();
+    const id = form.getAttribute('data-save-guidance');
+    const field = form.querySelector<HTMLTextAreaElement>('textarea[name=guidance]');
+    if (id === null || !field) return;
+    const guidance = field.value.trim();
+    appStore.actions.closeGuidance();
+    void setTopicGuidance(id, guidance).then(() => {
+      // Guidance only takes effect on the *next* check, so say so — otherwise
+      // saving looks like it did nothing until tomorrow's sweep.
+      showToast(guidance === '' ? 'Guidance cleared' : 'Guidance saved — applies from the next check');
+    });
+  });
+
+  void delegate(root, 'click', '[data-action=close-guidance]', () => {
+    appStore.actions.closeGuidance();
+  });
+
+  // Only a click that landed on the backdrop itself closes — matching
+  // descendants would dismiss the dialog on the way to Save (see docs/3-ui.md).
+  void delegate(root, 'click', '[data-action=guidance-backdrop]', (e, el) => {
+    if (e.target === el) appStore.actions.closeGuidance();
+  });
+
   // --- topic selection -----------------------------------------------------
 
   void delegate(root, 'click', '[data-topic-row]', (e, el) => {
@@ -1231,6 +1962,25 @@ function wireEvents(root: HTMLElement): void {
     // Cmd on macOS, Ctrl elsewhere — reading both is simpler and more forgiving
     // than sniffing the platform, and no OS uses them for conflicting meanings.
     selectTopic(id, { toggle: e.metaKey || e.ctrlKey, range: e.shiftKey });
+  });
+
+  // Keyboard equivalents for the row (NEWS-90). The context menu is the only
+  // route to check / pause / priority / guidance / solo / delete, so without
+  // these the whole topic action set is mouse-only.
+  void delegate(root, 'keydown', '[data-topic-row]', (e, el) => {
+    const id = el.getAttribute('data-topic-row');
+    if (id === null || !(e instanceof KeyboardEvent)) return;
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      selectTopic(id, { toggle: e.metaKey || e.ctrlKey, range: e.shiftKey });
+      return;
+    }
+    // The platform gesture for "open this element's menu": macOS has no Menu
+    // key, so Shift+F10 is the one that has to work everywhere.
+    if (e.key === 'ContextMenu' || (e.key === 'F10' && e.shiftKey)) {
+      e.preventDefault();
+      openTopicMenuFor(id, el);
+    }
   });
 
   void delegate(root, 'contextmenu', '[data-topic-row]', (e, el) => {
@@ -1427,9 +2177,27 @@ function wireGlobalKeysAndDismiss(): void {
   });
 
   document.addEventListener('keydown', (e) => {
+    // Tab is trapped inside an open dialog (NEWS-90): without it, tabbing walks
+    // out of the modal into the page behind, which a screen-reader user cannot
+    // see is still there.
+    if (e.key === 'Tab' && trapTabInDialog(e)) return;
     if (e.key === 'Escape') {
-      if (appStore.state.value.confirm !== null) {
+      const s = appStore.state.value;
+      if (s.confirm !== null) {
         resolveConfirm(false);
+        return;
+      }
+      // Innermost first: a dialog opened over another closes alone.
+      if (s.guidanceTopicId !== null) {
+        appStore.actions.closeGuidance();
+        return;
+      }
+      if (s.settingsOpen) {
+        appStore.actions.setSettingsOpen(false);
+        return;
+      }
+      if (s.onboarding !== null && s.onboarding !== 'auto') {
+        closeOnboarding();
         return;
       }
       appStore.actions.closeContextMenu();
@@ -1447,6 +2215,43 @@ function wireGlobalKeysAndDismiss(): void {
     e.preventDefault();
     confirmDelete(selectedTopicIds);
   });
+}
+
+/**
+ * Keep Tab inside the frontmost dialog. Returns true when it handled the event.
+ *
+ * Reads the DOM rather than mirroring dialog state in the store: what is
+ * actually focusable is a DOM question (a disabled Save button isn't), and a
+ * duplicate model of it would drift.
+ */
+function trapTabInDialog(e: KeyboardEvent): boolean {
+  const dialogs = [...document.querySelectorAll<HTMLElement>('.dialog-backdrop .dialog')];
+  const dialog = dialogs.at(-1);
+  if (dialog === undefined) return false;
+  const focusable = [...dialog.querySelectorAll<HTMLElement>('button, [href], input, select, textarea, [tabindex]')]
+    .filter((el) => !el.hasAttribute('disabled') && el.tabIndex !== -1 && el.offsetParent !== null);
+  const first = focusable.at(0);
+  const last = focusable.at(-1);
+  if (first === undefined || last === undefined) return false;
+  const active = document.activeElement;
+  // Focus outside the dialog (including on <body> right after it opened) gets
+  // pulled to an end of the cycle rather than left to wander the page.
+  if (!(active instanceof HTMLElement) || !dialog.contains(active)) {
+    e.preventDefault();
+    (e.shiftKey ? last : first).focus();
+    return true;
+  }
+  if (e.shiftKey && active === first) {
+    e.preventDefault();
+    last.focus();
+    return true;
+  }
+  if (!e.shiftKey && active === last) {
+    e.preventDefault();
+    first.focus();
+    return true;
+  }
+  return false;
 }
 
 function startPolling(): void {
@@ -1482,8 +2287,8 @@ if (root) {
   mount(root, () => appJsx());
   wireEvents(root);
   wireGlobalKeysAndDismiss();
-  void refreshState();
-  void refreshProviders();
+  void refreshState().then(maybeOpenOnboarding);
+  void refreshProviders().then(maybeOpenOnboarding);
   // Learn the OS notification permission up front in the desktop shell, so a
   // session that already had notifications on keeps firing them (NEWS-66).
   void syncTauriNotificationPermission();

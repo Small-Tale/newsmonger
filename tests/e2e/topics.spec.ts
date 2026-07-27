@@ -94,9 +94,10 @@ test('right-click opens a menu with icons and separators', async ({ page }) => {
   await row(page, 'Alpha Topic').click({ button: 'right' });
   await expect(page.locator('.menu')).toBeVisible();
 
-  // Check, Pause, High priority, Solo, Review Flagged, Delete (NEWS-61 added the fifth).
-  await expect(page.locator('.menu-item')).toHaveCount(6);
-  await expect(page.locator('.menu .icon')).toHaveCount(6);
+  // Check, Pause, High priority, Guidance, Solo, Review Flagged, Delete
+  // (NEWS-61 added Review Flagged; NEWS-80 added Guidance).
+  await expect(page.locator('.menu-item')).toHaveCount(7);
+  await expect(page.locator('.menu .icon')).toHaveCount(7);
   await expect(page.locator('.menu-sep')).toHaveCount(2);
   await expect(page.locator('.menu-item span').first()).toHaveText('Check now');
 
@@ -185,8 +186,9 @@ test('solo is additive and Show all clears it', async ({ page }) => {
 
   // Unsolo is the same menu item, flipped, once every target is solo'd.
   await row(page, 'Bravo Topic').click({ button: 'right' });
-  // Menu order: Check, Pause, High priority, Solo, Delete — Solo is index 3.
-  await expect(page.locator('.menu-item span').nth(3)).toHaveText('Unsolo');
+  // Targeted by action rather than position: menu items get added over time
+  // (Guidance, NEWS-80), and an index makes an unrelated feature break this.
+  await expect(page.locator('[data-menu-action=solo] span')).toHaveText('Unsolo');
   await page.keyboard.press('Escape');
 
   await page.locator('[data-action=clear-solo]').click();
@@ -297,6 +299,67 @@ test('the high-priority interval is clamped to the default (NEWS-56)', async ({ 
   // Restore a sane default so later serial tests aren't on a short interval.
   await dflt.selectOption(String(24 * HOUR));
   await page.locator('.dialog [data-action=close-settings]').click();
+});
+
+test('add, edit and clear a topic\u2019s guidance (NEWS-80)', async ({ page }) => {
+  await page.goto('/');
+  const target = row(page, 'Bravo Topic');
+  await expect(target).toBeVisible();
+  await expect(target.locator('.topic-flags .flag.guided')).toHaveCount(0);
+
+  // The menu offers "Add guidance" while there is none.
+  await target.click({ button: 'right' });
+  await expect(page.locator('.menu-item span', { hasText: 'Add guidance' })).toBeVisible();
+  await page.locator('[data-menu-action=guidance]').click();
+
+  const dialog = page.locator('.dialog.guidance');
+  await expect(dialog).toBeVisible();
+  await expect(dialog.locator('textarea')).toHaveValue('');
+  await dialog.locator('textarea').fill('Regulatory news only, not stock moves.');
+  await dialog.locator('button[type=submit]').click();
+  await expect(dialog).toHaveCount(0);
+
+  // The row picks up a badge carrying the text, and it survives a reload.
+  const badge = row(page, 'Bravo Topic').locator('.topic-flags .flag.guided');
+  await expect(badge).toHaveCount(1);
+  await expect(badge).toHaveAttribute('title', /Regulatory news only/);
+  await page.reload();
+  await expect(row(page, 'Bravo Topic').locator('.topic-flags .flag.guided')).toHaveCount(1);
+
+  // Reopening shows what was saved, and the menu now offers Edit.
+  await row(page, 'Bravo Topic').click({ button: 'right' });
+  await expect(page.locator('.menu-item span', { hasText: 'Edit guidance' })).toBeVisible();
+  await page.locator('[data-menu-action=guidance]').click();
+  await expect(page.locator('.dialog.guidance textarea')).toHaveValue(
+    'Regulatory news only, not stock moves.',
+  );
+
+  // Cancel leaves the saved text alone even after typing over it.
+  await page.locator('.dialog.guidance textarea').fill('scratch that');
+  await page.locator('[data-action=close-guidance]').click();
+  await expect(page.locator('.dialog.guidance')).toHaveCount(0);
+  await row(page, 'Bravo Topic').click({ button: 'right' });
+  await page.locator('[data-menu-action=guidance]').click();
+  await expect(page.locator('.dialog.guidance textarea')).toHaveValue(
+    'Regulatory news only, not stock moves.',
+  );
+
+  // Clearing it removes the badge.
+  await page.locator('.dialog.guidance textarea').fill('   ');
+  await page.locator('.dialog.guidance button[type=submit]').click();
+  await expect(page.locator('.dialog.guidance')).toHaveCount(0);
+  await expect(row(page, 'Bravo Topic').locator('.topic-flags .flag.guided')).toHaveCount(0);
+});
+
+test('guidance is offered for one topic at a time (NEWS-80)', async ({ page }) => {
+  // It is a paragraph about *this* topic, so a mixed selection has nothing
+  // sensible to write \u2014 the menu item is disabled rather than absent.
+  await page.goto('/');
+  await row(page, 'Alpha Topic').click();
+  await row(page, 'Bravo Topic').click({ modifiers: ['ControlOrMeta'] });
+  await row(page, 'Bravo Topic').click({ button: 'right' });
+  await expect(page.locator('[data-menu-action=guidance]')).toBeDisabled();
+  await page.keyboard.press('Escape');
 });
 
 test('clean up the topics this spec created', async ({ page }) => {

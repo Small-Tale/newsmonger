@@ -1,9 +1,24 @@
 import { filterNewItems } from './ai/dedupe.js';
-import type { KnownItem, NewsProvider } from './ai/types.js';
+import type { FoundNewsItem, KnownItem, NewsProvider } from './ai/types.js';
+import type { LinkProbe } from './ai/verify-links.js';
+import { verifyItemLinks } from './ai/verify-links.js';
 import { Attendance } from './attendance.js';
-import type { NewsItem } from './db/schemas.js';
+import type { NewsItem, Settings } from './db/schemas.js';
 import type { Store } from './db/store.js';
 import type { ImageFetcher } from './images/index.js';
+import { liveImageHashes, pruneImageCache } from './images/index.js';
+
+/**
+ * Whether the month's estimated spend has crossed the user's cap (NEWS-79).
+ *
+ * A cap of 0 means "no cap". **Unpriced runs count as unknown, not as zero** —
+ * the gate can only act on what it can price, so a provider that reports no
+ * usage is never held back by a budget it cannot be measured against. That is
+ * stated plainly in the UI rather than papered over.
+ */
+export function isOverBudget(spend: { usd: number }, settings: Pick<Settings, 'monthlyBudgetUsd'>): boolean {
+  return settings.monthlyBudgetUsd > 0 && spend.usd >= settings.monthlyBudgetUsd;
+}
 
 /** Resolves the active provider from current settings, per check. */
 export type ProviderResolver = () => Promise<NewsProvider>;
@@ -35,6 +50,11 @@ export class CheckRunner {
      * and the mock path never touch the network; omitted means no pictures.
      */
     private readonly fetchImage: ImageFetcher | null = null,
+    /**
+     * Probes a source URL before a story is stored (NEWS-83). Null skips the
+     * check — what `--ai-test` passes, since the mock's URLs are fictional.
+     */
+    private readonly probeLink: LinkProbe | null = null,
   ) {}
 
   /** Topic ids currently being checked. */
@@ -59,9 +79,11 @@ export class CheckRunner {
     this.inFlight.add(topicId);
     const run = this.store.startRun(topicId);
     let providerName: string | null = null;
+    let modelName: string | null = null;
     try {
       const provider = await this.resolveProvider();
       providerName = provider.name;
+      modelName = provider.model;
       const known: KnownItem[] = this.store
         .listItems(topicId)
         .map((i) => ({ title: i.title, foundAt: i.foundAt }));
@@ -70,8 +92,15 @@ export class CheckRunner {
       const offTopicTitles = this.store.offTopicTitlesForTopic(topicId);
       // Ask from what we've actually *covered*, not the last attempt: a run
       // that failed with news pending must not shrink the next window.
-      const found = await provider.checkTopic(topic.name, known, topic.coveredThroughAt, offTopicTitles);
-      const fresh = filterNewItems(found, this.store.dedupeKeysForTopic(topicId));
+      const found = await provider.checkTopic(topic.name, known, topic.coveredThroughAt, {
+        guidance: topic.guidance,
+        offTopicTitles,
+      });
+      // Check the citations resolve before anything is stored (NEWS-83). Done
+      // *before* dedup so a story kept only by a dead link can't claim a dedupe
+      // key that then blocks the real version of the same story later.
+      const verified = await this.verifyLinks(found.items);
+      const fresh = filterNewItems(verified, this.store.dedupeKeysForTopic(topicId));
       // Fetch lead images before storing, so an item never appears without one
       // and then pops a picture in a moment later. Failures are silent by
       // design: a missing image is cosmetic, and must not fail the check.
@@ -85,7 +114,13 @@ export class CheckRunner {
             topicId,
             title: item.title,
             summary: item.summary,
-            sources: item.sources,
+            sources: item.sources.map((source) => ({
+              ...source,
+              // Absent means "the model didn't say"; normalise to null so the
+              // stored shape is uniform and the UI has one case to handle.
+              outlet: source.outlet ?? null,
+              publishedAt: source.publishedAt ?? null,
+            })),
             image: images[i] ?? null,
             dedupeKey,
             foundAt: now,
@@ -96,7 +131,19 @@ export class CheckRunner {
         // Succeeded, so news is now covered through this moment.
         this.store.markTopicCovered(topicId, checkedAt);
       }
-      this.store.finishRun(run.id, { status: 'succeeded', newItems: fresh.length, provider: providerName });
+      // Prune here rather than only at startup: an always-on install would
+      // otherwise never reclaim anything (NEWS-87). Cheap — a filter over an
+      // already-in-memory array, and it only writes when something went.
+      this.pruneAfterCheck();
+      this.store.finishRun(run.id, {
+        status: 'succeeded',
+        newItems: fresh.length,
+        provider: providerName,
+        model: modelName,
+        // Recorded even when null: the run happened, and "we don't know what it
+        // cost" is a fact worth keeping (NEWS-79).
+        usage: found.usage,
+      });
       return fresh.length;
     } catch (err) {
       // Advance the *attempt* clock so the scheduler waits a full interval
@@ -109,10 +156,52 @@ export class CheckRunner {
         newItems: 0,
         error: err instanceof Error ? err.message : String(err),
         provider: providerName,
+        model: modelName,
       });
       return 0;
     } finally {
       this.inFlight.delete(topicId);
+    }
+  }
+
+  /**
+   * Drop stories whose citations don't resolve (NEWS-83).
+   *
+   * Best-effort in the same sense as image fetching: if the verifier itself
+   * throws, the stories go through unverified rather than the check failing.
+   * A story with an unchecked link is a smaller harm than no news at all.
+   */
+  private async verifyLinks(items: FoundNewsItem[]): Promise<FoundNewsItem[]> {
+    if (this.probeLink === null) return items;
+    try {
+      const result = await verifyItemLinks(items, this.probeLink);
+      if (result.droppedItems > 0 || result.droppedSources > 0) {
+        console.error(
+          `news: dropped ${String(result.droppedItems)} story/stories and ` +
+            `${String(result.droppedSources)} source link(s) that did not resolve`,
+        );
+      }
+      return result.items;
+    } catch (err: unknown) {
+      console.error('news: link verification failed, keeping stories unverified:', err);
+      return items;
+    }
+  }
+
+  /**
+   * Apply the retention window, and reclaim the images the dropped stories
+   * were holding (NEWS-87).
+   *
+   * Best-effort: pruning is housekeeping, and a failure here must never turn a
+   * successful check into a failed one.
+   */
+  private pruneAfterCheck(): void {
+    try {
+      if (this.store.pruneOldItems(new Date()) > 0) {
+        pruneImageCache(this.store.dataDir, liveImageHashes(this.store.listItems()));
+      }
+    } catch (err: unknown) {
+      console.error('news: pruning old stories failed:', err);
     }
   }
 
@@ -152,8 +241,45 @@ export class CheckRunner {
   }
 
   /**
-   * Check every non-paused topic that is due, sequentially, and return how many
-   * were checked (0 if none were due or the sweep was gated).
+   * Run `checkTopic` over `topics` with at most `limit` in flight, and return
+   * how many were actually checked (NEWS-81).
+   *
+   * Workers pull from a shared cursor rather than the list being sliced into
+   * fixed chunks, so a slow topic never leaves a worker idle while others wait
+   * behind it — which is the whole point when one check can take minutes.
+   *
+   * **Order is still respected**: workers start topics in `byCheckOrder`
+   * sequence, so the most-overdue and high-priority ones begin first (NEWS-58).
+   * They may finish in any order, which doesn't matter — nothing downstream
+   * depends on completion order.
+   *
+   * Safe against the single-file store because every `Store` mutation is
+   * synchronous: a check's `addItems` runs to completion, save included, before
+   * the event loop can hand control to another check. The awaits are all in the
+   * provider and image fetches, never inside a read-modify-write.
+   */
+  private async runPool(topics: { id: string }[], limit: number, manual: boolean): Promise<number> {
+    let cursor = 0;
+    let checked = 0;
+    const workers = Array.from({ length: Math.max(1, Math.min(limit, topics.length)) }, async () => {
+      for (;;) {
+        const index = cursor++;
+        if (index >= topics.length) return;
+        const topic = topics[index];
+        // Stamped per topic, not once per sweep: a sweep can outlast the 5-minute
+        // attendance window, and a scheduler tick firing mid-sweep must not
+        // defer the topics still queued behind it (NEWS-44).
+        await this.checkTopic(topic.id, manual ? { manual: true } : {});
+        checked += 1;
+      }
+    });
+    await Promise.all(workers);
+    return checked;
+  }
+
+  /**
+   * Check every non-paused topic that is due and return how many were checked
+   * (0 if none were due or the sweep was gated).
    *
    * Deferred topics are left untouched — `lastCheckedAt` does not advance — so
    * they stay due and run as soon as someone opens the app.
@@ -169,16 +295,15 @@ export class CheckRunner {
     const settings = this.store.getSettings();
     const due = this.store
       .listTopics()
-      .filter((topic) => isDue(topic, effectiveInterval(topic, settings), now))
+      .filter((topic) => isDueUnderSchedule(topic, settings, now))
       .sort(byCheckOrder);
     if (due.length === 0) return 0;
+    // The budget cap gates *scheduled* work only, exactly like the attendance
+    // gate: manual checks stay available so a capped month doesn't lock the
+    // user out of their own app, it just stops it spending on its own.
+    if (isOverBudget(this.store.spendThisMonth(now), settings)) return 0;
     if (!(await this.mayRunScheduled(now))) return 0;
-    let checked = 0;
-    for (const topic of due) {
-      await this.checkTopic(topic.id);
-      checked += 1;
-    }
-    return checked;
+    return this.runPool(due, settings.checkConcurrency, false);
   }
 
   /**
@@ -190,10 +315,8 @@ export class CheckRunner {
    * isn't gated and the remaining topics aren't deferred (NEWS-44).
    */
   async checkAll(): Promise<void> {
-    for (const topic of this.store.listTopics()) {
-      if (topic.paused) continue;
-      await this.checkTopic(topic.id, { manual: true });
-    }
+    const topics = this.store.listTopics().filter((t) => !t.paused).sort(byCheckOrder);
+    await this.runPool(topics, this.store.getSettings().checkConcurrency, true);
   }
 }
 
@@ -242,4 +365,72 @@ export function isDue(
   if (topic.paused) return false;
   if (topic.lastCheckedAt === null) return true;
   return now.getTime() - Date.parse(topic.lastCheckedAt) >= intervalMs;
+}
+
+/**
+ * The most recent `HH:MM` slot that has already come round, as a timestamp
+ * (NEWS-84). Null when none of today's slots have passed *and* there is no
+ * usable slot yesterday — i.e. the list is empty.
+ *
+ * Slots are evaluated in **local** time on purpose: "8am" means eight o'clock
+ * where the user is, and it should keep meaning that across a DST change. That
+ * is also why this walks back to yesterday's last slot rather than doing
+ * arithmetic on a fixed 24-hour period.
+ */
+export function lastSlotBefore(times: string[], now: Date): Date | null {
+  const parsed = times
+    .map((t) => t.split(':').map(Number))
+    .filter((parts): parts is [number, number] => parts.length === 2 && parts.every((n) => !Number.isNaN(n)))
+    .sort((a, b) => a[0] * 60 + a[1] - (b[0] * 60 + b[1]));
+  if (parsed.length === 0) return null;
+
+  const at = (dayOffset: number, [h, m]: [number, number]): Date =>
+    new Date(now.getFullYear(), now.getMonth(), now.getDate() + dayOffset, h, m, 0, 0);
+
+  for (let i = parsed.length - 1; i >= 0; i--) {
+    const slot = at(0, parsed[i]);
+    if (slot.getTime() <= now.getTime()) return slot;
+  }
+  // Before the first slot of the day — the standing obligation is yesterday's
+  // last one, so a topic checked the day before yesterday still reads as due.
+  return at(-1, parsed[parsed.length - 1]);
+}
+
+/**
+ * Whether a topic is due under a daily schedule (NEWS-84).
+ *
+ * Due when the most recent slot has passed and the topic has not been checked
+ * since it. Deliberately **not** "run at 08:00 exactly": the scheduler ticks
+ * once a minute and the app may be closed at 08:00, so a missed slot stays
+ * outstanding until it is served rather than being skipped to tomorrow.
+ */
+export function isDueDaily(
+  topic: { paused: boolean; lastCheckedAt: string | null },
+  times: string[],
+  now: Date,
+): boolean {
+  if (topic.paused) return false;
+  if (topic.lastCheckedAt === null) return true;
+  const slot = lastSlotBefore(times, now);
+  if (slot === null) return false;
+  return Date.parse(topic.lastCheckedAt) < slot.getTime();
+}
+
+/**
+ * Whether a topic is due, honouring the configured schedule mode (NEWS-84).
+ *
+ * High-priority topics always use the interval — "every 2 hours" is the right
+ * mental model there, and it is the whole point of the tier (FR-12.4). An empty
+ * `dailyTimes` falls back to the interval, so the mode can never leave a topic
+ * unscheduled forever.
+ */
+export function isDueUnderSchedule(
+  topic: { paused: boolean; lastCheckedAt: string | null; highPriority: boolean },
+  settings: Settings,
+  now: Date,
+): boolean {
+  if (settings.scheduleMode === 'daily' && !topic.highPriority && settings.dailyTimes.length > 0) {
+    return isDueDaily(topic, settings.dailyTimes, now);
+  }
+  return isDue(topic, effectiveInterval(topic, settings), now);
 }

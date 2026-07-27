@@ -12,6 +12,50 @@ Verified against the live API (NEWS-3): real current stories with citations that
 4. Add a very obscure topic — expect a successful check with no items ("Nothing found yet" only if no other topic has items).
 5. Unset the key and check — expect the run to fail and the warning banner to name the topic with an auth error.
 
+## First-run onboarding on a genuinely fresh install — NEWS-78
+
+The E2E suite shares one server whose state earlier specs build up, so it can never be in the no-topics/no-provider state that triggers the guide automatically. That path is manual.
+
+1. `npm run dev --data-dir /tmp/news-fresh` with **no** `ANTHROPIC_API_KEY`/`OPENAI_API_KEY` set and no Claude/Codex CLI signed in, in a browser profile that has never run News (or clear `localStorage` for the origin).
+2. The setup guide should open by itself, on the welcome step.
+3. Step 2 should say a key is needed. With a signed-in `claude-cli` **or** `codex-cli`, it should instead list it under "Found a signed-in subscription" — verify both branches.
+4. Pick two starter topics, choose an interval, click **Start watching**: both topics appear and both begin checking.
+5. Reload — the guide must **not** reappear. Settings → "Show the setup guide again" must bring it back.
+
+## Key verification (needs a real key) — NEWS-78
+
+1. In Settings, paste a deliberately corrupted key (change a few characters of a real one). Saving should fail immediately with "…rejected that key", and the key must **not** be stored.
+2. Paste the correct key — it should save.
+3. Disconnect the network and save a key. It should be **accepted** (the check can't run, so it must not claim the key is bad).
+
+## Citation verification against real sites (needs `ANTHROPIC_API_KEY`) — NEWS-83
+
+Unit tests inject the probe; the **live** `probeLink` — real HEAD/ranged-GET behaviour against real news sites — is manual, and it is the half that matters, because the whole design rests on how outlets actually answer HEAD.
+
+1. `npm run dev` with a valid key; run a check on an active topic.
+2. Every story that appears should have at least one working link. Click a few.
+3. Watch stderr: a line like `dropped N story/stories and M source link(s) that did not resolve` is expected occasionally and fine. **A run that drops most stories is not** — it means real outlets are being judged dead. If that happens, check whether they are 403-ing the ranged GET too, and widen the fallback rather than accepting the loss.
+4. Disconnect the network mid-check: the run should still succeed with stories stored **unverified** (the probe failing must not lose the news).
+
+## Live price updates — NEWS-93
+
+Unit tests cover the file and manifest paths with a stub fetch; these are the end-to-end halves.
+
+1. Run the app, open Settings → Spending, note the estimate.
+2. Edit `~/.news/prices.json` — double the input rate for the model in use — and save. Reopen Settings: the estimate should roughly double **without restarting the app**.
+3. Break the file (delete a closing brace). The estimate must be unchanged and stderr should say the file is invalid — not silently drop to "—".
+4. Point **Price updates** at an https URL serving the same JSON shape and restart. stderr should log `model prices updated from …` and `prices.json` should match the manifest.
+5. Point it at a URL that 404s and restart: no crash, no log of success, prices unchanged.
+
+## Token usage capture (needs `ANTHROPIC_API_KEY`) — NEWS-79
+
+Unit tests inject usage; the mapping from a *real* `message.usage` block is manual.
+
+1. `npm run dev` with a valid key; run one check on an active topic.
+2. Open Settings → **Spending**. The month's estimate should be a plausible few cents, and the note should say how many checks it is based on — not "—", and not a count of unpriced checks (the default model is priced).
+3. Set a **Monthly budget** below the current estimate. Within a minute the over-budget banner should appear and scheduled checks should stop; **Check now** must still work.
+4. Clear the budget field — the banner goes away and scheduled checks resume.
+
 ## Real OpenAI checks (needs `OPENAI_API_KEY`)
 
 1. `npm run dev --provider openai` (or set provider to OpenAI in Settings) with a valid key; add a topic with active coverage.

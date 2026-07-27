@@ -4,7 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 
 import { buildUserPrompt, NEWS_JSON_SCHEMA, parseNewsResult, searchingSystemPrompt } from '../prompt.js';
-import type { ConcreteProviderName, FoundNewsItem, KnownItem, NewsProvider } from '../types.js';
+import type { CheckResult, ConcreteProviderName, KnownItem, NewsProvider, TopicContext } from '../types.js';
 
 /**
  * Run checks against the user's **ChatGPT subscription** rather than an
@@ -161,14 +161,16 @@ export function createCodexCliProvider(
       topicName: string,
       known: KnownItem[],
       sinceIso: string | null,
-      offTopicTitles: string[] = [],
-    ): Promise<FoundNewsItem[]> {
+      context: TopicContext = {},
+    ): Promise<CheckResult> {
       const text = await runner.run(
         searchingSystemPrompt(),
-        buildUserPrompt(topicName, known, sinceIso, offTopicTitles),
+        buildUserPrompt(topicName, known, sinceIso, context),
         model !== '' ? model : undefined,
       );
-      return parseNewsResult(text);
+      // A subscription check spends plan quota, not metered dollars, and the
+      // CLI reports no token counts — so usage is genuinely unknown, not zero.
+      return { items: parseNewsResult(text), usage: null };
     },
   };
 }
