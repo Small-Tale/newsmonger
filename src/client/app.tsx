@@ -42,6 +42,7 @@ import { ensureNotificationPermission, syncTauriNotificationPermission } from '.
 import { activeBehindWarnings } from './schedule.js';
 import { itemMatchesQuery } from './search.js';
 import { shareItem } from './share.js';
+import { isAllSoloed, toggleSolo } from './solo.js';
 import type { AppState, OnboardingStep } from './stores.js';
 import {
   appStore,
@@ -1123,8 +1124,7 @@ function contextMenuJsx(menu: NonNullable<AppState['contextMenu']>, topics: Topi
   // With a mixed selection, offer the action that changes the most rows.
   const anyActive = targets.some((t) => !t.paused);
   const anyNormal = targets.some((t) => !t.highPriority);
-  const solo = new Set(appStore.state.value.soloTopicIds);
-  const allSoloed = count > 0 && targets.every((t) => solo.has(t.id));
+  const allSoloed = isAllSoloed(appStore.state.value.soloTopicIds, targets.map((t) => t.id));
   // Guidance is a paragraph about *one* topic, so it's offered only when
   // exactly one is targeted — there is nothing sensible to write across a mix.
   const only = count === 1 ? targets[0] : undefined;
@@ -1683,17 +1683,10 @@ function runTopicAction(action: string, ids: string[]): void {
       }
       break;
     }
-    case 'solo': {
-      const solo = new Set(soloTopicIds);
-      const allSoloed = targets.length > 0 && targets.every((t) => solo.has(t.id));
-      for (const t of targets) {
-        if (allSoloed) solo.delete(t.id);
-        else solo.add(t.id);
-      }
-      appStore.actions.setSolo([...solo]);
+    case 'solo':
+      appStore.actions.setSolo(toggleSolo(soloTopicIds, targets.map((t) => t.id)));
       void refreshFeed();
       break;
-    }
     case 'guidance': {
       // Single-target only; the menu item is disabled for a multi-selection.
       const only = targets.length === 1 ? targets[0] : undefined;
@@ -1972,6 +1965,24 @@ function wireEvents(root: HTMLElement): void {
     // Cmd on macOS, Ctrl elsewhere — reading both is simpler and more forgiving
     // than sniffing the platform, and no OS uses them for conflicting meanings.
     selectTopic(id, { toggle: e.metaKey || e.ctrlKey, range: e.shiftKey });
+  });
+
+  // Double-click toggles solo (NEWS-95) — the one topic action common enough to
+  // deserve a gesture instead of a trip through the right-click menu.
+  //
+  // Acts on the double-clicked row alone, never the wider selection: the two
+  // clicks that make up the gesture have already collapsed the selection to
+  // this row (a plain click sets it), so anything else would act on rows the
+  // user can no longer see are targeted.
+  //
+  // Routed through `runTopicAction` rather than reimplemented, so the gesture
+  // and the menu item can't drift apart — including the additive behaviour,
+  // where soloing a second topic widens the filter instead of replacing it.
+  // `.topic` is `user-select: none`, so this can't leave a stray text selection.
+  void delegate(root, 'dblclick', '[data-topic-row]', (e, el) => {
+    const id = el.getAttribute('data-topic-row');
+    if (id === null || !(e instanceof MouseEvent)) return;
+    runTopicAction('solo', [id]);
   });
 
   // Keyboard equivalents for the row (NEWS-90). The context menu is the only

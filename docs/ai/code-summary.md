@@ -60,6 +60,7 @@ src/
     search.ts         itemMatchesQuery/filterItemsByQuery — live feed search filter (NEWS-60)
     attribution.ts    outletFor/publishedLabel — source outlet + publication date display (NEWS-82)
     diagnostics.ts    runRows/formatDuration/buildDiagnostics — redacted bug-report bundle (NEWS-88)
+    solo.ts           toggleSolo/isAllSoloed — solo-set arithmetic shared by the context menu and the double-click gesture (NEWS-95)
     styles.scss       styling (light/dark via prefers-color-scheme)
 src-tauri/            Tauri v2 shell; one spawn path, dev runs tsx + release runs the sidecar
   src/lib.rs          server_command() picks the command; spawn_server() watches stdout + navigates
@@ -134,6 +135,7 @@ Data dir: `--data-dir` flag → `NEWS_DATA_DIR` → `~/.news`. Also holds `price
 | Export / the Atom feed | `src/export.ts` (pure renderers) + `/api/export.md`, `/api/export.json`, `/feed.xml` in `routes/api.ts`; Settings "Export & feed" block. `scope=all\|saved\|topic`. See `docs/21-export-and-feed.md` |
 | Story retention / data-file growth | `Store.pruneOldItems` + `itemRetentionDays` setting; called from `cli.ts` at startup and `CheckRunner.pruneAfterCheck` after each success. Bookmarked + flagged items exempt. See `docs/4-cli-server-storage.md` FR-4.11 |
 | Diagnostics / "why did a check fail" | `src/client/diagnostics.ts` (pure, unit-tested) + the Settings Diagnostics section; `appVersion` on `/api/state`. Topic names redacted unless opted in. See `docs/3-ui.md` FR-3.25–3.28 |
+| Solo filter (set arithmetic, menu + double-click) | `src/client/solo.ts` (`toggleSolo`, `isAllSoloed`), used by `runTopicAction` and the `dblclick` delegate in `app.tsx`. See `docs/3-ui.md` FR-3.40 |
 | Wide-window layout / column count | `.shell` (no max-width) and `.day` (`auto-fill, minmax(400px, 1fr)`) in `styles.scss`. Guarded by `tests/e2e/layout.spec.ts`. See `docs/3-ui.md` FR-3.36–3.39 |
 | Accessibility (keyboard, ARIA, focus) | `trapTabInDialog` + the global `keydown` handler + `openTopicMenuFor` in `app.tsx`; `role=listbox/option` on the topics list; `:focus-visible` rule in `styles.scss`. Guarded by `tests/e2e/a11y.spec.ts`. See `docs/3-ui.md` FR-3.20–3.24 |
 | The privacy disclosure | `privacyNoteJsx` in `app.tsx` (Settings → Privacy), README "Privacy", onboarding welcome step; pinned by a test in `tests/unit/guidance.test.ts`. See `docs/7-api-keys.md` FR-7.13 |

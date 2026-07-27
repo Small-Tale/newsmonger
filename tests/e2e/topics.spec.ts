@@ -203,6 +203,49 @@ test('solo is additive and Show all clears it', async ({ page }) => {
   await expect(page.locator('.topic.solo-dimmed')).toHaveCount(0);
 });
 
+test('double-clicking a topic toggles solo (NEWS-95)', async ({ page }) => {
+  await page.goto('/');
+  await expect(page.locator('.banner.solo')).toHaveCount(0);
+
+  // Double-click solos, without ever opening the menu.
+  await row(page, 'Alpha Topic').dblclick();
+  await expect(page.locator('.topic.soloed')).toHaveCount(1);
+  await expect(row(page, 'Alpha Topic')).toHaveClass(/soloed/);
+  await expect(page.locator('.banner.solo')).toBeVisible();
+
+  // Additive, exactly like the menu item: a second double-click widens the
+  // filter rather than replacing it.
+  await row(page, 'Bravo Topic').dblclick();
+  await expect(page.locator('.topic.soloed')).toHaveCount(2);
+  await expect(page.locator('.banner.solo')).toContainText('Showing 2 of');
+
+  // ...and double-clicking a soloed row toggles it back off.
+  await row(page, 'Bravo Topic').dblclick();
+  await expect(page.locator('.topic.soloed')).toHaveCount(1);
+  await expect(row(page, 'Alpha Topic')).toHaveClass(/soloed/);
+
+  // The gesture and the menu drive one filter, not two: the menu must now
+  // offer "Unsolo" for the row the double-click solo'd.
+  await row(page, 'Alpha Topic').click({ button: 'right' });
+  await expect(page.locator('[data-menu-action=solo] span')).toHaveText('Unsolo');
+  await page.keyboard.press('Escape');
+
+  await row(page, 'Alpha Topic').dblclick();
+  await expect(page.locator('.topic.soloed')).toHaveCount(0);
+  await expect(page.locator('.banner.solo')).toHaveCount(0);
+});
+
+test('a double-click leaves no stray text selection (NEWS-95)', async ({ page }) => {
+  // A double-click normally selects the word under the cursor; on a row whose
+  // whole job is to be clicked, that blue smear looks like a bug. `.topic` is
+  // `user-select: none`, and this is what keeps it that way.
+  await page.goto('/');
+  await row(page, 'Alpha Topic').dblclick();
+  expect(await page.evaluate(() => (window.getSelection()?.toString() ?? '').trim())).toBe('');
+  await page.locator('[data-action=clear-solo]').click();
+  await expect(page.locator('.banner.solo')).toHaveCount(0);
+});
+
 test('solo does not survive a reload', async ({ page }) => {
   // Ephemeral by design: a solo that persisted would silently hide news days
   // later, and "the app stopped finding anything" is the worse failure.
