@@ -702,6 +702,32 @@ export class Store {
     return asCount(info.changes);
   }
 
+  /**
+   * Delete stories and runs whose topic no longer exists (NEWS-105).
+   *
+   * `deleteTopic` already removes everything filed under a topic — but it runs
+   * *at deletion time*, and a check in flight can write a story or finish a run
+   * afterwards. There are no foreign keys precisely so that write succeeds
+   * rather than throwing mid-sweep (see `sqlite.ts`), which leaves this sweep as
+   * the thing that collects what the race left behind.
+   *
+   * Deliberately not solved at the writers: checking the topic exists before
+   * every insert costs a query on the hot path and still loses the race, since
+   * the topic can go between the check and the insert. Cleaning up after is both
+   * cheaper and actually correct.
+   *
+   * Returns the two counts separately: only the item count means cached images
+   * may now be reclaimable, and a caller that logs "pruned 3" without saying
+   * three of *what* is not worth logging.
+   */
+  pruneOrphans(): { items: number; runs: number } {
+    const items = this.db
+      .prepare('DELETE FROM items WHERE topic_id NOT IN (SELECT id FROM topics)')
+      .run();
+    const runs = this.db.prepare('DELETE FROM runs WHERE topic_id NOT IN (SELECT id FROM topics)').run();
+    return { items: asCount(items.changes), runs: asCount(runs.changes) };
+  }
+
   /** Estimated spend so far in `now`'s calendar month, in the local timezone. */
   spendThisMonth(now: Date): { usd: number; pricedRuns: number; unpricedRuns: number } {
     const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);

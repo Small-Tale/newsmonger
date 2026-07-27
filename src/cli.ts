@@ -69,6 +69,14 @@ async function main(): Promise<void> {
   // backlog waiting for the first check to clear it.
   const dropped = store.pruneOldItems(new Date());
   if (dropped > 0) console.error(`news: pruned ${String(dropped)} stories past the retention window`);
+  // And anything a topic deleted mid-check left behind (NEWS-105) — including
+  // from a previous run that was killed before its own sweep got there.
+  const orphaned = store.pruneOrphans();
+  if (orphaned.items > 0 || orphaned.runs > 0) {
+    console.error(
+      `news: swept ${String(orphaned.items)} story/ies and ${String(orphaned.runs)} run(s) left by a deleted topic`,
+    );
+  }
   // Reclaim any orphaned cached images at startup — from a topic deleted in a
   // previous run, a crash mid-download, or an older version (NEWS-36).
   const pruned = pruneImageCache(options.dataDir, liveImageHashes(store.listItems()));

@@ -368,7 +368,145 @@ describe('storage engine guarantees (NEWS-94)', () => {
     expect(store.queryItems({ mode: 'normal', q: 'nchanged', limit: 10 }).items).toHaveLength(1);
   });
 
-  it('keeps a story whose topic was deleted mid-check visible in the feed', () => {
+  it('sweeps up stories and runs left by a topic deleted mid-check (NEWS-105)', () => {
+    // The full sequence, not a synthetic orphan row: create, start a check,
+    // delete the topic while it is "in flight", then let the check land its
+    // writes. That ordering is the only way an orphan can exist, so it is the
+    // one worth testing.
+    const dir = tmpDataDir();
+    const store = new Store(dir);
+    const doomed = store.addTopic('Fleeting');
+    const kept = store.addTopic('Kept');
+    const inFlight = store.startRun(doomed.id);
+
+    store.deleteTopic(doomed.id);
+
+    // A run that had already *started* is not an orphan — `deleteTopic` removed
+    // it, and `finishRun` on a row that is gone is a no-op. Worth pinning: it is
+    // the boundary between what deletion handles and what this sweep is for.
+    expect(store.listRuns().map((r) => r.id)).not.toContain(inFlight.id);
+    store.finishRun(inFlight.id, { status: 'succeeded', newItems: 1 });
+    expect(store.listRuns().map((r) => r.id)).not.toContain(inFlight.id);
+
+    // These are the two writes that genuinely orphan: a story landing from the
+    // in-flight check, and a queued check *starting* after the delete (the
+    // sweep captured the topic list before it).
+    store.addItems([
+      {
+        topicId: doomed.id,
+        title: 'Arrived late',
+        summary: 's',
+        sources: [],
+        dedupeKey: 'late',
+        foundAt: '2026-07-02T00:00:00.000Z',
+      },
+    ]);
+    store.startRun(doomed.id);
+
+    store.addItems([
+      {
+        topicId: kept.id,
+        title: 'Still wanted',
+        summary: 's',
+        sources: [],
+        dedupeKey: 'kept',
+        foundAt: '2026-07-02T00:00:00.000Z',
+      },
+    ]);
+    store.startRun(kept.id);
+
+    // Before the sweep the orphans are really there — otherwise this test would
+    // pass against a store that never had the problem.
+    expect(store.listItems()).toHaveLength(2);
+
+    expect(store.pruneOrphans()).toEqual({ items: 1, runs: 1 });
+
+    expect(store.listItems().map((i) => i.title)).toEqual(['Still wanted']);
+    expect(store.listRuns().map((r) => r.topicId)).toEqual([kept.id]);
+  });
+
+  it('sweeps nothing when every topic is present', () => {
+    const dir = tmpDataDir();
+    const store = new Store(dir);
+    const topic = store.addTopic('Intact');
+    store.addItems([
+      {
+        topicId: topic.id,
+        title: 'Fine',
+        summary: 's',
+        sources: [],
+        dedupeKey: 'a',
+        foundAt: '2026-07-02T00:00:00.000Z',
+      },
+    ]);
+    store.startRun(topic.id);
+
+    expect(store.pruneOrphans()).toEqual({ items: 0, runs: 0 });
+    expect(store.listItems()).toHaveLength(1);
+    expect(store.listRuns()).toHaveLength(1);
+  });
+
+  it('sweeps orphans regardless of saved or flagged status', () => {
+    // `pruneOldItems` exempts bookmarked and flagged stories, and those
+    // exemptions must NOT carry over here: they mean "the user wants this kept",
+    // but there is no topic left to keep it under, and a flagged orphan would go
+    // on feeding a prompt for a topic that no longer exists.
+    const dir = tmpDataDir();
+    const store = new Store(dir);
+    const doomed = store.addTopic('Fleeting');
+    const [saved, flagged] = store.addItems([
+      {
+        topicId: doomed.id,
+        title: 'Bookmarked',
+        summary: 's',
+        sources: [],
+        dedupeKey: 'a',
+        foundAt: '2026-07-02T00:00:00.000Z',
+      },
+      {
+        topicId: doomed.id,
+        title: 'Flagged',
+        summary: 's',
+        sources: [],
+        dedupeKey: 'b',
+        foundAt: '2026-07-02T00:00:00.000Z',
+      },
+    ]);
+    store.setItemSaved(saved.id, true);
+    store.setItemOffTopic(flagged.id, true);
+    // Delete via SQL, so the items survive `deleteTopic`'s own cascade and are
+    // orphans by the time the sweep runs.
+    store.close();
+    const db = new DatabaseSync(dbPath(dir));
+    db.prepare('DELETE FROM topics WHERE id = ?').run(doomed.id);
+    db.close();
+
+    const reopened = new Store(dir);
+    expect(reopened.pruneOrphans()).toEqual({ items: 2, runs: 0 });
+    expect(reopened.listItems()).toEqual([]);
+  });
+
+  it('is idempotent — a second sweep finds nothing', () => {
+    const dir = tmpDataDir();
+    const store = new Store(dir);
+    const doomed = store.addTopic('Fleeting');
+    store.deleteTopic(doomed.id);
+    store.addItems([
+      {
+        topicId: doomed.id,
+        title: 'Late',
+        summary: 's',
+        sources: [],
+        dedupeKey: 'a',
+        foundAt: '2026-07-02T00:00:00.000Z',
+      },
+    ]);
+
+    expect(store.pruneOrphans()).toEqual({ items: 1, runs: 0 });
+    expect(store.pruneOrphans()).toEqual({ items: 0, runs: 0 });
+  });
+
+  it('keeps a story whose topic was deleted mid-check visible in the feed until the sweep', () => {
     // No foreign keys, deliberately: a check can outlive its topic. The story
     // should still be readable rather than vanish or fail to insert.
     const dir = tmpDataDir();

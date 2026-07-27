@@ -126,6 +126,44 @@ describe('pruning runs as part of a check (NEWS-87)', () => {
     expect(store.listItems()).toHaveLength(2);
   });
 
+  it('sweeps orphans left by a topic deleted mid-check (NEWS-105)', async () => {
+    const { store } = storeWith([1]);
+    const doomed = store.addTopic('Deleted Mid Check');
+    const kept = store.addTopic('Survivor');
+    const runner = new CheckRunner(store, asResolver(createMockProvider()));
+
+    // Stories land for a topic that is already gone — the shape the sweep exists
+    // for, produced through the store rather than by hand-writing orphan rows.
+    store.deleteTopic(doomed.id);
+    store.addItems([
+      {
+        topicId: doomed.id,
+        title: 'Landed after the delete',
+        summary: 's',
+        sources: [],
+        dedupeKey: 'orphan',
+        foundAt: new Date().toISOString(),
+      },
+    ]);
+    expect(store.listItems().map((i) => i.title)).toContain('Landed after the delete');
+
+    // A check on *any* topic runs the sweep — it is housekeeping, not per-topic.
+    await runner.checkTopic(kept.id);
+
+    expect(store.listItems().map((i) => i.title)).not.toContain('Landed after the delete');
+  });
+
+  it('does not fail the check when the orphan sweep throws', async () => {
+    const { store, topic } = storeWith([1]);
+    const runner = new CheckRunner(store, asResolver(createMockProvider()));
+    store.pruneOrphans = () => {
+      throw new Error('disk on fire');
+    };
+
+    expect(await runner.checkTopic(topic.id)).toBe(2);
+    expect(store.listRuns(1)[0].status).toBe('succeeded');
+  });
+
   it('does not fail the check when pruning throws', async () => {
     const { store, topic } = storeWith([400]);
     const runner = new CheckRunner(store, asResolver(createMockProvider()));

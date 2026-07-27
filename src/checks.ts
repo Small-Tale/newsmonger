@@ -189,15 +189,28 @@ export class CheckRunner {
   }
 
   /**
-   * Apply the retention window, and reclaim the images the dropped stories
-   * were holding (NEWS-87).
+   * Apply the retention window, sweep up anything orphaned by a topic deleted
+   * mid-check, and reclaim the images the dropped stories were holding
+   * (NEWS-87, NEWS-105).
+   *
+   * The orphan sweep belongs *here* rather than on a timer of its own: this is
+   * the moment right after the write that can create an orphan, so the window
+   * in which one exists is as short as it can be.
    *
    * Best-effort: pruning is housekeeping, and a failure here must never turn a
    * successful check into a failed one.
    */
   private pruneAfterCheck(): void {
     try {
-      if (this.store.pruneOldItems(new Date()) > 0) {
+      const expired = this.store.pruneOldItems(new Date());
+      const orphaned = this.store.pruneOrphans();
+      if (orphaned.items > 0 || orphaned.runs > 0) {
+        console.error(
+          `news: swept ${String(orphaned.items)} story/ies and ${String(orphaned.runs)} run(s) left by a deleted topic`,
+        );
+      }
+      // Only items hold images, so a run-only sweep has nothing to reclaim.
+      if (expired > 0 || orphaned.items > 0) {
         pruneImageCache(this.store.dataDir, liveImageHashes(this.store.listItems()));
       }
     } catch (err: unknown) {

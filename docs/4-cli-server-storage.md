@@ -41,6 +41,12 @@
 
 - **FR-4.8a** *(Shipped, NEWS-94)* A legacy `<data-dir>/data.json` is **imported once** on first open, then renamed to `data.json.imported-<ts>`. The import parses with the same `DataFileSchema`, so every migration that schema performs still happens. It runs only when the database has neither topics nor settings, so it can never fire twice or overwrite live data — and the file is renamed rather than deleted, since it is the only copy of that data until someone is satisfied the import worked.
 
+- **FR-4.8c** *(Shipped, NEWS-105)* **An orphan sweep collects what the race leaves behind.** `deleteTopic` cascades at deletion time, but an in-flight check can land a story, or a queued check can *start*, after that — so `Store.pruneOrphans()` deletes items and runs whose `topic_id` no longer resolves. It runs after every check (the moment right after the write that can create an orphan, so the window is as short as possible) and at startup (to collect anything a killed process never swept).
+
+  Deliberately **not** solved at the writers: checking the topic exists before every insert costs a query on the hot path and still loses the race, since the topic can go between the check and the insert.
+
+  The sweep ignores the `saved` / `offTopic` exemptions that `pruneOldItems` honours. Those mean "the user wants this kept", but there is no topic left to keep it under — and a flagged orphan would go on feeding the negative-example list for a topic that no longer exists.
+
 - **FR-4.8b** *(Shipped, NEWS-94)* **No foreign keys on `topic_id`.** `ON DELETE CASCADE` would make `deleteTopic` a single statement, but it would also reject a *write* for a topic deleted mid-check — a race the app has tolerated since `markTopicChecked` was written. A constraint would convert a harmless no-op into a thrown error mid-sweep. `deleteTopic` cascades explicitly, in a transaction.
 - **FR-4.9** A corrupt database is backed up (`news.db.corrupt-<ts>`, along with its `-wal`/`-shm` siblings, which would otherwise be replayed into the replacement) and the app starts fresh rather than crashing. Unreadable **settings** alone fall back to defaults *without* touching topics and stories — that separation is much of the point of leaving one file behind. Schema *evolution* must not trigger this: removed keys are stripped by zod, and a stored `provider` that no longer exists degrades to `auto` (`.catch('auto')`), so retiring a provider never wipes a user's topics.
 - **FR-4.10** Tests never touch `~/.news` — unit tests and E2E use temp dirs.
