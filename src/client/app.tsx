@@ -1477,16 +1477,26 @@ function appJsx(): SafeHtml {
                 solo.has(topic.id),
                 solo.size > 0 && !solo.has(topic.id),
               ),
-            // `each()` memoizes per row on object identity, and selection/solo
-            // live outside the topic object — so without this comparator a row
-            // keeps its cached HTML and selecting it appears to do nothing until
-            // the next poll happens to replace `topics` with fresh objects.
-            // `highPriority` is in the key too so toggling it re-renders the
-            // star and the dial's interval without waiting for the next poll.
-            (topic) =>
-              `${String(selected.has(topic.id))}|${String(solo.has(topic.id))}|${String(solo.size)}|${String(
-                s.checking.includes(topic.id),
-              )}|${String(topic.highPriority)}`,
+            {
+              // `each()` memoizes per row on object identity, and selection/solo
+              // live outside the topic object — so without this comparator a row
+              // keeps its cached HTML and selecting it appears to do nothing until
+              // the next poll happens to replace `topics` with fresh objects.
+              // `highPriority` is in the key too so toggling it re-renders the
+              // star and the dial's interval without waiting for the next poll.
+              cacheKey: (topic: Topic) =>
+                `${String(selected.has(topic.id))}|${String(solo.has(topic.id))}|${String(solo.size)}|${String(
+                  s.checking.includes(topic.id),
+                )}|${String(topic.highPriority)}`,
+              // A stable list identity (kerf 3.x). Unkeyed lists are identified by
+              // their position among a render's `each()` calls, so a conditional
+              // list appearing above this one would rebuild it and cost the rows
+              // their focus and scroll. This is the only `each()` in the app today
+              // — the feed uses `.map()` — so the position can't currently shift;
+              // the key means adding a second list later can't silently break this
+              // one either.
+              key: 'topics',
+            },
           )}
         </ul>
         <div class="empty-slot">

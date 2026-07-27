@@ -5,7 +5,7 @@ Topic-based news tracker. The user enters topics; on a configurable interval (de
 ## Tech Stack
 
 - Node 20+, TypeScript (strict), ESM
-- [kerfjs](https://github.com/brianwestphal/kerf) 2.0 UI (JSX → HTML strings, signals + morph) — **read `.claude/skills/kerf-app/SKILL.md` before touching client code**
+- [kerfjs](https://github.com/brianwestphal/kerf) 3.0 (beta) UI (JSX → HTML strings, signals + morph) — **read `.claude/skills/kerf-app/SKILL.md` before touching client code**
 - Hono + `@hono/node-server` (localhost-only, default port 4187)
 - Pluggable AI providers (`src/ai/providers/`, like `~/Documents/gitgist`) behind a `NewsProvider` interface — **only platforms that do their own web search** (Anthropic, OpenAI); default `anthropic` uses `@anthropic-ai/sdk` (`claude-opus-4-8`, adaptive thinking, `web_search_20260209`, streamed). See `docs/6-providers.md`.
 - Single zod-validated JSON file for storage (`~/.news/data.json`; `--data-dir` / `NEWS_DATA_DIR` override)
@@ -21,7 +21,7 @@ Topic-based news tracker. The user enters topics; on a configurable interval (de
 ## Conventions
 
 - **Type safety: validate, don't assert.** zod at every trust boundary (API request bodies, client-side state parsing, the data file, Claude's JSON output). No bare `as` casts to cross boundaries.
-- **kerf client rules** (enforced by `eslint-plugin-kerfjs`, documented in `docs/3-ui.md`): state in `defineStore`/signals; events via `delegate()` with `data-*` attributes (never `addEventListener`/inline handlers); `data-key` on list rows; `.map()` not `each()` for static structural arrays. Plus two hard-won structural rules (see `docs/3-ui.md`; kerf bug KF-377): wrap conditional siblings (banners) in an always-present container — removing a conditional sibling before a keyed `each()` list permanently empties it in kerfjs 2.0.0 — and keep `each()` containers structurally stable (defensive).
+- **kerf client rules** (enforced by `eslint-plugin-kerfjs`, documented in `docs/3-ui.md`): state in `defineStore`/signals; events via `delegate()` with `data-*` attributes (never `addEventListener`/inline handlers); `data-key` on list rows; `.map()` not `each()` for static structural arrays. Plus two structural rules (see `docs/3-ui.md`): wrap conditional siblings (banners) in an always-present container, and keep `each()` containers structurally stable. **KF-377 — the kerfjs ≤2.0.1 bug these were written for — is fixed in 3.0.0-beta.1**, so they are now defensive convention rather than load-bearing; they stay while we're on a beta.
 - The server readiness line `news running at <url>` is watched by `src-tauri/src/lib.rs` — keep the `running at ` marker in sync.
 - Tests must never touch `~/.news` — use `tests/helpers/tmp.ts` (unit) or the Playwright-managed temp dir (E2E).
 - The mock news service keys off topic names: containing "fail" → throws, "empty" → no items; anything else → the same two deterministic stories every call (that's what makes dedup testable).
