@@ -11,7 +11,7 @@
  *
  * Scope: this defends against the user's browser being turned against the app
  * by a web page. It is deliberately not authentication — a local process can
- * still call the API (and could read `data.json` directly anyway), and a
+ * still call the API (and could read the database directly anyway), and a
  * request with no `Origin` header (curl, the test harness) is allowed through.
  * A browser cannot make a cross-origin request without sending one.
  */

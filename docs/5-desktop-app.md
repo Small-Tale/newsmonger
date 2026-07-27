@@ -10,6 +10,8 @@ Hybrid model borrowed from glassbox: the Node server is the app in both modes; T
 
   **Verified end to end:** the built `News.app` starts its sidecar, serves the real UI (request log shows `GET /` → assets → `/api/state` → `/api/providers`), and leaves no orphaned server on quit. Only macOS (`aarch64-apple-darwin`) has been built and run; the other target triples are wired but untested, as is the Windows `CREATE_NO_WINDOW` flag.
 
+  The sidecar Node must be **22.5 or newer** — the server stores its data through the built-in `node:sqlite` (FR-4.8). `scripts/build-sidecar.sh` pins v22.14.0.
+
   **Why a real Node binary rather than a single-file executable:** the server resolves its client assets relative to `import.meta.url`, which single-binary compilers (`pkg`, `bun build --compile`) break.
 
   **Why `npm install` rather than copying `node_modules/<dep>`:** the runtime deps have transitive deps of their own (`@anthropic-ai/sdk` → `standardwebhooks`, `kerfjs` → `@preact/signals-core`), and a top-level copy silently omits them.

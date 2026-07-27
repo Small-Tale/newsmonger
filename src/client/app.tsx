@@ -1039,7 +1039,7 @@ function settingsDialogJsx(): SafeHtml {
           )}
         </div>
         <p class="note">
-          Keys are stored in your {s.keychainLabel} — never in ~/.news/data.json, and never sent anywhere but the
+          Keys are stored in your {s.keychainLabel} — never in ~/.news/news.db, and never sent anywhere but the
           provider you chose.
         </p>
 

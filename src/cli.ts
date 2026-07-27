@@ -124,6 +124,9 @@ async function main(): Promise<void> {
     clearInterval(priceTimer);
     stopScheduler();
     server.close();
+    // Close the database explicitly so WAL is checkpointed into `news.db`
+    // rather than left for the next start to replay (NEWS-94).
+    store.close();
     if ((process.env['NODE_V8_COVERAGE'] ?? '') !== '') v8.takeCoverage();
     process.exit(0);
   };

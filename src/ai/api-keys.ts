@@ -2,7 +2,7 @@
  * Where each provider's API key comes from.
  *
  * Two sources, in order: the environment, then the OS keychain. There is
- * deliberately no third — a key is never written to `~/.news/data.json`, so the
+ * deliberately no third — a key is never written to `~/.news/news.db`, so the
  * data file stays safe to copy, sync, or attach to a bug report. When the
  * keychain is unavailable, the environment is the only way to supply a key, and
  * the settings dialog says so rather than silently falling back to disk.

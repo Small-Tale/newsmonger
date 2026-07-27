@@ -3,7 +3,8 @@ import { defineConfig } from 'tsup';
 export default defineConfig({
   entry: { cli: 'src/cli.ts' },
   format: ['esm'],
-  target: 'node20',
+  // node22: `node:sqlite` needs 22.5+ (NEWS-94).
+  target: 'node22',
   platform: 'node',
   outDir: 'dist',
   clean: false,

@@ -12,7 +12,7 @@ export ANTHROPIC_API_KEY=sk-ant-...   # or run with --ai-test for a mock service
 npm run dev                            # http://127.0.0.1:4187
 ```
 
-Data lives in `~/.news/data.json` (override with `--data-dir` or `NEWS_DATA_DIR`).
+Data lives in `~/.news/news.db`, a SQLite database (override the directory with `--data-dir` or `NEWS_DATA_DIR`). A `data.json` left by an older build is imported automatically on first start and renamed.
 
 ## AI providers
 

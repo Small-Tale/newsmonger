@@ -33,8 +33,16 @@
 
 ## Storage
 
-- **FR-4.8** All data lives in one zod-validated JSON file, `<data-dir>/data.json`: topics, items, settings, and the last 200 check runs. Writes are atomic (temp file + rename).
-- **FR-4.9** A corrupt data file is backed up (`data.json.corrupt-<ts>`) and the app starts fresh rather than crashing. Schema *evolution* must not trigger this: removed keys are stripped by zod, and a stored `provider` that no longer exists degrades to `auto` (`.catch('auto')`), so retiring a provider never wipes a user's topics.
+- **FR-4.8** *(Shipped, NEWS-94)* All data lives in a **SQLite database**, `<data-dir>/news.db`: topics, items, settings, and the last 200 check runs. Writes are per-row — toggling one bookmark writes that row, where the previous JSON file re-serialized every topic, story and run on every mutation. Uses the built-in `node:sqlite`, so there is no native dependency and nothing extra to stage into the Tauri sidecar; it needs **Node 22.5+**, which is now the engine floor.
+
+  Rows are still **validated, not asserted** — every read goes through the same zod schemas the JSON file used, so the trust boundary didn't move, it just applies per row. Settings are one JSON row rather than columns, because `SettingsSchema` defaults every field and that makes adding a setting a zero-migration change.
+
+  Search stays `LIKE '%q%'` rather than FTS5. FTS matches tokens and prefixes, so it would stop matching mid-word — and a filter that narrows as you type is exactly where someone types the middle of a word. Adopting FTS is a user-visible change to what search finds, not a free win, so it is a separate decision.
+
+- **FR-4.8a** *(Shipped, NEWS-94)* A legacy `<data-dir>/data.json` is **imported once** on first open, then renamed to `data.json.imported-<ts>`. The import parses with the same `DataFileSchema`, so every migration that schema performs still happens. It runs only when the database has neither topics nor settings, so it can never fire twice or overwrite live data — and the file is renamed rather than deleted, since it is the only copy of that data until someone is satisfied the import worked.
+
+- **FR-4.8b** *(Shipped, NEWS-94)* **No foreign keys on `topic_id`.** `ON DELETE CASCADE` would make `deleteTopic` a single statement, but it would also reject a *write* for a topic deleted mid-check — a race the app has tolerated since `markTopicChecked` was written. A constraint would convert a harmless no-op into a thrown error mid-sweep. `deleteTopic` cascades explicitly, in a transaction.
+- **FR-4.9** A corrupt database is backed up (`news.db.corrupt-<ts>`, along with its `-wal`/`-shm` siblings, which would otherwise be replayed into the replacement) and the app starts fresh rather than crashing. Unreadable **settings** alone fall back to defaults *without* touching topics and stories — that separation is much of the point of leaving one file behind. Schema *evolution* must not trigger this: removed keys are stripped by zod, and a stored `provider` that no longer exists degrades to `auto` (`.catch('auto')`), so retiring a provider never wipes a user's topics.
 - **FR-4.10** Tests never touch `~/.news` — unit tests and E2E use temp dirs.
 - **FR-4.11** *(Shipped)* **Story retention** (NEWS-87). Stories older than `settings.itemRetentionDays` are dropped; the default is **365 days** and **0 means keep forever** (the pre-NEWS-87 behaviour). `runs` has been capped at 200 all along and images are pruned by mark-and-sweep — `items` was the one collection with no ceiling at all, and every mutation rewrites the whole file, so unbounded growth was a write-cost problem as much as a disk one.
 
@@ -44,6 +52,6 @@
 
   The window is a boundary-inclusive `>=`: a story found exactly `days` ago is inside the window.
 
-  > The storage *engine* is unchanged — this bounds the JSON file rather than replacing it. Moving to SQLite (per-row writes, a smaller corruption blast radius, FTS5 search) is **NEWS-94**.
+  > The storage engine moved to SQLite in **NEWS-94** (FR-4.8). Retention still matters — it bounds what the database holds — but the whole-file rewrite it was mitigating is gone.
 
 See also: [5 — Desktop App](5-desktop-app.md).

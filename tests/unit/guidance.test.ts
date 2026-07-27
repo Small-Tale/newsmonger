@@ -88,15 +88,24 @@ describe('Store guidance (NEWS-80)', () => {
   });
 
   it('loads a pre-NEWS-80 topic that has no guidance field at all', () => {
-    const store = new Store(tmpDataDir());
-    const topic = store.addTopic('Tesla');
-    const file = `${store.dataDir}/data.json`;
-    const raw = JSON.parse(fs.readFileSync(file, 'utf8')) as { topics: Record<string, unknown>[] };
-    delete raw.topics[0]?.['guidance'];
-    fs.writeFileSync(file, JSON.stringify(raw));
+    // Arrives as a legacy `data.json`, which the SQLite store imports on first
+    // open (NEWS-94). The column is NOT NULL, so this also proves the import
+    // applies the schema's default rather than writing a null.
+    const dir = tmpDataDir();
+    fs.writeFileSync(
+      `${dir}/data.json`,
+      JSON.stringify({
+        topics: [
+          { id: 't1', name: 'Tesla', paused: false, createdAt: '2026-07-01T00:00:00.000Z', lastCheckedAt: null },
+        ],
+        items: [],
+        settings: { checkIntervalMs: 86_400_000 },
+        runs: [],
+      }),
+    );
 
-    const reloaded = new Store(store.dataDir);
-    expect(reloaded.getTopic(topic.id)?.guidance).toBe('');
+    const reloaded = new Store(dir);
+    expect(reloaded.getTopic('t1')?.guidance).toBe('');
     expect(reloaded.listTopics()).toHaveLength(1);
   });
 });

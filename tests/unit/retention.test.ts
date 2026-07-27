@@ -88,11 +88,23 @@ describe('Store.pruneOldItems (NEWS-87)', () => {
     expect(new Store(store.dataDir).listItems()).toHaveLength(1);
   });
 
-  it('does not rewrite the data file when nothing is due', () => {
+  it('writes nothing when no story is due (NEWS-94)', () => {
+    // Originally "does not rewrite the data file": under the JSON store a
+    // needless prune re-serialized every topic, story and run. SQLite makes
+    // that particular cost impossible, but the assertion is still worth having
+    // in its new form — a DELETE that matches nothing should leave the database
+    // byte-identical, and the retention sweep runs on every tick.
     const { store } = storeWith([1]);
-    const before = fs.statSync(`${store.dataDir}/data.json`).mtimeMs;
+    const db = `${store.dataDir}/news.db`;
+    const size = fs.statSync(db).size;
+    const wal = fs.existsSync(`${db}-wal`) ? fs.statSync(`${db}-wal`).size : 0;
+
     expect(store.pruneOldItems(NOW)).toBe(0);
-    expect(fs.statSync(`${store.dataDir}/data.json`).mtimeMs).toBe(before);
+
+    expect(fs.statSync(db).size).toBe(size);
+    expect(fs.existsSync(`${db}-wal`) ? fs.statSync(`${db}-wal`).size : 0).toBe(wal);
+    // And the store still holds what it held.
+    expect(store.listItems()).toHaveLength(1);
   });
 
   it('loads a pre-NEWS-87 data file and applies the default window', () => {

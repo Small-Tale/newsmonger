@@ -36,7 +36,7 @@ The topics list also now carries an explicit `key: 'topics'` (kerf 3.x). Unkeyed
 
 ## Bookmarking stories (Saved)
 
-Each story card has a bookmark button (NEWS-42). Saving sets `item.saved` in `data.json` — a persistent property of the story, so it survives restarts but goes with the story if its topic is deleted. The toggle is `PATCH /api/items/:id { saved }`.
+Each story card has a bookmark button (NEWS-42). Saving sets `item.saved` in the store — a persistent property of the story, so it survives restarts but goes with the story if its topic is deleted. The toggle is `PATCH /api/items/:id { saved }`.
 
 A **Saved filter** (bookmark toggle in the header, next to the gear) filters the feed to saved stories only, with a "Showing N saved" banner and a Show-all button — the same shape as the Solo filter. The filter itself is a **view state, ephemeral** (cleared on reload); only the saved flags persist. Solo and Saved compose: Saved filters within the current Solo set.
 
@@ -102,7 +102,7 @@ Dialogs keep their own max-widths; only the app shell became full-bleed.
 ## Collapsible topics sidebar
 
 - The topics sidebar (`#topics-panel`) collapses via a panel-glyph toggle at the left of the header. Collapsed, the grid drops to a single column and the feed reflows to the full width (measured: 652px → 1012px at a 1100px viewport).
-- The choice persists **per device** in `localStorage` (`news:sidebar-collapsed`), not in `data.json` — how you've sized your own window is a view preference, not something belonging in the shared data file alongside topics and stories. Reads and writes are guarded so a non-browser import or disabled storage can't throw.
+- The choice persists **per device** in `localStorage` (`news:sidebar-collapsed`), not in the store — how you've sized your own window is a view preference, not something belonging in the shared data file alongside topics and stories. Reads and writes are guarded so a non-browser import or disabled storage can't throw.
 - The toggle carries `aria-expanded` / `aria-controls`, and its glyph reflects state (the panel divider thickens when the sidebar is showing) rather than only naming an action.
 - Collapsing hides the Source status line and the add-topic form along with the list, since they live in the same panel. Expanding is required to add a topic — acceptable, and the toggle is always visible.
 

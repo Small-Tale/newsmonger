@@ -8,7 +8,7 @@ See also: [3 — UI](3-ui.md), [6 — AI Providers](6-providers.md) (the attenda
 
 ## When it fires
 
-- **FR-10.1** *(Shipped)* Off by default. A checkbox in the Settings dialog (`notifyOnNewItems`, persisted in `data.json`) enables it. Enabling requests notification permission on the spot — that request must ride the click, so it lives in the toggle's change handler. In the **Tauri desktop shell** the request goes through the notification plugin, whose `requestPermission()` raises the real OS dialog; in a browser it uses the web `Notification.requestPermission()` (NEWS-66).
+- **FR-10.1** *(Shipped)* Off by default. A checkbox in the Settings dialog (`notifyOnNewItems`, persisted in the store's settings) enables it. Enabling requests notification permission on the spot — that request must ride the click, so it lives in the toggle's change handler. In the **Tauri desktop shell** the request goes through the notification plugin, whose `requestPermission()` raises the real OS dialog; in a browser it uses the web `Notification.requestPermission()` (NEWS-66).
 
 - **FR-10.2** *(Shipped)* **Only when the app is not focused.** If the window is visible and focused when new stories land, the feed updating in front of you is enough — a notification would be noise. `focusProbe.isFocused()` (visible AND focused) gates it.
 

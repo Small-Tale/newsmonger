@@ -154,10 +154,16 @@ describe('an existing data file is cleaned when the store loads it', () => {
     const store = new Store(dir);
     expect(store.listItems()[0]?.summary).toBe('Entry list out. She is No. 29.');
 
-    // Any subsequent write flushes the cleaned text back to disk, so the markup
-    // doesn't linger in the file either.
-    store.addTopic('another');
-    const onDisk: unknown = JSON.parse(fs.readFileSync(path.join(dir, 'data.json'), 'utf-8'));
-    expect(JSON.stringify(onDisk)).not.toContain('<cite');
+    // The markup doesn't linger in storage either: the import parses through
+    // the same schema, so what lands in the database is already clean (NEWS-94).
+    // Read as raw bytes rather than through the store, since the store's own
+    // read path would sanitize it a second time and hide a dirty write.
+    const bytes = fs.readFileSync(path.join(dir, 'news.db')).toString('utf8');
+    expect(bytes).not.toContain('<cite');
+
+    // The imported file is kept under a new name, so it can't re-import — and
+    // so the original data still exists if anyone wants to check the import.
+    expect(fs.existsSync(path.join(dir, 'data.json'))).toBe(false);
+    expect(fs.readdirSync(dir).some((f) => f.startsWith('data.json.imported-'))).toBe(true);
   });
 });

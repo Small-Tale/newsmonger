@@ -1,4 +1,4 @@
-import { readFileSync, writeFileSync } from 'node:fs';
+import { writeFileSync } from 'node:fs';
 
 import { describe, expect, it } from 'vitest';
 
@@ -135,18 +135,42 @@ describe('run records carry usage (NEWS-79)', () => {
   });
 
   it('loads a pre-NEWS-79 run record that has no usage or model field', () => {
-    const store = new Store(tmpDataDir());
-    const topic = store.addTopic('Fusion');
-    store.startRun(topic.id);
-    const file = `${store.dataDir}/data.json`;
-    const raw = JSON.parse(readFileSync(file, 'utf8')) as { runs: Record<string, unknown>[] };
-    delete raw.runs[0]?.['usage'];
-    delete raw.runs[0]?.['model'];
-    writeFileSync(file, JSON.stringify(raw));
+    // Written as a legacy `data.json`, which the SQLite store imports on first
+    // open (NEWS-94) — so this now covers the real path such a record arrives
+    // by, rather than round-tripping through a file the store no longer writes.
+    const dir = tmpDataDir();
+    writeFileSync(
+      `${dir}/data.json`,
+      JSON.stringify({
+        topics: [
+          {
+            id: 't1',
+            name: 'Fusion',
+            paused: false,
+            createdAt: '2026-07-01T00:00:00.000Z',
+            lastCheckedAt: null,
+          },
+        ],
+        items: [],
+        settings: { checkIntervalMs: 86_400_000 },
+        runs: [
+          {
+            id: 'r1',
+            topicId: 't1',
+            startedAt: '2026-07-01T00:00:00.000Z',
+            finishedAt: null,
+            status: 'running',
+            newItems: 0,
+            error: null,
+          },
+        ],
+      }),
+    );
 
-    const reloaded = new Store(store.dataDir);
-    expect(reloaded.listRuns(5)).toHaveLength(1);
-    expect(reloaded.listRuns(5)[0].usage).toBeNull();
+    const store = new Store(dir);
+    expect(store.listRuns(5)).toHaveLength(1);
+    expect(store.listRuns(5)[0].usage).toBeNull();
+    expect(store.listRuns(5)[0].model).toBeNull();
   });
 });
 

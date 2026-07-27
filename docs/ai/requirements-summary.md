@@ -95,6 +95,7 @@ Default Anthropic provider (`claude-opus-4-8` + web search), prompt-level exclus
 - Error/warning banners are dismissable; the failure warning's dismissal is remembered by run id so a new failure reappears (NEWS-41): **Shipped**
 - Destructive confirmations via an in-app dialog, never `window.confirm` (a WKWebView no-op that broke delete in the desktop app — NEWS-39): **Shipped**
 
+- FR-4.8/4.8a/4.8b/4.9 **storage moved to SQLite** (`node:sqlite`, Node 22.5+): per-row writes, zod-validated rows, one-time `data.json` import, no foreign keys (a check can outlive its topic), corrupt-db backup + settings-only fallback. Search stays substring `LIKE`, not FTS5 — NEWS-94: **Shipped**
 - FR-3.40 double-click a topic row to toggle solo, sharing `toggleSolo` with the menu item — NEWS-95: **Shipped**
 - FR-3.36–3.39 full-window layout: no shell max-width, extra width becomes story columns (1→6 across 1100–3000px), 400px column minimum, 74ch measure cap — NEWS-96: **Shipped**
 - FR-3.33–3.35 kerf dev diagnostics behind a `__KERF_DEV__` esbuild define; **E2E runs the dev bundle with `invariants: 'throw'`** plus a `pageerror` guard, so a morph bug fails at the render that caused it — NEWS-100: **Shipped**
@@ -132,7 +133,7 @@ Subscription-backed providers (`attended: true`) run *scheduled* checks only whi
 ## [7 — API Keys and Settings Dialog](../7-api-keys.md) — Shipped (all three platforms verified)
 
 - FR-7.1 env → keychain precedence: **Shipped**
-- FR-7.2 keys never written to `data.json` (no disk fallback): **Shipped**
+- FR-7.2 keys never written to the data file (no disk fallback): **Shipped**
 - FR-7.3 per-request resolution; SDK client cache keyed on the credential: **Shipped**
 - FR-7.4 keychain via platform tooling, no native module: **Shipped, all three platforms verified** (macOS real Keychain; Linux in Docker; Windows 11 in Parallels — three Windows bugs found and fixed)
 - FR-7.5 availability probed once; Linux round-trip probe: **Shipped, verified** (the headless-no-daemon case is exactly what it catches)

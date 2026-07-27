@@ -168,7 +168,7 @@ export interface AppState {
 }
 
 /**
- * Persisted per device rather than in `data.json`: how you've sized your own
+ * Persisted per device rather than in the store: how you've sized your own
  * window is a view preference, not something that belongs in the shared data
  * file alongside topics and stories.
  */

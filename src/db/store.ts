@@ -1,12 +1,22 @@
 import { randomUUID } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
+import type { DatabaseSync } from 'node:sqlite';
 
 import { PriceStore } from '../ai/price-store.js';
 import { estimateCostUsd } from '../ai/pricing.js';
 import type { TokenUsage } from '../ai/types.js';
-import type { CheckRun, DataFile, NewsItem, Settings, Topic } from './schemas.js';
-import { DataFileSchema, emptyDataFile, MAX_GUIDANCE_LENGTH } from './schemas.js';
+import type { CheckRun, NewsItem, Settings, Topic } from './schemas.js';
+import {
+  CheckRunSchema,
+  DataFileSchema,
+  emptyDataFile,
+  MAX_GUIDANCE_LENGTH,
+  NewsItemSchema,
+  SettingsSchema,
+  TopicSchema,
+} from './schemas.js';
+import { backupUnreadableDb, dbPath, openDb } from './sqlite.js';
 
 const MAX_RUNS_KEPT = 200;
 
@@ -27,22 +37,54 @@ export interface ItemQuery {
   before?: ItemCursor | null;
 }
 
-/** Descending string compare: later/greater first. */
-function cmpDesc(a: string, b: string): number {
-  return a < b ? 1 : a > b ? -1 : 0;
+/** SQLite has no boolean type; every column that means one is 0/1. */
+function bit(value: boolean): number {
+  return value ? 1 : 0;
+}
+
+function isTrue(value: unknown): boolean {
+  return value === 1 || value === 1n || value === true;
 }
 
 /**
- * JSON-file-backed store for topics, news items, settings, and check runs.
+ * Read a SQLite integer as a JS number.
  *
- * All data lives in a single `data.json` inside the data directory. Writes are
- * synchronous and atomic (write to a temp file, then rename).
+ * `node:sqlite` hands back a `bigint` for values outside the safe-integer range,
+ * so the column type alone doesn't tell you which you have. Everything counted
+ * here (rows, `changes`) is small, and this is the one place that has to know.
+ */
+function asCount(value: unknown): number {
+  return typeof value === 'bigint' ? Number(value) : Number(value ?? 0);
+}
+
+/** Parse a JSON column, treating null/empty as absent rather than as an error. */
+function parseJson(value: unknown): unknown {
+  if (typeof value !== 'string' || value === '') return null;
+  return JSON.parse(value) as unknown;
+}
+
+/**
+ * SQLite-backed store for topics, news items, settings, and check runs (NEWS-94).
+ *
+ * Replaces a single `data.json` that was rewritten in full on every mutation —
+ * toggling one bookmark serialized every topic, story and run — and whose
+ * corruption blast radius was therefore everything at once. Writes are now
+ * per-row, and the public interface is unchanged, which is what kept this a
+ * refactor rather than a rewrite.
+ *
+ * **Rows are validated, not asserted.** Every read goes through the same zod
+ * schemas the JSON file used, so the trust boundary didn't move — it just
+ * applies per row instead of per file. That is also what keeps `stripMarkup`
+ * cleaning stories stored before it existed.
+ *
+ * An existing `data.json` is imported once on first open (see `importJsonFile`).
  */
 export class Store {
-  private readonly filePath: string;
-  private data: DataFile;
+  private readonly db: DatabaseSync;
+  private readonly file: string;
+  private settingsCache: Settings;
 
-  /** Where the data file and image cache live. */
+  /** Where the database and image cache live. */
   readonly dataDir: string;
 
   /**
@@ -54,46 +96,206 @@ export class Store {
   constructor(dataDir: string) {
     this.dataDir = dataDir;
     fs.mkdirSync(dataDir, { recursive: true });
-    this.filePath = path.join(dataDir, 'data.json');
-    this.data = this.load();
+    this.file = dbPath(dataDir);
+
+    let db: DatabaseSync;
+    try {
+      db = openDb(this.file);
+    } catch (err) {
+      // Corrupt or unreadable database: back it up and start fresh rather than
+      // crash — the same contract the JSON store had for a bad `data.json`.
+      // A database that cannot be opened cannot be repaired from in here, and
+      // refusing to start would leave the user with no way in at all.
+      const backup = backupUnreadableDb(this.file);
+      console.error(`news: database unreadable (${String(err)}); backed up to ${backup} and starting fresh`);
+      db = openDb(this.file);
+    }
+    this.db = db;
+
+    this.importJsonFile();
+    this.settingsCache = this.loadSettings();
     this.prices = new PriceStore(dataDir);
   }
 
-  private load(): DataFile {
-    if (!fs.existsSync(this.filePath)) return emptyDataFile();
+  /**
+   * One-time import of a legacy `data.json` (NEWS-94).
+   *
+   * Runs only when the database is empty *and* a JSON file is there, so it
+   * can't fire twice or overwrite live data. The file is parsed with the same
+   * `DataFileSchema` the JSON store used, which means every migration that
+   * schema performs still happens — dropped fields, renamed providers,
+   * `stripMarkup` on old citation markup — and an unparseable file still gets
+   * backed up rather than taking the app down.
+   *
+   * The file is renamed afterwards, not deleted: it is the only copy of that
+   * data until someone is satisfied the import worked, and leaving it under its
+   * original name would make it re-import if the database were ever removed.
+   */
+  private importJsonFile(): void {
+    const jsonFile = path.join(this.dataDir, 'data.json');
+    if (!fs.existsSync(jsonFile)) return;
+    const populated = this.db.prepare('SELECT count(*) AS c FROM topics').get() as { c: unknown };
+    const hasSettings = this.db.prepare(`SELECT count(*) AS c FROM meta WHERE key = 'settings'`).get() as {
+      c: unknown;
+    };
+    if (asCount(populated.c) > 0 || asCount(hasSettings.c) > 0) return;
+
+    let data;
     try {
-      const raw = fs.readFileSync(this.filePath, 'utf8');
-      return DataFileSchema.parse(JSON.parse(raw));
+      data = DataFileSchema.parse(JSON.parse(fs.readFileSync(jsonFile, 'utf8')));
     } catch (err) {
-      // Corrupt or incompatible file: back it up and start fresh rather than crash.
-      const backup = `${this.filePath}.corrupt-${Date.now()}`;
-      fs.copyFileSync(this.filePath, backup);
+      const backup = `${jsonFile}.corrupt-${String(Date.now())}`;
+      fs.copyFileSync(jsonFile, backup);
+      fs.rmSync(jsonFile, { force: true });
       console.error(`news: data file invalid (${String(err)}); backed up to ${backup} and starting fresh`);
-      return emptyDataFile();
+      return;
     }
+
+    this.db.exec('BEGIN');
+    try {
+      for (const topic of data.topics) this.insertTopic(topic);
+      for (const item of data.items) this.insertItem(item);
+      for (const run of data.runs) this.insertRun(run);
+      this.writeSettings(data.settings);
+      this.db.exec('COMMIT');
+    } catch (err) {
+      this.db.exec('ROLLBACK');
+      throw err;
+    }
+    fs.renameSync(jsonFile, `${jsonFile}.imported-${String(Date.now())}`);
   }
 
-  private save(): void {
-    const tmp = `${this.filePath}.tmp`;
-    fs.writeFileSync(tmp, JSON.stringify(this.data, null, 2));
-    fs.renameSync(tmp, this.filePath);
+  /** Release the database handle. Tests open many stores; servers hold one. */
+  close(): void {
+    this.db.close();
   }
 
-  // --- Topics ---
+  // --- Row mapping ---------------------------------------------------------
 
+  private static rowToTopic(row: Record<string, unknown>): Topic {
+    return TopicSchema.parse({
+      id: row['id'],
+      name: row['name'],
+      paused: isTrue(row['paused']),
+      highPriority: isTrue(row['high_priority']),
+      guidance: row['guidance'],
+      createdAt: row['created_at'],
+      lastCheckedAt: row['last_checked_at'] ?? null,
+      coveredThroughAt: row['covered_through_at'] ?? null,
+    });
+  }
+
+  private static rowToItem(row: Record<string, unknown>): NewsItem {
+    return NewsItemSchema.parse({
+      id: row['id'],
+      topicId: row['topic_id'],
+      title: row['title'],
+      summary: row['summary'],
+      saved: isTrue(row['saved']),
+      offTopic: isTrue(row['off_topic']),
+      sources: parseJson(row['sources']) ?? [],
+      image: parseJson(row['image']),
+      dedupeKey: row['dedupe_key'],
+      foundAt: row['found_at'],
+    });
+  }
+
+  private static rowToRun(row: Record<string, unknown>): CheckRun {
+    return CheckRunSchema.parse({
+      id: row['id'],
+      topicId: row['topic_id'],
+      startedAt: row['started_at'],
+      finishedAt: row['finished_at'] ?? null,
+      status: row['status'],
+      newItems: asCount(row['new_items']),
+      error: row['error'] ?? null,
+      provider: row['provider'] ?? null,
+      model: row['model'] ?? null,
+      usage: parseJson(row['usage']),
+    });
+  }
+
+  private insertTopic(topic: Topic): void {
+    this.db
+      .prepare(
+        `INSERT INTO topics (id, name, paused, high_priority, guidance, created_at, last_checked_at, covered_through_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      )
+      .run(
+        topic.id,
+        topic.name,
+        bit(topic.paused),
+        bit(topic.highPriority),
+        topic.guidance,
+        topic.createdAt,
+        topic.lastCheckedAt,
+        topic.coveredThroughAt,
+      );
+  }
+
+  private insertItem(item: NewsItem): void {
+    this.db
+      .prepare(
+        `INSERT INTO items (id, topic_id, title, summary, sources, image, dedupe_key, found_at, saved, off_topic)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      )
+      .run(
+        item.id,
+        item.topicId,
+        item.title,
+        item.summary,
+        JSON.stringify(item.sources),
+        item.image === null ? null : JSON.stringify(item.image),
+        item.dedupeKey,
+        item.foundAt,
+        bit(item.saved),
+        bit(item.offTopic),
+      );
+  }
+
+  private insertRun(run: CheckRun): void {
+    this.db
+      .prepare(
+        `INSERT INTO runs (id, topic_id, started_at, finished_at, status, new_items, error, provider, model, usage)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      )
+      .run(
+        run.id,
+        run.topicId,
+        run.startedAt,
+        run.finishedAt,
+        run.status,
+        run.newItems,
+        run.error,
+        run.provider,
+        run.model,
+        run.usage === null ? null : JSON.stringify(run.usage),
+      );
+  }
+
+  // --- Topics --------------------------------------------------------------
+
+  /** Insertion order, which is the implicit rowid — the JSON array's order. */
   listTopics(): Topic[] {
-    return [...this.data.topics];
+    return (this.db.prepare('SELECT * FROM topics ORDER BY rowid').all() as Record<string, unknown>[]).map((r) =>
+      Store.rowToTopic(r),
+    );
   }
 
   getTopic(id: string): Topic | undefined {
-    return this.data.topics.find((t) => t.id === id);
+    const row = this.db.prepare('SELECT * FROM topics WHERE id = ?').get(id) as Record<string, unknown> | undefined;
+    return row === undefined ? undefined : Store.rowToTopic(row);
   }
 
   addTopic(name: string): Topic {
     const trimmed = name.trim();
     if (trimmed === '') throw new Error('topic name must not be empty');
-    const existing = this.data.topics.find((t) => t.name.toLowerCase() === trimmed.toLowerCase());
-    if (existing) throw new Error(`topic "${trimmed}" already exists`);
+    // Checked here rather than left to the unique index, so the message the API
+    // surfaces names the topic instead of quoting a constraint.
+    const existing = this.db
+      .prepare('SELECT id FROM topics WHERE name = ? COLLATE NOCASE')
+      .get(trimmed) as { id: string } | undefined;
+    if (existing !== undefined) throw new Error(`topic "${trimmed}" already exists`);
     const topic: Topic = {
       id: randomUUID(),
       name: trimmed,
@@ -104,26 +306,26 @@ export class Store {
       lastCheckedAt: null,
       coveredThroughAt: null,
     };
-    this.data.topics.push(topic);
-    this.save();
+    this.insertTopic(topic);
+    return topic;
+  }
+
+  /** Set one topic column and return the reloaded row, or throw if it's gone. */
+  private updateTopic(id: string, column: string, value: string | number | null): Topic {
+    const info = this.db.prepare(`UPDATE topics SET ${column} = ? WHERE id = ?`).run(value, id);
+    if (asCount(info.changes) === 0) throw new Error(`no such topic: ${id}`);
+    const topic = this.getTopic(id);
+    if (topic === undefined) throw new Error(`no such topic: ${id}`);
     return topic;
   }
 
   setTopicPaused(id: string, paused: boolean): Topic {
-    const topic = this.getTopic(id);
-    if (!topic) throw new Error(`no such topic: ${id}`);
-    topic.paused = paused;
-    this.save();
-    return topic;
+    return this.updateTopic(id, 'paused', bit(paused));
   }
 
   /** Mark a topic high-priority (shorter interval) or normal (NEWS-56). */
   setTopicHighPriority(id: string, highPriority: boolean): Topic {
-    const topic = this.getTopic(id);
-    if (!topic) throw new Error(`no such topic: ${id}`);
-    topic.highPriority = highPriority;
-    this.save();
-    return topic;
+    return this.updateTopic(id, 'high_priority', bit(highPriority));
   }
 
   /**
@@ -134,52 +336,18 @@ export class Store {
    * all key off emptiness, and they should agree.
    */
   setTopicGuidance(id: string, guidance: string): Topic {
-    const topic = this.getTopic(id);
-    if (!topic) throw new Error(`no such topic: ${id}`);
-    topic.guidance = guidance.trim().slice(0, MAX_GUIDANCE_LENGTH);
-    this.save();
-    return topic;
+    return this.updateTopic(id, 'guidance', guidance.trim().slice(0, MAX_GUIDANCE_LENGTH));
   }
 
   /**
    * Record a check *attempt*. Call for successes and failures alike — it is
    * what keeps the scheduler from retrying a broken provider every tick.
+   *
+   * Silently does nothing for a deleted topic: a check can outlive the topic
+   * that started it, and that is not an error.
    */
-  /** Bookmark or un-bookmark a story. Returns the updated item, or null if gone. */
-  setItemSaved(id: string, saved: boolean): NewsItem | null {
-    const item = this.data.items.find((i) => i.id === id);
-    if (!item) return null;
-    item.saved = saved;
-    this.save();
-    return item;
-  }
-
-  /** Flag or un-flag a story as off-topic (NEWS-61). Null if the item is gone. */
-  setItemOffTopic(id: string, offTopic: boolean): NewsItem | null {
-    const item = this.data.items.find((i) => i.id === id);
-    if (!item) return null;
-    item.offTopic = offTopic;
-    this.save();
-    return item;
-  }
-
-  /**
-   * Titles of a topic's off-topic stories, most recent first, for the prompt's
-   * negative-example list (NEWS-61). Capped by `limit` to keep the prompt bounded.
-   */
-  offTopicTitlesForTopic(topicId: string, limit = 10): string[] {
-    return this.data.items
-      .filter((i) => i.topicId === topicId && i.offTopic)
-      .sort((a, b) => b.foundAt.localeCompare(a.foundAt))
-      .slice(0, limit)
-      .map((i) => i.title);
-  }
-
   markTopicChecked(id: string, when: Date): void {
-    const topic = this.getTopic(id);
-    if (!topic) return; // topic may have been deleted mid-check
-    topic.lastCheckedAt = when.toISOString();
-    this.save();
+    this.db.prepare('UPDATE topics SET last_checked_at = ? WHERE id = ?').run(when.toISOString(), id);
   }
 
   /**
@@ -188,34 +356,45 @@ export class Store {
    * discard however much news was pending.
    */
   markTopicCovered(id: string, when: Date): void {
-    const topic = this.getTopic(id);
-    if (!topic) return; // topic may have been deleted mid-check
-    topic.coveredThroughAt = when.toISOString();
-    this.save();
+    this.db.prepare('UPDATE topics SET covered_through_at = ? WHERE id = ?').run(when.toISOString(), id);
   }
 
+  /**
+   * Delete a topic and everything filed under it.
+   *
+   * Cascaded by hand rather than by a foreign key — see the note in `sqlite.ts`:
+   * a constraint would also reject a *write* for a topic deleted mid-check,
+   * turning a harmless race into a thrown error.
+   */
   deleteTopic(id: string): void {
-    const before = this.data.topics.length;
-    this.data.topics = this.data.topics.filter((t) => t.id !== id);
-    if (this.data.topics.length === before) throw new Error(`no such topic: ${id}`);
-    this.data.items = this.data.items.filter((i) => i.topicId !== id);
-    this.data.runs = this.data.runs.filter((r) => r.topicId !== id);
-    this.save();
+    this.db.exec('BEGIN');
+    try {
+      const info = this.db.prepare('DELETE FROM topics WHERE id = ?').run(id);
+      if (asCount(info.changes) === 0) throw new Error(`no such topic: ${id}`);
+      this.db.prepare('DELETE FROM items WHERE topic_id = ?').run(id);
+      this.db.prepare('DELETE FROM runs WHERE topic_id = ?').run(id);
+      this.db.exec('COMMIT');
+    } catch (err) {
+      this.db.exec('ROLLBACK');
+      throw err;
+    }
   }
 
-  // --- Items ---
+  // --- Items ---------------------------------------------------------------
 
   listItems(topicId?: string): NewsItem[] {
-    const items = topicId === undefined ? this.data.items : this.data.items.filter((i) => i.topicId === topicId);
-    return [...items];
+    const rows =
+      topicId === undefined
+        ? this.db.prepare('SELECT * FROM items ORDER BY rowid').all()
+        : this.db.prepare('SELECT * FROM items WHERE topic_id = ? ORDER BY rowid').all(topicId);
+    return (rows as Record<string, unknown>[]).map((r) => Store.rowToItem(r));
   }
 
   /**
    * Query the feed for a page (server-side pagination, NEWS-74).
    *
    * Filters, sorts newest-first, and cursor-paginates in one place so the
-   * server is the single source of truth for what the feed shows. The filter
-   * predicates mirror the client's view logic:
+   * server is the single source of truth for what the feed shows:
    *  - `mode: 'review'` → only off-topic stories for `topicIds` (the reviewed
    *    topics); nothing else applies.
    *  - `mode: 'normal'` → exclude off-topic stories, then apply Solo (`topicIds`),
@@ -223,51 +402,79 @@ export class Store {
    *
    * The cursor is the last item of the previous page `(foundAt, id)`; the page is
    * the items strictly *older* than it, so paging is stable as new items arrive.
+   *
+   * Search is `LIKE '%q%'` rather than FTS5 deliberately. FTS matches tokens and
+   * prefixes, so it would stop matching mid-word — and a filter that narrows as
+   * you type is exactly where someone types the middle of a word. Preserving the
+   * old `String.includes` semantics keeps the behaviour identical to the JSON
+   * store; FTS is a separate, user-visible decision (see the follow-up ticket).
    */
   queryItems(query: ItemQuery): { items: NewsItem[]; nextCursor: ItemCursor | null; total: number } {
-    const topicNames = new Map(this.data.topics.map((t) => [t.id, t.name]));
-    const topicSet = query.topicIds && query.topicIds.length > 0 ? new Set(query.topicIds) : null;
-    const q = (query.q ?? '').trim().toLowerCase();
+    const where: string[] = [];
+    const params: (string | number)[] = [];
+    const topicIds = query.topicIds ?? [];
 
-    const filtered = this.data.items.filter((item) => {
-      if (query.mode === 'review') {
-        return item.offTopic && topicSet !== null && topicSet.has(item.topicId);
+    if (query.mode === 'review') {
+      // Review mode shows a named set of topics' flagged stories; with no topics
+      // named there is nothing to review, which `IN ()` can't express.
+      if (topicIds.length === 0) return { items: [], nextCursor: null, total: 0 };
+      where.push('i.off_topic = 1');
+      where.push(`i.topic_id IN (${topicIds.map(() => '?').join(',')})`);
+      params.push(...topicIds);
+    } else {
+      where.push('i.off_topic = 0');
+      if (topicIds.length > 0) {
+        where.push(`i.topic_id IN (${topicIds.map(() => '?').join(',')})`);
+        params.push(...topicIds);
       }
-      if (item.offTopic) return false;
-      if (topicSet !== null && !topicSet.has(item.topicId)) return false;
-      if (query.saved === true && !item.saved) return false;
+      if (query.saved === true) where.push('i.saved = 1');
+      const q = (query.q ?? '').trim().toLowerCase();
       if (q !== '') {
-        const name = topicNames.get(item.topicId) ?? '';
-        const hit =
-          item.title.toLowerCase().includes(q) ||
-          item.summary.toLowerCase().includes(q) ||
-          name.toLowerCase().includes(q);
-        if (!hit) return false;
+        // `escape` keeps a literal % or _ in the query from turning into a
+        // wildcard — searching for "100%" should find "100%", not everything.
+        const like = `%${q.replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
+        where.push(
+          `(lower(i.title) LIKE ? ESCAPE '\\' OR lower(i.summary) LIKE ? ESCAPE '\\' OR lower(coalesce(t.name, '')) LIKE ? ESCAPE '\\')`,
+        );
+        params.push(like, like, like);
       }
-      return true;
-    });
+    }
 
-    // Newest first; tie-break on id so a shared timestamp still gives a total,
-    // stable order for the cursor.
-    filtered.sort((a, b) =>
-      a.foundAt === b.foundAt ? cmpDesc(a.id, b.id) : cmpDesc(a.foundAt, b.foundAt),
-    );
+    // LEFT JOIN, not JOIN: a story can be filed for a topic deleted mid-check,
+    // and the JSON store looked names up in a map that simply missed — it never
+    // dropped the row. An inner join would silently hide those.
+    const from = 'FROM items i LEFT JOIN topics t ON t.id = i.topic_id';
+    const clause = where.length > 0 ? `WHERE ${where.join(' AND ')}` : '';
+    const totalRow = this.db.prepare(`SELECT count(*) AS c ${from} ${clause}`).get(...params) as { c: unknown };
+    const total = asCount(totalRow.c);
 
-    const total = filtered.length;
+    const pageWhere = [...where];
+    const pageParams = [...params];
     const c = query.before;
-    const afterCursor =
-      c === undefined || c === null
-        ? filtered
-        : filtered.filter((i) => i.foundAt < c.foundAt || (i.foundAt === c.foundAt && i.id < c.id));
-    const items = afterCursor.slice(0, query.limit);
-    // More remain iff the filtered-after-cursor set exceeded the page.
-    const last = afterCursor.length > items.length ? items[items.length - 1] : undefined;
+    if (c !== undefined && c !== null) {
+      pageWhere.push('(i.found_at < ? OR (i.found_at = ? AND i.id < ?))');
+      pageParams.push(c.foundAt, c.foundAt, c.id);
+    }
+    // One row more than the page, so "are there more?" is answered by the query
+    // rather than by a second count.
+    const rows = this.db
+      .prepare(
+        `SELECT i.* ${from} WHERE ${pageWhere.join(' AND ')} ORDER BY i.found_at DESC, i.id DESC LIMIT ?`,
+      )
+      .all(...pageParams, query.limit + 1) as Record<string, unknown>[];
+
+    const hasMore = rows.length > query.limit;
+    const items = rows.slice(0, query.limit).map((r) => Store.rowToItem(r));
+    const last = hasMore ? items[items.length - 1] : undefined;
     const nextCursor = last ? { foundAt: last.foundAt, id: last.id } : null;
     return { items, nextCursor, total };
   }
 
   dedupeKeysForTopic(topicId: string): Set<string> {
-    return new Set(this.data.items.filter((i) => i.topicId === topicId).map((i) => i.dedupeKey));
+    const rows = this.db.prepare('SELECT dedupe_key AS k FROM items WHERE topic_id = ?').all(topicId) as {
+      k: string;
+    }[];
+    return new Set(rows.map((r) => r.k));
   }
 
   /**
@@ -276,13 +483,13 @@ export class Store {
    * Small enough to ride the `/api/state` poll: it's the signal the client uses
    * to detect *new* stories for notifications, independent of whatever filtered
    * page the feed is showing — so a new story in a topic you aren't looking at
-   * still notifies, once the feed itself moves off `/api/state` (phase 2b).
+   * still notifies.
    */
   latestItemIds(n = 50): string[] {
-    return [...this.data.items]
-      .sort((a, b) => (a.foundAt === b.foundAt ? cmpDesc(a.id, b.id) : cmpDesc(a.foundAt, b.foundAt)))
-      .slice(0, n)
-      .map((i) => i.id);
+    const rows = this.db
+      .prepare('SELECT id FROM items ORDER BY found_at DESC, id DESC LIMIT ?')
+      .all(n) as { id: string }[];
+    return rows.map((r) => r.id);
   }
 
   /**
@@ -291,11 +498,43 @@ export class Store {
    * item list. Topics with none are omitted.
    */
   flaggedCountsByTopic(): Record<string, number> {
+    const rows = this.db
+      .prepare('SELECT topic_id AS t, count(*) AS c FROM items WHERE off_topic = 1 GROUP BY topic_id')
+      .all() as { t: string; c: unknown }[];
     const counts: Record<string, number> = {};
-    for (const item of this.data.items) {
-      if (item.offTopic) counts[item.topicId] = (counts[item.topicId] ?? 0) + 1;
-    }
+    for (const row of rows) counts[row.t] = asCount(row.c);
     return counts;
+  }
+
+  /**
+   * Titles of a topic's off-topic stories, most recent first, for the prompt's
+   * negative-example list (NEWS-61). Capped by `limit` to keep the prompt bounded.
+   */
+  offTopicTitlesForTopic(topicId: string, limit = 10): string[] {
+    const rows = this.db
+      .prepare('SELECT title FROM items WHERE topic_id = ? AND off_topic = 1 ORDER BY found_at DESC LIMIT ?')
+      .all(topicId, limit) as { title: string }[];
+    // Through the schema, not straight off the row: stored titles may predate
+    // `stripMarkup`, and the prompt should never be handed citation markup.
+    return rows.map((r) => NewsItemSchema.shape.title.parse(r.title));
+  }
+
+  /** Toggle one item flag and return the reloaded item, or null if it's gone. */
+  private setItemFlag(id: string, column: 'saved' | 'off_topic', value: boolean): NewsItem | null {
+    const info = this.db.prepare(`UPDATE items SET ${column} = ? WHERE id = ?`).run(bit(value), id);
+    if (asCount(info.changes) === 0) return null;
+    const row = this.db.prepare('SELECT * FROM items WHERE id = ?').get(id) as Record<string, unknown> | undefined;
+    return row === undefined ? null : Store.rowToItem(row);
+  }
+
+  /** Bookmark or un-bookmark a story. Returns the updated item, or null if gone. */
+  setItemSaved(id: string, saved: boolean): NewsItem | null {
+    return this.setItemFlag(id, 'saved', saved);
+  }
+
+  /** Flag or un-flag a story as off-topic (NEWS-61). Null if the item is gone. */
+  setItemOffTopic(id: string, offTopic: boolean): NewsItem | null {
+    return this.setItemFlag(id, 'off_topic', offTopic);
   }
 
   /** `image`/`saved`/`offTopic` are optional: a new story has no picture, isn't saved, and isn't flagged. */
@@ -307,19 +546,54 @@ export class Store {
     })[],
   ): NewsItem[] {
     const added = items.map((item) => ({ image: null, saved: false, offTopic: false, ...item, id: randomUUID() }));
-    this.data.items.push(...added);
-    this.save();
+    // One transaction: a check's stories arrive together or not at all, and a
+    // single commit is also what makes a sweep's writes cheap.
+    this.db.exec('BEGIN');
+    try {
+      for (const item of added) this.insertItem(item);
+      this.db.exec('COMMIT');
+    } catch (err) {
+      this.db.exec('ROLLBACK');
+      throw err;
+    }
     return added;
   }
 
-  // --- Settings ---
+  // --- Settings ------------------------------------------------------------
+
+  private loadSettings(): Settings {
+    const row = this.db.prepare(`SELECT value FROM meta WHERE key = 'settings'`).get() as
+      | { value: string }
+      | undefined;
+    if (row === undefined) {
+      const defaults = emptyDataFile().settings;
+      this.writeSettings(defaults);
+      return defaults;
+    }
+    try {
+      return SettingsSchema.parse(JSON.parse(row.value));
+    } catch (err) {
+      // Settings alone are recoverable — falling back to defaults keeps topics
+      // and stories, which is the whole point of not storing them together.
+      console.error(`news: settings unreadable (${String(err)}); using defaults`);
+      const defaults = emptyDataFile().settings;
+      this.writeSettings(defaults);
+      return defaults;
+    }
+  }
+
+  private writeSettings(settings: Settings): void {
+    this.db
+      .prepare(`INSERT INTO meta (key, value) VALUES ('settings', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value`)
+      .run(JSON.stringify(settings));
+  }
 
   getSettings(): Settings {
-    return { ...this.data.settings };
+    return { ...this.settingsCache };
   }
 
   updateSettings(patch: Partial<Settings>): Settings {
-    const next = { ...this.data.settings, ...patch };
+    const next = { ...this.settingsCache, ...patch };
     // Keep the invariant highPriorityIntervalMs <= checkIntervalMs (NEWS-56) by
     // moving the value the user did NOT just change: shorten the default and the
     // high-priority interval follows down; lengthen the high-priority interval
@@ -337,15 +611,19 @@ export class Store {
     if (patch.dailyTimes !== undefined) {
       next.dailyTimes = [...new Set(next.dailyTimes)].sort((a, b) => a.localeCompare(b));
     }
-    this.data.settings = next;
-    this.save();
+    this.writeSettings(next);
+    this.settingsCache = next;
     return this.getSettings();
   }
 
-  // --- Check runs ---
+  // --- Check runs ----------------------------------------------------------
 
   listRuns(limit = 50): CheckRun[] {
-    return this.data.runs.slice(-limit).reverse();
+    const rows = this.db.prepare('SELECT * FROM runs ORDER BY rowid DESC LIMIT ?').all(limit) as Record<
+      string,
+      unknown
+    >[];
+    return rows.map((r) => Store.rowToRun(r));
   }
 
   startRun(topicId: string): CheckRun {
@@ -361,11 +639,11 @@ export class Store {
       model: null,
       usage: null,
     };
-    this.data.runs.push(run);
-    if (this.data.runs.length > MAX_RUNS_KEPT) {
-      this.data.runs = this.data.runs.slice(-MAX_RUNS_KEPT);
-    }
-    this.save();
+    this.insertRun(run);
+    // Truncation is now a bounded DELETE instead of re-serializing every run.
+    this.db
+      .prepare(`DELETE FROM runs WHERE rowid NOT IN (SELECT rowid FROM runs ORDER BY rowid DESC LIMIT ?)`)
+      .run(MAX_RUNS_KEPT);
     return run;
   }
 
@@ -380,16 +658,54 @@ export class Store {
       usage?: TokenUsage | null;
     },
   ): void {
-    const run = this.data.runs.find((r) => r.id === runId);
-    if (!run) return;
-    run.finishedAt = new Date().toISOString();
-    run.status = result.status;
-    run.newItems = result.newItems;
-    run.error = result.error ?? null;
-    if (result.provider !== undefined) run.provider = result.provider;
-    if (result.model !== undefined) run.model = result.model;
-    if (result.usage !== undefined) run.usage = result.usage;
-    this.save();
+    const sets = ['finished_at = ?', 'status = ?', 'new_items = ?', 'error = ?'];
+    const params: (string | number | null)[] = [
+      new Date().toISOString(),
+      result.status,
+      result.newItems,
+      result.error ?? null,
+    ];
+    // Absent means "don't touch", which is why these are conditional rather
+    // than defaulted — a retry that reports no model shouldn't erase the one
+    // the first attempt recorded.
+    if (result.provider !== undefined) {
+      sets.push('provider = ?');
+      params.push(result.provider);
+    }
+    if (result.model !== undefined) {
+      sets.push('model = ?');
+      params.push(result.model);
+    }
+    if (result.usage !== undefined) {
+      sets.push('usage = ?');
+      params.push(result.usage === null ? null : JSON.stringify(result.usage));
+    }
+    this.db.prepare(`UPDATE runs SET ${sets.join(', ')} WHERE id = ?`).run(...params, runId);
+  }
+
+  /**
+   * Drop stories older than the retention window (NEWS-87). Returns how many
+   * went, so the caller can log it and prune the images they referenced.
+   *
+   * Two things are deliberately exempt: **bookmarked** stories, which the user
+   * marked as worth keeping, and **off-topic flagged** ones, whose titles feed
+   * the prompt's negative-example list — pruning those would quietly un-teach
+   * the model what the user meant by a topic.
+   */
+  pruneOldItems(now: Date): number {
+    const days = this.settingsCache.itemRetentionDays;
+    if (days <= 0) return 0;
+    const cutoff = new Date(now.getTime() - days * 24 * 60 * 60 * 1000).toISOString();
+    const info = this.db
+      .prepare('DELETE FROM items WHERE saved = 0 AND off_topic = 0 AND found_at < ?')
+      .run(cutoff);
+    return asCount(info.changes);
+  }
+
+  /** Estimated spend so far in `now`'s calendar month, in the local timezone. */
+  spendThisMonth(now: Date): { usd: number; pricedRuns: number; unpricedRuns: number } {
+    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+    return this.spendSince(monthStart.toISOString());
   }
 
   /**
@@ -403,45 +719,19 @@ export class Store {
    * Note the horizon is `MAX_RUNS_KEPT` runs, not all of history: this is what
    * the app can still see, which for a busy install may be less than a month.
    */
-  /**
-   * Drop stories older than the retention window (NEWS-87). Returns how many
-   * went, so the caller can log it and prune the images they referenced.
-   *
-   * Two things are deliberately exempt: **bookmarked** stories, which the user
-   * marked as worth keeping, and **off-topic flagged** ones, whose titles feed
-   * the prompt's negative-example list — pruning those would quietly un-teach
-   * the model what the user meant by a topic.
-   */
-  pruneOldItems(now: Date): number {
-    const days = this.data.settings.itemRetentionDays;
-    if (days <= 0) return 0;
-    const cutoff = new Date(now.getTime() - days * 24 * 60 * 60 * 1000).toISOString();
-    const before = this.data.items.length;
-    this.data.items = this.data.items.filter(
-      (item) => item.saved || item.offTopic || item.foundAt >= cutoff,
-    );
-    const removed = before - this.data.items.length;
-    if (removed > 0) this.save();
-    return removed;
-  }
-
-  /** Estimated spend so far in `now`'s calendar month, in the local timezone. */
-  spendThisMonth(now: Date): { usd: number; pricedRuns: number; unpricedRuns: number } {
-    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
-    return this.spendSince(monthStart.toISOString());
-  }
-
   spendSince(sinceIso: string): { usd: number; pricedRuns: number; unpricedRuns: number } {
     // Read once per call, not per run: the file's mtime check is cheap but not
     // free, and every run in a sweep is priced against the same table.
     const table = this.prices.table().models;
+    const rows = this.db
+      .prepare(`SELECT model, usage FROM runs WHERE started_at >= ? AND status != 'running'`)
+      .all(sinceIso) as { model: string | null; usage: string | null }[];
     let usd = 0;
     let pricedRuns = 0;
     let unpricedRuns = 0;
-    for (const run of this.data.runs) {
-      if (run.startedAt < sinceIso) continue;
-      if (run.status === 'running') continue;
-      const cost = estimateCostUsd(run.model ?? '', run.usage, table);
+    for (const row of rows) {
+      const usage = parseJson(row.usage);
+      const cost = estimateCostUsd(row.model ?? '', usage as TokenUsage | null, table);
       if (cost === null) unpricedRuns += 1;
       else {
         usd += cost;

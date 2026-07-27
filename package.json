@@ -6,7 +6,7 @@
   "license": "MIT",
   "author": "westphal",
   "engines": {
-    "node": ">=20"
+    "node": ">=22.5"
   },
   "bin": {
     "news": "./dist/cli.js"

@@ -13,6 +13,7 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
+# 22.5 is the floor: the server uses the built-in `node:sqlite` (NEWS-94).
 NODE_VERSION="v22.14.0"
 # Tauri passes $TAURI_ENV_TARGET_TRIPLE to beforeBuildCommand, but it expands to
 # an empty string outside a Tauri build — fall back to the host triple.

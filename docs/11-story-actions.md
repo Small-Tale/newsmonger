@@ -6,7 +6,7 @@ Per-story actions that live in each feed card's header: a **bookmark** to save a
 
 ### Save / bookmark (NEWS-42)
 
-- **FR-11.1** *(Shipped)* Every story card has a bookmark button. Clicking it toggles `item.saved`, persisted in `data.json` via `PATCH /api/items/:id { saved }` (`setItemSaved` in the store). Saved is a **property of the story**, so a bookmark survives a restart — but it goes with the story if the topic is deleted (the flag lives on the item, not on a separate list). The button fills solid green when saved.
+- **FR-11.1** *(Shipped)* Every story card has a bookmark button. Clicking it toggles `item.saved`, persisted in the store via `PATCH /api/items/:id { saved }` (`setItemSaved` in the store). Saved is a **property of the story**, so a bookmark survives a restart — but it goes with the story if the topic is deleted (the flag lives on the item, not on a separate list). The button fills solid green when saved.
 
 - **FR-11.2** *(Shipped)* A **Saved filter** — a bookmark toggle in the header, beside the settings gear — narrows the feed to saved stories only, with a "Showing N saved" banner and a Show-all button, mirroring the existing Solo filter. The two **compose**: Saved filters within the current Solo set. The filter is a **view state and ephemeral** — a reload clears the filter but not the saved flags — for the same reason Solo is ephemeral (a stale hide-everything filter surviving a restart is a worse failure than re-applying one). Empty state when nothing is saved: a prompt to use the bookmark button.
 

@@ -21,7 +21,9 @@ src/
   attendance.ts       Attendance: in-memory lastSeenAt + 5 min window; gates attended providers
   db/
     schemas.ts        zod: Topic, NewsItem, Settings, CheckRun, DataFile; DEFAULT_CHECK_INTERVAL_MS, MAX_GUIDANCE_LENGTH
-    store.ts          Store: single data.json, atomic writes, corrupt-file backup+reset
+    store.ts          Store: SQLite (node:sqlite), per-row writes, zod-validated rows, corrupt-db backup+reset, one-time data.json import (NEWS-94)
+    sqlite.ts         schema DDL, openDb (WAL + sanity probe), backupUnreadableDb, dbPath
+    warnings.ts       filters ONLY node:sqlite's ExperimentalWarning; imported before the require in sqlite.ts
   ai/
     types.ts          NewsService + NewsProvider interfaces, TopicContext, CheckResult/TokenUsage, PROVIDER_NAMES/INFO, FoundNewsItem, KnownItem
     prompt.ts         searchingSystemPrompt, buildUserPrompt, parseNewsResult, NEWS_JSON_SCHEMA
@@ -30,7 +32,7 @@ src/
     price-store.ts    PriceStore (<data-dir>/prices.json, mtime-cached) + refreshPricesFromManifest (NEWS-93)
     verify-links.ts   probeLink/verifyItemLinks — citation checking before storage (NEWS-83)
     verify-key.ts     verifyApiKey — vendor-side key check before saving; 401/403 = invalid, else unknown (NEWS-78)
-    api-keys.ts       resolveApiKey/saveApiKey/deleteApiKey — env then keychain, never data.json
+    api-keys.ts       resolveApiKey/saveApiKey/deleteApiKey — env then keychain, never the database
     sanitize.ts       stripMarkup — strips model citation markup (<cite>) from prose, idempotent
     dedupe.ts         normalizeUrl/normalizeTitle/dedupeKeyFor/filterNewItems
     providers/
@@ -76,14 +78,16 @@ tests/
 docs/                 numbered requirements (1–21), ai/ summaries, manual-test-plan.md
 ```
 
-## Data schema (`<data-dir>/data.json`)
+## Data schema (`<data-dir>/news.db`, SQLite — NEWS-94)
+
+Tables `topics` / `items` / `runs` / `meta` (settings as one JSON row). Booleans are INTEGER 0/1; `sources`, `image` and `usage` are JSON columns. No foreign keys — a check can outlive its topic, so `deleteTopic` cascades explicitly. The shapes below are the zod schemas every row is validated against on read.
 
 - `topics[]`: id, name, paused, highPriority (checked on the shorter interval — NEWS-56), guidance (free-text steer fed to the prompt — NEWS-80), createdAt, lastCheckedAt (every attempt), coveredThroughAt (successes only — drives the prompt window)
 - `items[]`: id, topicId, title, summary, sources[{title,url,outlet,publishedAt — NEWS-82}], image, saved (bookmark), offTopic (NEWS-61 flag), dedupeKey, foundAt
 - `settings`: itemRetentionDays (default 365, 0 = forever — NEWS-87), checkIntervalMs (default 1 day, min 5 min), highPriorityIntervalMs (≤ checkIntervalMs, clamped on update+load — NEWS-56), provider (default `auto`, `.catch('auto')` for retired providers), model (''), endpoint (''), notifyOnNewItems, monthlyBudgetUsd (0 = no cap — NEWS-79)
 - `runs[]`: id, topicId, startedAt, finishedAt, status(running|succeeded|failed), newItems, error, provider, model, usage (tokens+searches, null = unknown — NEWS-79) (last 200)
 
-Data dir: `--data-dir` flag → `NEWS_DATA_DIR` → `~/.news`. Also holds `prices.json` (live model rates, user-editable — NEWS-93) and the image cache.
+Data dir: `--data-dir` flag → `NEWS_DATA_DIR` → `~/.news`. Also holds `news.db-wal`/`-shm`, `prices.json` (live model rates, user-editable — NEWS-93) and the image cache.
 
 ## Build / run / test
 
