@@ -3,9 +3,44 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import type { Locator, Page } from '@playwright/test';
-import { expect, test as base } from '@playwright/test';
+import { expect, request as playwrightRequest, test as base } from '@playwright/test';
 
 export { expect } from '@playwright/test';
+
+/**
+ * Delete every topic on the shared server (NEWS-101).
+ *
+ * The whole suite runs against **one** server and **one** data dir, and
+ * `app.spec.ts` / `topics.spec.ts` are `mode: 'serial'` — so when a test fails,
+ * Playwright replays the *entire group from the top* without resetting
+ * anything. A test that failed before reaching its own cleanup leaves its
+ * topics behind, and the replayed early tests then fail on state they never
+ * created. The run blames an innocent test and hides the one that actually
+ * broke, which is far more expensive than the flake itself.
+ *
+ * Calling this from `beforeAll` gives every attempt — first run or retry — the
+ * same precondition the first attempt had: an empty server. Nothing else is
+ * reset (settings, runs), because nothing else has caused this.
+ *
+ * Uses its own request context rather than the `request` fixture: `beforeAll`
+ * only sees worker-scoped fixtures. No `Origin` header is sent, which the
+ * cross-origin guard allows by design (FR-4.5a) — a non-browser caller.
+ */
+export async function resetTopics(baseURL: string): Promise<void> {
+  const ctx = await playwrightRequest.newContext({ baseURL });
+  try {
+    const state = (await (await ctx.get('/api/state')).json()) as { topics: { id: string }[] };
+    for (const topic of state.topics) {
+      await ctx.delete(`/api/topics/${encodeURIComponent(topic.id)}`);
+    }
+    // Assert rather than assume: a silent failure here would put the pollution
+    // back, and it would look exactly like the bug this exists to prevent.
+    const after = (await (await ctx.get('/api/state')).json()) as { topics: unknown[] };
+    expect(after.topics, 'server should start each attempt with no topics').toHaveLength(0);
+  } finally {
+    await ctx.dispose();
+  }
+}
 
 /**
  * Accept the in-app confirmation dialog (NEWS-39).

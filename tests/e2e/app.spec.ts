@@ -1,6 +1,6 @@
 import type { Page } from '@playwright/test';
 
-import { expect, test, topicAction } from './fixtures.js';
+import { expect, resetTopics, test, topicAction } from './fixtures.js';
 
 // Tests run serially against one shared server (see playwright.config.ts) and
 // build on each other's state where noted. The server runs with --ai-test, so
@@ -8,6 +8,13 @@ import { expect, test, topicAction } from './fixtures.js';
 // which lets us assert deduplication end-to-end.
 
 test.describe.configure({ mode: 'serial' });
+
+// Every attempt starts from an empty server, including a serial retry — see
+// `resetTopics` (NEWS-101). Without this a mid-test failure leaves topics
+// behind and the replay blames whichever early test trips over them.
+test.beforeAll(async () => {
+  await resetTopics(test.info().project.use.baseURL ?? '');
+});
 
 /** Settings (interval, provider, model/endpoint, API keys) live in a dialog. */
 async function openSettings(page: Page): Promise<void> {
@@ -347,8 +354,14 @@ test('the failure warning can be dismissed and stays dismissed, but a new failur
 
   await page.locator('.banner.warn [data-action=dismiss-warn]').click();
   await expect(page.locator('.banner.warn')).toHaveCount(0);
-  // Stays gone across a poll cycle — the dismissal is remembered by run id.
-  await page.waitForTimeout(4500);
+  // Stays gone across poll cycles — the dismissal is remembered by run id.
+  // Waits for the client's own polls to land rather than sleeping past them: a
+  // fixed 4.5s sleep leaves 500ms of margin on a 4s poll, which is exactly the
+  // budget a loaded machine eats (NEWS-101). Deliberately NOT triggering a
+  // check to force the wait — a new check would be a new failure, which is the
+  // one thing that legitimately brings this banner back.
+  await page.waitForResponse((r) => r.url().includes('/api/state'), { timeout: 15_000 });
+  await page.waitForResponse((r) => r.url().includes('/api/state'), { timeout: 15_000 });
   await expect(page.locator('.banner.warn')).toHaveCount(0);
 
   // A fresh failure is a new run id, so the banner comes back.

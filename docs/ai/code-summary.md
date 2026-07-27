@@ -71,7 +71,7 @@ scripts/
 tests/
   helpers/            tmp.ts (tmp data dirs), provider.ts (asResolver/fakeProvider)
   unit/               vitest: dedupe, store, checks, scheduler, config, parse-result, providers, openai, api, api-keys, api-keys-routes, attendance, catch-up, sanitize, origin-guard, guidance, cost, key-verify, diagnostics, retention, export, daily-schedule, verify-links, attribution, concurrency, price-store
-  e2e/                playwright, serial, mock AI (--ai-test), port 4189: app.spec.ts, keys.spec.ts, topics.spec.ts, a11y.spec.ts (axe-core, both themes)
+  e2e/                playwright, serial, mock AI (--ai-test), port 4189: app.spec.ts, keys.spec.ts, topics.spec.ts, a11y.spec.ts (axe-core, both themes). `resetTopics` in a beforeAll gives every attempt — first run or serial retry — an empty server (NEWS-101)
 docs/                 numbered requirements (1–21), ai/ summaries, manual-test-plan.md
 ```
 
