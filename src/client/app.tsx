@@ -2292,6 +2292,48 @@ function startForegroundHeartbeat(): void {
   document.addEventListener('visibilitychange', beat);
 }
 
+/**
+ * Compile-time flag, substituted by esbuild (`--define:__KERF_DEV__`). False in
+ * `build:client`, true in `build:client:dev`.
+ *
+ * A literal `false` lets esbuild drop the whole block *and* the `import()` with
+ * it, so the dev chunk is never emitted in a production build — that is the
+ * point of a define rather than a runtime check. It cannot be
+ * `process.env.NODE_ENV`, kerf's own documented form: this is an IIFE browser
+ * bundle, `process` doesn't exist, and the read would throw at startup.
+ */
+declare const __KERF_DEV__: boolean;
+
+/**
+ * kerf development diagnostics (NEWS-100). kerf 3.x no longer infers dev mode —
+ * installing these is the app's decision, made here.
+ *
+ * `invariants: 'throw'` is the valuable one: it audits kerf's list bookkeeping
+ * against the live DOM after every render and fails at the render that broke
+ * it, rather than leaving a wrong picture to be discovered several interactions
+ * later. That is exactly the shape KF-377 had.
+ *
+ * `enableWarnings()` rather than the `KERF_DEV_WARN_*` env vars, which cannot
+ * be reached from a browser at all.
+ */
+if (__KERF_DEV__) {
+  void import('kerfjs/dev').then((dev) => {
+    dev.enableWarnings({
+      invariants: 'throw',
+      staleBinding: true,
+      narrowSet: true,
+      duplicateEachKeys: true,
+      listRebind: true,
+      staleIndex: true,
+      eachInMorphSkip: true,
+      delegateInEffect: true,
+      rebuiltListeners: true,
+      parserRepair: true,
+    });
+    return dev;
+  });
+}
+
 const root = document.getElementById('app');
 if (root) {
   mount(root, () => appJsx());

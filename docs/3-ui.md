@@ -161,3 +161,19 @@ The bundle is built by a pure function (`src/client/diagnostics.ts`) so it is un
 - **FR-3.32** *(Shipped)* The date is shown **only when it differs from the day the story was found**, which is exactly when the day heading is misleading. Same day → nothing (the heading already says it). Under a week → "published 3 days earlier". A week or more → the absolute date, because "published 23 days earlier" is arithmetic the reader shouldn't have to do. A date *after* the found date is nonsense from the model and renders as nothing rather than a negative count.
 
 `outletFor` and `publishedLabel` live in `src/client/attribution.ts` rather than `app.tsx` — they are pure, and `app.tsx` touches `document` at import time, so keeping them there would make them untestable outside a browser (same reason `search.ts` / `share.ts` / `schedule.ts` are separate).
+
+## kerf development diagnostics (NEWS-100)
+
+kerf 3.x no longer infers dev mode — installing diagnostics is the app's decision. We make it with a compile-time flag rather than a runtime check.
+
+- **FR-3.33** *(Shipped)* `__KERF_DEV__` is substituted by esbuild: `false` in `build:client`, `true` in `build:client:dev`. It cannot be kerf's documented `process.env.NODE_ENV` form — this is an IIFE browser bundle, `process` doesn't exist, and the read would throw at startup. (That is the same defect kerf's own changelog describes for its previous inference.)
+
+  With `false`, esbuild proves the `import('kerfjs/dev')` unreachable and **the dev module is not bundled at all** — verified: zero occurrences of `installDevHooks`/`DEV_HOOKS` in the production bundle, ~30 KB smaller unminified. The `if (false)` husk itself remains only because the build doesn't minify; it is inert.
+
+- **FR-3.34** *(Shipped)* `npm run dev`, `dev:server` and the **E2E web server** all build the dev bundle, which calls `enableWarnings()` with the whole family and `invariants: 'throw'`. `enableWarnings()` rather than the `KERF_DEV_WARN_*` env vars, which cannot be reached from a browser at all.
+
+- **FR-3.35** *(Shipped)* A `pageerror` listener in the E2E `page` fixture collects uncaught page errors and asserts there were none at the end of every test. This is what makes the invariants meaningful: kerf's audit throws inside a render, and without the listener that throw is swallowed and the suite stays green while the DOM is quietly wrong.
+
+  The guard is verified non-vacuous — a spec whose body passes but which injects an uncaught error does fail.
+
+**Why `invariants` is the valuable one:** it audits kerf's list bookkeeping against the live DOM after every render and fails *at the render that broke it*, rather than leaving a wrong picture to be found several interactions later. That is precisely the shape KF-377 had. The full 76-test suite passes with it active, which is also independent corroboration that the kerf 3 upgrade is clean.

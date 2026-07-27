@@ -95,6 +95,7 @@ Default Anthropic provider (`claude-opus-4-8` + web search), prompt-level exclus
 - Error/warning banners are dismissable; the failure warning's dismissal is remembered by run id so a new failure reappears (NEWS-41): **Shipped**
 - Destructive confirmations via an in-app dialog, never `window.confirm` (a WKWebView no-op that broke delete in the desktop app — NEWS-39): **Shipped**
 
+- FR-3.33–3.35 kerf dev diagnostics behind a `__KERF_DEV__` esbuild define; **E2E runs the dev bundle with `invariants: 'throw'`** plus a `pageerror` guard, so a morph bug fails at the render that caused it — NEWS-100: **Shipped**
 - FR-3.29–3.32 source attribution: optional `outlet` + `publishedAt` per source, domain fallback for the outlet, date shown **only when it differs from the found day** — NEWS-82: **Shipped**
 - FR-3.25–3.28 in-app diagnostics: recent-checks list + copy-diagnostics bundle; **topic names redacted by default**, endpoint reported as set/not-set, never its URL — NEWS-88: **Shipped**
 - FR-3.20–3.24 accessibility pass — NEWS-90: **Shipped**. Topics list is a real multi-select listbox (Enter/Space selects, **Shift+F10 opens the menu** — the whole topic action set was mouse-only); Escape closes dialogs innermost-first; Tab trapped in the frontmost dialog; banners `aria-live`; visible focus ring everywhere. axe-core runs in the E2E suite over **both themes** (0 violations / 22 rules).

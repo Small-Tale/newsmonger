@@ -98,7 +98,19 @@ export const test = base.extend({
   page: async ({ page }, use) => {
     const collect = process.env['E2E_COVERAGE'] === '1';
     if (collect) await page.coverage.startJSCoverage({ resetOnNavigation: false });
+
+    // The E2E bundle is built with kerf's dev diagnostics and
+    // `invariants: 'throw'` (NEWS-100), which audits kerf's list bookkeeping
+    // against the live DOM after every render. That throw surfaces here as an
+    // uncaught page error — and without this listener it would be swallowed,
+    // leaving the suite green while the DOM was quietly wrong. Collecting them
+    // is what turns Playwright into a morph-correctness harness rather than
+    // only a behaviour harness.
+    const pageErrors: Error[] = [];
+    page.on('pageerror', (err) => pageErrors.push(err));
+
     await use(page);
+    expect(pageErrors.map((e) => e.message), 'uncaught errors in the page').toEqual([]);
     if (collect) {
       const entries = await page.coverage.stopJSCoverage();
       const result = entries

@@ -86,7 +86,8 @@ Data dir: `--data-dir` flag → `NEWS_DATA_DIR` → `~/.news`. Also holds `price
 
 ## Build / run / test
 
-- `npm run dev` — build client (esbuild IIFE + sass) then run server from source (tsx); port 4187
+- `npm run dev` — build client (esbuild IIFE + sass, **dev bundle**) then run server from source (tsx); port 4187
+- `npm run build:client` (prod, `__KERF_DEV__=false`) vs `build:client:dev` (kerf diagnostics + `invariants: 'throw'`) — NEWS-100
 - `npm run build` — tsup → `dist/cli.js`; `npm run build:client` → `dist/client/`
 - `npm run tauri:dev` — desktop dev shell (needs Rust; verified on macOS)
 - `npm run tauri:build` — release app + dmg; runs `scripts/build-sidecar.sh` via `beforeBuildCommand`

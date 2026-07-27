@@ -23,8 +23,13 @@ export default defineConfig({
     baseURL: `http://127.0.0.1:${PORT}`,
     trace: 'on-first-retry',
   },
+  // The dev bundle, deliberately: it carries kerf's diagnostics with
+  // `invariants: 'throw'`, so a morph/list-bookkeeping bug fails the suite at
+  // the render that caused it instead of surfacing as a confusing assertion
+  // several steps later (NEWS-100). The `pageerror` guard in fixtures.ts is
+  // what makes that throw visible.
   webServer: {
-    command: `npm run build:client && npx tsx src/cli.ts --no-open --strict-port --ai-test --port ${PORT} --data-dir ${dataDir}`,
+    command: `npm run build:client:dev && npx tsx src/cli.ts --no-open --strict-port --ai-test --port ${PORT} --data-dir ${dataDir}`,
     url: `http://127.0.0.1:${PORT}/healthz`,
     reuseExistingServer: false,
     timeout: 60_000,
