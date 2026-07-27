@@ -50,9 +50,13 @@ body {
   line-height: 1.55;
 }
 
+// No max-width (NEWS-96): the shell fills the window at every size. The story
+// grid below already reflows into as many columns as it has room for, so the
+// old 1060px cap was the one thing standing between a wide monitor and extra
+// columns — it left the feed at a fixed ~650px and centred the whole app.
+// The sidebar stays a fixed 320px; all the new room goes to the feed, which is
+// where it is worth something.
 .shell {
-  max-width: 1060px;
-  margin: 0 auto;
   padding: 28px 24px 90px;
   display: grid;
   grid-template-columns: 320px minmax(0, 1fr);
@@ -581,7 +585,11 @@ h2.eyebrow {
 .day {
   margin-bottom: 26px;
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(min(100%, 460px), 1fr));
+  // 400px, not the original 460 (NEWS-96): once the shell stopped being capped
+  // at 1060px, the column minimum became the thing that decides how soon extra
+  // room turns into an extra column. A smaller minimum breaks into two columns
+  // at ~1200px of window rather than ~1340, which is where most laptops sit.
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 400px), 1fr));
   gap: 12px;
 
   h2 {
@@ -626,6 +634,15 @@ h2.eyebrow {
     font-weight: 600;
     line-height: 1.3;
     letter-spacing: -0.008em;
+  }
+
+  // A card stretches to its column, and the widest a single column can get is
+  // just under twice the minimum — so on a window between the one- and
+  // two-column thresholds the prose would otherwise run to ~100 characters a
+  // line. The card keeps the full width; only the measure is bounded.
+  h3,
+  p {
+    max-width: 74ch;
   }
 
   p {

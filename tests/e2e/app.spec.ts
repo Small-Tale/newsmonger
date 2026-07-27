@@ -663,7 +663,12 @@ test('search filters the feed live, and clearing restores it (NEWS-60)', async (
 });
 
 test('the feed lays out as a multi-column grid on a wide display (NEWS-64)', async ({ page }) => {
-  await page.setViewportSize({ width: 1280, height: 800 });
+  // 1100px, not the 1280 this test used before NEWS-96. Removing the shell's
+  // 1060px cap means 1280 now has room for two columns *with* the sidebar
+  // shown, so it no longer exercises the narrow case this test is about. 1100
+  // is the same shape the test always had: one column beside the sidebar, more
+  // without it.
+  await page.setViewportSize({ width: 1100, height: 800 });
   await page.goto('/');
   await page.fill('.add-topic input', 'Grid Probe');
   await page.press('.add-topic input', 'Enter');
@@ -680,9 +685,12 @@ test('the feed lays out as a multi-column grid on a wide display (NEWS-64)', asy
   }
   await expect.poll(trackCount).toBe(1);
 
-  // Hide the sidebar: the feed widens → two columns.
+  // Hide the sidebar: the feed widens → more columns. Asserted as "strictly
+  // more" rather than a fixed number — how much room a column takes is a
+  // styling decision (NEWS-96 retuned it), but that reclaimed width must
+  // always turn into columns, which is the requirement NEWS-64 states.
   await page.locator('[data-action=toggle-sidebar]').click();
-  await expect.poll(trackCount).toBe(2);
+  await expect.poll(trackCount).toBeGreaterThan(1);
 
   // Clean up (also restores the sidebar for good measure).
   await page.locator('[data-action=toggle-sidebar]').click();

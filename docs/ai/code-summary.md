@@ -71,7 +71,7 @@ scripts/
 tests/
   helpers/            tmp.ts (tmp data dirs), provider.ts (asResolver/fakeProvider)
   unit/               vitest: dedupe, store, checks, scheduler, config, parse-result, providers, openai, api, api-keys, api-keys-routes, attendance, catch-up, sanitize, origin-guard, guidance, cost, key-verify, diagnostics, retention, export, daily-schedule, verify-links, attribution, concurrency, price-store
-  e2e/                playwright, serial, mock AI (--ai-test), port 4189: app.spec.ts, keys.spec.ts, topics.spec.ts, a11y.spec.ts (axe-core, both themes). `resetTopics` in a beforeAll gives every attempt — first run or serial retry — an empty server (NEWS-101)
+  e2e/                playwright, serial, mock AI (--ai-test), port 4189: app.spec.ts, keys.spec.ts, topics.spec.ts, a11y.spec.ts (axe-core, both themes), layout.spec.ts (full-window layout + column count at several viewports, NEWS-96). `resetTopics` in a beforeAll gives every attempt — first run or serial retry — an empty server (NEWS-101)
 docs/                 numbered requirements (1–21), ai/ summaries, manual-test-plan.md
 ```
 
@@ -134,6 +134,7 @@ Data dir: `--data-dir` flag → `NEWS_DATA_DIR` → `~/.news`. Also holds `price
 | Export / the Atom feed | `src/export.ts` (pure renderers) + `/api/export.md`, `/api/export.json`, `/feed.xml` in `routes/api.ts`; Settings "Export & feed" block. `scope=all\|saved\|topic`. See `docs/21-export-and-feed.md` |
 | Story retention / data-file growth | `Store.pruneOldItems` + `itemRetentionDays` setting; called from `cli.ts` at startup and `CheckRunner.pruneAfterCheck` after each success. Bookmarked + flagged items exempt. See `docs/4-cli-server-storage.md` FR-4.11 |
 | Diagnostics / "why did a check fail" | `src/client/diagnostics.ts` (pure, unit-tested) + the Settings Diagnostics section; `appVersion` on `/api/state`. Topic names redacted unless opted in. See `docs/3-ui.md` FR-3.25–3.28 |
+| Wide-window layout / column count | `.shell` (no max-width) and `.day` (`auto-fill, minmax(400px, 1fr)`) in `styles.scss`. Guarded by `tests/e2e/layout.spec.ts`. See `docs/3-ui.md` FR-3.36–3.39 |
 | Accessibility (keyboard, ARIA, focus) | `trapTabInDialog` + the global `keydown` handler + `openTopicMenuFor` in `app.tsx`; `role=listbox/option` on the topics list; `:focus-visible` rule in `styles.scss`. Guarded by `tests/e2e/a11y.spec.ts`. See `docs/3-ui.md` FR-3.20–3.24 |
 | The privacy disclosure | `privacyNoteJsx` in `app.tsx` (Settings → Privacy), README "Privacy", onboarding welcome step; pinned by a test in `tests/unit/guidance.test.ts`. See `docs/7-api-keys.md` FR-7.13 |
 | First-run onboarding | `onboarding`/`onboardingTopics`/`STARTER_TOPICS` in `stores.ts`; `onboardingJsx` + `maybeOpenOnboarding` in `app.tsx`; dismissal in localStorage `news:onboarding-seen`. Key check: `src/ai/verify-key.ts`, injected via `createApp({verifyKey})` (null under `--ai-test`). See `docs/20-onboarding.md` |

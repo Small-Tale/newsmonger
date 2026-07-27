@@ -87,9 +87,16 @@ each(s.topics, (t) => topicRowJsx(...), (t) => `${selected.has(t.id)}|${solo.has
 
 **The menu backdrop wraps the menu, so a shared close action swallows the item click.** `[data-action=close-menu]` matches by ancestor walk, so a click on a menu item also matched the backdrop; the menu closed and cleared `contextMenu` before the item handler could read it, and the action silently did nothing. The handler now closes only when the click landed on the backdrop element itself. This is the same trap the settings dialog hit — worth checking on any future overlay.
 
-## Feed grid on wide displays (NEWS-64)
+## Feed grid on wide displays (NEWS-64, NEWS-96)
 
-Stories lay out in a **responsive CSS grid** (per day group), not a single column: `repeat(auto-fill, minmax(min(100%, 460px), 1fr))`. The feed is one column when narrow (sidebar shown) and two-plus when wide (sidebar hidden), with no JS or media query — the column count follows the available width. Grid rows **stretch every card to the tallest on that line**, so a row reads as one unit. The day header and a flagged one-liner span all columns (`grid-column: 1 / -1`).
+Stories lay out in a **responsive CSS grid** (per day group), not a single column: `repeat(auto-fill, minmax(min(100%, 400px), 1fr))`. Column count follows the available width, with no JS and no media query. Grid rows **stretch every card to the tallest on that line**, so a row reads as one unit. The day header and a flagged one-liner span all columns (`grid-column: 1 / -1`).
+
+- **FR-3.36** *(Shipped, NEWS-96)* The shell has **no max-width** — it fills the window at every size, flush to the padding. It was previously capped at 1060px and centred, which fixed the feed at ~650px however large the display, so a wide monitor bought nothing but margins.
+- **FR-3.37** *(Shipped, NEWS-96)* Reclaimed width becomes **columns, not wider cards**. The sidebar stays a fixed 320px; everything gained goes to the feed. Measured: 1 column at 1100px of window, 2 at 1440, 3 at 1920, 5 at 2560, 6 at 3000.
+- **FR-3.38** *(Shipped, NEWS-96)* The column minimum is **400px**, lowered from 460 in the same change. Once the shell stopped being capped, this number became what decides how soon extra room turns into another column; 400 breaks into two columns at ~1200px of window rather than ~1340, which is where most laptops sit.
+- **FR-3.39** *(Shipped, NEWS-96)* A card's **title and prose are capped at 74ch** while the card itself still fills its column. The widest a single column can get is just under twice the minimum, so on a window between the one- and two-column thresholds the summary would otherwise run to ~100 characters a line — wider than the layout it replaced, which is the opposite of the point.
+
+Dialogs keep their own max-widths; only the app shell became full-bleed.
 
 ## Collapsible topics sidebar
 
