@@ -26,7 +26,15 @@ Topic-based news tracker. The user enters topics; on a configurable interval (de
 - Tests must never touch `~/.news` — use `tests/helpers/tmp.ts` (unit) or the Playwright-managed temp dir (E2E).
 - The mock news service keys off topic names: containing "fail" → throws, "empty" → no items; anything else → the same two deterministic stories every call (that's what makes dedup testable).
 
-<!-- hotsheet:begin section=ticket-driven-work v=1 -->
+## Git
+
+**Commit as you go — one commit per ticket, not one commit per session.** Don't wait to be asked, and don't batch a work session into a single giant commit: a 75-file commit spanning fourteen tickets is unreviewable, un-bisectable, and impossible to revert in part.
+
+- **Commit when a ticket is done** — after its gates pass (typecheck, lint, unit, E2E) and its docs are updated, and before starting the next ticket. Commit the ticket's code, tests and docs together; they are one change.
+- **Never commit red.** If the gates don't pass, the work isn't done — fix it or leave it uncommitted.
+- **Message style**: `<Summary> (NEWS-NN)` subject, then prose explaining *why* and what was decided, bullets for substance, and a closing line for tests/docs. Long lines unwrapped. **No `Co-Authored-By` or `Claude-Session` trailers** — the user has asked for these to stay out.
+- **Never `git push`** without being asked explicitly. Committing is routine; publishing is not.
+- Commits land on `main` — that's this repo's history and the user's workflow. Don't open a branch unless asked.
 ## Ticket-Driven Work
 
 When the user gives you work directly (not via the Hot Sheet channel or events), create Hot Sheet tickets before starting implementation — especially for substantial or multi-step work.
