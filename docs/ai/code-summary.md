@@ -22,7 +22,7 @@ src/
   db/
     schemas.ts        zod: Topic, NewsItem, Settings, CheckRun, DataFile; DEFAULT_CHECK_INTERVAL_MS, MAX_GUIDANCE_LENGTH
     store.ts          Store: SQLite (node:sqlite), per-row writes, zod-validated rows, corrupt-db backup+reset, one-time data.json import (NEWS-94)
-    sqlite.ts         schema DDL, openDb (WAL + sanity probe), backupUnreadableDb, dbPath
+    sqlite.ts         schema DDL, SCHEMA_VERSION + MIGRATIONS (user_version based), openDb (WAL + sanity probe), backupUnreadableDb, dbPath
     warnings.ts       filters ONLY node:sqlite's ExperimentalWarning; imported before the require in sqlite.ts
   ai/
     types.ts          NewsService + NewsProvider interfaces, TopicContext, CheckResult/TokenUsage, PROVIDER_NAMES/INFO, FoundNewsItem, KnownItem

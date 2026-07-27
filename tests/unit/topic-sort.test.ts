@@ -17,6 +17,9 @@ function topic(name: string, over: Partial<Topic> = {}): Topic {
     createdAt: `2026-07-2${String(seq)}T00:00:00Z`,
     lastCheckedAt: null,
     coveredThroughAt: null,
+    category: null,
+    subcategory: null,
+    categorySource: 'auto',
     ...over,
   };
 }

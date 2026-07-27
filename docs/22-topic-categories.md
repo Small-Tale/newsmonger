@@ -2,7 +2,7 @@
 
 Topics are classified into newspaper-style sections so the sidebar can label them and the feed can be filtered to one section at a time. Related: [topics and scheduling](./1-topics-and-scheduling.md), [UI](./3-ui.md), [topic guidance](./18-topic-guidance.md).
 
-**Status: partly built.** The taxonomy and its resolution logic are shipped (FR-22.1–22.6). Nothing yet writes a category onto a topic, and there is no filter bar — those depend on decisions still open with the owner (see [Open questions](#open-questions)). Tracked by NEWS-97 and its follow-ups.
+**Status: partly built.** The taxonomy, its resolution logic and topic storage are shipped (FR-22.1–22.7). Automatic classification and the UI are not yet (FR-22.8–22.10) — NEWS-107 and NEWS-108.
 
 ## The taxonomy
 
@@ -32,7 +32,9 @@ Three placements were reviewed specifically:
 
 ## Requirements
 
-- **FR-22.1** *(Shipped)* The taxonomy is **data seeded from built-ins** (`BUILTIN_CATEGORIES` in `src/categories.ts`), not a hard-coded list. Adding, renaming or retiring a category is a data write, not a release.
+- **FR-22.1** *(Shipped)* The taxonomy lives in one module, `BUILTIN_CATEGORIES` in `src/categories.ts`, and is **edited in code**. There is no settings UI and no stored copy — the owner's call: "no UI, this should be code side only, just that it's likely we'll find gaps in the future."
+
+  Consequences worth knowing: the client imports the module directly rather than receiving it over `/api/state`, so the table cannot drift between server and client and the 4-second poll carries no static payload. And `retired` still earns its place even as a code-side flag — see FR-22.4.
 
 - **FR-22.2** *(Shipped)* **Topics store a slug, never a label.** Renaming *Style* → *Fashion & Style* touches one table row and no topic.
 
@@ -46,25 +48,29 @@ Three placements were reviewed specifically:
 
   Requested as "a General subcategory for all categories"; done this way because a stored row per category would have to be remembered for every category added later — reopening the same hole — and because adding *Skiing* next winter would then strand `sports/general` topics claiming to be classified. With `null` they are unclassified-at-sub-level, which is exactly what they are. It also gives the classifier an easier instruction: omit the field rather than choose a catch-all.
 
-- **FR-22.7** *(Not built)* Topics carry `category` / `subcategory` / `categorySource`. `categorySource: 'auto' | 'manual'` exists so a user's own choice is never overwritten by a later automatic classification.
+- **FR-22.7** *(Shipped)* Topics carry `category` / `subcategory` / `categorySource`, stored as three nullable columns on `topics` (schema v2; an existing v1 database is migrated by `ALTER TABLE`, additive and needing no backfill — an unclassified topic is exactly what `null` means).
 
-- **FR-22.8** *(Not built)* Topics are classified automatically. See [Open questions](#open-questions) — the mechanism is undecided.
+  `categorySource: 'auto' | 'manual'` is a promise: automatic classification must not overwrite a choice a person made. `PATCH /api/topics/:id { category, subcategory? }` always writes `'manual'`, because that route only runs when someone chose. **Clearing** (`category: null`) resets the source to `'auto'` — otherwise a cleared topic would be permanently ineligible for classification, which is both invisible and unfixable from the UI. Changing the category drops the subcategory, since a sub from the previous parent resolves to nothing.
 
-- **FR-22.9** *(Not built)* The sidebar shows a pill per topic with the most specific label.
+  The store **accepts slugs the taxonomy doesn't have**, and so does the route. The taxonomy is code-side and editable, so a slug that resolves today may not tomorrow; rejecting them would make storage the one place that can't survive an ordinary edit. A caller taking a slug from a *model* should still validate — that is FR-22.8's job.
 
-- **FR-22.10** *(Not built)* A horizontally scrollable filter bar sits between the page header and the sidebar+content area, filtering the feed to a category.
+- **FR-22.8** *(Not built — NEWS-107)* Topics are classified automatically, by extending the provider's JSON contract on the first news check. Options come from `activeCategories()`, never a hard-coded list. A slug the model returns that isn't in the taxonomy is **dropped rather than stored**: unresolvable renders identically to never-classified, so a bad write would be invisible. Only writes when the topic is unset or `categorySource === 'auto'`.
 
-## Open questions
+- **FR-22.9** *(Not built — NEWS-108)* The sidebar shows a pill per topic with the most specific label, coloured by top-level category.
 
-Blocking the unbuilt requirements above. Recorded here so the design isn't re-derived later.
+- **FR-22.10** *(Not built — NEWS-108)* A horizontally scrollable filter bar sits between the page header and the sidebar+content area, filtering the feed to a category. Selecting a category reveals a **second row of its subcategories**, styled differently from the first — a newspaper masthead and its subsections.
 
-1. **Classification mechanism.** Piggyback on the first news check (free — a new topic is due immediately, so the pill appears within a minute — but a topic whose checks keep failing stays uncategorized), or a dedicated classification call at creation (instant and failure-independent, but a new method on all five providers plus a per-topic cost)?
+## Decisions made
 
-   A local keyword table was considered and rejected: it would match "Premier League" and miss "Tesla", "Zelensky", "Ozempic", and proper nouns are most of what people track.
+Recorded so they aren't re-litigated. All three were the owner's calls on 2026-07-27.
 
-2. **Editing the taxonomy.** A settings UI for add/rename/retire, or is hand-editing the stored table enough for now? The data model supports both; only the UI is extra work.
+1. **Classification piggybacks on the first news check** rather than making a dedicated call at topic creation. Free: a new topic is due immediately (`lastCheckedAt === null` ⇒ due, and the scheduler ticks every minute), so the label appears within about a minute. The accepted trade-off is that a topic whose checks keep failing stays uncategorized — a topic that has never fetched news has larger problems than a missing pill.
 
-3. **Second-level filtering.** Top-level pills only at first, with sub-pills as a second row once a category is selected — or both rows from the outset?
+   A local keyword table was considered and rejected: it would match "Premier League" and miss "Tesla", "Zelensky", "Ozempic", and proper nouns are most of what people actually track.
+
+2. **The taxonomy is edited in code, with no settings UI** (FR-22.1). Gaps are expected and are filled by editing `BUILTIN_CATEGORIES`.
+
+3. **Sub-pills ship as a second row** below the top-level row, styled differently — the newspaper masthead-and-subsection look — rather than being deferred.
 
 ## Testing
 

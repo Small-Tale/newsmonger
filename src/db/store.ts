@@ -200,6 +200,9 @@ export class Store {
       createdAt: row['created_at'],
       lastCheckedAt: row['last_checked_at'] ?? null,
       coveredThroughAt: row['covered_through_at'] ?? null,
+      category: row['category'] ?? null,
+      subcategory: row['subcategory'] ?? null,
+      categorySource: row['category_source'] ?? 'auto',
     });
   }
 
@@ -236,8 +239,9 @@ export class Store {
   private insertTopic(topic: Topic): void {
     this.db
       .prepare(
-        `INSERT INTO topics (id, name, paused, high_priority, guidance, created_at, last_checked_at, covered_through_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO topics (id, name, paused, high_priority, guidance, created_at, last_checked_at,
+                             covered_through_at, category, subcategory, category_source)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         topic.id,
@@ -248,6 +252,9 @@ export class Store {
         topic.createdAt,
         topic.lastCheckedAt,
         topic.coveredThroughAt,
+        topic.category,
+        topic.subcategory,
+        topic.categorySource,
       );
   }
 
@@ -323,6 +330,9 @@ export class Store {
       createdAt: new Date().toISOString(),
       lastCheckedAt: null,
       coveredThroughAt: null,
+      category: null,
+      subcategory: null,
+      categorySource: 'auto',
     };
     this.insertTopic(topic);
     return topic;
@@ -355,6 +365,36 @@ export class Store {
    */
   setTopicGuidance(id: string, guidance: string): Topic {
     return this.updateTopic(id, 'guidance', guidance.trim().slice(0, MAX_GUIDANCE_LENGTH));
+  }
+
+  /**
+   * Set a topic's category (NEWS-97).
+   *
+   * `source` records who chose it, and `'manual'` is a promise: an automatic
+   * classification must not overwrite it. That check belongs to the caller doing
+   * the classifying — this method is the deliberate write, and a "recategorize"
+   * action has to be able to replace a manual choice.
+   *
+   * Slugs are stored as given, without validating them against the taxonomy.
+   * The taxonomy is code-side and editable, so a slug that resolves today may
+   * not tomorrow; rejecting unknown slugs here would make the store the one
+   * place that can't survive an ordinary edit. Unresolvable slugs render as
+   * *Uncategorized* (FR-22.3, FR-22.5). Callers accepting a slug from a *model*
+   * should still validate it — see NEWS-107.
+   */
+  setTopicCategory(
+    id: string,
+    category: string | null,
+    subcategory: string | null,
+    source: 'auto' | 'manual',
+  ): Topic {
+    const info = this.db
+      .prepare('UPDATE topics SET category = ?, subcategory = ?, category_source = ? WHERE id = ?')
+      .run(category, subcategory, source, id);
+    if (asCount(info.changes) === 0) throw new Error(`no such topic: ${id}`);
+    const topic = this.getTopic(id);
+    if (topic === undefined) throw new Error(`no such topic: ${id}`);
+    return topic;
   }
 
   /**

@@ -32,6 +32,9 @@ function topic(over: Partial<Topic> = {}): Topic {
     createdAt: '2026-07-01T00:00:00Z',
     lastCheckedAt: '2026-07-24T11:00:00Z',
     coveredThroughAt: null,
+    category: null,
+    subcategory: null,
+    categorySource: 'auto',
     ...over,
   };
 }

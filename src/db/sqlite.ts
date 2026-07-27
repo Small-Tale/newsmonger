@@ -31,7 +31,25 @@ const { DatabaseSync } = createRequire(import.meta.url)('node:sqlite') as {
  */
 
 /** Bumped when `SCHEMA` changes in a way an existing database must be migrated for. */
-export const SCHEMA_VERSION = 1;
+export const SCHEMA_VERSION = 2;
+
+/**
+ * Upgrades for a database created by an older `SCHEMA_VERSION`.
+ *
+ * Indexed by the version being upgraded *from*: `MIGRATIONS[1]` takes a v1
+ * database to v2. A brand-new database gets the current `SCHEMA` directly and
+ * skips all of these, which is why `SCHEMA` below must always describe the
+ * latest shape rather than the original one plus a trail of migrations.
+ */
+const MIGRATIONS: Partial<Record<number, (db: DatabaseSyncType) => void>> = {
+  // v1 → v2: topic categories (NEWS-97). Additive and nullable, so nothing needs
+  // backfilling — an unclassified topic is exactly what `null` means here.
+  1: (db) => {
+    db.exec(`ALTER TABLE topics ADD COLUMN category TEXT`);
+    db.exec(`ALTER TABLE topics ADD COLUMN subcategory TEXT`);
+    db.exec(`ALTER TABLE topics ADD COLUMN category_source TEXT NOT NULL DEFAULT 'auto'`);
+  },
+};
 
 /**
  * Notes on choices that aren't obvious from the DDL:
@@ -64,7 +82,10 @@ CREATE TABLE IF NOT EXISTS topics (
   guidance           TEXT NOT NULL DEFAULT '',
   created_at         TEXT NOT NULL,
   last_checked_at    TEXT,
-  covered_through_at TEXT
+  covered_through_at TEXT,
+  category           TEXT,
+  subcategory        TEXT,
+  category_source    TEXT NOT NULL DEFAULT 'auto'
 );
 
 -- Backstop for the case-insensitive uniqueness addTopic enforces in code. The
@@ -128,7 +149,16 @@ export function openDb(file: string): DatabaseSyncType {
     // WAL lets a read run while a write is in flight and, more to the point
     // here, stops every commit from rewriting the whole database header page.
     db.exec('PRAGMA journal_mode = WAL');
+    // Read *before* `SCHEMA` runs: a brand-new file reports 0, and `SCHEMA`
+    // already describes the latest shape, so it needs no migrations. Anything
+    // >0 was created by an older build and does.
+    const from = Number((db.prepare('PRAGMA user_version').get() as { user_version: unknown }).user_version ?? 0);
     db.exec(SCHEMA);
+    for (let v = from; v > 0 && v < SCHEMA_VERSION; v++) {
+      const migrate = MIGRATIONS[v];
+      if (migrate === undefined) throw new Error(`no migration from schema v${String(v)}`);
+      migrate(db);
+    }
     db.exec(`PRAGMA user_version = ${String(SCHEMA_VERSION)}`);
     // A statement that touches real data: `DatabaseSync` opens lazily enough
     // that a corrupt file can survive everything above and only fail on first

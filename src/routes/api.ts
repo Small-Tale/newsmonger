@@ -172,7 +172,10 @@ export function registerApi(app: Hono<AppEnv>): void {
   app.patch('/api/topics/:id', async (c) => {
     const body = await parseBody(c, UpdateTopicReqSchema);
     if (!body) {
-      return c.json({ error: 'invalid request: expected { paused?, highPriority?, guidance? }' }, 400);
+      return c.json(
+        { error: 'invalid request: expected { paused?, highPriority?, guidance?, category?, subcategory? }' },
+        400,
+      );
     }
     const store = c.get('store');
     const id = c.req.param('id');
@@ -181,6 +184,18 @@ export function registerApi(app: Hono<AppEnv>): void {
       if (body.paused !== undefined) topic = store.setTopicPaused(id, body.paused);
       if (body.highPriority !== undefined) topic = store.setTopicHighPriority(id, body.highPriority);
       if (body.guidance !== undefined) topic = store.setTopicGuidance(id, body.guidance);
+      // Always `manual`: this route only runs because a person chose something,
+      // and that is exactly what automatic classification must not overwrite
+      // (FR-22.7). Clearing the category resets the source too, so a cleared
+      // topic becomes eligible for automatic classification again.
+      if (body.category !== undefined) {
+        topic = store.setTopicCategory(
+          id,
+          body.category,
+          body.category === null ? null : (body.subcategory ?? null),
+          body.category === null ? 'auto' : 'manual',
+        );
+      }
       return c.json(topic);
     } catch {
       return c.json({ error: 'no such topic' }, 404);

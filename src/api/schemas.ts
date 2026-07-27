@@ -15,16 +15,29 @@ import {
 export const CreateTopicReqSchema = z.object({ name: z.string().min(1).max(200) });
 export type CreateTopicReq = z.infer<typeof CreateTopicReqSchema>;
 
-// A topic PATCH may toggle pause / high-priority and/or set guidance; at least
-// one is required. Guidance accepts '' — that is how the user clears it.
+// A topic PATCH may toggle pause / high-priority, set guidance, and/or set the
+// category; at least one is required. Guidance accepts '' — that is how the user
+// clears it, and `category: null` is how they clear that.
 export const UpdateTopicReqSchema = z
   .object({
     paused: z.boolean(),
     highPriority: z.boolean(),
     guidance: z.string().max(MAX_GUIDANCE_LENGTH),
+    /**
+     * Category slug (NEWS-97). A plain nullable string, not an enum — the
+     * taxonomy is edited in code (FR-22.3), and an enum here would start
+     * rejecting requests the moment someone renamed a slug.
+     */
+    category: z.string().nullable(),
+    subcategory: z.string().nullable(),
   })
   .partial()
-  .refine((v) => Object.keys(v).length > 0, { message: 'at least one field is required' });
+  .refine((v) => Object.keys(v).length > 0, { message: 'at least one field is required' })
+  // A subcategory without its parent is meaningless — it would render as the
+  // bare category anyway, and storing it would look like a classification.
+  .refine((v) => !(v.subcategory !== undefined && v.category === undefined), {
+    message: 'subcategory requires category',
+  });
 export type UpdateTopicReq = z.infer<typeof UpdateTopicReqSchema>;
 
 const MIN_CHECK_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes

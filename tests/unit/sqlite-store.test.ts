@@ -530,3 +530,159 @@ describe('storage engine guarantees (NEWS-94)', () => {
     expect(store.queryItems({ mode: 'normal', limit: 10 }).items.map((i) => i.title)).toEqual(['Arrived late']);
   });
 });
+
+describe('topic categories in the store (NEWS-97)', () => {
+  it('defaults a new topic to uncategorized', () => {
+    const store = new Store(tmpDataDir());
+    const topic = store.addTopic('Skiing');
+    expect(topic.category).toBeNull();
+    expect(topic.subcategory).toBeNull();
+    // 'auto' rather than null: nobody has chosen, so automatic classification
+    // is free to write. Only an explicit human choice sets 'manual'.
+    expect(topic.categorySource).toBe('auto');
+  });
+
+  it('round-trips a category through storage', () => {
+    const dir = tmpDataDir();
+    const store = new Store(dir);
+    const topic = store.addTopic('Premier League');
+    store.setTopicCategory(topic.id, 'sports', 'soccer', 'manual');
+    store.close();
+
+    const reopened = new Store(dir);
+    const reloaded = reopened.getTopic(topic.id);
+    expect(reloaded?.category).toBe('sports');
+    expect(reloaded?.subcategory).toBe('soccer');
+    expect(reloaded?.categorySource).toBe('manual');
+  });
+
+  it('stores a category with no subcategory', () => {
+    // The `sports`/null shape that renders as "Other" — it has to survive a
+    // round-trip as null rather than as an empty string.
+    const dir = tmpDataDir();
+    const store = new Store(dir);
+    const topic = store.addTopic('Skiing');
+    store.setTopicCategory(topic.id, 'sports', null, 'auto');
+    store.close();
+
+    expect(new Store(dir).getTopic(topic.id)?.subcategory).toBeNull();
+  });
+
+  it('accepts a slug the taxonomy does not have', () => {
+    // Deliberate: the taxonomy is code-side and editable, so a slug that
+    // resolves today may not tomorrow. The store must not be the one place that
+    // can't survive an ordinary edit — unresolvable slugs render as
+    // Uncategorized rather than failing a load.
+    const store = new Store(tmpDataDir());
+    const topic = store.addTopic('Weather');
+    expect(() => store.setTopicCategory(topic.id, 'weather', 'forecasts', 'auto')).not.toThrow();
+    expect(store.getTopic(topic.id)?.category).toBe('weather');
+  });
+
+  it('clears a category back to null', () => {
+    const store = new Store(tmpDataDir());
+    const topic = store.addTopic('Ambiguous');
+    store.setTopicCategory(topic.id, 'sports', 'soccer', 'manual');
+    store.setTopicCategory(topic.id, null, null, 'auto');
+    expect(store.getTopic(topic.id)?.category).toBeNull();
+    expect(store.getTopic(topic.id)?.categorySource).toBe('auto');
+  });
+
+  it('throws for a topic that is gone', () => {
+    const store = new Store(tmpDataDir());
+    expect(() => store.setTopicCategory('nope', 'sports', null, 'auto')).toThrow(/no such topic/);
+  });
+});
+
+describe('schema migration v1 → v2 (NEWS-97)', () => {
+  /** Build a database in the pre-category v1 shape, as an older build wrote it. */
+  function v1Database(dir: string): void {
+    const db = new DatabaseSync(dbPath(dir));
+    db.exec(`
+      CREATE TABLE topics (
+        id TEXT PRIMARY KEY, name TEXT NOT NULL, paused INTEGER NOT NULL DEFAULT 0,
+        high_priority INTEGER NOT NULL DEFAULT 0, guidance TEXT NOT NULL DEFAULT '',
+        created_at TEXT NOT NULL, last_checked_at TEXT, covered_through_at TEXT
+      );
+      CREATE TABLE items (
+        id TEXT PRIMARY KEY, topic_id TEXT NOT NULL, title TEXT NOT NULL, summary TEXT NOT NULL,
+        sources TEXT NOT NULL, image TEXT, dedupe_key TEXT NOT NULL, found_at TEXT NOT NULL,
+        saved INTEGER NOT NULL DEFAULT 0, off_topic INTEGER NOT NULL DEFAULT 0
+      );
+      CREATE TABLE runs (
+        id TEXT PRIMARY KEY, topic_id TEXT NOT NULL, started_at TEXT NOT NULL, finished_at TEXT,
+        status TEXT NOT NULL, new_items INTEGER NOT NULL DEFAULT 0, error TEXT,
+        provider TEXT, model TEXT, usage TEXT
+      );
+      CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+      PRAGMA user_version = 1;
+    `);
+    db.prepare(
+      `INSERT INTO topics (id, name, paused, high_priority, guidance, created_at, last_checked_at, covered_through_at)
+       VALUES ('t1', 'Tennis', 1, 1, 'majors only', '2026-07-01T00:00:00.000Z', '2026-07-02T00:00:00.000Z', NULL)`,
+    ).run();
+    db.prepare(
+      `INSERT INTO items (id, topic_id, title, summary, sources, dedupe_key, found_at)
+       VALUES ('i1', 't1', 'Final set', 'It went long.', '[]', 'k1', '2026-07-02T00:00:00.000Z')`,
+    ).run();
+    db.close();
+  }
+
+  it('adds the category columns without touching existing data', () => {
+    const dir = tmpDataDir();
+    v1Database(dir);
+
+    const store = new Store(dir);
+    const topic = store.getTopic('t1');
+    // Everything the v1 row held is intact...
+    expect(topic?.name).toBe('Tennis');
+    expect(topic?.paused).toBe(true);
+    expect(topic?.highPriority).toBe(true);
+    expect(topic?.guidance).toBe('majors only');
+    expect(topic?.lastCheckedAt).toBe('2026-07-02T00:00:00.000Z');
+    expect(store.listItems()).toHaveLength(1);
+    // ...and the new columns arrive as "not yet classified", which is true.
+    expect(topic?.category).toBeNull();
+    expect(topic?.subcategory).toBeNull();
+    expect(topic?.categorySource).toBe('auto');
+  });
+
+  it('leaves a migrated database writable and at the new version', () => {
+    const dir = tmpDataDir();
+    v1Database(dir);
+    const store = new Store(dir);
+
+    store.setTopicCategory('t1', 'sports', 'tennis', 'manual');
+    expect(store.getTopic('t1')?.subcategory).toBe('tennis');
+    store.close();
+
+    const db = new DatabaseSync(dbPath(dir));
+    expect((db.prepare('PRAGMA user_version').get() as { user_version: number }).user_version).toBe(2);
+    db.close();
+  });
+
+  it('does not re-run the migration on a second open', () => {
+    // `ALTER TABLE ADD COLUMN` throws on a duplicate, so a version that failed
+    // to advance would make the app unopenable on the next start.
+    const dir = tmpDataDir();
+    v1Database(dir);
+    new Store(dir).close();
+    expect(() => new Store(dir)).not.toThrow();
+    expect(new Store(dir).getTopic('t1')?.name).toBe('Tennis');
+  });
+
+  it('creates a fresh database at the current version with no migration', () => {
+    const dir = tmpDataDir();
+    const store = new Store(dir);
+    store.addTopic('Fresh');
+    store.close();
+
+    const db = new DatabaseSync(dbPath(dir));
+    expect((db.prepare('PRAGMA user_version').get() as { user_version: number }).user_version).toBe(2);
+    // The columns come from SCHEMA, not from a migration that a new file skips.
+    const cols = (db.prepare('PRAGMA table_info(topics)').all() as { name: string }[]).map((c) => c.name);
+    expect(cols).toContain('category');
+    expect(cols).toContain('category_source');
+    db.close();
+  });
+});

@@ -57,6 +57,23 @@ export const TopicSchema = z.object({
    * days. Null until the first success.
    */
   coveredThroughAt: z.string().nullable().default(null),
+  /**
+   * Section slug from the taxonomy in `src/categories.ts` (NEWS-97); null until
+   * the topic has been classified.
+   *
+   * A plain string, deliberately **not** a zod enum (FR-22.3). The taxonomy is
+   * edited in code, so an enum would let any edit invalidate stored rows and
+   * take the whole load down with it. A slug that no longer resolves simply
+   * renders as Uncategorized.
+   */
+  category: z.string().nullable().default(null),
+  /** Second-level slug within `category`; null means no subcategory fits. */
+  subcategory: z.string().nullable().default(null),
+  /**
+   * Who set the category. `manual` is a promise: automatic classification never
+   * overwrites a choice the user made by hand (FR-22.7).
+   */
+  categorySource: z.enum(['auto', 'manual']).default('auto').catch('auto'),
 });
 export type Topic = z.infer<typeof TopicSchema>;
 

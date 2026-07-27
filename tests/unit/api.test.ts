@@ -346,3 +346,92 @@ describe('API', () => {
     expect(((await json(res)) as { ok: boolean }).ok).toBe(true);
   });
 });
+
+describe('PATCH /api/topics/:id category (NEWS-97)', () => {
+  async function patch(app: ReturnType<typeof makeApp>['app'], id: string, body: unknown): Promise<Response> {
+    return app.request(`/api/topics/${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+  }
+
+  it('sets a category and marks it manual', async () => {
+    const { app, store } = makeApp();
+    const topic = store.addTopic('Premier League');
+
+    const res = await patch(app, topic.id, { category: 'sports', subcategory: 'soccer' });
+    expect(res.status).toBe(200);
+
+    const updated = store.getTopic(topic.id);
+    expect(updated?.category).toBe('sports');
+    expect(updated?.subcategory).toBe('soccer');
+    // The whole point of the field: a person chose this, so classification
+    // must not overwrite it later.
+    expect(updated?.categorySource).toBe('manual');
+  });
+
+  it('accepts a category with no subcategory', async () => {
+    const { app, store } = makeApp();
+    const topic = store.addTopic('Skiing');
+    expect((await patch(app, topic.id, { category: 'sports' })).status).toBe(200);
+    expect(store.getTopic(topic.id)?.subcategory).toBeNull();
+  });
+
+  it('clears the category and returns it to automatic', async () => {
+    // Clearing has to reset the source too, or a cleared topic would be
+    // permanently ineligible for classification — invisible and unfixable.
+    const { app, store } = makeApp();
+    const topic = store.addTopic('Ambiguous');
+    await patch(app, topic.id, { category: 'sports', subcategory: 'soccer' });
+
+    expect((await patch(app, topic.id, { category: null })).status).toBe(200);
+    const updated = store.getTopic(topic.id);
+    expect(updated?.category).toBeNull();
+    expect(updated?.subcategory).toBeNull();
+    expect(updated?.categorySource).toBe('auto');
+  });
+
+  it('drops the subcategory when the category changes', async () => {
+    // Sports · Soccer reclassified to Culture must not keep "soccer" — it would
+    // resolve to nothing and silently render as bare "Culture" anyway.
+    const { app, store } = makeApp();
+    const topic = store.addTopic('Moved');
+    await patch(app, topic.id, { category: 'sports', subcategory: 'soccer' });
+    await patch(app, topic.id, { category: 'culture' });
+    expect(store.getTopic(topic.id)?.subcategory).toBeNull();
+  });
+
+  it('rejects a subcategory sent without its category', async () => {
+    const { app, store } = makeApp();
+    const topic = store.addTopic('Orphan Sub');
+    expect((await patch(app, topic.id, { subcategory: 'soccer' })).status).toBe(400);
+    expect(store.getTopic(topic.id)?.subcategory).toBeNull();
+  });
+
+  it('accepts a slug the taxonomy does not have', async () => {
+    // Not an enum, deliberately (FR-22.3): the taxonomy is edited in code, and
+    // an enum here would start rejecting requests the moment a slug is renamed.
+    const { app, store } = makeApp();
+    const topic = store.addTopic('Weather');
+    expect((await patch(app, topic.id, { category: 'weather' })).status).toBe(200);
+    expect(store.getTopic(topic.id)?.category).toBe('weather');
+  });
+
+  it('still 404s for a topic that does not exist', async () => {
+    const { app } = makeApp();
+    expect((await patch(app, 'nope', { category: 'sports' })).status).toBe(404);
+  });
+
+  it('leaves the other patchable fields alone', async () => {
+    const { app, store } = makeApp();
+    const topic = store.addTopic('Combined');
+    await patch(app, topic.id, { paused: true, guidance: 'only finals' });
+    await patch(app, topic.id, { category: 'sports' });
+
+    const updated = store.getTopic(topic.id);
+    expect(updated?.paused).toBe(true);
+    expect(updated?.guidance).toBe('only finals');
+    expect(updated?.category).toBe('sports');
+  });
+});
