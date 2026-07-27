@@ -140,6 +140,7 @@ Data dir: `--data-dir` flag → `NEWS_DATA_DIR` → `~/.news`. Also holds `news.
 | Story retention / data-file growth | `Store.pruneOldItems` + `itemRetentionDays` setting; called from `cli.ts` at startup and `CheckRunner.pruneAfterCheck` after each success. Bookmarked + flagged items exempt. See `docs/4-cli-server-storage.md` FR-4.11 |
 | Diagnostics / "why did a check fail" | `src/client/diagnostics.ts` (pure, unit-tested) + the Settings Diagnostics section; `appVersion` on `/api/state`. Topic names redacted unless opted in. See `docs/3-ui.md` FR-3.25–3.28 |
 | Solo filter (set arithmetic, menu + double-click) | `src/client/solo.ts` (`toggleSolo`, `isAllSoloed`), used by `runTopicAction` and the `dblclick` delegate in `app.tsx`. See `docs/3-ui.md` FR-3.40 |
+| Topic categories / taxonomy | `src/categories.ts` (`BUILTIN_CATEGORIES`, `categoryLabel`, `activeCategories`). See `docs/22-topic-categories.md` |
 | Run history / spend horizon | `RUN_RETENTION_DAYS` (400) + `MAX_RUNS_KEPT` (25k) and `Store.pruneOldRuns` in `db/store.ts`, called from the housekeeping sweep. See `docs/19-cost-visibility.md` FR-19.13 |
 | Stale refresh overwriting newer state | sequence guards in `refreshState`/`refreshFeed` (`src/client/api.ts`). See `docs/17-server-pagination.md` FR-17.9 |
 | Orphaned stories/runs after a topic delete | `Store.pruneOrphans()` in `db/store.ts`, called from `pruneAfterCheck` (`checks.ts`) and at startup (`cli.ts`). See `docs/4-cli-server-storage.md` FR-4.8c |
