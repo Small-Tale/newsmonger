@@ -1334,16 +1334,22 @@ function appJsx(): SafeHtml {
       <div id="item-menu-slot">{s.itemMenu !== null ? itemMenuJsx(s.itemMenu, feedAndFlagged()) : ''}</div>
       <div id="confirm-slot">{s.confirm !== null ? confirmDialogJsx(s.confirm) : ''}</div>
       <div id="guidance-slot">{guidanceTarget !== undefined ? guidanceDialogJsx(guidanceTarget) : ''}</div>
-      {/* Always-present slot: the toast coming and going must not restructure
-          its siblings (kerf KF-377 — see docs/3-ui.md). */}
+      {/* Always present because it is a **live region**: assistive technology
+          announces mutations to a region it is already observing, so a slot
+          created in the same render as its own text has nothing watching it and
+          the announcement is lost. (It also predates kerf 3.0.0, where it
+          doubled as a KF-377 workaround — that reason is gone; this one isn't.
+          See docs/3-ui.md, NEWS-99.) */}
       <div id="toast-slot" aria-live="polite">
         {s.toast !== null ? <div class="toast">{s.toast}</div> : ''}
       </div>
 
-      {/* Always-present container: banners coming and going must not shift the
-          sections below (kerf KF-377 — see docs/3-ui.md). */}
       {/* Banners appear in response to background events (a failed check, a
-          blown budget), so they have to announce rather than wait to be found. */}
+          blown budget), so they have to announce rather than wait to be found —
+          which is why the container is always present. A live region has to
+          exist *before* its content for the announcement to happen at all.
+          (Also a KF-377 workaround once; that reason expired in kerf 3.0.0 and
+          this one did not. See docs/3-ui.md, NEWS-99.) */}
       <div id="banners" role="status" aria-live="polite">
         {s.spend.overBudget ? (
           <div class="banner warn">
@@ -1446,8 +1452,12 @@ function appJsx(): SafeHtml {
         )}
       </div>
 
-      {/* Always rendered, hidden via CSS when collapsed: unmounting a sibling
-          ahead of the keyed topics list is the kerf KF-377 hazard (docs/3-ui.md). */}
+      {/* Always rendered, hidden via CSS when collapsed. The header's toggle
+          carries aria-controls="topics-panel", so unmounting this would leave
+          that attribute pointing at nothing — verified: doing so fails
+          a11y.spec.ts on an axe `aria-valid-attr-value` violation. Collapsing
+          also sets aria-hidden here, which a removed element cannot express.
+          (Originally the KF-377 workaround too; see docs/3-ui.md, NEWS-99.) */}
       <section id="topics-panel" class="topics-panel" aria-hidden={s.sidebarCollapsed ? 'true' : undefined}>
         <div class="topics-head">
           <h2 class="eyebrow">Watching</h2>

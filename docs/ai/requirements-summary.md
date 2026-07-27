@@ -95,6 +95,7 @@ Default Anthropic provider (`claude-opus-4-8` + web search), prompt-level exclus
 - Error/warning banners are dismissable; the failure warning's dismissal is remembered by run id so a new failure reappears (NEWS-41): **Shipped**
 - Destructive confirmations via an in-app dialog, never `window.confirm` (a WKWebView no-op that broke delete in the desktop app — NEWS-39): **Shipped**
 
+- KF-377 workarounds **kept deliberately** after kerfjs 3.0.0 went stable — `#banners`/`#toast-slot` are ARIA live regions (must exist before their content), `#topics-panel` is the `aria-controls` target (removal fails axe) — NEWS-99: **Decided, no change**
 - FR-4.8/4.8a/4.8b/4.9 **storage moved to SQLite** (`node:sqlite`, Node 22.5+): per-row writes, zod-validated rows, one-time `data.json` import, no foreign keys (a check can outlive its topic), corrupt-db backup + settings-only fallback. Search stays substring `LIKE`, not FTS5 — NEWS-94: **Shipped**
 - FR-3.40 double-click a topic row to toggle solo, sharing `toggleSolo` with the menu item — NEWS-95: **Shipped**
 - FR-3.36–3.39 full-window layout: no shell max-width, extra width becomes story columns (1→6 across 1100–3000px), 400px column minimum, 74ch measure cap — NEWS-96: **Shipped**

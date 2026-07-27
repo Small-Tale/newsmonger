@@ -30,7 +30,15 @@ Two rendering rules this UI depends on — regression-tested by the E2E suite:
 
 **Fixed in kerfjs 3.0.0**, along with a family of related morph defects: a conditional sibling *inside* a keyed list's parent no longer costs rows their DOM identity; a surviving list no longer renders a departed list's rows when the number of `each()` calls changes; and the morph no longer positionally adopts a `data-morph-skip` / `data-morph-preserve` node as a stand-in for an unrelated element.
 
-The always-present containers (`#banners`, `#settings-slot`, `#confirm-slot`, `#guidance-slot`, `#onboarding-slot`, `#toast-slot`, `.empty-slot`, `#schedule-slot`) **stay for now**. They cost nothing, they are good structure independent of the bug, and removing them is a behavioural change with no functional gain. 3.0.0 is now stable (released 2026-07-27, identical to beta.1), so the decision is live rather than deferred — NEWS-99.
+### The always-present containers stay — for reasons that outlived the bug (NEWS-99)
+
+kerfjs 3.0.0 went stable on 2026-07-27, so the "wait until it isn't a beta" deferral is spent. **Decision: keep every one of them**, and the justification below replaces "works around KF-377" — a comment pointing at a fixed bug is exactly what invites a later removal.
+
+- **`#banners`** (`role="status" aria-live="polite"`) and **`#toast-slot`** (`aria-live="polite"`) are **live regions**, and a live region has to be in the DOM *before* the text lands in it. Assistive technology observes the region and announces subsequent mutations; a container created in the same render as its own content has nothing watching it, and the announcement is simply lost. Being always-present is the feature here, not a workaround.
+- **`#topics-panel`** turns out to be the *least* removable, not the most — the opposite of what this was expected to conclude. The sidebar toggle carries `aria-controls="topics-panel"`, so unmounting the panel leaves that attribute pointing at nothing. **Verified rather than assumed**: pointing `aria-controls` at a non-existent id and running the suite fails `a11y.spec.ts` on an axe violation (`aria-valid-attr-value`), so the existing tests already defend this. Collapsing also sets `aria-hidden` on the panel, which is state a removed element cannot express.
+- **The dialog slots** (`#settings-slot`, `#confirm-slot`, `#guidance-slot`, `#onboarding-slot`, `#schedule-slot`, `.empty-slot`) hold conditionally-rendered children. Removing the wrapper doesn't delete a conditional sibling — it *promotes* one, which is more structural churn for no gain. A stable slot is also a stable test target.
+
+So the containers are no longer KF-377 scar tissue; they are ordinary good structure that happened to also dodge a bug. `docs/3-ui.md` and `CLAUDE.md` say so, so nobody re-derives the question from the changelog.
 
 The topics list also now carries an explicit `key: 'topics'` (kerf 3.x). Unkeyed lists are identified by their position among a render's `each()` calls; this is the only `each()` in the app today, so the position cannot currently shift, but the key means adding a second list later can't silently rebuild this one.
 
