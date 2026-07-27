@@ -202,7 +202,9 @@ export class CheckRunner {
    */
   private pruneAfterCheck(): void {
     try {
-      const expired = this.store.pruneOldItems(new Date());
+      const now = new Date();
+      const expired = this.store.pruneOldItems(now);
+      this.store.pruneOldRuns(now);
       const orphaned = this.store.pruneOrphans();
       if (orphaned.items > 0 || orphaned.runs > 0) {
         console.error(

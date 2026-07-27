@@ -18,7 +18,25 @@ import {
 } from './schemas.js';
 import { backupUnreadableDb, dbPath, openDb } from './sqlite.js';
 
-const MAX_RUNS_KEPT = 200;
+/**
+ * Run-history retention (NEWS-103). Two limits, whichever binds first.
+ *
+ * `RUN_RETENTION_DAYS` is the one with a purpose: spend is computed from stored
+ * runs, so the run window *is* the spend window. 400 days means "this month" and
+ * "the last twelve months" are always complete, which is the guarantee the cost
+ * UI needs to stop hedging. The previous cap was 200 runs — under an hour of
+ * history for a busy install, which made a monthly total quietly partial.
+ *
+ * `MAX_RUNS_KEPT` is a backstop, not a policy. Runs accrue per topic per check,
+ * so a short interval across many topics can generate thousands a day; without a
+ * ceiling, 400 days of that is millions of rows. 25,000 is far above any
+ * plausible real usage (20 topics checked daily is ~7,300 a year) while bounding
+ * the table at a few MB. When it *does* bind, the spend horizon shortens again —
+ * which is why FR-19.13 still names a condition rather than promising a year
+ * unconditionally.
+ */
+export const RUN_RETENTION_DAYS = 400;
+export const MAX_RUNS_KEPT = 25_000;
 
 /** A feed cursor: the last item of a page, for fetching the next (NEWS-74). */
 export interface ItemCursor {
@@ -640,10 +658,10 @@ export class Store {
       usage: null,
     };
     this.insertRun(run);
-    // Truncation is now a bounded DELETE instead of re-serializing every run.
-    this.db
-      .prepare(`DELETE FROM runs WHERE rowid NOT IN (SELECT rowid FROM runs ORDER BY rowid DESC LIMIT ?)`)
-      .run(MAX_RUNS_KEPT);
+    // Retention is applied by `pruneOldRuns` in the housekeeping sweep, not here
+    // (NEWS-103): the count ceiling is now 25,000, and re-scanning that many
+    // rowids on every check to enforce a bound nothing is close to would be a
+    // cost paid constantly for a case that almost never arises.
     return run;
   }
 
@@ -703,6 +721,31 @@ export class Store {
   }
 
   /**
+   * Apply run-history retention (NEWS-103): drop runs older than
+   * `RUN_RETENTION_DAYS`, then any beyond `MAX_RUNS_KEPT` oldest-first.
+   *
+   * Runs are what spend is computed from, so this is also what bounds how far
+   * back a cost figure can see — see the constants above for why it is a date
+   * window with a count backstop rather than either alone.
+   */
+  pruneOldRuns(now: Date): number {
+    const cutoff = new Date(now.getTime() - RUN_RETENTION_DAYS * 24 * 60 * 60 * 1000).toISOString();
+    const aged = this.db.prepare('DELETE FROM runs WHERE started_at < ?').run(cutoff);
+    // Only pay for the rowid scan when the table is actually over the ceiling;
+    // on every ordinary call this is a single indexed count.
+    const total = asCount((this.db.prepare('SELECT count(*) AS c FROM runs').get() as { c: unknown }).c);
+    let excess = 0;
+    if (total > MAX_RUNS_KEPT) {
+      excess = asCount(
+        this.db
+          .prepare('DELETE FROM runs WHERE rowid NOT IN (SELECT rowid FROM runs ORDER BY rowid DESC LIMIT ?)')
+          .run(MAX_RUNS_KEPT).changes,
+      );
+    }
+    return asCount(aged.changes) + excess;
+  }
+
+  /**
    * Delete stories and runs whose topic no longer exists (NEWS-105).
    *
    * `deleteTopic` already removes everything filed under a topic — but it runs
@@ -742,8 +785,10 @@ export class Store {
    * usage, or whose model has no published price, are counted as unknown rather
    * than as zero — see `estimateCostUsd`.
    *
-   * Note the horizon is `MAX_RUNS_KEPT` runs, not all of history: this is what
-   * the app can still see, which for a busy install may be less than a month.
+   * The horizon is the retained run history — `RUN_RETENTION_DAYS` (400 days),
+   * so a calendar month is always complete in practice. It shortens only if the
+   * `MAX_RUNS_KEPT` backstop binds first, which takes sustained check volume far
+   * above normal use (NEWS-103).
    */
   spendSince(sinceIso: string): { usd: number; pricedRuns: number; unpricedRuns: number } {
     // Read once per call, not per run: the file's mtime check is cheap but not

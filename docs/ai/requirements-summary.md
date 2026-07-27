@@ -96,6 +96,7 @@ Default Anthropic provider (`claude-opus-4-8` + web search), prompt-level exclus
 - Destructive confirmations via an in-app dialog, never `window.confirm` (a WKWebView no-op that broke delete in the desktop app — NEWS-39): **Shipped**
 
 - KF-377 workarounds **kept deliberately** after kerfjs 3.0.0 went stable — `#banners`/`#toast-slot` are ARIA live regions (must exist before their content), `#topics-panel` is the `aria-controls` target (removal fails axe) — NEWS-99: **Decided, no change**
+- FR-19.13 spend horizon widened from 200 runs to **400 days** (25,000-row backstop); run retention moved to the housekeeping sweep — NEWS-103: **Shipped**
 - FR-17.9 refresh responses apply in **issue order** — sequence guard on `refreshState`/`refreshFeed`, so a slow poll can't overwrite a newer mutation — NEWS-104: **Shipped**
 - FR-4.8c orphan sweep (`pruneOrphans`) for stories/runs written after their topic was deleted — after every check and at startup — NEWS-105: **Shipped**
 - FR-4.8/4.8a/4.8b/4.9 **storage moved to SQLite** (`node:sqlite`, Node 22.5+): per-row writes, zod-validated rows, one-time `data.json` import, no foreign keys (a check can outlive its topic), corrupt-db backup + settings-only fallback. Search stays substring `LIKE`, not FTS5 — NEWS-94: **Shipped**

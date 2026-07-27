@@ -50,7 +50,11 @@ See also [6 — AI Providers](6-providers.md) and [4 — CLI, Server, and Storag
 
 - **FR-19.12** *(Shipped)* The gate can only act on what it can price. Unpriced runs count as unknown, not as zero, so a provider that reports no usage is never held back by a budget it cannot be measured against — stated plainly in the UI rather than papered over.
 
-- **FR-19.13** *(Shipped)* The spend horizon is the calendar month **within the retained run history** (the last 200 runs). On a busy install that may be less than a full month; the figure is an estimate of what the app can still see, and is labelled an estimate.
+- **FR-19.13** *(Shipped, revised NEWS-103)* The spend horizon is the calendar month **within the retained run history**, and that history is now **400 days** — so a calendar month, and a rolling year, are complete in ordinary use. It was the last 200 runs, which on a busy install was under an hour: a "this month" total could quietly cover an afternoon.
+
+  The one condition left: run history is also capped at **25,000 rows** as a backstop against unbounded growth (runs accrue per topic per check, so a short interval across many topics can produce thousands a day). Exceeding that inside 400 days shortens the window again. It takes roughly 60 checks a day sustained for over a year — far above normal use, where 20 topics checked daily is ~7,300 runs a year — but the figure remains an estimate and is still labelled one.
+
+  Retention is applied by `Store.pruneOldRuns`, in the same housekeeping sweep as story retention rather than on every `startRun`: enforcing a 25,000-row ceiling on each insert would mean re-scanning 25,000 rowids per check to bound something nothing is near.
 
 ## Testing
 

@@ -1,11 +1,12 @@
 import fs from 'node:fs';
+import { DatabaseSync } from 'node:sqlite';
 
 import { describe, expect, it } from 'vitest';
 
 import { createMockProvider } from '../../src/ai/providers/index.js';
 import { CheckRunner } from '../../src/checks.js';
 import { DEFAULT_RETENTION_DAYS } from '../../src/db/schemas.js';
-import { Store } from '../../src/db/store.js';
+import { MAX_RUNS_KEPT, RUN_RETENTION_DAYS, Store } from '../../src/db/store.js';
 import { asResolver } from '../helpers/provider.js';
 import { tmpDataDir } from '../helpers/tmp.js';
 
@@ -174,5 +175,108 @@ describe('pruning runs as part of a check (NEWS-87)', () => {
     // Housekeeping must never turn a successful check into a failed one.
     expect(await runner.checkTopic(topic.id)).toBe(2);
     expect(store.listRuns(1)[0].status).toBe('succeeded');
+  });
+});
+
+describe('Store.pruneOldRuns (NEWS-103)', () => {
+  /** Insert `n` runs directly, dated back from `NOW`, oldest first. */
+  function seedRuns(store: Store, n: number, dayStep = 0): void {
+    const db = new DatabaseSync(`${store.dataDir}/news.db`);
+    db.exec('BEGIN');
+    const insert = db.prepare(
+      `INSERT INTO runs (id, topic_id, started_at, finished_at, status, new_items, error, provider, model, usage)
+       VALUES (?, 't1', ?, NULL, 'succeeded', 0, NULL, NULL, NULL, NULL)`,
+    );
+    for (let i = 0; i < n; i++) {
+      const age = dayStep === 0 ? 0 : (n - i) * dayStep;
+      insert.run(`seed-${String(i)}`, new Date(NOW.getTime() - age * 24 * 60 * 60 * 1000).toISOString());
+    }
+    db.exec('COMMIT');
+    db.close();
+  }
+
+  it('drops runs older than the retention window and keeps the rest', () => {
+    const store = new Store(tmpDataDir());
+    store.close();
+    // 10 runs, 100 days apart: the oldest four fall outside 400 days.
+    seedRuns(store, 10, 100);
+
+    const reopened = new Store(store.dataDir);
+    expect(reopened.listRuns(50)).toHaveLength(10);
+    expect(reopened.pruneOldRuns(NOW)).toBe(6);
+    expect(reopened.listRuns(50)).toHaveLength(4);
+    // The survivors are the newest ones, not an arbitrary four — and the
+    // boundary is inclusive: a run at *exactly* the retention age is kept,
+    // because the delete is `started_at < cutoff`. Worth pinning rather than
+    // asserting loosely, since off-by-one at a retention edge is silent.
+    const oldest = reopened.listRuns(50).at(-1);
+    expect(new Date(oldest?.startedAt ?? 0).getTime()).toBe(
+      NOW.getTime() - RUN_RETENTION_DAYS * 24 * 60 * 60 * 1000,
+    );
+  });
+
+  it('keeps a full year of history, which the old 200-run cap did not', () => {
+    // The point of the change: 365 daily runs used to be truncated to 200, so a
+    // monthly spend total could silently cover part of a month.
+    const store = new Store(tmpDataDir());
+    store.close();
+    seedRuns(store, 365, 1);
+
+    const reopened = new Store(store.dataDir);
+    expect(reopened.pruneOldRuns(NOW)).toBe(0);
+    expect(reopened.listRuns(1000)).toHaveLength(365);
+  });
+
+  it('is a no-op when nothing is due', () => {
+    const store = new Store(tmpDataDir());
+    const topic = store.addTopic('Fresh');
+    store.startRun(topic.id);
+    expect(store.pruneOldRuns(NOW)).toBe(0);
+    expect(store.listRuns(10)).toHaveLength(1);
+  });
+
+  it('enforces the count backstop, oldest first', () => {
+    const store = new Store(tmpDataDir());
+    store.close();
+    // All same-day, so only the count limit can bind.
+    seedRuns(store, MAX_RUNS_KEPT + 5);
+
+    const reopened = new Store(store.dataDir);
+    expect(reopened.pruneOldRuns(NOW)).toBe(5);
+    const kept = reopened.listRuns(MAX_RUNS_KEPT + 10);
+    expect(kept).toHaveLength(MAX_RUNS_KEPT);
+    // The five dropped are the five inserted first.
+    expect(kept.map((r) => r.id)).not.toContain('seed-0');
+    expect(kept.map((r) => r.id)).not.toContain('seed-4');
+    expect(kept.map((r) => r.id)).toContain('seed-5');
+  });
+
+  it('spend now sees a whole month of runs (NEWS-103)', () => {
+    // The behaviour the ticket is actually about, asserted end to end rather
+    // than via row counts: a month of daily runs all price into the total.
+    const store = new Store(tmpDataDir());
+    const topic = store.addTopic('Costly');
+    for (let i = 0; i < 300; i++) {
+      const run = store.startRun(topic.id);
+      store.finishRun(run.id, {
+        status: 'succeeded',
+        newItems: 0,
+        model: 'claude-opus-4-8',
+        usage: {
+          inputTokens: 1000,
+          cacheReadTokens: 0,
+          cacheWriteTokens: 0,
+          outputTokens: 1000,
+          webSearches: 0,
+        },
+      });
+    }
+    store.pruneOldRuns(NOW);
+
+    // All 300 are still there and all 300 are priced — under the old 200 cap a
+    // third of them would already have been discarded.
+    const spend = store.spendSince('2000-01-01T00:00:00.000Z');
+    expect(spend.pricedRuns).toBe(300);
+    expect(spend.unpricedRuns).toBe(0);
   });
 });

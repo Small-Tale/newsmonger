@@ -71,6 +71,9 @@ async function main(): Promise<void> {
   if (dropped > 0) console.error(`news: pruned ${String(dropped)} stories past the retention window`);
   // And anything a topic deleted mid-check left behind (NEWS-105) — including
   // from a previous run that was killed before its own sweep got there.
+  // Run history bounds the spend window (NEWS-103), so it is pruned on the same
+  // schedule as stories rather than on every insert.
+  store.pruneOldRuns(new Date());
   const orphaned = store.pruneOrphans();
   if (orphaned.items > 0 || orphaned.runs > 0) {
     console.error(
