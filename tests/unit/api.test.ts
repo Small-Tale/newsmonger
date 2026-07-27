@@ -70,7 +70,7 @@ describe('API', () => {
     expect(service.calls.map((c) => c.topicName)).toEqual(['Fusion']);
 
     const state = StateRespSchema.parse(await json(await app.request('/api/state')));
-    expect(state.items).toHaveLength(2);
+    expect(store.listItems()).toHaveLength(2);
     expect(state.runs[0]?.status).toBe('succeeded');
     expect(store.listTopics()[0]?.lastCheckedAt).not.toBeNull();
   });
@@ -117,17 +117,16 @@ describe('API', () => {
     expect(check.status).toBe(200);
     await waitForIdle(app);
 
-    let state = StateRespSchema.parse(await json(await app.request('/api/state')));
-    expect(state.items).toHaveLength(2);
+    const state = StateRespSchema.parse(await json(await app.request('/api/state')));
+    expect(store.listItems()).toHaveLength(2);
     // The newest-ids field for notifications tracks the same items (NEWS-75).
-    expect([...state.latestItemIds].sort()).toEqual(state.items.map((i) => i.id).sort());
+    expect([...state.latestItemIds].sort()).toEqual(store.listItems().map((i) => i.id).sort());
     expect(state.runs[0]?.status).toBe('succeeded');
     expect(state.topics[0]?.lastCheckedAt).not.toBeNull();
 
     await app.request('/api/check', { method: 'POST', body: JSON.stringify({ topicId }) });
     await waitForIdle(app);
-    state = StateRespSchema.parse(await json(await app.request('/api/state')));
-    expect(state.items).toHaveLength(2);
+    expect(store.listItems()).toHaveLength(2); // dedup kept it at 2
   });
 
   it('check-all skips paused topics', async () => {
@@ -317,7 +316,7 @@ describe('API', () => {
     const state = StateRespSchema.parse(await json(await app.request('/api/state')));
     expect(state.runs[0]?.status).toBe('failed');
     expect(state.runs[0]?.error).toMatch(/mock/);
-    expect(state.items).toEqual([]);
+    expect(store.listItems()).toEqual([]);
   });
 
   it('validates open-external urls', async () => {

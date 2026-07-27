@@ -1,6 +1,6 @@
-# 17 — Server-Side Pagination (Design)
+# 17 — Server-Side Pagination
 
-**Status: Design only — Deferred.** Client-side pagination (a 100-item render cap + "Show more", [16 — Feed Pagination](16-pagination.md)) bounds the DOM today. This doc designs the *server* side — trimming the `/api/state` payload — which isn't yet a live problem (pre-launch, no large datasets) but will matter at thousands of stories. See NEWS-73.
+**Status: Shipped.** The feed is filtered, sorted, and paginated server-side; `/api/state` no longer carries the item list. Built in three parts: phase 1 the endpoint (NEWS-74), phase 2a the notification decoupling (NEWS-75), phase 2b the client flip (NEWS-76).
 
 ## The core tension
 
@@ -36,6 +36,11 @@ Until the dataset is actually large, do nothing more: the client cap already kee
 1. **Server item query + `/api/items`** — *(Shipped, NEWS-74)* `Store.queryItems` (filter/sort/cursor-paginate + total) + the endpoint. Additive; `/api/state` untouched.
 2. **Client rewire** — split for safety:
    - **2a** *(Shipped, NEWS-75)* — `latestItemIds` on `/api/state` and notifications moved onto it (`noteState` no longer reads the full item list), so a later feed-slim can't break notifications. Non-breaking.
-   - **2b** *(Deferred, NEWS-76)* — the atomic flip: slim `/api/state` (drop `items`, add `flaggedByTopic`), feed from `/api/items` per view, debounced search, the `recentlyFlagged` overlay, server-provided counts, and the filter/search/flag E2E rewrite.
+   - **2b** *(Shipped, NEWS-76)* — the atomic flip: `/api/state` slimmed (dropped `items`, added `flaggedByTopic`); the feed fetches `/api/items` per view (`refreshFeed`); **search is debounced** (~250 ms, `SEARCH_DEBOUNCE_MS`); the `recentlyFlagged` overlay holds just-flagged items client-side and merges them collapsed into the normal page; counts come from the server's per-view `total` and `flaggedByTopic`.
 
-The search-UX decision is settled: **server-side, debounced** (confirmed when phase 2 was scheduled).
+The search-UX decision is settled: **server-side, debounced** — the instant per-keystroke filter (NEWS-60) is now a debounced refetch, the accepted regression.
+
+## What each part touches (as built)
+
+- `Store.queryItems` / `latestItemIds` / `flaggedCountsByTopic` (`src/db/store.ts`); `GET /api/items` + slimmed `/api/state` (`src/routes/api.ts`); `ItemsResp` + slimmed `StateResp` (`src/api/schemas.ts`).
+- Client: `refreshFeed` (`src/client/api.ts`); `feedItems`/`feedTotal`/`flaggedByTopic`/`recentlyFlaggedItems` state + `setFeed`/`addRecentlyFlagged`/`removeRecentlyFlagged` (`src/client/stores.ts`); the feed pipeline, overlay merge, and view-change refetch wiring (`src/client/app.tsx`). `itemMatchesQuery` stays for the client-side overlay match.

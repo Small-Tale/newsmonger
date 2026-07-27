@@ -36,7 +36,7 @@ src/
   api/
     schemas.ts        zod request schemas + StateResp (shared client/server)
   routes/
-    api.ts            /api/state, /api/providers, /api/topics, /api/items/:id (save), /api/settings, /api/keys, /api/foreground, /api/check, /api/open-external, /healthz
+    api.ts            /api/state (topics/settings/runs/checking + latestItemIds + flaggedByTopic; NO items), /api/items (paginated feed: filter+sort+cursor), /api/providers, /api/topics, /api/items/:id (save/flag), /api/settings, /api/keys, /api/foreground, /api/check, /api/open-external, /healthz
     pages.tsx         GET / — SSR shell
   components/
     layout.tsx        HTML shell
@@ -116,7 +116,8 @@ Data dir: `--data-dir` flag → `NEWS_DATA_DIR` → `~/.news`.
 | Topic selection / context menu / solo | `src/client/app.tsx` (`contextMenuJsx`, `selectTopic`, `runTopicAction`); state in `stores.ts`. **Row state outside the topic object needs `each()`'s cacheKey** |
 | Confirm a destructive action | `confirm()` helper + `confirmDialogJsx` in `app.tsx`. **Never `window.confirm` — a silent no-op in Tauri's WKWebView** |
 | Save/bookmark or share a story | `src/client/app.tsx` (bookmark + share buttons in `itemJsx`, `showToast`); `setItemSaved` in `store.ts` + `PATCH /api/items/:id`; `src/client/share.ts`. See `docs/11-story-actions.md` |
-| Feed filters (Solo / Saved / Search) | `src/client/app.tsx` feed pipeline (`soloItems` → `savedItems` → `filterItemsByQuery` → `filteredItems.slice(0, feedLimit)`); Solo/Saved/`searchQuery` state in `stores.ts`; `src/client/search.ts`. See `docs/14-search.md` |
-| Feed pagination ("Show more") | `feedLimit`/`FEED_PAGE`/`showMoreFeed` in `stores.ts` (reset per view); the cap + button in `app.tsx`. Client-side only; server-side is NEWS-73. See `docs/16-pagination.md` |
+| Feed filters (Solo / Saved / Search) | **Server-side** now (NEWS-76): `Store.queryItems` filters; client sends view params via `refreshFeed` (`src/client/api.ts`). Search is debounced. `feedItems`/`feedTotal` in `stores.ts`. See `docs/14-search.md` + `docs/17-server-pagination.md` |
+| Feed pagination ("Show more") | `feedLimit`/`FEED_PAGE`/`showMoreFeed` in `stores.ts` (reset per view) → `/api/items?limit=`; `moreCount` from server `total`. See `docs/16-pagination.md` |
+| The feed data / where items come from | `/api/items` via `refreshFeed`, NOT `/api/state` (slimmed). Just-flagged overlay: `recentlyFlaggedItems` merged in `app.tsx`. Notifications read `latestItemIds`. See `docs/17-server-pagination.md` |
 | Flag a story off-topic / review mode | `offTopic` on items + `setItemOffTopic`/`offTopicTitlesForTopic` in `store.ts`; `PATCH /api/items/:id`; item context menu (`itemMenuJsx`), `flaggedRowJsx`, `reviewTopicIds`/`recentlyFlagged` in `app.tsx`; prompt via `buildUserPrompt` offTopicTitles. See `docs/15-off-topic-flagging.md` |
 | Transient toast | `#toast-slot`/`.toast` + `showToast` in `app.tsx`; `toast` state in `stores.ts`. **Never `window.alert` — a WKWebView no-op** |

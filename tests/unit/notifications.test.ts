@@ -22,9 +22,9 @@ const BASE_SETTINGS: StateResp['settings'] = {
 function state(itemIds: string[]): StateResp {
   return {
     topics: [],
-    items: [],
-    // noteState reads latestItemIds (NEWS-75), not items.
+    // noteState reads latestItemIds (NEWS-75); the feed lives on /api/items now.
     latestItemIds: itemIds,
+    flaggedByTopic: {},
     settings: BASE_SETTINGS,
     runs: [],
     checking: [],

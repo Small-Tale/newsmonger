@@ -14,9 +14,9 @@ The feed renders a bounded number of stories with a "Show more" button, rather t
 
 - **FR-16.4** *(Evaluated, rejected)* **Virtualized scrolling** was considered and rejected: capping the render at 100 already keeps the DOM small (that's the point of the cap), and virtual lists handle our variable-height, grid-laid-out, day-grouped cards worst while fighting kerf's keyed `each()` + morph. A cap + "Show more" is simpler and sufficient.
 
-### Server-side pagination (deferred — NEWS-73)
+### Server-side pagination (shipped — NEWS-73/74/75/76)
 
-`/api/state` still returns *every* item on the 4 s poll; the client cap bounds the DOM but not the payload. Paginating the payload is deferred because it forces the filters server-side to stay correct, and moving **Search** server-side would regress the instant per-keystroke filter (NEWS-60) into a debounced round-trip. That's an architecture + UX decision, tracked in **NEWS-73** with the full design (endpoint shape, the recentlyFlagged overlay, per-view totals). It isn't yet a live problem: pre-launch, there are no large datasets.
+The feed now fetches `/api/items` per view (filtered + sorted + paginated server-side); `/api/state` no longer carries the item list. Search became a debounced server query (the accepted regression from NEWS-60's instant filter). Full design and mechanics in [17 — Server-Side Pagination](17-server-pagination.md). The client cap here still applies as the page size (`feedLimit` → the `/api/items` `limit`).
 
 ## Testing
 

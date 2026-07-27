@@ -1,5 +1,5 @@
 import type { ProviderName } from '../ai/types.js';
-import { KeysRespSchema, ProvidersRespSchema, StateRespSchema } from '../api/schemas.js';
+import { ItemsRespSchema, KeysRespSchema, ProvidersRespSchema, StateRespSchema } from '../api/schemas.js';
 import { noteState } from './notifications.js';
 import { appStore } from './stores.js';
 
@@ -26,6 +26,36 @@ export async function refreshState(): Promise<void> {
     appStore.actions.setState(state);
     // Fire an OS notification if new stories arrived while unfocused (NEWS-38).
     noteState(state);
+  } catch (err) {
+    appStore.actions.setError(err instanceof Error ? err.message : String(err));
+  }
+  // The feed lives on its own endpoint now (NEWS-76); refresh it in step.
+  await refreshFeed();
+}
+
+/**
+ * Fetch the feed page for the current view from `/api/items` (NEWS-76).
+ *
+ * Builds the query from the active view — review mode, else Solo + Saved +
+ * Search — plus the current `feedLimit`. Called on the poll, on a view change,
+ * and on "Show more"; each call fetches the newest `feedLimit` matches, so a
+ * poll naturally folds in new stories at the top.
+ */
+export async function refreshFeed(): Promise<void> {
+  const s = appStore.state.value;
+  const params = new URLSearchParams({ limit: String(s.feedLimit) });
+  if (s.reviewTopicIds.length > 0) {
+    params.set('mode', 'review');
+    params.set('topics', s.reviewTopicIds.join(','));
+  } else {
+    if (s.soloTopicIds.length > 0) params.set('topics', s.soloTopicIds.join(','));
+    if (s.savedFilter) params.set('saved', '1');
+    const q = s.searchQuery.trim();
+    if (q !== '') params.set('q', q);
+  }
+  try {
+    const resp = ItemsRespSchema.parse(await request(`/api/items?${params.toString()}`));
+    appStore.actions.setFeed({ items: resp.items, total: resp.total });
   } catch (err) {
     appStore.actions.setError(err instanceof Error ? err.message : String(err));
   }

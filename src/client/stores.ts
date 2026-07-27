@@ -1,6 +1,8 @@
 import { defineStore } from 'kerfjs';
 
-import type { KeysResp, ProviderInfo, StateResp } from '../api/schemas.js';
+import type { ItemsResp, KeysResp, ProviderInfo, StateResp } from '../api/schemas.js';
+
+type NewsItem = ItemsResp['items'][number];
 
 /** How many stories the feed reveals per "Show more" page (NEWS-62). */
 export const FEED_PAGE = 100;
@@ -19,7 +21,12 @@ export interface AppState {
   /** Last error shown in the banner, or null. */
   error: string | null;
   topics: StateResp['topics'];
-  items: StateResp['items'];
+  /** The current feed page, fetched from `/api/items` for the active view (NEWS-76). */
+  feedItems: NewsItem[];
+  /** Total stories matching the active view, from the server — drives "Show more". */
+  feedTotal: number;
+  /** Off-topic count per topic, for the "Review Flagged (N)" badge (NEWS-76). */
+  flaggedByTopic: Record<string, number>;
   settings: StateResp['settings'];
   runs: StateResp['runs'];
   checking: string[];
@@ -70,11 +77,13 @@ export interface AppState {
   /** Open story context menu (bookmark / share / flag), viewport coords (NEWS-61). */
   itemMenu: { x: number; y: number; itemId: string } | null;
   /**
-   * Ids of stories flagged off-topic **this session** (NEWS-61). A just-flagged
-   * story stays visible as a dimmed one-liner so the user can undo a mistake;
-   * on reload this set is empty, so flagged stories are simply hidden.
+   * Stories flagged off-topic **this session** (NEWS-61), full data kept so
+   * they can be merged (collapsed) into the server's normal-view page, which
+   * now excludes them (NEWS-76). A just-flagged story stays visible as a dimmed
+   * one-liner so a mistake is undoable; on reload this is empty, so flagged
+   * stories are simply gone.
    */
-  recentlyFlagged: string[];
+  recentlyFlaggedItems: NewsItem[];
   /**
    * When non-empty, the feed is in "review flagged" mode (NEWS-61): it shows
    * ONLY the off-topic stories for these topics. Ephemeral; a banner exits it.
@@ -181,7 +190,9 @@ export const appStore = defineStore({
     loaded: false,
     error: null,
     topics: [],
-    items: [],
+    feedItems: [],
+    feedTotal: 0,
+    flaggedByTopic: {},
     settings: { checkIntervalMs: 24 * 60 * 60 * 1000, highPriorityIntervalMs: 24 * 60 * 60 * 1000, provider: 'auto', model: '', endpoint: '', notifyOnNewItems: false },
     runs: [],
     checking: [],
@@ -201,7 +212,7 @@ export const appStore = defineStore({
     soloTopicIds: [],
     contextMenu: null,
     itemMenu: null,
-    recentlyFlagged: [],
+    recentlyFlaggedItems: [],
     reviewTopicIds: [],
     confirm: null,
     notifyPermissionDenied: false,
@@ -255,10 +266,19 @@ export const appStore = defineStore({
     closeItemMenu: () => {
       set({ ...get(), itemMenu: null });
     },
-    markRecentlyFlagged: (id: string) => {
+    setFeed: (feed: { items: NewsItem[]; total: number }) => {
+      set({ ...get(), feedItems: feed.items, feedTotal: feed.total });
+    },
+    // Hold a just-flagged story (full data) so it can render collapsed even
+    // though the server's normal-view page now excludes it (NEWS-76).
+    addRecentlyFlagged: (item: NewsItem) => {
       const s = get();
-      if (s.recentlyFlagged.includes(id)) return;
-      set({ ...s, recentlyFlagged: [...s.recentlyFlagged, id] });
+      if (s.recentlyFlaggedItems.some((i) => i.id === item.id)) return;
+      set({ ...s, recentlyFlaggedItems: [...s.recentlyFlaggedItems, { ...item, offTopic: true }] });
+    },
+    removeRecentlyFlagged: (id: string) => {
+      const s = get();
+      set({ ...s, recentlyFlaggedItems: s.recentlyFlaggedItems.filter((i) => i.id !== id) });
     },
     setReviewTopicIds: (reviewTopicIds: string[]) => {
       set({ ...get(), reviewTopicIds, feedLimit: FEED_PAGE });

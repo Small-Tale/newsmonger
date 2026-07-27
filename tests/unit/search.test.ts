@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
 
-import type { StateResp } from '../../src/api/schemas.js';
+import type { ItemsResp } from '../../src/api/schemas.js';
 import { filterItemsByQuery, itemMatchesQuery } from '../../src/client/search.js';
 
-type NewsItem = StateResp['items'][number];
+type NewsItem = ItemsResp['items'][number];
 
 let seq = 0;
 function item(over: Partial<NewsItem> = {}): NewsItem {

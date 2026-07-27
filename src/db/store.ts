@@ -259,6 +259,19 @@ export class Store {
       .map((i) => i.id);
   }
 
+  /**
+   * Count of off-topic (flagged) stories per topic (NEWS-76). Drives the
+   * "Review Flagged (N)" badge once the feed page no longer carries the full
+   * item list. Topics with none are omitted.
+   */
+  flaggedCountsByTopic(): Record<string, number> {
+    const counts: Record<string, number> = {};
+    for (const item of this.data.items) {
+      if (item.offTopic) counts[item.topicId] = (counts[item.topicId] ?? 0) + 1;
+    }
+    return counts;
+  }
+
   /** `image`/`saved`/`offTopic` are optional: a new story has no picture, isn't saved, and isn't flagged. */
   addItems(
     items: (Omit<NewsItem, 'id' | 'image' | 'saved' | 'offTopic'> & {

@@ -1,6 +1,6 @@
-import type { StateResp } from '../api/schemas.js';
+import type { ItemsResp } from '../api/schemas.js';
 
-type NewsItem = StateResp['items'][number];
+type NewsItem = ItemsResp['items'][number];
 
 /**
  * Whether a story matches a feed search query (NEWS-60): a case-insensitive

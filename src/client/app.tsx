@@ -8,6 +8,7 @@ import {
   addTopic,
   deleteKey,
   deleteTopic,
+  refreshFeed,
   refreshKeys,
   refreshProviders,
   refreshState,
@@ -27,7 +28,7 @@ import { currentFailure } from './failure.js';
 import { icon } from './icons.js';
 import { ensureNotificationPermission, syncTauriNotificationPermission } from './notifications.js';
 import { activeBehindWarnings } from './schedule.js';
-import { filterItemsByQuery } from './search.js';
+import { itemMatchesQuery } from './search.js';
 import { shareItem } from './share.js';
 import type { AppState } from './stores.js';
 import { appStore, FEED_PAGE, TOPIC_SORT_LABELS, TOPIC_SORTS } from './stores.js';
@@ -47,6 +48,10 @@ const INTERVAL_OPTIONS: { label: string; ms: number }[] = [
 /** How long a toast stays up before it fades out on its own. */
 const TOAST_MS = 2600;
 let toastTimer: ReturnType<typeof setTimeout> | undefined;
+
+/** Debounce for the server-side feed search refetch (NEWS-76). */
+const SEARCH_DEBOUNCE_MS = 250;
+let searchDebounce: ReturnType<typeof setTimeout> | undefined;
 
 /** Show a transient bottom-of-screen notice, replacing any current one. */
 function showToast(message: string): void {
@@ -621,9 +626,10 @@ function contextMenuJsx(menu: NonNullable<AppState['contextMenu']>, topics: Topi
   const anyNormal = targets.some((t) => !t.highPriority);
   const solo = new Set(appStore.state.value.soloTopicIds);
   const allSoloed = count > 0 && targets.every((t) => solo.has(t.id));
-  // Flagged-story count across the targeted topics, for "Review Flagged" (NEWS-61).
-  const targetIds = new Set(menu.topicIds);
-  const flaggedCount = appStore.state.value.items.filter((i) => i.offTopic && targetIds.has(i.topicId)).length;
+  // Flagged-story count across the targeted topics, for "Review Flagged"
+  // (NEWS-61) — from the server aggregate now that the feed is paginated (NEWS-76).
+  const flaggedByTopic = appStore.state.value.flaggedByTopic;
+  const flaggedCount = menu.topicIds.reduce((sum, id) => sum + (flaggedByTopic[id] ?? 0), 0);
 
   return (
     <div class="menu-backdrop" data-action="close-menu">
@@ -712,30 +718,32 @@ function appJsx(): SafeHtml {
   const topicNames = new Map(s.topics.map((t) => [t.id, t.name]));
   const solo = new Set(s.soloTopicIds);
   const selected = new Set(s.selectedTopicIds);
-  const allItems = [...s.items].sort((a, b) => b.foundAt.localeCompare(a.foundAt));
-  // Solo is a view filter: it hides stories, never deletes or unsubscribes.
-  // Review mode (NEWS-61) overrides the normal filters: it shows ONLY the
-  // flagged stories for the topics under review.
-  const reviewSet = new Set(s.reviewTopicIds);
-  const reviewMode = reviewSet.size > 0;
-  const recentFlagged = new Set(s.recentlyFlagged);
-  const soloItems = solo.size > 0 ? allItems.filter((i) => solo.has(i.topicId)) : allItems;
-  const savedItems = s.savedFilter ? soloItems.filter((i) => i.saved) : soloItems;
-  // Search narrows within whatever Solo/Saved is showing (NEWS-60).
-  const searchedItems = filterItemsByQuery(savedItems, topicNames, s.searchQuery);
+  // The feed page is filtered + sorted + paginated by the server for the active
+  // view (NEWS-76). Review mode shows ONLY the flagged stories for its topics.
+  const reviewMode = s.reviewTopicIds.length > 0;
   const searching = s.searchQuery.trim() !== '';
   const feedVariant: 'normal' | 'review' = reviewMode ? 'review' : 'normal';
-  const filteredItems = reviewMode
-    ? allItems.filter((i) => i.offTopic && reviewSet.has(i.topicId))
-    : // Flagged stories are hidden from the normal feed, except ones flagged this
-      // session — those show collapsed so a misclick can be undone (NEWS-61).
-      searchedItems.filter((i) => !i.offTopic || recentFlagged.has(i.id));
-  // Paginate the final filtered list: render at most `feedLimit`, with a "Show
-  // more" button for the rest (NEWS-62). Capping after all filters keeps it
-  // correct for every view; the limit resets to a page when the view changes.
-  const feedItems = filteredItems.slice(0, s.feedLimit);
-  const moreCount = filteredItems.length - feedItems.length;
-  const savedCount = allItems.filter((i) => i.saved).length;
+  // In the normal view the server excludes off-topic stories, so merge in any
+  // flagged *this session* — collapsed, and only if they match the active
+  // Solo/Saved/Search — so a misclick stays undoable until reload (NEWS-61).
+  let feedItems = s.feedItems;
+  if (!reviewMode && s.recentlyFlaggedItems.length > 0) {
+    const seen = new Set(s.feedItems.map((i) => i.id));
+    const overlay = s.recentlyFlaggedItems.filter(
+      (it) =>
+        !seen.has(it.id) &&
+        (solo.size === 0 || solo.has(it.topicId)) &&
+        (!s.savedFilter || it.saved) &&
+        itemMatchesQuery(it, topicNames.get(it.topicId) ?? '', s.searchQuery),
+    );
+    if (overlay.length > 0) {
+      feedItems = [...s.feedItems, ...overlay].sort((a, b) => b.foundAt.localeCompare(a.foundAt));
+    }
+  }
+  // "Show more" reflects what the *server* still holds for this view (the
+  // session overlay is separate and always shown).
+  const moreCount = Math.max(0, s.feedTotal - s.feedItems.length);
+  const savedCount = s.feedTotal; // meaningful only while the Saved filter is on
   const anyChecking = s.checking.length > 0;
   // Only warn about a topic whose *latest* run failed — not a stale failure from
   // one that has since recovered (NEWS-41).
@@ -802,7 +810,7 @@ function appJsx(): SafeHtml {
           its siblings (kerf KF-377 — see docs/3-ui.md). */}
       <div id="settings-slot">{s.settingsOpen ? settingsDialogJsx() : ''}</div>
       <div id="menu-slot">{s.contextMenu !== null ? contextMenuJsx(s.contextMenu, s.topics) : ''}</div>
-      <div id="item-menu-slot">{s.itemMenu !== null ? itemMenuJsx(s.itemMenu, s.items) : ''}</div>
+      <div id="item-menu-slot">{s.itemMenu !== null ? itemMenuJsx(s.itemMenu, feedAndFlagged()) : ''}</div>
       <div id="confirm-slot">{s.confirm !== null ? confirmDialogJsx(s.confirm) : ''}</div>
       {/* Always-present slot: the toast coming and going must not restructure
           its siblings (kerf KF-377 — see docs/3-ui.md). */}
@@ -886,9 +894,10 @@ function appJsx(): SafeHtml {
           <div class="banner review">
             {icon('flag', 14)}
             <span class="banner-text">
-              Reviewing {String(filteredItems.length)} flagged{' '}
-              {filteredItems.length === 1 ? 'story' : 'stories'}
-              {reviewSet.size === 1 ? ` for ${topicNames.get(s.reviewTopicIds[0] ?? '') ?? 'a topic'}` : ''}
+              Reviewing {String(s.feedTotal)} flagged {s.feedTotal === 1 ? 'story' : 'stories'}
+              {s.reviewTopicIds.length === 1
+                ? ` for ${topicNames.get(s.reviewTopicIds[0] ?? '') ?? 'a topic'}`
+                : ''}
             </span>
             <button class="btn subtle" type="button" data-action="exit-review">
               Exit review
@@ -1036,6 +1045,13 @@ function confirmDelete(ids: string[]): void {
   })();
 }
 
+/** Every story the client currently holds: the server feed page plus the
+ *  just-flagged session overlay (NEWS-76) — the pool for id lookups. */
+function feedAndFlagged(): NewsItem[] {
+  const s = appStore.state.value;
+  return [...s.feedItems, ...s.recentlyFlaggedItems];
+}
+
 /** Share one story, toasting only when it fell back to the clipboard/failed. */
 async function shareOne(item: NewsItem): Promise<void> {
   const result = await shareItem(item);
@@ -1044,11 +1060,13 @@ async function shareOne(item: NewsItem): Promise<void> {
   else if (result === 'failed') showToast("Couldn't share this story");
 }
 
-/** Flag/unflag a story off-topic (NEWS-61). Flagging keeps it visible-but-collapsed
- *  this session (via `recentlyFlagged`) so a misclick can be undone. */
-function flagItem(id: string, offTopic: boolean): void {
-  if (offTopic) appStore.actions.markRecentlyFlagged(id);
-  void setItemOffTopic(id, offTopic);
+/** Flag/unflag a story off-topic (NEWS-61). Flagging holds the item this session
+ *  (via `recentlyFlaggedItems`) so it stays visible-but-collapsed after the
+ *  server drops it from the normal page; unflagging releases it (NEWS-76). */
+function flagItem(item: NewsItem, offTopic: boolean): void {
+  if (offTopic) appStore.actions.addRecentlyFlagged(item);
+  else appStore.actions.removeRecentlyFlagged(item.id);
+  void setItemOffTopic(item.id, offTopic).then(refreshFeed);
 }
 
 /** Apply a context-menu action to every targeted topic. */
@@ -1086,12 +1104,14 @@ function runTopicAction(action: string, ids: string[]): void {
         else solo.add(t.id);
       }
       appStore.actions.setSolo([...solo]);
+      void refreshFeed();
       break;
     }
     case 'review-flagged':
       // Enter review mode for the targeted topics (the menu item is disabled
       // when none of them have flagged stories).
       appStore.actions.setReviewTopicIds(ids);
+      void refreshFeed();
       break;
     case 'delete':
       confirmDelete(ids);
@@ -1259,12 +1279,12 @@ function wireEvents(root: HTMLElement): void {
     const action = el.getAttribute('data-item-menu-action');
     const menu = appStore.state.value.itemMenu;
     if (action === null || menu === null) return;
-    const item = appStore.state.value.items.find((i) => i.id === menu.itemId);
+    const item = feedAndFlagged().find((i) => i.id === menu.itemId);
     appStore.actions.closeItemMenu();
     if (item === undefined) return;
     if (action === 'bookmark') void setItemSaved(item.id, !item.saved);
     else if (action === 'share') void shareOne(item);
-    else if (action === 'flag') flagItem(item.id, !item.offTopic);
+    else if (action === 'flag') flagItem(item, !item.offTopic);
   });
   // Clicking the "off topic" pill on a collapsed row prompts to unflag.
   void delegate(root, 'click', '[data-unflag-prompt]', (_e, el) => {
@@ -1272,16 +1292,20 @@ function wireEvents(root: HTMLElement): void {
     if (id === null) return;
     void (async () => {
       if (await confirm('Unflag this story? It will return to the feed.', { confirmLabel: 'Unflag' })) {
+        appStore.actions.removeRecentlyFlagged(id);
         await setItemOffTopic(id, false);
+        await refreshFeed();
       }
     })();
   });
   void delegate(root, 'click', '[data-action=exit-review]', () => {
     appStore.actions.setReviewTopicIds([]);
+    void refreshFeed();
   });
 
   void delegate(root, 'click', '[data-action=clear-solo]', () => {
     appStore.actions.setSolo([]);
+    void refreshFeed();
   });
 
   void delegate(root, 'click', '[data-save-item]', (_e, el) => {
@@ -1293,34 +1317,41 @@ function wireEvents(root: HTMLElement): void {
   void delegate(root, 'click', '[data-share-item]', (_e, el) => {
     const id = el.getAttribute('data-share-item');
     if (id === null) return;
-    const item = appStore.state.value.items.find((i) => i.id === id);
+    const item = feedAndFlagged().find((i) => i.id === id);
     if (item !== undefined) void shareOne(item);
   });
   void delegate(root, 'click', '[data-action=toggle-saved-filter]', () => {
     appStore.actions.setSavedFilter(!appStore.state.value.savedFilter);
+    void refreshFeed();
   });
   void delegate(root, 'click', '[data-action=clear-saved-filter]', () => {
     appStore.actions.setSavedFilter(false);
+    void refreshFeed();
   });
 
-  // Live feed search (NEWS-60). The input is uncontrolled — no `value` binding —
-  // so re-rendering the app on each keystroke can't fight the cursor; the store
-  // just drives the filter and the expand/collapse class.
+  // Live feed search (NEWS-60/76). The input is uncontrolled — no `value`
+  // binding — so re-rendering can't fight the cursor. Search is now a server
+  // query (NEWS-76), so the refetch is debounced rather than per-keystroke.
   void delegate(root, 'input', '[data-action=search]', (_e, el) => {
     appStore.actions.setSearchQuery((el as HTMLInputElement).value);
+    clearTimeout(searchDebounce);
+    searchDebounce = setTimeout(() => void refreshFeed(), SEARCH_DEBOUNCE_MS);
   });
   void delegate(root, 'click', '[data-action=show-more]', () => {
     appStore.actions.showMoreFeed();
+    void refreshFeed();
   });
 
   void delegate(root, 'click', '[data-action=clear-search]', (_e, el) => {
     // Clear the store AND the uncontrolled input's live value, then refocus it.
+    clearTimeout(searchDebounce);
     appStore.actions.setSearchQuery('');
     const input = el.closest('.search')?.querySelector<HTMLInputElement>('[data-action=search]');
     if (input) {
       input.value = '';
       input.focus();
     }
+    void refreshFeed();
   });
 
   void delegate(root, 'click', '[data-action=dismiss-error]', () => {

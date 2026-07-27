@@ -88,10 +88,10 @@ describe('PATCH /api/items/:id', () => {
     ).toBe(400);
   });
 
-  it('the saved flag rides through /api/state', async () => {
+  it('the saved flag rides through the feed endpoint', async () => {
     const { app, itemId } = makeApp();
     await app.request(`/api/items/${itemId}`, { method: 'PATCH', body: JSON.stringify({ saved: true }) });
-    const state = (await (await app.request('/api/state')).json()) as { items: { saved: boolean }[] };
-    expect(state.items[0]?.saved).toBe(true);
+    const feed = (await (await app.request('/api/items')).json()) as { items: { id: string; saved: boolean }[] };
+    expect(feed.items.find((i) => i.id === itemId)?.saved).toBe(true);
   });
 });
