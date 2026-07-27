@@ -41,6 +41,25 @@
 
 - **FR-4.8a** *(Shipped, NEWS-94)* A legacy `<data-dir>/data.json` is **imported once** on first open, then renamed to `data.json.imported-<ts>`. The import parses with the same `DataFileSchema`, so every migration that schema performs still happens. It runs only when the database has neither topics nor settings, so it can never fire twice or overwrite live data — and the file is renamed rather than deleted, since it is the only copy of that data until someone is satisfied the import worked.
 
+### Feed search stays substring, not FTS5 (NEWS-102)
+
+**Decision: keep `LIKE '%q%'`.** No code change; recorded here so the omission is a decision rather than an oversight, since NEWS-94 originally named FTS5 as a benefit.
+
+**What FTS5 would cost.** It matches *tokens and prefixes*, so `eserv` would stop finding "Federal Reserve" and `ommittee` would stop finding "The committee held". A filter that narrows as you type is precisely where someone types the middle of a word, so that is a real regression in what the box finds — not a technicality. Two tests in `tests/unit/sqlite-store.test.ts` pin mid-word matching so this can't be reversed by accident.
+
+**What it would buy: measured, not assumed.** `LIKE '%q%'` can't use an index, so it scales linearly — about 1 µs per stored story on this machine:
+
+| Stories | Search |
+|---|---|
+| 15,000 | 18 ms |
+| 50,000 | 57 ms |
+| 100,000 | 97 ms |
+| 250,000 | 223 ms |
+
+15,000 is roughly what a year of 20 topics at a couple of stories a day produces — the realistic ceiling under the default 365-day retention window (FR-4.11). At 18 ms, behind the existing search debounce, it is imperceptible. Reaching the 100 ms mark needs ~275 new stories a day sustained for a year, which is an order of magnitude beyond what checks actually return.
+
+**Revisit when** a real store passes ~100k stories — that is where the linear scan starts being felt rather than merely being theoretically wrong. Until then the honest trade is to keep a search that finds what people type.
+
 - **FR-4.8c** *(Shipped, NEWS-105)* **An orphan sweep collects what the race leaves behind.** `deleteTopic` cascades at deletion time, but an in-flight check can land a story, or a queued check can *start*, after that — so `Store.pruneOrphans()` deletes items and runs whose `topic_id` no longer resolves. It runs after every check (the moment right after the write that can create an orphan, so the window is as short as possible) and at startup (to collect anything a killed process never swept).
 
   Deliberately **not** solved at the writers: checking the topic exists before every insert costs a query on the hot path and still loses the race, since the topic can go between the check and the insert.
