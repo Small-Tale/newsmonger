@@ -1,6 +1,5 @@
 import v8 from 'node:v8';
 
-import { refreshPricesFromManifest } from './ai/price-store.js';
 import { createMockProvider, resolveProvider } from './ai/providers/index.js';
 import { probeLink } from './ai/verify-links.js';
 import { Attendance } from './attendance.js';
@@ -106,21 +105,6 @@ async function main(): Promise<void> {
   console.log(`news running at ${url}`);
 
   const stopScheduler = startScheduler(runner);
-  // Refresh model rates from the configured manifest at startup and daily
-  // (NEWS-93), so a price change reaches installs without a new build. Failure
-  // is silent by design: an unreachable manifest means the *update* didn't
-  // happen, which is a different thing from the prices being wrong.
-  const refreshPrices = (): void => {
-    const url = store.getSettings().priceManifestUrl;
-    if (url === '') return;
-    void refreshPricesFromManifest(store.prices, url).then((updated) => {
-      if (updated) console.error(`news: model prices updated from ${url}`);
-      return updated;
-    });
-  };
-  refreshPrices();
-  const priceTimer = setInterval(refreshPrices, 24 * 60 * 60 * 1000);
-  priceTimer.unref();
   if (options.open) openInBrowser(url);
 
   // Under E2E coverage collection the test runner may kill us without letting
@@ -132,7 +116,6 @@ async function main(): Promise<void> {
   }
 
   const shutdown = (): void => {
-    clearInterval(priceTimer);
     stopScheduler();
     server.close();
     // Close the database explicitly so WAL is checkpointed into `news.db`

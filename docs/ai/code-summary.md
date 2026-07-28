@@ -27,9 +27,6 @@ src/
   ai/
     types.ts          NewsService + NewsProvider interfaces, TopicContext, CheckResult/TokenUsage, PROVIDER_NAMES/INFO, FoundNewsItem, KnownItem
     prompt.ts         searchingSystemPrompt, buildUserPrompt, parseNewsResult, NEWS_JSON_SCHEMA
-    pricing.ts        BUILTIN_PRICES (seed/fallback) + estimateCostUsd/formatUsd — cost derived at display time (NEWS-79)
-    price-schema.ts   ModelPrice/PriceTable zod shapes — browser-safe, no node built-ins (NEWS-93)
-    price-store.ts    PriceStore (<data-dir>/prices.json, mtime-cached) + refreshPricesFromManifest (NEWS-93)
     retry.ts          two backoffs (in-check DEFAULT_BACKOFF, per-topic FAILURE_COOLDOWN), failure classification, Retry-After parsing (NEWS-109/110)
     verify-links.ts   probeLink/verifyItemLinks — citation checking before storage (NEWS-83)
     verify-key.ts     verifyApiKey — vendor-side key check before saving; 401/403 = invalid, else unknown (NEWS-78)
@@ -74,7 +71,7 @@ scripts/
 .github/              CI: gate job (test:all) + rust job (fmt + clippy, BOTH profiles); dependabot
 tests/
   helpers/            tmp.ts (tmp data dirs), provider.ts (asResolver/fakeProvider)
-  unit/               vitest: dedupe, store, checks, scheduler, config, parse-result, providers, openai, api, api-keys, api-keys-routes, attendance, catch-up, sanitize, origin-guard, guidance, cost, key-verify, diagnostics, retention, export, daily-schedule, verify-links, attribution, concurrency, price-store
+  unit/               vitest: dedupe, store, checks, scheduler, config, parse-result, providers, openai, api, api-keys, api-keys-routes, attendance, catch-up, sanitize, origin-guard, guidance, key-verify, diagnostics, retention, export, daily-schedule, verify-links, attribution, concurrency
   e2e/                playwright, serial, mock AI (--ai-test), port 4189: app.spec.ts, keys.spec.ts, topics.spec.ts, a11y.spec.ts (axe-core, both themes), categories.spec.ts (NEWS-97), layout.spec.ts (full-window layout + column count at several viewports, NEWS-96). `resetTopics` in a beforeAll gives every attempt — first run or serial retry — an empty server (NEWS-101)
 docs/                 numbered requirements (1–21), ai/ summaries, manual-test-plan.md
 ```
@@ -148,15 +145,12 @@ Data dir: `--data-dir` flag → `NEWS_DATA_DIR` → `~/.news`. Also holds `news.
 | Which filter pills are shown | `visibleCategories`/`visibleSubcategories`/`hasUncategorized` in `src/categories.ts` (pure, over the topic list). See `docs/22-topic-categories.md` FR-22.13–22.15 |
 | Section filter bar / sidebar pills | `filterBarJsx` + `[data-filter-category]`/`[data-filter-subcategory]` delegates in `client/app.tsx`; `.filter-bar` in `styles.scss`; server filter in `Store.queryItems`. See `docs/22-topic-categories.md` FR-22.9–22.12 |
 | Automatic topic classification | `needsClassifying`/`classifierOptions`/`applyClassification` in `checks.ts`; prompt + parsing in `ai/prompt.ts`. See `docs/22-topic-categories.md` FR-22.8 |
-| Run history / spend horizon | `RUN_RETENTION_DAYS` (400) + `MAX_RUNS_KEPT` (25k) and `Store.pruneOldRuns` in `db/store.ts`, called from the housekeeping sweep. See `docs/19-cost-visibility.md` FR-19.13 |
 | Stale refresh overwriting newer state | sequence guards in `refreshState`/`refreshFeed` (`src/client/api.ts`). See `docs/17-server-pagination.md` FR-17.9 |
 | Orphaned stories/runs after a topic delete | `Store.pruneOrphans()` in `db/store.ts`, called from `pruneAfterCheck` (`checks.ts`) and at startup (`cli.ts`). See `docs/4-cli-server-storage.md` FR-4.8c |
 | Wide-window layout / column count | `.shell` (no max-width) and `.day` (`auto-fill, minmax(400px, 1fr)`) in `styles.scss`. Guarded by `tests/e2e/layout.spec.ts`. See `docs/3-ui.md` FR-3.36–3.39 |
 | Accessibility (keyboard, ARIA, focus) | `trapTabInDialog` + the global `keydown` handler + `openTopicMenuFor` in `app.tsx`; `role=listbox/option` on the topics list; `:focus-visible` rule in `styles.scss`. Guarded by `tests/e2e/a11y.spec.ts`. See `docs/3-ui.md` FR-3.20–3.24 |
 | The privacy disclosure | `privacyNoteJsx` in `app.tsx` (Settings → Privacy), README "Privacy", onboarding welcome step; pinned by a test in `tests/unit/guidance.test.ts`. See `docs/7-api-keys.md` FR-7.13 |
 | First-run onboarding | `onboarding`/`onboardingTopics`/`STARTER_TOPICS` in `stores.ts`; `onboardingJsx` + `maybeOpenOnboarding` in `app.tsx`; dismissal in localStorage `news:onboarding-seen`. Key check: `src/ai/verify-key.ts`, injected via `createApp({verifyKey})` (null under `--ai-test`). See `docs/20-onboarding.md` |
-| Changing a model's price | **Edit `<data-dir>/prices.json`** — applies with no restart, no rebuild. Seeded from `BUILTIN_PRICES`; an https `priceManifestUrl` setting refreshes it daily. `src/ai/price-store.ts`, `docs/19-cost-visibility.md` FR-19.5a |
-| Cost / token usage / the budget cap | `src/ai/pricing.ts` (rates + `estimateCostUsd`); `usage`+`model` on `CheckRun`; `Store.spendThisMonth`/`spendSince`; `isOverBudget` in `checks.ts` gating `checkDue`; `spend` on `/api/state`; Settings "Spending" block in `app.tsx`. **Counts are stored, money is derived** — see `docs/19-cost-visibility.md` |
 | Per-topic guidance (free-text steer) | `guidance` on the topic + `setTopicGuidance` in `store.ts`; `PATCH /api/topics/:id`; `TopicContext` → `buildUserPrompt` in `src/ai/prompt.ts`; menu action `guidance` + `guidanceDialogJsx`/`guidanceTopicId` in the client. See `docs/18-topic-guidance.md` |
 | Flag a story off-topic / review mode | `offTopic` on items + `setItemOffTopic`/`offTopicTitlesForTopic` in `store.ts`; `PATCH /api/items/:id`; item context menu (`itemMenuJsx`), `flaggedRowJsx`, `reviewTopicIds`/`recentlyFlagged` in `app.tsx`; prompt via `buildUserPrompt` offTopicTitles. See `docs/15-off-topic-flagging.md` |
 | Transient toast | `#toast-slot`/`.toast` + `showToast` in `app.tsx`; `toast` state in `stores.ts`. **Never `window.alert` — a WKWebView no-op** |

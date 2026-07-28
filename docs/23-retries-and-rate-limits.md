@@ -1,6 +1,6 @@
 # Retries and rate limits
 
-What happens when a provider call fails. Related: [providers](./6-providers.md), [news checks](./2-news-checks-and-dedup.md), [cost visibility](./19-cost-visibility.md).
+What happens when a provider call fails. Related: [providers](./6-providers.md), [news checks](./2-news-checks-and-dedup.md).
 
 ## What it was before (NEWS-109)
 

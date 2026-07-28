@@ -29,13 +29,11 @@ Add/delete/pause topics (unique, case-insensitive); global interval (default 1 d
 - FR-20.9–20.11 keys checked with the vendor before saving (models-list probe, not a completion); **only 401/403 blocks the save** — offline is "unknown", not "wrong key"; verifier injected, null under `--ai-test`: **Shipped**
 - Auto-open on a genuinely fresh install is **manual** — the shared E2E server can never be in that state
 
-## [19 — Cost Visibility](../19-cost-visibility.md) — Shipped
+## 19 — Cost Visibility — **Removed (NEWS-119)**
 
-- FR-19.1–19.3 providers return `{items, usage}`; token+search counts persisted on the `CheckRun` with the model. **null usage = unknown, never zero** — NEWS-79: **Shipped**
-- FR-19.4–19.6 counts stored, money derived at display time from a dated, never-guessed rate table; a model with no published price yields **no estimate** rather than a wrong one: **Shipped**
-- FR-19.5a **rates updatable without a build** — NEWS-93: **Shipped**. `<data-dir>/prices.json` is the live table (seeded from built-ins, hand edits apply with no restart); an optional https `priceManifestUrl` is fetched daily and replaces it; built-ins are the floor. Every failure costs the *update*, never the estimate.
-- FR-19.7–19.9 `spend` block on `/api/state`; Settings shows the month's estimate *with* the count of checks it couldn't price: **Shipped**
-- FR-19.10–19.13 optional monthly cap pausing **scheduled** checks only (manual always runs), tripping on `>=`: **Shipped**
+Spend estimation, the monthly budget cap and the updatable price table are gone, along with `docs/19-cost-visibility.md`. Settings shows nothing about money; `/api/state` carries no `spend` or `prices`; `monthlyBudgetUsd` and `priceManifestUrl` are no longer settings (the settings blob is zod-parsed, so stored copies are simply dropped on read — no migration needed).
+
+**Token usage is still captured** on each `CheckRun` and is now unread. Kept deliberately as telemetry: it is the raw material if spend ever returns, and removing the column would be a schema migration for no visible gain.
 
 ## [18 — Topic Guidance](../18-topic-guidance.md) — Shipped
 
@@ -99,7 +97,7 @@ Default Anthropic provider (`claude-opus-4-8` + web search), prompt-level exclus
 - **docs/23-retries-and-rate-limits.md** (NEWS-109) — FR-23.1–23.6 linear jittered retry (15/30/45 s, ±20 %, 4 attempts), failure classification, account-wide rate-limit gate, rate-limited checks not advancing the attempt clock, `Retry-After` honoured: **Shipped**. FR-23.7 (NEWS-110) per-topic failure cooldown (2→30 min, schema v3), only *fatal* failures now advance the attempt clock, in-check retries cut to one: **Shipped**
 - **docs/22-topic-categories.md** (NEWS-97) — topic categories. FR-22.1–22.7 code-side taxonomy, slug-not-label storage, retire-not-delete, most-specific label resolution, "no subcategory" as a rendered *Other*, topic `category`/`subcategory`/`categorySource` + manual-override route (schema v2 migration): **Shipped**. FR-22.8 auto-classification on the first check, model slugs validated against the live taxonomy: **Shipped**. FR-22.9 section label on its own line with the full path (NEWS-111), FR-22.10–22.12 two-row newspaper-style filter bar, server-side filtering with `uncategorized`/`other` sentinels, ephemeral filter state; FR-22.13–22.15 (NEWS-114) empty options hidden, no subsection row below two options, active selection always kept: **Shipped**
 - Feed search **stays substring `LIKE`**, FTS5 declined (measured: 18 ms at a realistic 15k stories; FTS would break mid-word matching) — NEWS-102: **Decided, no change**
-- FR-19.13 spend horizon widened from 200 runs to **400 days** (25,000-row backstop); run retention moved to the housekeeping sweep — NEWS-103: **Shipped**
+- Run retention 200 runs → **400 days** (25,000-row backstop), moved to the housekeeping sweep — NEWS-103: **Shipped**. Originally sized so a spend total covered a billing month; spend is gone (NEWS-119) and the window is kept for the diagnostics record instead
 - FR-17.9 refresh responses apply in **issue order** — sequence guard on `refreshState`/`refreshFeed`, so a slow poll can't overwrite a newer mutation — NEWS-104: **Shipped**
 - FR-4.8c orphan sweep (`pruneOrphans`) for stories/runs written after their topic was deleted — after every check and at startup — NEWS-105: **Shipped**
 - FR-4.8/4.8a/4.8b/4.9 **storage moved to SQLite** (`node:sqlite`, Node 22.5+): per-row writes, zod-validated rows, one-time `data.json` import, no foreign keys (a check can outlive its topic), corrupt-db backup + settings-only fallback. Search stays substring `LIKE`, not FTS5 — NEWS-94: **Shipped**

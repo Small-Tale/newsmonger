@@ -19,12 +19,10 @@ describe('Store', () => {
       model: '',
       endpoint: '',
       notifyOnNewItems: false,
-      monthlyBudgetUsd: 0,
       itemRetentionDays: 365,
       scheduleMode: 'interval',
       dailyTimes: ['08:00'],
       checkConcurrency: 3,
-      priceManifestUrl: '',
     });
   });
 
@@ -238,12 +236,10 @@ describe('Store', () => {
       model: '',
       endpoint: '',
       notifyOnNewItems: false,
-      monthlyBudgetUsd: 0,
       itemRetentionDays: 365,
       scheduleMode: 'interval',
       dailyTimes: ['08:00'],
       checkConcurrency: 3,
-      priceManifestUrl: '',
     });
   });
 

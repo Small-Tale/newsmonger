@@ -199,20 +199,6 @@ export const SettingsSchema = z.object({
    */
   notifyOnNewItems: z.boolean().default(false),
   /**
-   * Monthly ceiling on estimated spend, in USD (NEWS-79). 0 means no cap.
-   * Crossing it pauses *scheduled* checks only — manual ones still run, so a
-   * capped month never locks the user out of their own app.
-   */
-  monthlyBudgetUsd: z.number().nonnegative().default(0),
-  /**
-   * HTTPS URL of a published price manifest (NEWS-93). Empty = don't fetch.
-   *
-   * Fetched at startup and once a day, replacing `<data-dir>/prices.json`, so
-   * corrected rates can reach installs without shipping a new build. Rates
-   * change on the vendors' schedule, not on a release schedule.
-   */
-  priceManifestUrl: z.string().default(''),
-  /**
    * How long a story is kept, in days (NEWS-87). 0 means forever, which was the
    * behaviour before this existed. **Bookmarked stories are never pruned** — the
    * user marked those as worth keeping, and a retention window is about the
@@ -284,8 +270,6 @@ export function emptyDataFile(): DataFile {
       scheduleMode: 'interval',
       dailyTimes: ['08:00'],
       checkConcurrency: 3,
-      priceManifestUrl: '',
-      monthlyBudgetUsd: 0,
       itemRetentionDays: DEFAULT_RETENTION_DAYS,
     },
     runs: [],

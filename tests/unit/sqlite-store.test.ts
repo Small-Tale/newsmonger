@@ -47,7 +47,7 @@ function legacyFile(dir: string, overrides: Record<string, unknown> = {}): void 
           foundAt: '2026-07-02T00:00:00.000Z',
         },
       ],
-      settings: { checkIntervalMs: 3_600_000, monthlyBudgetUsd: 12 },
+      settings: { checkIntervalMs: 3_600_000, notifyOnNewItems: true },
       runs: [
         {
           id: 'r1',
@@ -89,7 +89,7 @@ describe('legacy data.json import (NEWS-94)', () => {
 
     expect(store.listRuns()[0]?.newItems).toBe(1);
     expect(store.getSettings().checkIntervalMs).toBe(3_600_000);
-    expect(store.getSettings().monthlyBudgetUsd).toBe(12);
+    expect(store.getSettings().notifyOnNewItems).toBe(true);
     // Absent fields still get their schema defaults through the import.
     expect(store.getSettings().itemRetentionDays).toBe(DEFAULT_RETENTION_DAYS);
   });
@@ -126,11 +126,11 @@ describe('legacy data.json import (NEWS-94)', () => {
     // deliberate state. "No topics" is not the same as "empty".
     const dir = tmpDataDir();
     const store = new Store(dir);
-    store.updateSettings({ monthlyBudgetUsd: 99 });
+    store.updateSettings({ notifyOnNewItems: true });
     legacyFile(dir);
 
     const reopened = new Store(dir);
-    expect(reopened.getSettings().monthlyBudgetUsd).toBe(99);
+    expect(reopened.getSettings().notifyOnNewItems).toBe(true);
     expect(reopened.listTopics()).toEqual([]);
   });
 

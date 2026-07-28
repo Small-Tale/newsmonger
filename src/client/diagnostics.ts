@@ -1,4 +1,3 @@
-import { estimateCostUsd, formatUsd } from '../ai/pricing.js';
 import type { StateResp } from '../api/schemas.js';
 
 /** One row of the diagnostics table, already resolved for display. */
@@ -15,11 +14,10 @@ export interface RunRow {
   model: string | null;
   newItems: number;
   /** Estimated cost, or null when it can't be known (NEWS-79). */
-  costUsd: number | null;
   error: string | null;
 }
 
-export function runRows(state: Pick<StateResp, 'runs' | 'topics' | 'prices'>): RunRow[] {
+export function runRows(state: Pick<StateResp, 'runs' | 'topics'>): RunRow[] {
   const names = new Map(state.topics.map((t) => [t.id, t.name]));
   return state.runs.map((run) => ({
     id: run.id,
@@ -31,7 +29,6 @@ export function runRows(state: Pick<StateResp, 'runs' | 'topics' | 'prices'>): R
     provider: run.provider,
     model: run.model,
     newItems: run.newItems,
-    costUsd: estimateCostUsd(run.model ?? '', run.usage, state.prices),
     error: run.error,
   }));
 }
@@ -79,20 +76,14 @@ export function buildDiagnostics(state: StateResp, opts: DiagnosticsOptions): st
   lines.push(`endpoint set: ${state.settings.endpoint === '' ? 'no' : 'yes'}`);
   lines.push(`check interval: ${String(Math.round(state.settings.checkIntervalMs / 60_000))} min`);
   lines.push(`topics: ${String(state.topics.length)} (${String(state.topics.filter((t) => t.paused).length)} paused)`);
-  lines.push(
-    `spend this month: ${formatUsd(state.spend.usd)} across ${String(state.spend.pricedRuns)} priced runs` +
-      `, ${String(state.spend.unpricedRuns)} unpriced`,
-  );
-  lines.push(`monthly budget: ${state.spend.monthlyBudgetUsd === 0 ? 'none' : formatUsd(state.spend.monthlyBudgetUsd)}`);
   lines.push('');
   lines.push(`## Recent checks (${String(rows.length)})`);
   if (rows.length === 0) lines.push('(none recorded)');
   for (const [i, row] of rows.entries()) {
     const who = opts.includeTopicNames ? row.topicName : `topic ${String(i + 1)}`;
-    const cost = row.costUsd === null ? 'cost unknown' : formatUsd(row.costUsd);
     lines.push(
       `- ${row.startedAt} ${row.status} ${who} · ${row.provider ?? 'no provider'}/${row.model ?? '?'}` +
-        ` · ${formatDuration(row.durationMs)} · ${String(row.newItems)} new · ${cost}`,
+        ` · ${formatDuration(row.durationMs)} · ${String(row.newItems)} new`,
     );
     // Error text is the whole point of the bundle, so it is never truncated
     // away — it is also the one field that could echo a topic name back, which

@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest';
 
-import { builtinTable } from '../../src/ai/price-store.js';
 import type { StateResp } from '../../src/api/schemas.js';
 import { buildDiagnostics, formatDuration, runRows } from '../../src/client/diagnostics.js';
 
@@ -32,12 +31,10 @@ function state(over: Partial<StateResp> = {}): StateResp {
       model: 'claude-opus-4-8',
       endpoint: '',
       notifyOnNewItems: false,
-      monthlyBudgetUsd: 0,
       itemRetentionDays: 365,
       scheduleMode: 'interval',
       dailyTimes: ['08:00'],
       checkConcurrency: 3,
-      priceManifestUrl: '',
     },
     runs: [
       {
@@ -60,10 +57,8 @@ function state(over: Partial<StateResp> = {}): StateResp {
       },
     ],
     checking: [],
-    spend: { usd: 0.3, pricedRuns: 1, unpricedRuns: 0, monthlyBudgetUsd: 0, overBudget: false, pricesVerifiedOn: '2026-07-27' },
     appVersion: '0.1.0',
     // The shipped defaults, so cost assertions exercise a real rate.
-    prices: builtinTable().models,
     ...over,
   };
 }
@@ -76,7 +71,6 @@ describe('runRows (NEWS-88)', () => {
     expect(row.topicName).toBe('My Divorce Proceedings');
     expect(row.durationMs).toBe(252_000);
     // 30k in + 3k out + 8 searches on Opus 4.8.
-    expect(row.costUsd).toBeCloseTo(0.15 + 0.075 + 0.08, 6);
   });
 
   it('names a deleted topic rather than showing a bare id', () => {
@@ -153,10 +147,15 @@ describe('buildDiagnostics (NEWS-88)', () => {
     expect(buildDiagnostics(state({ runs: [] }), OPTS)).toContain('(none recorded)');
   });
 
-  it('reports unknown cost as unknown rather than as zero', () => {
+  it('says nothing about cost (NEWS-119)', () => {
+    // Spend is gone. This used to assert that an unpriced run reported "cost
+    // unknown" rather than zero; the bundle now reports no money at all, and
+    // asserting the absence keeps a stray reintroduction visible.
     const s = state();
     const [only] = s.runs;
     const text = buildDiagnostics({ ...s, runs: [{ ...only, usage: null }] }, OPTS);
-    expect(text).toContain('cost unknown');
+    expect(text).not.toContain('cost');
+    expect(text).not.toContain('$');
+    expect(text).not.toContain('budget');
   });
 });

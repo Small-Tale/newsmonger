@@ -1,10 +1,8 @@
 import type { SafeHtml } from 'kerfjs';
 import { delegate, each, mount } from 'kerfjs';
 
-import { formatUsd } from '../ai/pricing.js';
 import type { ProviderName } from '../ai/types.js';
 import { PROVIDER_INFO, PROVIDER_MODELS, PROVIDER_NAMES } from '../ai/types.js';
-import type { StateResp } from '../api/schemas.js';
 import {
   BUILTIN_CATEGORIES,
   categoryLabel,
@@ -39,8 +37,6 @@ import {
   updateDailyTimes,
   updateHighPriorityInterval,
   updateInterval,
-  updateMonthlyBudget,
-  updatePriceManifestUrl,
   updateProviderSettings,
   updateRetention,
   updateScheduleMode,
@@ -666,32 +662,6 @@ function guidanceDialogJsx(topic: Topic): SafeHtml {
   );
 }
 
-/**
- * This month's estimated spend (NEWS-79).
- *
- * The unpriced-run count is shown *next to* the total rather than folded into
- * it. A bare number reads as complete, and a check whose provider reported no
- * usage — every subscription CLI — is genuinely unknown rather than free.
- */
-function spendSectionJsx(spend: StateResp['spend']): SafeHtml {
-  const nothingPriced = spend.pricedRuns === 0;
-  return (
-    <div class="spend">
-      <p class="spend-total">
-        <strong>{nothingPriced ? '—' : formatUsd(spend.usd)}</strong>
-        <span class="spend-label">estimated this month</span>
-      </p>
-      <p class="note">
-        {nothingPriced && spend.unpricedRuns === 0
-          ? 'No checks have run yet this month.'
-          : spend.unpricedRuns > 0
-            ? `${String(spend.unpricedRuns)} of ${String(spend.unpricedRuns + spend.pricedRuns)} checks can’t be priced — a subscription provider reports no token usage, and some models have no published rate. Those are missing from the total, not free.`
-            : `Based on ${String(spend.pricedRuns)} priced ${spend.pricedRuns === 1 ? 'check' : 'checks'}. Rates last verified ${spend.pricesVerifiedOn}; treat it as an estimate, not your bill.`}
-      </p>
-    </div>
-  );
-}
-
 
 /**
  * First-run flow (NEWS-78).
@@ -794,7 +764,7 @@ function onboardingStepJsx(step: OnboardingStep, s: AppState): SafeHtml {
           ))}
         </select>
       </label>
-      <p class="note">You can change this, and set a spending cap, in Settings later.</p>
+      <p class="note">You can change this in Settings later.</p>
     </div>
   );
 }
@@ -895,8 +865,7 @@ function diagnosticsJsx(s: AppState): SafeHtml {
                   ? 'running…'
                   : row.status === 'failed'
                     ? (row.error ?? 'failed')
-                    : `${String(row.newItems)} new · ${formatDuration(row.durationMs)}` +
-                      (row.costUsd === null ? '' : ` · ${formatUsd(row.costUsd)}`)}
+                    : `${String(row.newItems)} new · ${formatDuration(row.durationMs)}`}
               </span>
             </li>
           ))}
@@ -1104,43 +1073,6 @@ function settingsDialogJsx(): SafeHtml {
             ''
           )}
         </div>
-
-        <h3 class="eyebrow">Spending</h3>
-        {spendSectionJsx(s.spend)}
-        <label class="field">
-          <span>Monthly budget</span>
-          <span class="budget-input">
-            <span class="budget-currency">$</span>
-            <input
-              type="number"
-              min="0"
-              step="1"
-              data-action="budget"
-              value={s.spend.monthlyBudgetUsd > 0 ? String(s.spend.monthlyBudgetUsd) : ''}
-              placeholder="No limit"
-            />
-          </span>
-        </label>
-        <p class="note">
-          When the month’s estimated spend reaches this, scheduled checks pause. Check-now still works, so a
-          reached budget never locks you out — leave it blank for no limit.
-        </p>
-
-        <label class="field">
-          <span class="field-label">Price updates</span>
-          <input
-            type="url"
-            data-action="price-manifest"
-            value={s.settings.priceManifestUrl}
-            placeholder="https://… (optional)"
-          />
-        </label>
-        <p class="note">
-          Rates change on the vendors’ schedule, not ours. The ones in use live in{' '}
-          <code>~/.news/prices.json</code> — edit that file at any time and the change applies immediately, no
-          restart and no update. Point this at a published manifest (same format) to have them refreshed daily
-          instead.
-        </p>
 
         <h3 class="eyebrow">API keys</h3>
         <div class="keys">{s.keys.map((k) => keyRowJsx(k, s.keychainLabel, s.keychainAvailable))}</div>
@@ -1467,26 +1399,12 @@ function appJsx(): SafeHtml {
       <div id="filter-slot">{filterBarJsx(s.categoryFilter, s.topics)}</div>
 
       {/* Banners appear in response to background events (a failed check, a
-          blown budget), so they have to announce rather than wait to be found —
+          a failing topic), so they have to announce rather than wait to be found —
           which is why the container is always present. A live region has to
           exist *before* its content for the announcement to happen at all.
           (Also a KF-377 workaround once; that reason expired in kerf 3.0.0 and
           this one did not. See docs/3-ui.md, NEWS-99.) */}
       <div id="banners" role="status" aria-live="polite">
-        {s.spend.overBudget ? (
-          <div class="banner warn">
-            {icon('warn', 14)}
-            <span class="banner-text">
-              Scheduled checks are paused — this month’s estimated spend has reached your{' '}
-              {formatUsd(s.spend.monthlyBudgetUsd)} budget. Check now still works.
-            </span>
-            <button class="btn subtle" type="button" data-action="open-settings">
-              Settings
-            </button>
-          </div>
-        ) : (
-          ''
-        )}
         {s.savedFilter ? (
           <div class="banner saved">
             {icon('bookmark', 14)}
@@ -1954,13 +1872,6 @@ function wireEvents(root: HTMLElement): void {
   // Budget is committed on `change` (blur / Enter), not `input` — a PATCH per
   // keystroke would round-trip "1", "12", "125" and fight the 4 s state poll
   // for the field. Blank means no limit.
-  void delegate(root, 'change', '[data-action=budget]', (_e, el) => {
-    if (!(el instanceof HTMLInputElement)) return;
-    const raw = el.value.trim();
-    const value = raw === '' ? 0 : Number.parseFloat(raw);
-    if (!Number.isFinite(value) || value < 0) return;
-    void updateMonthlyBudget(value);
-  });
 
   void delegate(root, 'change', '[data-action=schedule-mode]', (_e, el) => {
     if (el instanceof HTMLSelectElement && (el.value === 'interval' || el.value === 'daily')) {
@@ -1986,16 +1897,6 @@ function wireEvents(root: HTMLElement): void {
     void updateDailyTimes(times);
   });
 
-  void delegate(root, 'change', '[data-action=price-manifest]', (_e, el) => {
-    if (!(el instanceof HTMLInputElement)) return;
-    const url = el.value.trim();
-    if (url !== '' && !url.startsWith('https://')) {
-      el.value = appStore.state.value.settings.priceManifestUrl;
-      showToast('The manifest URL must start with https://');
-      return;
-    }
-    void updatePriceManifestUrl(url);
-  });
 
   void delegate(root, 'change', '[data-action=concurrency]', (_e, el) => {
     if (el instanceof HTMLSelectElement) void updateConcurrency(Number(el.value));

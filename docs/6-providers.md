@@ -55,4 +55,4 @@ The Settings model field is a **combobox** (NEWS-37): an editable text input bac
 
 See also: [2 — News Checks and Deduplication](2-news-checks-and-dedup.md), [4 — CLI, Server, and Storage](4-cli-server-storage.md).
 
-Key storage and the Settings dialog are covered in [7 — API Keys and Settings Dialog](7-api-keys.md). What a check *costs* — token usage capture, the price table, and the monthly budget cap — is covered in [19 — Cost Visibility](19-cost-visibility.md).
+Key storage and the Settings dialog are covered in [7 — API Keys and Settings Dialog](7-api-keys.md). Providers still report token usage on each check and it is stored on the `CheckRun`, but nothing reads it: the spend estimate, the budget cap and the price table were removed in NEWS-119. The counts are kept as telemetry rather than deleted, since dropping the column would be a migration for no visible gain.

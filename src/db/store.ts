@@ -3,8 +3,6 @@ import fs from 'node:fs';
 import path from 'node:path';
 import type { DatabaseSync } from 'node:sqlite';
 
-import { PriceStore } from '../ai/price-store.js';
-import { estimateCostUsd } from '../ai/pricing.js';
 import type { TokenUsage } from '../ai/types.js';
 import { NO_SUBCATEGORY_FILTER, UNCATEGORIZED_FILTER } from '../categories.js';
 import type { CheckRun, NewsItem, Settings, Topic } from './schemas.js';
@@ -20,21 +18,22 @@ import {
 import { backupUnreadableDb, dbPath, openDb } from './sqlite.js';
 
 /**
- * Run-history retention (NEWS-103). Two limits, whichever binds first.
+ * Run-history retention (NEWS-103, revised NEWS-119). Two limits, whichever
+ * binds first.
  *
- * `RUN_RETENTION_DAYS` is the one with a purpose: spend is computed from stored
- * runs, so the run window *is* the spend window. 400 days means "this month" and
- * "the last twelve months" are always complete, which is the guarantee the cost
- * UI needs to stop hedging. The previous cap was 200 runs — under an hour of
- * history for a busy install, which made a monthly total quietly partial.
+ * These numbers were chosen when spend was computed from stored runs, so the run
+ * window *was* the spend window and had to cover a billing month. Spend is gone
+ * (NEWS-119) and the only reader left is the diagnostics run list, which shows
+ * twenty — so the window is now far wider than anything needs.
  *
- * `MAX_RUNS_KEPT` is a backstop, not a policy. Runs accrue per topic per check,
- * so a short interval across many topics can generate thousands a day; without a
- * ceiling, 400 days of that is millions of rows. 25,000 is far above any
- * plausible real usage (20 topics checked daily is ~7,300 a year) while bounding
- * the table at a few MB. When it *does* bind, the spend horizon shortens again —
- * which is why FR-19.13 still names a condition rather than promising a year
- * unconditionally.
+ * Kept anyway, deliberately: run history is the record of what the app did and
+ * when it failed, it costs a few MB at the ceiling, and shrinking it would throw
+ * away the evidence a bug report is made of. The justification changed; the
+ * value didn't need to.
+ *
+ * `MAX_RUNS_KEPT` remains the backstop against pathological volume — runs accrue
+ * per topic per check, so a short interval across many topics can generate
+ * thousands a day, and 400 days of that is millions of rows.
  */
 export const RUN_RETENTION_DAYS = 400;
 export const MAX_RUNS_KEPT = 25_000;
@@ -117,11 +116,6 @@ export class Store {
   /** Where the database and image cache live. */
   readonly dataDir: string;
 
-  /**
-   * Live model rates (NEWS-93). Lives here because spend is computed here, and
-   * it reads `<data-dir>/prices.json` — editable without rebuilding the app.
-   */
-  readonly prices: PriceStore;
 
   constructor(dataDir: string) {
     this.dataDir = dataDir;
@@ -144,7 +138,6 @@ export class Store {
 
     this.importJsonFile();
     this.settingsCache = this.loadSettings();
-    this.prices = new PriceStore(dataDir);
   }
 
   /**
@@ -822,9 +815,8 @@ export class Store {
    * Apply run-history retention (NEWS-103): drop runs older than
    * `RUN_RETENTION_DAYS`, then any beyond `MAX_RUNS_KEPT` oldest-first.
    *
-   * Runs are what spend is computed from, so this is also what bounds how far
-   * back a cost figure can see — see the constants above for why it is a date
-   * window with a count backstop rather than either alone.
+   * See the constants above for why this is a date window with a count backstop
+   * rather than either alone.
    */
   pruneOldRuns(now: Date): number {
     const cutoff = new Date(now.getTime() - RUN_RETENTION_DAYS * 24 * 60 * 60 * 1000).toISOString();
@@ -869,44 +861,4 @@ export class Store {
     return { items: asCount(items.changes), runs: asCount(runs.changes) };
   }
 
-  /** Estimated spend so far in `now`'s calendar month, in the local timezone. */
-  spendThisMonth(now: Date): { usd: number; pricedRuns: number; unpricedRuns: number } {
-    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
-    return this.spendSince(monthStart.toISOString());
-  }
-
-  /**
-   * Estimated spend, in USD, over the runs recorded since `sinceIso` (NEWS-79).
-   *
-   * Returns both the total and how many runs could **not** be priced, because a
-   * total alone would quietly read as complete. Runs whose provider reported no
-   * usage, or whose model has no published price, are counted as unknown rather
-   * than as zero — see `estimateCostUsd`.
-   *
-   * The horizon is the retained run history — `RUN_RETENTION_DAYS` (400 days),
-   * so a calendar month is always complete in practice. It shortens only if the
-   * `MAX_RUNS_KEPT` backstop binds first, which takes sustained check volume far
-   * above normal use (NEWS-103).
-   */
-  spendSince(sinceIso: string): { usd: number; pricedRuns: number; unpricedRuns: number } {
-    // Read once per call, not per run: the file's mtime check is cheap but not
-    // free, and every run in a sweep is priced against the same table.
-    const table = this.prices.table().models;
-    const rows = this.db
-      .prepare(`SELECT model, usage FROM runs WHERE started_at >= ? AND status != 'running'`)
-      .all(sinceIso) as { model: string | null; usage: string | null }[];
-    let usd = 0;
-    let pricedRuns = 0;
-    let unpricedRuns = 0;
-    for (const row of rows) {
-      const usage = parseJson(row.usage);
-      const cost = estimateCostUsd(row.model ?? '', usage as TokenUsage | null, table);
-      if (cost === null) unpricedRuns += 1;
-      else {
-        usd += cost;
-        pricedRuns += 1;
-      }
-    }
-    return { usd, pricedRuns, unpricedRuns };
-  }
 }

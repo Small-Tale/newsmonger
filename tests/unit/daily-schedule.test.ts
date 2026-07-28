@@ -18,12 +18,10 @@ const SETTINGS: Settings = {
   scheduleMode: 'daily',
   dailyTimes: ['08:00', '18:00'],
   checkConcurrency: 3,
-  priceManifestUrl: '',
   provider: 'auto',
   model: '',
   endpoint: '',
   notifyOnNewItems: false,
-  monthlyBudgetUsd: 0,
   itemRetentionDays: 365,
 };
 

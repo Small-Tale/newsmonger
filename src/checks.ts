@@ -54,18 +54,6 @@ function classifierOptions(): CategoryOption[] {
   }));
 }
 
-/**
- * Whether the month's estimated spend has crossed the user's cap (NEWS-79).
- *
- * A cap of 0 means "no cap". **Unpriced runs count as unknown, not as zero** —
- * the gate can only act on what it can price, so a provider that reports no
- * usage is never held back by a budget it cannot be measured against. That is
- * stated plainly in the UI rather than papered over.
- */
-export function isOverBudget(spend: { usd: number }, settings: Pick<Settings, 'monthlyBudgetUsd'>): boolean {
-  return settings.monthlyBudgetUsd > 0 && spend.usd >= settings.monthlyBudgetUsd;
-}
-
 /** Resolves the active provider from current settings, per check. */
 export type ProviderResolver = () => Promise<NewsProvider>;
 
@@ -496,10 +484,6 @@ export class CheckRunner {
       .filter((topic) => isDueUnderSchedule(topic, settings, now))
       .sort(byCheckOrder);
     if (due.length === 0) return 0;
-    // The budget cap gates *scheduled* work only, exactly like the attendance
-    // gate: manual checks stay available so a capped month doesn't lock the
-    // user out of their own app, it just stops it spending on its own.
-    if (isOverBudget(this.store.spendThisMonth(now), settings)) return 0;
     if (!(await this.mayRunScheduled(now))) return 0;
     return this.runPool(due, settings.checkConcurrency, false);
   }

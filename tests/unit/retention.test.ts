@@ -251,32 +251,19 @@ describe('Store.pruneOldRuns (NEWS-103)', () => {
     expect(kept.map((r) => r.id)).toContain('seed-5');
   });
 
-  it('spend now sees a whole month of runs (NEWS-103)', () => {
-    // The behaviour the ticket is actually about, asserted end to end rather
-    // than via row counts: a month of daily runs all price into the total.
+  it('keeps a whole month of runs, which the old 200-run cap did not (NEWS-103)', () => {
+    // The behaviour the ticket was about. It used to assert this through the
+    // spend total; spend is gone (NEWS-119), so it asserts the retained runs
+    // directly — which is what the cap actually governs.
     const store = new Store(tmpDataDir());
-    const topic = store.addTopic('Costly');
+    const topic = store.addTopic('Busy');
     for (let i = 0; i < 300; i++) {
       const run = store.startRun(topic.id);
-      store.finishRun(run.id, {
-        status: 'succeeded',
-        newItems: 0,
-        model: 'claude-opus-4-8',
-        usage: {
-          inputTokens: 1000,
-          cacheReadTokens: 0,
-          cacheWriteTokens: 0,
-          outputTokens: 1000,
-          webSearches: 0,
-        },
-      });
+      store.finishRun(run.id, { status: 'succeeded', newItems: 0, model: 'claude-opus-4-8' });
     }
     store.pruneOldRuns(NOW);
 
-    // All 300 are still there and all 300 are priced — under the old 200 cap a
-    // third of them would already have been discarded.
-    const spend = store.spendSince('2000-01-01T00:00:00.000Z');
-    expect(spend.pricedRuns).toBe(300);
-    expect(spend.unpricedRuns).toBe(0);
+    // All 300 survive — under the old 200 cap a third would already be gone.
+    expect(store.listRuns(1000)).toHaveLength(300);
   });
 });

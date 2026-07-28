@@ -9,7 +9,7 @@ import type { z } from 'zod';
 import { deleteApiKey, resolveApiKey, saveApiKey } from '../ai/api-keys.js';
 import { probeProviders } from '../ai/providers/index.js';
 import { isKeyedProvider, KEY_ENV_VARS, KEYED_PROVIDERS, PROVIDER_INFO } from '../ai/types.js';
-import type { ItemsResp, KeysResp, ProvidersResp, SpendResp, StateResp } from '../api/schemas.js';
+import type { ItemsResp, KeysResp, ProvidersResp, StateResp } from '../api/schemas.js';
 import {
   CheckReqSchema,
   CreateTopicReqSchema,
@@ -19,9 +19,6 @@ import {
   UpdateSettingsReqSchema,
   UpdateTopicReqSchema,
 } from '../api/schemas.js';
-import { isOverBudget } from '../checks.js';
-import type { Settings } from '../db/schemas.js';
-import type { Store } from '../db/store.js';
 import { toAtom, toJson, toMarkdown } from '../export.js';
 import { cachedImagePath, isValidHash, liveImageHashes, pruneImageCache, sniffImageType } from '../images/index.js';
 import { isKeychainAvailable, keychainLabel } from '../keychain.js';
@@ -67,19 +64,6 @@ function appVersion(): string {
   return cachedVersion;
 }
 
-/** Build the spend block for `/api/state` (NEWS-79). */
-function spendResp(store: Store, settings: Settings, now: Date): SpendResp {
-  const spend = store.spendThisMonth(now);
-  return {
-    ...spend,
-    monthlyBudgetUsd: settings.monthlyBudgetUsd,
-    overBudget: isOverBudget(spend, settings),
-    // From the *live* table, so the date shown is the one the estimate used
-    // rather than whenever the build happened to be cut (NEWS-93).
-    pricesVerifiedOn: store.prices.table().verifiedOn,
-  };
-}
-
 /**
  * Ceiling on one export or feed (NEWS-85). Generous for a document, bounded so
  * an install with a year of retained stories can't build a 40 MB response.
@@ -98,10 +82,6 @@ export function registerApi(app: Hono<AppEnv>): void {
       settings,
       runs: store.listRuns(20),
       checking: runner.checking(),
-      spend: spendResp(store, settings, new Date()),
-      // The client prices individual runs for the diagnostics list, so it needs
-      // the same table the server used.
-      prices: store.prices.table().models,
       appVersion: appVersion(),
     };
     return c.json(state);

@@ -25,12 +25,10 @@ const BASE_SETTINGS: StateResp['settings'] = {
   model: '',
   endpoint: '',
   notifyOnNewItems: false,
-  monthlyBudgetUsd: 0,
   itemRetentionDays: 365,
   scheduleMode: 'interval',
   dailyTimes: ['08:00'],
   checkConcurrency: 3,
-  priceManifestUrl: '',
 };
 
 function stateBody(checkIntervalMs: number, topicNames: string[] = []): unknown {
@@ -50,16 +48,7 @@ function stateBody(checkIntervalMs: number, topicNames: string[] = []): unknown 
     settings: { ...BASE_SETTINGS, checkIntervalMs },
     runs: [],
     checking: [],
-    spend: {
-      usd: 0,
-      pricedRuns: 0,
-      unpricedRuns: 0,
-      monthlyBudgetUsd: 0,
-      overBudget: false,
-      pricesVerifiedOn: '2026-07-27',
-    },
     appVersion: '',
-    prices: {},
   };
 }
 

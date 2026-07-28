@@ -47,12 +47,8 @@ export interface AppState {
   settings: StateResp['settings'];
   runs: StateResp['runs'];
   checking: string[];
-  /** Estimated spend this month + the budget cap (NEWS-79). */
-  spend: StateResp['spend'];
   /** App version, for the diagnostics bundle (NEWS-88). */
   appVersion: string;
-  /** Live model rates, so the client can price runs the same way (NEWS-93). */
-  prices: StateResp['prices'];
   /** Whether a copied diagnostics bundle includes topic names (NEWS-88). */
   diagIncludeTopics: boolean;
   /** Provider list + availability (fetched on demand, not every poll). */
@@ -278,25 +274,14 @@ export const appStore = defineStore({
       model: '',
       endpoint: '',
       notifyOnNewItems: false,
-      monthlyBudgetUsd: 0,
       itemRetentionDays: 365,
       scheduleMode: 'interval',
       dailyTimes: ['08:00'],
       checkConcurrency: 3,
-      priceManifestUrl: '',
     },
     runs: [],
     checking: [],
-    spend: {
-      usd: 0,
-      pricedRuns: 0,
-      unpricedRuns: 0,
-      monthlyBudgetUsd: 0,
-      overBudget: false,
-      pricesVerifiedOn: '',
-    },
     appVersion: '',
-    prices: {},
     diagIncludeTopics: false,
     providers: [],
     settingsOpen: false,

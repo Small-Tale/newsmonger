@@ -1471,46 +1471,6 @@ h2.eyebrow {
   }
 }
 
-// -------------------------------------------------------------- spending ---
-
-.spend {
-  margin: 0 0 14px;
-}
-
-.spend-total {
-  display: flex;
-  align-items: baseline;
-  gap: 8px;
-  margin: 0 0 4px;
-
-  strong {
-    font-size: 22px;
-    font-variant-numeric: tabular-nums;
-    color: var(--ink);
-  }
-}
-
-.spend-label {
-  font-size: 12.5px;
-  color: var(--muted);
-}
-
-.budget-input {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-
-  .budget-currency {
-    color: var(--muted);
-  }
-
-  input {
-    // Wide enough for a four-figure budget, no wider — this is a small number
-    // sitting in a settings row, not a primary field.
-    width: 7ch;
-  }
-}
-
 // ------------------------------------------------------ guidance dialog ---
 
 .dialog.guidance {

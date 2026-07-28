@@ -726,39 +726,18 @@ test('the local API refuses requests from a page on another origin (NEWS-86)', a
   expect((await request.delete(`/api/topics/${topic.id}`)).ok()).toBeTruthy();
 });
 
-test('the settings dialog shows spend and accepts a monthly budget (NEWS-79)', async ({ page, request }) => {
+test('settings offers nothing about money (NEWS-119)', async ({ page }) => {
+  // Spend, the monthly budget and the price-manifest field are gone. Asserting
+  // their absence is what stops one drifting back in unnoticed — the removal is
+  // the requirement, so it needs a test like any other.
   await page.goto('/');
   await openSettings(page);
 
-  // The mock provider's model has no published price, so nothing is priceable —
-  // which is exactly the case the UI must not render as "$0.00 spent".
-  await expect(page.locator('.spend')).toBeVisible();
-  await expect(page.locator('.spend-total strong')).toHaveText('—');
-
-  const budget = page.locator('[data-action=budget]');
-  await expect(budget).toHaveValue('');
-  await budget.fill('25');
-  await budget.blur();
-  await expect
-    .poll(async () => {
-      const state = (await (await request.get('/api/state')).json()) as {
-        settings: { monthlyBudgetUsd: number };
-      };
-      return state.settings.monthlyBudgetUsd;
-    })
-    .toBe(25);
-
-  // Clearing it turns the cap off again — blank means no limit, not zero spend.
-  await budget.fill('');
-  await budget.blur();
-  await expect
-    .poll(async () => {
-      const state = (await (await request.get('/api/state')).json()) as {
-        settings: { monthlyBudgetUsd: number };
-      };
-      return state.settings.monthlyBudgetUsd;
-    })
-    .toBe(0);
+  await expect(page.locator('.spend')).toHaveCount(0);
+  await expect(page.locator('[data-action=budget]')).toHaveCount(0);
+  await expect(page.locator('[data-action=price-manifest]')).toHaveCount(0);
+  await expect(page.locator('.dialog')).not.toContainText('Spending');
+  await expect(page.locator('.dialog')).not.toContainText('budget');
 
   await closeSettings(page);
 });

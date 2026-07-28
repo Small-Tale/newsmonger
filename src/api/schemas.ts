@@ -1,6 +1,5 @@
 import { z } from 'zod';
 
-import { ModelPriceSchema } from '../ai/price-schema.js';
 import { KEYED_PROVIDERS, PROVIDER_NAMES } from '../ai/types.js';
 import {
   CheckRunSchema,
@@ -92,19 +91,6 @@ export type SaveKeyReq = z.infer<typeof SaveKeyReqSchema>;
  * complete, and a run whose provider reported no usage (or whose model has no
  * published price) is genuinely *unknown*, not zero. The UI says so.
  */
-export const SpendRespSchema = z.object({
-  usd: z.number(),
-  pricedRuns: z.number().int(),
-  unpricedRuns: z.number().int(),
-  /** The user's cap, echoed so the client doesn't have to re-derive it. 0 = off. */
-  monthlyBudgetUsd: z.number(),
-  /** Whether scheduled checks are currently paused by the cap. */
-  overBudget: z.boolean(),
-  /** When the price table was last verified, and against what. */
-  pricesVerifiedOn: z.string(),
-});
-export type SpendResp = z.infer<typeof SpendRespSchema>;
-
 export const StateRespSchema = z.object({
   topics: z.array(TopicSchema),
   /**
@@ -118,15 +104,8 @@ export const StateRespSchema = z.object({
   settings: SettingsSchema,
   runs: z.array(CheckRunSchema),
   checking: z.array(z.string()),
-  /** Estimated spend so far this calendar month (NEWS-79). */
-  spend: SpendRespSchema,
   /** App version, for diagnostics bundles (NEWS-88). '' if it can't be read. */
   appVersion: z.string().default(''),
-  /**
-   * The live model rate table (NEWS-93), so the client can price individual
-   * runs with exactly what the server used. Small — a dozen entries.
-   */
-  prices: z.record(z.string(), ModelPriceSchema).default({}),
 });
 export type StateResp = z.infer<typeof StateRespSchema>;
 
