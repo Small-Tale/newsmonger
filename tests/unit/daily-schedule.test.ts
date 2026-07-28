@@ -119,22 +119,32 @@ describe('the daily schedule end to end (NEWS-84)', () => {
     store.updateSettings({ scheduleMode: 'daily', dailyTimes: ['08:00'] });
     store.addTopic('Fusion');
 
-    // Anchored to the real current day rather than a fixed date. `checkDue`
-    // takes a simulated `now`, but a completed check records `new Date()` — so a
-    // hard-coded timeline silently becomes wrong the moment the wall clock
-    // passes it, and the test fails on a day nobody changed anything. (It did:
-    // the original dates were 2026-07-27/28, and it started failing on the 28th.)
+    // `checkDue` takes a simulated `now`, but a completed check records the REAL
+    // `new Date()`. So every assertion here is really a comparison between the
+    // simulated slot and the actual wall clock, and the timeline has to be
+    // positioned around "now" rather than written down.
+    //
+    // Anchoring only the *day* is not enough, and this test has now failed twice
+    // for that reason: fixed dates (2026-07-27/28) broke once the date passed
+    // them, and a today-relative timeline broke again whenever the suite ran
+    // before 08:00, because the recorded time landed *before* the slot it was
+    // supposed to satisfy.
+    //
+    // So the "already checked" assertions use slots in the PAST (yesterday), which
+    // the recorded now is guaranteed to be after, and the "due again" assertion
+    // uses one in the FUTURE (tomorrow), which it is guaranteed to be before.
+    // Nothing here depends on the time of day.
     const today = new Date();
     const at = (dayOffset: number, hour: number, min = 0): Date =>
       new Date(today.getFullYear(), today.getMonth(), today.getDate() + dayOffset, hour, min, 0, 0);
 
     // Never checked → due immediately.
-    expect(await runner.checkDue(at(0, 9))).toBe(1);
+    expect(await runner.checkDue(at(-1, 9))).toBe(1);
     // Same slot, a minute later: nothing.
-    expect(await runner.checkDue(at(0, 9, 1))).toBe(0);
-    // Later the same day, still the 08:00 slot: nothing.
-    expect(await runner.checkDue(at(0, 23))).toBe(0);
-    // Tomorrow's slot: due again.
+    expect(await runner.checkDue(at(-1, 9, 1))).toBe(0);
+    // Later the same day, still that 08:00 slot: nothing.
+    expect(await runner.checkDue(at(-1, 23))).toBe(0);
+    // A slot the recorded check predates: due again.
     expect(await runner.checkDue(at(1, 8, 5))).toBe(1);
   });
 
