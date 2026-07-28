@@ -98,14 +98,16 @@ each(s.topics, (t) => topicRowJsx(...), (t) => `${selected.has(t.id)}|${solo.has
 
 ## Icons (NEWS-115)
 
-Source art lives in `assets/`. Which file goes where turns on one question — **does the platform apply its own shape?**
+Source art lives in `assets/`, in two shapes — rounded and full-bleed — and which one a surface wants depends on whether the platform applies its own mask.
 
-| File | Used for | Shape |
-|---|---|---|
-| `logo.svg` | Desktop app icon — `npx tauri icon assets/logo.svg` regenerates `src-tauri/icons/` | Pre-rounded |
-| `logo-full-bleed.svg` | Manifest icon, `purpose: "maskable"` | Hard square, bleeds to the edges |
-| `favicon.svg` | Tab icon, and manifest `purpose: "any"` | Mark on transparent |
-| `mask-icon.svg` | **Nothing** — see below | Opaque square |
+| File | Used for |
+|---|---|
+| `logo-full-bleed.svg` | Desktop app icon (`npx tauri icon assets/logo-full-bleed.svg`) **and** manifest `purpose: "maskable"` |
+| `favicon.svg` | Tab icon, and manifest `purpose: "any"` |
+| `logo.svg` | Nothing — the rounded variant, kept as source art |
+| `mask-icon.svg` | Nothing — see below |
+
+**The desktop icon is deliberately the full-bleed square, and it is the owner's call rather than the platform convention.** macOS renders `.icns` exactly as authored — it applies no mask — so a square icon stays square beside the rounded neighbours in the Dock. The rounded `logo.svg` would match macOS convention more closely. This was chosen with that trade-off on screen, so it is a decision, not an oversight: don't "fix" it by swapping the source.
 
 - **FR-3.43** *(Shipped)* The page serves an **SVG favicon only**. Every browser this app runs in — and the Tauri webview — supports it, so one vector file beats a ladder of PNG sizes.
 
@@ -113,7 +115,7 @@ Source art lives in `assets/`. Which file goes where turns on one question — *
 
   It advertises two icons, and the distinction is the reason to have a manifest at all: `favicon.svg` as `purpose: "any"` is drawn as-is, while `logo-full-bleed.svg` as `purpose: "maskable"` is cropped by the platform to a circle, squircle or rounded rect — so it must bleed to the edges with the mark inside the safe zone. Handing the rounded `logo.svg` to a maskable slot gets its corners cut off twice.
 
-  **`logo.svg` is deliberately not in the manifest**, and the full-bleed one is deliberately not the desktop icon: macOS does not mask `.icns`, it expects the shape drawn in. A full-bleed square would sit as a hard-edged tile among rounded neighbours in the Dock.
+  The same full-bleed file serves both the maskable slot and the desktop icon. They want the same thing for different reasons: a maskable icon is cropped by the platform, and the desktop icon is square by choice (see above).
 
   A unit test reads the manifest href out of the served page, fetches it, and asserts **every icon path it names is actually served** — nothing but a string links the manifest to the client build, and a maskable icon that 404s is invisible until someone installs the app.
 

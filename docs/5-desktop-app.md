@@ -6,7 +6,7 @@ Hybrid model borrowed from glassbox: the Node server is the app in both modes; T
 
 - **FR-5.1** *(Shipped, verified on macOS)* `npm run tauri:dev` compiles, spawns the server from source (`node --import tsx src/cli.ts --no-open`), watches stdout for the `running at <url>` readiness line, navigates the webview there (verified via server request log: `GET /` → assets → `/api/state`), and SIGTERMs the server on normal quit. Until ready, a bundled loading page shows a spinner (with an error message if the server exits first). Navigation attempts are logged to stderr as `[shell] navigated to <url>` / `[shell] navigate failed: <err>`.
 - **FR-5.2** *(Shipped)* The frontend detects Tauri via `window.__TAURI__` (`src/client/tauri.ts`) and routes external links through the server (`/api/open-external`), since the webview has no tabs.
-- **FR-5.3** *(Shipped, verified on macOS)* `npm run tauri:build` produces a self-contained app: a real Node binary ships beside the app executable as an `externalBin` sidecar (`news-node`), and the tsup server bundle plus its client assets and full dependency tree are staged into `resources/server/`. The release shell resolves both and spawns the server exactly as dev mode does — same readiness-line watch, same navigation, same shutdown. `scripts/build-sidecar.sh` produces all of it and runs as `beforeBuildCommand`, so `tauri build` is self-contained. App icons live in `src-tauri/icons/`, generated from `assets/logo.svg` with `npx tauri icon` (required even for dev compilation). Regenerate from that source rather than editing the PNGs — and delete the `android/` and `ios/` directories it also writes, since this is a desktop-only app and ~30 unused mobile icons is dead weight in the tree.
+- **FR-5.3** *(Shipped, verified on macOS)* `npm run tauri:build` produces a self-contained app: a real Node binary ships beside the app executable as an `externalBin` sidecar (`news-node`), and the tsup server bundle plus its client assets and full dependency tree are staged into `resources/server/`. The release shell resolves both and spawns the server exactly as dev mode does — same readiness-line watch, same navigation, same shutdown. `scripts/build-sidecar.sh` produces all of it and runs as `beforeBuildCommand`, so `tauri build` is self-contained. App icons live in `src-tauri/icons/`, generated from `assets/logo-full-bleed.svg` with `npx tauri icon` (required even for dev compilation). Regenerate from that source rather than editing the PNGs (see `docs/3-ui.md` for why the *full-bleed* variant is the source, which is a deliberate choice against the macOS convention) — and delete the `android/` and `ios/` directories it also writes, since this is a desktop-only app and ~30 unused mobile icons is dead weight in the tree.
 
   **Verified end to end:** the built `News.app` starts its sidecar, serves the real UI (request log shows `GET /` → assets → `/api/state` → `/api/providers`), and leaves no orphaned server on quit. Only macOS (`aarch64-apple-darwin`) has been built and run; the other target triples are wired but untested, as is the Windows `CREATE_NO_WINDOW` flag.
 
@@ -71,3 +71,19 @@ Everything below requires the Apple Developer account and must not be committed:
 Then a signed local build is `APPLE_SIGNING_IDENTITY="Developer ID Application: … (TEAMID)" APPLE_ID=… APPLE_PASSWORD=… APPLE_TEAM_ID=… npm run tauri:build`, followed by `bash scripts/verify-signing.sh`.
 
 **Windows Authenticode** is untouched — no Windows bundle has been verified at all yet (NEWS-20), so signing one would be signing something unproven.
+
+### If the app icon looks stale in dev
+
+`tauri dev` runs the bare executable, not a bundle, and `generate_context!` compiles the icon **into the binary** — so the Dock icon in dev comes from whatever was embedded the last time the Rust crate was built, not from `src-tauri/icons/` on disk. Regenerating the icons changes nothing until something rebuilds.
+
+The crate does recompile on every `cargo build` here, so the next `tauri dev` picks it up; a binary showing old artwork simply predates the icon change. To confirm rather than guess, search the binary for the icon's bytes:
+
+```sh
+python3 -c "
+new = open('src-tauri/icons/icon.png','rb').read()
+blob = open('src-tauri/target/debug/news','rb').read()
+c = new[len(new)//2:len(new)//2+256]
+print('embedded:', c in blob)"
+```
+
+If that says `True` and the Dock still disagrees, it is macOS's icon cache rather than the build.
