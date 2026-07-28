@@ -2,6 +2,11 @@
 
 Status markers: **Shipped** · **Partial** · **Design only** · **Deferred**. Source docs win on conflict.
 
+## [24 — Topic Discovery](../24-topic-discovery.md) — **Design only** (brainstorm, direction not chosen)
+
+- NEWS-116: four variations wireframed — **A** catalogue (drill down the NEWS-97 taxonomy, AI at the leaf), **B** tuner (keep/skip rounds on revealed preference), **C** describe-it box (one query → clustered suggestions), **D** newsstand (persistent front-page view). Recommendation: **A + C as one surface**, D as the follow-up, B as a later bet.
+- Nothing is built. The one piece common to every variation: `NewsService` has a single method (`checkTopic`), so discovery needs a **second provider capability** implemented across all five providers.
+
 ## [1 — Topics and Scheduling](../1-topics-and-scheduling.md) — Shipped
 
 - FR-1.14 **two schedule modes** — `interval` (default) or `daily` at fixed local times — NEWS-84: **Shipped**. A missed slot stays outstanding rather than skipping to tomorrow; before the first slot the obligation is yesterday's last; high-priority topics stay on their interval.

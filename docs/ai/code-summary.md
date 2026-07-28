@@ -140,6 +140,7 @@ Data dir: `--data-dir` flag → `NEWS_DATA_DIR` → `~/.news`. Also holds `news.
 | Diagnostics / "why did a check fail" | `src/client/diagnostics.ts` (pure, unit-tested) + the Settings Diagnostics section; `appVersion` on `/api/state`. Topic names redacted unless opted in. See `docs/3-ui.md` FR-3.25–3.28 |
 | Solo filter (set arithmetic, menu + double-click) | `src/client/solo.ts` (`toggleSolo`, `isAllSoloed`), used by `runTopicAction` and the `dblclick` delegate in `app.tsx`. See `docs/3-ui.md` FR-3.40 |
 | Topic categories / taxonomy | `src/categories.ts` (`BUILTIN_CATEGORIES`, `categoryLabel`, `activeCategories`). See `docs/22-topic-categories.md` |
+| Topic discovery / suggestions | **Nothing built yet** — `docs/24-topic-discovery.md` is a design-only brainstorm (NEWS-116). Note it needs a *second* method on `NewsService`, which today has only `checkTopic` |
 | Provider retries / rate limiting | `src/ai/retry.ts` (`backoffDelayMs`, `classifyFailure`, `retryAfterMs`, `DEFAULT_BACKOFF` vs `FAILURE_COOLDOWN`); `checkWithRetry` + `rateLimitedUntil` in `checks.ts`. See `docs/23-retries-and-rate-limits.md` |
 | A topic held back after failures | `consecutiveFailures`/`retryAfter` columns; `recordCheckFailure`/`clearCheckFailures` in `db/store.ts`; the cooldown check at the top of `isDueUnderSchedule`. See FR-23.7 |
 | Settings tabs / panels | `SETTINGS_TABS`, `settingsTabsJsx`, `settingsPanelJsx` in `client/app.tsx`; `settingsTab` in `stores.ts`; `.settings-tabs` in `styles.scss`. See `docs/3-ui.md` FR-3.45 |
