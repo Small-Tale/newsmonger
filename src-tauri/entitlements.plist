@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Entitlements for the hardened runtime (NEWS-21).
+
+  Notarization requires the hardened runtime, and Tauri enables it by default
+  (`bundle.macOS.hardenedRuntime`, default true). That matters more here than in
+  a typical Tauri app, because the sidecar is a real Node binary: V8 compiles
+  JavaScript at runtime, and the hardened runtime blocks exactly that unless the
+  entitlements below say otherwise. Without them the app signs and notarizes
+  cleanly and then dies on launch — on someone else's machine, not the build
+  machine, which is the worst possible place to find out.
+
+  These are the entitlements Node's own official binary carries, *minus* two:
+
+  - `com.apple.security.get-task-allow` is deliberately absent. It permits a
+    debugger to attach, and the notary service rejects any binary carrying it.
+    Node ships it because Node's binaries are signed but not notarized; ours are
+    both, so it has to go.
+  - `com.apple.security.cs.allow-dyld-environment-variables` is absent because
+    nothing here sets DYLD_* for the sidecar. It is an injection surface, and an
+    entitlement that isn't needed is one that shouldn't be granted.
+
+  `disable-library-validation` is also absent: it would let the process load
+  libraries signed by anyone, and the staged dependency tree contains no native
+  addons at all (`find src-tauri/server -name '*.node'` is empty). If a native
+  dependency is ever added, this is the entitlement whose absence will break it,
+  and the failure will look like a mysterious dlopen error.
+-->
+<plist version="1.0">
+  <dict>
+    <!-- V8 writes and executes JIT-compiled code. Without this the sidecar
+         cannot run any JavaScript at all under the hardened runtime. -->
+    <key>com.apple.security.cs.allow-jit</key>
+    <true/>
+    <!-- V8 also maps executable pages it did not sign. `allow-jit` alone covers
+         the MAP_JIT path; this covers the rest, and Node ships both. -->
+    <key>com.apple.security.cs.allow-unsigned-executable-memory</key>
+    <true/>
+    <!-- V8's code pages are written and executed without the W^X separation the
+         hardened runtime otherwise enforces. -->
+    <key>com.apple.security.cs.disable-executable-page-protection</key>
+    <true/>
+  </dict>
+</plist>

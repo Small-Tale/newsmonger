@@ -33,3 +33,41 @@ The check is skipped when cross-compiling, since the downloaded Node binary won'
 - `NEWS_LOG_REQUESTS=1` makes the server log every request (`[req] GET /api/state`) to stderr — the reliable way to confirm the webview is actually talking to the server (note: WKWebView throttles timers in occluded windows, so the 4 s poll may pause while the window is hidden).
 
 See also: [4 — CLI, Server, and Storage](4-cli-server-storage.md), glassbox's `docs/tauri-architecture.md` for the reference pattern.
+
+## Code signing and notarization (NEWS-21)
+
+An unsigned bundle opens on the machine that built it and nowhere else. Gatekeeper blocks it everywhere a stranger might run it, which is the only place it matters — and the build machine cannot reproduce that, because it trusts its own certificate and never quarantines a file it made itself.
+
+- **FR-5.5** *(Partial — config shipped, credentials outstanding)* Release bundles are signed with a **Developer ID Application** certificate and notarized. Nothing identity-specific is committed: Tauri reads `APPLE_SIGNING_IDENTITY` (or `APPLE_CERTIFICATE` + `APPLE_CERTIFICATE_PASSWORD` in CI) and, for notarization, either `APPLE_ID` + `APPLE_PASSWORD` + `APPLE_TEAM_ID` or the App Store Connect key trio `APPLE_API_ISSUER` + `APPLE_API_KEY` + `APPLE_API_KEY_PATH`.
+
+- **FR-5.6** *(Shipped)* `src-tauri/entitlements.plist` grants the hardened runtime exceptions **the Node sidecar cannot run without**, and no others.
+
+  This is the trap in signing a Tauri app whose sidecar is a JavaScript runtime. Notarization requires the hardened runtime (Tauri enables it by default), and the hardened runtime blocks exactly what V8 does — writing and executing code at runtime. Get this wrong and the app signs, notarizes and staples cleanly, then dies at launch on someone else's Mac. Every check up to that point is green.
+
+  The set is Node's own, minus three:
+
+  | Entitlement | Why |
+  |---|---|
+  | `cs.allow-jit` | V8 compiles JavaScript at runtime |
+  | `cs.allow-unsigned-executable-memory` | V8 maps executable pages it did not sign |
+  | `cs.disable-executable-page-protection` | V8 writes and executes the same pages |
+  | ~~`get-task-allow`~~ | **The notary service rejects it.** Node ships it because Node's binaries are signed but not notarized; ours are both |
+  | ~~`cs.allow-dyld-environment-variables`~~ | Nothing sets `DYLD_*` for the sidecar, and it is an injection surface |
+  | ~~`cs.disable-library-validation`~~ | The staged tree has no native addons. **This is the one to add if a native dependency ever appears** — the failure will look like an unexplained `dlopen` error |
+
+- **FR-5.7** *(Shipped)* `bash scripts/verify-signing.sh` asserts, on the build machine, the properties Gatekeeper will check on someone else's: a Developer ID authority, the hardened runtime flag, the sidecar's JIT entitlements, the *absence* of `get-task-allow`, a deep strict `codesign --verify`, `spctl` reporting `source=Notarized Developer ID`, and a stapled ticket on **both** the app and the `.dmg` — notarizing the app does not notarize the disk image it ships in.
+
+  Run against the current unsigned build it reports exactly what is missing, including that the sidecar inherits `get-task-allow` from Node's own signature. That was found by running it, not by reasoning about it.
+
+### What still needs a human
+
+Everything below requires the Apple Developer account and must not be committed:
+
+1. **Create a Developer ID Application certificate** (Apple Developer → Certificates) and install it in the login keychain. `security find-identity -v -p codesigning` should then list it.
+2. **Get the Team ID** from the membership page.
+3. **Create an app-specific password** at appleid.apple.com (Sign-In and Security → App-Specific Passwords) for notarization — *not* the Apple ID password. The App Store Connect API key is the better option for CI, since it isn't tied to one person's account.
+4. **Export the certificate as `.p12`** only when CI needs it (NEWS-6); a local build uses the keychain directly and needs no export.
+
+Then a signed local build is `APPLE_SIGNING_IDENTITY="Developer ID Application: … (TEAMID)" APPLE_ID=… APPLE_PASSWORD=… APPLE_TEAM_ID=… npm run tauri:build`, followed by `bash scripts/verify-signing.sh`.
+
+**Windows Authenticode** is untouched — no Windows bundle has been verified at all yet (NEWS-20), so signing one would be signing something unproven.

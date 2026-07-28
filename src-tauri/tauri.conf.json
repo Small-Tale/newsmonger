@@ -28,6 +28,9 @@
     "active": true,
     "targets": "all",
     "externalBin": ["binaries/news-node"],
-    "resources": ["server"]
+    "resources": ["server"],
+    "macOS": {
+      "entitlements": "entitlements.plist"
+    }
   }
 }

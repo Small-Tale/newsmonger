@@ -79,7 +79,7 @@ Still manual, and **unverified on every other platform**:
 1. Build on Windows and Linux — confirm the target-triple → Node-platform mapping in `scripts/build-sidecar.sh` is right and the app launches.
 2. On Windows, confirm no console window flashes when the sidecar spawns (`CREATE_NO_WINDOW`, written but never run).
 3. Install from the `.dmg` (not just the build tree) and launch — confirms resources resolve from a real install location.
-4. On macOS, the bundle is unsigned/unnotarized, so Gatekeeper will block it on another machine; signing is not set up.
+4. On macOS, signing config is in place (NEWS-21) but no build has been signed yet — the bundle is still unsigned, so Gatekeeper will block it on another machine. After a signed build, `bash scripts/verify-signing.sh` checks it mechanically; the one thing it cannot check is the launch itself, so **open the .dmg on a Mac that has never seen the app** and confirm the window loads. That is the only test that exercises the sidecar's entitlements under a real quarantine.
 
 ## System browser opening
 
