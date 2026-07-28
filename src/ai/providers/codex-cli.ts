@@ -170,7 +170,7 @@ export function createCodexCliProvider(
       );
       // A subscription check spends plan quota, not metered dollars, and the
       // CLI reports no token counts — so usage is genuinely unknown, not zero.
-      return { items: parseNewsResult(text), usage: null };
+      return { ...parseNewsResult(text), usage: null };
     },
   };
 }

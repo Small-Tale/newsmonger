@@ -99,7 +99,7 @@ export function createAnthropicProvider(config: {
         buildUserPrompt(topicName, known, sinceIso, context),
         model,
       );
-      return { items: parseNewsResult(text), usage };
+      return { ...parseNewsResult(text), usage };
     },
   };
 }

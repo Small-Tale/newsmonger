@@ -76,7 +76,7 @@ describe('parseNewsResult sanitizes model output', () => {
 }]}
 \`\`\``;
 
-    const items = parseNewsResult(text);
+    const items = parseNewsResult(text).items;
 
     expect(items).toHaveLength(1);
     expect(items[0]?.title).toBe('Eala confirmed in main draw');
@@ -88,7 +88,7 @@ describe('parseNewsResult sanitizes model output', () => {
     // Only prose is sanitized — a URL is data, and mangling it would break the
     // link rather than tidy it.
     const text = '{"items":[{"title":"t","summary":"s","sources":[{"title":"x","url":"https://a.test/p?q=1&b=2"}]}]}';
-    expect(parseNewsResult(text)[0]?.sources[0]?.url).toBe('https://a.test/p?q=1&b=2');
+    expect(parseNewsResult(text).items[0]?.sources[0]?.url).toBe('https://a.test/p?q=1&b=2');
   });
 });
 

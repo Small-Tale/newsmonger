@@ -37,6 +37,29 @@ export interface TokenUsage {
 export interface CheckResult {
   items: FoundNewsItem[];
   usage: TokenUsage | null;
+  /**
+   * The model's section classification for the topic (NEWS-97), when one was
+   * asked for. Null when it wasn't asked, or the model declined.
+   *
+   * Slugs here are **untrusted** — a model can return one that isn't in the
+   * taxonomy. The caller validates before storing; an unresolvable slug renders
+   * identically to never having been classified, so a silent bad write would be
+   * invisible (FR-22.8).
+   */
+  classification?: TopicClassification | null;
+}
+
+/** A section the model assigned to a topic. `subcategory` null means none fit. */
+export interface TopicClassification {
+  category: string;
+  subcategory: string | null;
+}
+
+/** A category and its subcategories, as offered to the model. */
+export interface CategoryOption {
+  slug: string;
+  label: string;
+  subcategories: { slug: string; label: string }[];
 }
 
 /**
@@ -57,6 +80,14 @@ export interface TopicContext {
    * negative examples so the model can infer the topic's intended sense.
    */
   offTopicTitles?: string[];
+  /**
+   * Sections to classify this topic into (NEWS-97), or absent to not ask.
+   *
+   * Passed only for a topic that still needs classifying, so an already-labelled
+   * topic doesn't spend tokens on the question every check — and can't drift to
+   * a different answer each time.
+   */
+  categoryOptions?: CategoryOption[];
 }
 
 /** Abstraction over "ask an LLM for news" so tests can substitute a mock. */

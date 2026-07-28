@@ -1,12 +1,34 @@
 import { filterNewItems } from './ai/dedupe.js';
-import type { FoundNewsItem, KnownItem, NewsProvider } from './ai/types.js';
+import type { CategoryOption, FoundNewsItem, KnownItem, NewsProvider, TopicClassification } from './ai/types.js';
 import type { LinkProbe } from './ai/verify-links.js';
 import { verifyItemLinks } from './ai/verify-links.js';
 import { Attendance } from './attendance.js';
-import type { NewsItem, Settings } from './db/schemas.js';
+import { activeCategories, BUILTIN_CATEGORIES, findCategory, findSubcategory } from './categories.js';
+import type { NewsItem, Settings, Topic } from './db/schemas.js';
 import type { Store } from './db/store.js';
 import type { ImageFetcher } from './images/index.js';
 import { liveImageHashes, pruneImageCache } from './images/index.js';
+
+/**
+ * Whether a topic still wants an automatic section (NEWS-97).
+ *
+ * A manual choice is never revisited — that is what `categorySource` promises.
+ * An `auto` topic that already has a category is left alone too: the label is a
+ * property of the topic, not of this week's stories, so re-asking every check
+ * would just invite it to drift.
+ */
+function needsClassifying(topic: Topic): boolean {
+  return topic.category === null && topic.categorySource === 'auto';
+}
+
+/** The sections offered to the model — retired ones excluded (FR-22.4). */
+function classifierOptions(): CategoryOption[] {
+  return activeCategories(BUILTIN_CATEGORIES).map((c) => ({
+    slug: c.slug,
+    label: c.label,
+    subcategories: c.subcategories.map((s) => ({ slug: s.slug, label: s.label })),
+  }));
+}
 
 /**
  * Whether the month's estimated spend has crossed the user's cap (NEWS-79).
@@ -95,6 +117,10 @@ export class CheckRunner {
       const found = await provider.checkTopic(topic.name, known, topic.coveredThroughAt, {
         guidance: topic.guidance,
         offTopicTitles,
+        // Only asked for while the topic still needs it (NEWS-97): a labelled
+        // topic would otherwise spend tokens on the question every check, and
+        // could answer differently each time.
+        ...(needsClassifying(topic) ? { categoryOptions: classifierOptions() } : {}),
       });
       // Check the citations resolve before anything is stored (NEWS-83). Done
       // *before* dedup so a story kept only by a dead link can't claim a dedupe
@@ -126,6 +152,7 @@ export class CheckRunner {
             foundAt: now,
           })),
         );
+        this.applyClassification(topicId, found.classification ?? null);
         const checkedAt = new Date();
         this.store.markTopicChecked(topicId, checkedAt);
         // Succeeded, so news is now covered through this moment.
@@ -218,6 +245,34 @@ export class CheckRunner {
     } catch (err: unknown) {
       console.error('news: pruning old stories failed:', err);
     }
+  }
+
+  /**
+   * Store the model's section for a topic, if it gave a usable one (NEWS-97).
+   *
+   * **Validated against the live taxonomy, not trusted.** An unresolvable slug
+   * renders exactly like never having been classified, so storing one would be
+   * an invisible bad write — the topic would look unlabelled forever while the
+   * code believed it was done. A slug that doesn't resolve is dropped, leaving
+   * the topic eligible for a better answer on the next check.
+   *
+   * Never overwrites a manual choice. Re-read rather than reusing the topic
+   * captured before the check, since a check takes minutes and the user may have
+   * categorised it by hand in the meantime.
+   */
+  private applyClassification(topicId: string, classification: TopicClassification | null): void {
+    if (classification === null) return;
+    const topic = this.store.getTopic(topicId);
+    if (topic === undefined || !needsClassifying(topic)) return;
+
+    const table = activeCategories(BUILTIN_CATEGORIES);
+    const category = findCategory(table, classification.category);
+    if (category === undefined) return;
+    // A subcategory that doesn't belong to the chosen category is dropped on its
+    // own — the category is still good, and Sports with no sub is a valid answer
+    // (FR-22.6) rather than a reason to discard the whole classification.
+    const sub = findSubcategory(table, category.slug, classification.subcategory);
+    this.store.setTopicCategory(topicId, category.slug, sub?.slug ?? null, 'auto');
   }
 
   /** Resolve a lead image per story, in parallel, never throwing. */

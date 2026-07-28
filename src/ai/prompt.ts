@@ -1,7 +1,7 @@
 import { z } from 'zod';
 
 import { stripMarkup } from './sanitize.js';
-import type { FoundNewsItem, KnownItem, TopicContext } from './types.js';
+import type { FoundNewsItem, KnownItem, TopicClassification, TopicContext } from './types.js';
 
 const MAX_KNOWN_ITEMS = 60;
 
@@ -30,6 +30,13 @@ const ResultSchema = z.object({
       ),
     }),
   ),
+  // Topic classification (NEWS-97). Optional in every sense: absent when we
+  // didn't ask, and `.catch(null)` so a malformed value degrades to "not
+  // classified" instead of failing the parse and losing the whole news batch.
+  // A category the taxonomy doesn't have is *not* rejected here — the caller
+  // validates against the live table, which is the only place that knows it.
+  category: z.string().min(1).nullish().catch(null).transform((v) => v ?? null),
+  subcategory: z.string().min(1).nullish().catch(null).transform((v) => v ?? null),
 });
 
 /** JSON Schema for the news result, for providers that support structured output. */
@@ -63,6 +70,11 @@ export const NEWS_JSON_SCHEMA = {
         required: ['title', 'summary', 'sources'],
       },
     },
+    // Declared but not required (NEWS-97). `additionalProperties: false` means a
+    // structured-output provider would *reject* a classification that wasn't
+    // named here — so the fields are always allowed and only ever requested.
+    category: { type: ['string', 'null'] },
+    subcategory: { type: ['string', 'null'] },
   },
   required: ['items'],
 } as const;
@@ -90,6 +102,9 @@ export function searchingSystemPrompt(): string {
     '',
     'Respond with a JSON object of exactly this shape (and, if your output is free text, put it in a fenced ```json block):',
     '{"items": [{"title": "...", "summary": "...", "sources": [{"title": "...", "url": "https://...", "outlet": "...", "publishedAt": "YYYY-MM-DD"}]}]}',
+    '',
+    'If — and only if — the user message asks you to classify the topic, add top-level "category" and',
+    '"subcategory" fields to that same object. Otherwise omit them entirely.',
   ].join('\n');
 }
 
@@ -187,6 +202,24 @@ export function buildUserPrompt(
       lines.push(`- ${title}`);
     }
   }
+  const options = context.categoryOptions ?? [];
+  if (options.length > 0) {
+    lines.push('');
+    lines.push(
+      'Also classify this topic into one of the sections below, as top-level "category" and "subcategory" ' +
+        'fields on the JSON object. Use the slug (the value in parentheses), not the label. Classify the ' +
+        'TOPIC ITSELF, not the individual stories you found — the label is permanent and the stories are not.',
+    );
+    for (const option of options) {
+      const subs = option.subcategories.map((s) => `${s.label} (${s.slug})`).join(', ');
+      lines.push(`- ${option.label} (${option.slug})${subs === '' ? '' : ` — subcategories: ${subs}`}`);
+    }
+    lines.push(
+      'Pick exactly one category. If no subcategory fits, set "subcategory" to null rather than forcing one — ' +
+        'a topic can legitimately belong to a section without matching any of its subsections. If no category ' +
+        'fits either, set both to null.',
+    );
+  }
   lines.push('');
   lines.push('Find any new news about this topic and respond with the JSON object described in your instructions.');
   return lines.join('\n');
@@ -195,8 +228,15 @@ export function buildUserPrompt(
 /**
  * Extract and validate the news result from a model's text. Accepts a fenced
  * json code block (preferred, last one wins) or a bare object.
+ *
+ * Returns the classification alongside the items when the model supplied one.
+ * The slug is **not** checked against the taxonomy here — this module has no
+ * access to it, and the caller must validate before storing (FR-22.8).
  */
-export function parseNewsResult(text: string): FoundNewsItem[] {
+export function parseNewsResult(text: string): {
+  items: FoundNewsItem[];
+  classification: TopicClassification | null;
+} {
   const fenced = [...text.matchAll(/```(?:json)?\s*\n([\s\S]*?)```/g)];
   const candidates: string[] = fenced.map((m) => m[1]);
   if (candidates.length === 0) {
@@ -206,7 +246,11 @@ export function parseNewsResult(text: string): FoundNewsItem[] {
   }
   for (const candidate of candidates.reverse()) {
     try {
-      return ResultSchema.parse(JSON.parse(candidate)).items;
+      const parsed = ResultSchema.parse(JSON.parse(candidate));
+      return {
+        items: parsed.items,
+        classification: parsed.category === null ? null : { category: parsed.category, subcategory: parsed.subcategory },
+      };
     } catch {
       // try the next candidate
     }

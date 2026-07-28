@@ -3,13 +3,16 @@ import { describe, expect, it } from 'vitest';
 import { parseNewsResult } from '../../src/ai/prompt.js';
 import { outletFor, publishedLabel } from '../../src/client/attribution.js';
 
+/** These tests are about item fields; `.items` keeps them focused on that. */
+const itemsOf = (text: string) => parseNewsResult(text).items;
+
 function fenced(items: unknown): string {
   return `\`\`\`json\n${JSON.stringify({ items })}\n\`\`\``;
 }
 
 describe('parsing outlet and publishedAt (NEWS-82)', () => {
   it('reads both when the model supplies them', () => {
-    const [story] = parseNewsResult(
+    const [story] = itemsOf(
       fenced([
         {
           title: 'T',
@@ -25,7 +28,7 @@ describe('parsing outlet and publishedAt (NEWS-82)', () => {
   it('defaults both to null when the model omits them', () => {
     // The overwhelmingly common case — and it must not fail the parse, or one
     // missing date would cost the whole batch of stories.
-    const [story] = parseNewsResult(
+    const [story] = itemsOf(
       fenced([{ title: 'T', summary: 'S', sources: [{ title: 'Src', url: 'https://a.com/x' }] }]),
     );
     expect(story.sources[0].outlet).toBeNull();
@@ -35,7 +38,7 @@ describe('parsing outlet and publishedAt (NEWS-82)', () => {
   it('degrades a malformed date to null rather than failing the batch', () => {
     // `.catch(null)`: a model that writes "last Tuesday" costs us a date, not
     // every story in the response.
-    const [story] = parseNewsResult(
+    const [story] = itemsOf(
       fenced([
         {
           title: 'T',
@@ -48,7 +51,7 @@ describe('parsing outlet and publishedAt (NEWS-82)', () => {
   });
 
   it('rejects a date that is not YYYY-MM-DD', () => {
-    const [story] = parseNewsResult(
+    const [story] = itemsOf(
       fenced([
         { title: 'T', summary: 'S', sources: [{ title: 'S', url: 'https://a.com/x', publishedAt: '20/07/2026' }] },
       ]),
@@ -59,7 +62,7 @@ describe('parsing outlet and publishedAt (NEWS-82)', () => {
   it('strips citation markup from the outlet like every other prose field', () => {
     // `stripMarkup` removes the tags and keeps the inner text, same as it does
     // for titles and summaries — the point is that no markup reaches the DOM.
-    const [story] = parseNewsResult(
+    const [story] = itemsOf(
       fenced([
         {
           title: 'T',

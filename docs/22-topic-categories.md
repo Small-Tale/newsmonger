@@ -2,7 +2,7 @@
 
 Topics are classified into newspaper-style sections so the sidebar can label them and the feed can be filtered to one section at a time. Related: [topics and scheduling](./1-topics-and-scheduling.md), [UI](./3-ui.md), [topic guidance](./18-topic-guidance.md).
 
-**Status: partly built.** The taxonomy, its resolution logic and topic storage are shipped (FR-22.1–22.7). Automatic classification and the UI are not yet (FR-22.8–22.10) — NEWS-107 and NEWS-108.
+**Status: partly built.** Everything but the UI is shipped (FR-22.1–22.8) — topics classify themselves on their first check. The sidebar pills and filter bar are not built yet (FR-22.9–22.10) — NEWS-108.
 
 ## The taxonomy
 
@@ -54,7 +54,19 @@ Three placements were reviewed specifically:
 
   The store **accepts slugs the taxonomy doesn't have**, and so does the route. The taxonomy is code-side and editable, so a slug that resolves today may not tomorrow; rejecting them would make storage the one place that can't survive an ordinary edit. A caller taking a slug from a *model* should still validate — that is FR-22.8's job.
 
-- **FR-22.8** *(Not built — NEWS-107)* Topics are classified automatically, by extending the provider's JSON contract on the first news check. Options come from `activeCategories()`, never a hard-coded list. A slug the model returns that isn't in the taxonomy is **dropped rather than stored**: unresolvable renders identically to never-classified, so a bad write would be invisible. Only writes when the topic is unset or `categorySource === 'auto'`.
+- **FR-22.8** *(Shipped)* Topics are classified automatically, by extending the provider's JSON contract on the news check. No extra API call: a new topic is due immediately, so the label lands on the first check, about a minute after it's added.
+
+  **Asked for only while the topic needs it** — `category === null && categorySource === 'auto'`. A labelled topic would otherwise spend tokens on a settled question every check and could answer differently each time. The label is a property of the topic, not of this week's stories.
+
+  **The model's answer is untrusted.** Options come from `activeCategories()`, never a hard-coded list (FR-22.4), and what comes back is validated against the live taxonomy before it is stored:
+
+  - An unknown **category** drops the whole classification, leaving the topic eligible for a better answer next check. This is the failure that matters: an unresolvable slug renders identically to never-classified (FR-22.5), so storing one would look untouched in the UI while the code considered it done — and it would never be asked again, because `category !== null`.
+  - An unknown or **mismatched subcategory** is dropped on its own, keeping the category. Sports-with-no-subcategory is a valid answer (FR-22.6), not a reason to discard a good category.
+  - A malformed classification never fails the parse. The stories are the expensive part of the response; a bad category degrades to "not classified" rather than losing the batch.
+
+  The topic is **re-read after the check returns** rather than trusting the copy taken before it. A check takes minutes, and a user may categorise by hand in the meantime — `categorySource: 'manual'` has to win.
+
+  `category`/`subcategory` are declared in `NEWS_JSON_SCHEMA` but not required: `additionalProperties: false` means a structured-output provider would otherwise *reject* a classification, while most checks don't ask for one.
 
 - **FR-22.9** *(Not built — NEWS-108)* The sidebar shows a pill per topic with the most specific label, coloured by top-level category.
 
@@ -73,6 +85,10 @@ Recorded so they aren't re-litigated. All three were the owner's calls on 2026-0
 3. **Sub-pills ship as a second row** below the top-level row, styled differently — the newspaper masthead-and-subsection look — rather than being deferred.
 
 ## Testing
+
+`tests/unit/classify.test.ts` covers the classification path — when the request is made and withheld, and every way a model answer is rejected. Verified non-vacuous: removing the taxonomy validation fails exactly the four tests that assert rejection.
+
+The mock provider classifies deterministically from the topic name: a name containing a category or subcategory **label** yields that section (so a fixture called "Soccer transfers" is Sports · Soccer and reads as its own documentation), a name containing "uncategorized" declines, and one containing "bogus" returns a slug the taxonomy doesn't have.
 
 `tests/unit/categories.test.ts` covers the seed table's shape (slug uniqueness at both levels, punctuation-safe slugs, the three reviewed placements, nothing shipped retired) and label resolution (each fallback, retired-but-still-labelled, a subcategory belonging to a different category).
 
