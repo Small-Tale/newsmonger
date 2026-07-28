@@ -197,8 +197,19 @@ body {
   }
 }
 
-// The per-topic section label in the sidebar.
+// The per-topic section label in the sidebar (NEWS-111).
+//
+// On its own line under the topic name rather than beside it. Sharing the row
+// meant the label and the name competed for the same ~320px and both truncated;
+// a full line fits the whole "Technology · Consumer Tech" path and gives the
+// name back the width the badge was taking.
+//
+// `align-self: start` keeps the pill hugging its text — a flex column would
+// otherwise stretch it the full width of the row, which reads as a bar rather
+// than a badge.
 .topic-category {
+  align-self: start;
+  margin-top: 3px;
   font-family: var(--mono);
   font-size: 9.5px;
   letter-spacing: 0.06em;
@@ -208,10 +219,13 @@ body {
   border: 1px solid var(--line);
   border-radius: 4px;
   padding: 1px 5px;
-  white-space: nowrap;
-  max-width: 14ch;
+  // Still bounded, for a hand-edited taxonomy with an unreasonably long label —
+  // but by the row rather than by a character count, so nothing in the built-in
+  // table can trip it.
+  max-width: 100%;
   overflow: hidden;
   text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 // ---------------------------------------------------------------- header ---

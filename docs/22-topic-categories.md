@@ -68,9 +68,13 @@ Three placements were reviewed specifically:
 
   `category`/`subcategory` are declared in `NEWS_JSON_SCHEMA` but not required: `additionalProperties: false` means a structured-output provider would otherwise *reject* a classification, while most checks don't ask for one.
 
-- **FR-22.9** *(Shipped)* The sidebar shows a pill per topic with the **single most specific label** — the subcategory when there is one, else the category. Not the full path: the row has about twelve characters between the topic name and the edge, and "Sports · Soccer" truncates to "SPORTS ·…", which reads as broken rather than abbreviated. The subcategory is the more informative half anyway, since the filter bar already supplies the section, and the full path is in the row's `title`.
+- **FR-22.9** *(Shipped, revised NEWS-111)* The sidebar shows a section label per topic, on **its own line** beneath the topic name and status, carrying the **full path** ("Technology · Consumer Tech").
 
-  An unclassified topic gets **no pill at all** rather than an "Uncategorized" badge — a badge on every unclassified row is noise, and absence already reads as "not yet".
+  It was beside the name at first, showing only the most specific segment because that was all that fit. Both were wrong for the same reason: the label and the name competed for the same ~320px and both truncated — "Consumer Tech" became "CONSUMER …" while a long topic name lost its tail. A full line fits the longest path the built-in taxonomy can produce ("Science · Biology & Medicine Research") and gives the name back the width the badge was taking.
+
+  The label is still bounded, but by the row rather than by a character count, so nothing in the built-in table can trip it — the cap only exists for a hand-edited taxonomy with an unreasonably long label.
+
+  An unclassified topic gets **no label at all** rather than an "Uncategorized" badge — a badge on every unclassified row is noise, and absence already reads as "not yet".
 
 - **FR-22.10** *(Shipped)* A horizontally scrollable filter bar sits directly under the header, above the banners and the sidebar+feed area. **All** · the 11 sections · **Uncategorized** — 13 pills, which is why the taxonomy stops at 11.
 
@@ -100,7 +104,9 @@ Recorded so they aren't re-litigated. All three were the owner's calls on 2026-0
 
 ## Testing
 
-`tests/e2e/categories.spec.ts` drives the real bar: pills appearing after classification, narrowing to a section, the sub-row appearing and resetting when the section changes, the Uncategorized pill, composing with search, and the filter not surviving a reload. `tests/unit/items-query.test.ts` covers the server-side filter — both sentinels, composition with saved/search, and pagination *within* a filter.
+`tests/e2e/categories.spec.ts` asserts the label is not clipped by **measuring** it — `scrollWidth` against `clientWidth` for the longest path the taxonomy can produce — and that it sits below the name rather than beside it. The measurement carries a guard against its own vacuous pass: a row re-rendered by the 4 s poll can report `scrollWidth === clientWidth === 0` for an instant, and `0 <= 0 + 1` would "prove" the label fits. It did exactly that at first, passing against a deliberately re-broken layout until the non-zero-width check was added.
+
+`tests/e2e/categories.spec.ts` also drives the real bar: pills appearing after classification, narrowing to a section, the sub-row appearing and resetting when the section changes, the Uncategorized pill, composing with search, and the filter not surviving a reload. `tests/unit/items-query.test.ts` covers the server-side filter — both sentinels, composition with saved/search, and pagination *within* a filter.
 
 `tests/unit/classify.test.ts` covers the classification path — when the request is made and withheld, and every way a model answer is rejected. Verified non-vacuous: removing the taxonomy validation fails exactly the four tests that assert rejection.
 

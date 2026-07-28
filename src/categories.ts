@@ -175,25 +175,6 @@ export function categoryLabel(
   return sub === undefined ? category.label : `${category.label} · ${sub.label}`;
 }
 
-/**
- * The single most specific label, for somewhere with no room for a path.
- *
- * The sidebar row has about twelve characters between the topic name and the
- * edge — "Sports · Soccer" truncates to "SPORTS ·…", which reads as broken
- * rather than abbreviated. One word does fit, and the *subcategory* is the more
- * informative half: the filter bar already supplies the section, and the full
- * path is in the row's tooltip.
- */
-export function shortCategoryLabel(
-  table: CategoryTable,
-  categorySlug: string | null,
-  subSlug: string | null,
-): string {
-  const category = findCategory(table, categorySlug);
-  if (category === undefined) return UNCATEGORIZED_LABEL;
-  return findSubcategory(table, categorySlug, subSlug)?.label ?? category.label;
-}
-
 /** Categories offered in the filter bar and to the classifier — retired ones excluded. */
 export function activeCategories(table: CategoryTable): Category[] {
   return table

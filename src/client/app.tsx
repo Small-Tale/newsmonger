@@ -12,7 +12,6 @@ import {
   findCategory,
   NO_SUBCATEGORY_FILTER,
   NO_SUBCATEGORY_LABEL,
-  shortCategoryLabel,
   UNCATEGORIZED_FILTER,
   UNCATEGORIZED_LABEL,
 } from '../categories.js';
@@ -210,19 +209,21 @@ function topicRowJsx(
                 ? `checked ${relativeTime(topic.lastCheckedAt)}`
                 : 'not checked yet'}
         </span>
-      </div>
-      {/* Always-present slot so the badge appearing can't restructure the row. */}
-      <span class="topic-flags">
+        {/* Its own line, below the name and status (NEWS-111). Sharing the row
+            meant the label and the topic name competed for the same ~320px and
+            both lost — "Consumer Tech" truncated to "CONSUMER …" while "Apple
+            (the company…)" lost its tail. A full line fits the whole path and
+            gives the name back the width the badge was taking. */}
         {topic.category === null ? (
           ''
         ) : (
-          <span
-            class={`topic-category cat-${topic.category}`}
-            title={`Section: ${categoryLabel(BUILTIN_CATEGORIES, topic.category, topic.subcategory)}`}
-          >
-            {shortCategoryLabel(BUILTIN_CATEGORIES, topic.category, topic.subcategory)}
+          <span class="topic-category">
+            {categoryLabel(BUILTIN_CATEGORIES, topic.category, topic.subcategory)}
           </span>
         )}
+      </div>
+      {/* Always-present slot so the badge appearing can't restructure the row. */}
+      <span class="topic-flags">
         {topic.guidance !== '' ? (
           <span class="flag guided" title={`Guidance: ${topic.guidance}`}>
             {icon('guidance', 13)}

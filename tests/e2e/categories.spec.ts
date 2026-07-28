@@ -13,7 +13,14 @@ test.beforeAll(async () => {
   await resetTopics(test.info().project.use.baseURL ?? '');
 });
 
-const TOPICS = ['Soccer transfers', 'Tennis majors', 'Fashion week', 'An uncategorized thing'];
+const TOPICS = [
+  'Soccer transfers',
+  'Tennis majors',
+  'Fashion week',
+  'An uncategorized thing',
+  // Added mid-spec by the NEWS-111 truncation test; listed so cleanup covers it.
+  'Biology & Medicine Research funding',
+];
 
 test('set up topics that classify themselves', async ({ page }) => {
   await page.goto('/');
@@ -24,23 +31,54 @@ test('set up topics that classify themselves', async ({ page }) => {
   }
   // Classification lands on the check the new topic triggers.
   await expect(page.locator('.topic', { hasText: 'Soccer transfers' }).locator('.topic-category')).toHaveText(
-    'Soccer',
+    'Sports · Soccer',
     { timeout: 15_000 },
   );
 });
 
-test('the sidebar shows the most specific section per topic (FR-22.9)', async ({ page }) => {
+test('the sidebar shows the full section path per topic (FR-22.9)', async ({ page }) => {
   await page.goto('/');
   const pill = (name: string) => page.locator('.topic', { hasText: name }).locator('.topic-category');
 
-  await expect(pill('Soccer transfers')).toHaveText('Soccer');
-  await expect(pill('Fashion week')).toHaveText('Fashion');
-  // The full path is in the tooltip, where there is room for it.
-  await expect(pill('Soccer transfers')).toHaveAttribute('title', 'Section: Sports · Soccer');
+  // The whole path, not just the subcategory — the label has its own line since
+  // NEWS-111, so there is room for it.
+  await expect(pill('Soccer transfers')).toHaveText('Sports · Soccer');
+  await expect(pill('Fashion week')).toHaveText('Style · Fashion');
 
   // A topic the model declined to classify has no pill at all — an
   // "Uncategorized" badge on every unclassified row would be noise.
   await expect(page.locator('.topic', { hasText: 'An uncategorized thing' }).locator('.topic-category')).toHaveCount(0);
+});
+
+test('a long section label is not truncated (NEWS-111)', async ({ page }) => {
+  // The reason the label moved to its own line: sharing the row with the topic
+  // name meant both competed for ~320px and both lost. Measured rather than
+  // eyeballed, and against the *longest* label the built-in taxonomy can produce.
+  await page.goto('/');
+  await page.fill('.add-topic input', 'Biology & Medicine Research funding');
+  await page.press('.add-topic input', 'Enter');
+
+  const pill = page.locator('.topic', { hasText: 'Biology & Medicine Research' }).locator('.topic-category');
+  await expect(pill).toHaveText('Science · Biology & Medicine Research', { timeout: 15_000 });
+  // Measured, with a guard against the vacuous pass: a row that has just been
+  // re-rendered by the 4 s poll can report scrollWidth === clientWidth === 0 for
+  // an instant, and `0 <= 0 + 1` would "prove" the label fits. Requiring a real
+  // width first is what makes this assert anything. (It didn't, at first — the
+  // test passed against a deliberately re-broken layout until this was added.)
+  await expect
+    .poll(async () => pill.evaluate((el) => ({ scroll: el.scrollWidth, client: el.clientWidth })))
+    .toEqual(expect.objectContaining({ client: expect.any(Number) }));
+  const box = await pill.evaluate((el) => ({ scroll: el.scrollWidth, client: el.clientWidth }));
+  expect(box.client, 'the label should have been measured, not mid-render').toBeGreaterThan(20);
+  expect(box.scroll, 'the section label should not be clipped').toBeLessThanOrEqual(box.client + 1);
+
+  // And the label sits below the name rather than beside it, which is what
+  // gives both the room.
+  const [nameBox, pillBox] = await Promise.all([
+    page.locator('.topic', { hasText: 'Biology & Medicine Research' }).locator('.topic-name').boundingBox(),
+    pill.boundingBox(),
+  ]);
+  expect(pillBox?.y ?? 0).toBeGreaterThan((nameBox?.y ?? 0) + (nameBox?.height ?? 0) - 1);
 });
 
 test('the filter bar narrows the feed to a section (FR-22.10)', async ({ page }) => {
