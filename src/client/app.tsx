@@ -6,14 +6,15 @@ import type { ProviderName } from '../ai/types.js';
 import { PROVIDER_INFO, PROVIDER_MODELS, PROVIDER_NAMES } from '../ai/types.js';
 import type { StateResp } from '../api/schemas.js';
 import {
-  activeCategories,
   BUILTIN_CATEGORIES,
   categoryLabel,
   findCategory,
+  hasUncategorized,
   NO_SUBCATEGORY_FILTER,
-  NO_SUBCATEGORY_LABEL,
   UNCATEGORIZED_FILTER,
   UNCATEGORIZED_LABEL,
+  visibleCategories,
+  visibleSubcategories,
 } from '../categories.js';
 import type { NewsItem, Topic } from '../db/schemas.js';
 import { MAX_GUIDANCE_LENGTH } from '../db/schemas.js';
@@ -255,9 +256,15 @@ function topicRowJsx(
  * The sub-row only appears once a category is selected — 11 categories plus
  * their ~60 subcategories in one bar would be a wall rather than navigation.
  */
-function filterBarJsx(selected: AppState['categoryFilter']): SafeHtml {
-  const table = activeCategories(BUILTIN_CATEGORIES);
+function filterBarJsx(selected: AppState['categoryFilter'], topics: readonly Topic[]): SafeHtml {
+  // Only sections something is filed under (NEWS-114) — a pill for a section
+  // nobody watches can only ever produce an empty feed.
+  const table = visibleCategories(BUILTIN_CATEGORIES, topics, selected?.category ?? null);
   const current = selected === null ? null : findCategory(table, selected.category);
+  const subs =
+    current === undefined || current === null
+      ? []
+      : visibleSubcategories(BUILTIN_CATEGORIES, current.slug, topics, selected?.subcategory ?? null);
   return (
     <nav class="filter-bar" aria-label="Filter by section">
       <div class="filter-row filter-row-top">
@@ -280,21 +287,26 @@ function filterBarJsx(selected: AppState['categoryFilter']): SafeHtml {
           </button>
         ))}
         {/* Selects the absence of a category, which no table row can express —
-            hence a sentinel slug rather than an entry in the taxonomy. */}
-        <button
-          class={`filter-pill${selected?.category === UNCATEGORIZED_FILTER ? ' active' : ''}`}
-          type="button"
-          data-filter-category={UNCATEGORIZED_FILTER}
-          aria-pressed={selected?.category === UNCATEGORIZED_FILTER ? 'true' : 'false'}
-        >
-          {UNCATEGORIZED_LABEL}
-        </button>
+            hence a sentinel slug rather than an entry in the taxonomy. Shown
+            only when something is actually unclassified (NEWS-114). */}
+        {hasUncategorized(topics, selected?.category ?? null) ? (
+          <button
+            class={`filter-pill${selected?.category === UNCATEGORIZED_FILTER ? ' active' : ''}`}
+            type="button"
+            data-filter-category={UNCATEGORIZED_FILTER}
+            aria-pressed={selected?.category === UNCATEGORIZED_FILTER ? 'true' : 'false'}
+          >
+            {UNCATEGORIZED_LABEL}
+          </button>
+        ) : (
+          ''
+        )}
       </div>
       {/* Always present, even when empty: this sits above the keyed topics list,
           and a row that comes and going would be a conditional sibling
           (docs/3-ui.md). It also keeps the bar's height from jumping. */}
       <div class="filter-row filter-row-sub">
-        {current === undefined || current === null
+        {subs.length === 0
           ? ''
           : [
               <button
@@ -303,28 +315,25 @@ function filterBarJsx(selected: AppState['categoryFilter']): SafeHtml {
                 data-filter-subcategory=""
                 aria-pressed={selected?.subcategory === null ? 'true' : 'false'}
               >
-                All {current.label}
+                All {current?.label ?? ''}
               </button>,
-              ...current.subcategories.map((sub) => (
-                <button
-                  class={`filter-subpill${selected?.subcategory === sub.slug ? ' active' : ''}`}
-                  type="button"
-                  data-filter-subcategory={sub.slug}
-                  aria-pressed={selected?.subcategory === sub.slug ? 'true' : 'false'}
-                >
-                  {sub.label}
-                </button>
-              )),
-              // The topics that landed in this section without a subcategory —
-              // "Other" is a rendered fallback, not a stored row (FR-22.6).
-              <button
-                class={`filter-subpill${selected?.subcategory === NO_SUBCATEGORY_FILTER ? ' active' : ''}`}
-                type="button"
-                data-filter-subcategory={NO_SUBCATEGORY_FILTER}
-                aria-pressed={selected?.subcategory === NO_SUBCATEGORY_FILTER ? 'true' : 'false'}
-              >
-                {NO_SUBCATEGORY_LABEL}
-              </button>,
+              ...subs.map((sub) => {
+                // A null slug is the "Other" pill — topics in this section with
+                // no subcategory. The sentinel travels in the attribute because
+                // an absence has no slug of its own (FR-22.6).
+                const value = sub.slug ?? NO_SUBCATEGORY_FILTER;
+                const active = (selected?.subcategory ?? '') === value;
+                return (
+                  <button
+                    class={`filter-subpill${active ? ' active' : ''}`}
+                    type="button"
+                    data-filter-subcategory={value}
+                    aria-pressed={active ? 'true' : 'false'}
+                  >
+                    {sub.label}
+                  </button>
+                );
+              }),
             ]}
       </div>
     </nav>
@@ -1455,7 +1464,7 @@ function appJsx(): SafeHtml {
 
       {/* Section navigation sits directly under the masthead, as a newspaper's
           does — above the banners and above the sidebar+feed area (FR-22.10). */}
-      <div id="filter-slot">{filterBarJsx(s.categoryFilter)}</div>
+      <div id="filter-slot">{filterBarJsx(s.categoryFilter, s.topics)}</div>
 
       {/* Banners appear in response to background events (a failed check, a
           blown budget), so they have to announce rather than wait to be found —

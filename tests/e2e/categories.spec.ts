@@ -1,4 +1,4 @@
-import { expect, resetTopics, test } from './fixtures.js';
+import { expect, resetTopics, test, topicAction } from './fixtures.js';
 
 // The section filter bar and sidebar pills (NEWS-97, FR-22.9/22.10).
 //
@@ -105,8 +105,9 @@ test('selecting a section reveals its subsections (FR-22.10)', async ({ page }) 
   await page.locator('[data-filter-category=sports]').click();
   const subs = page.locator('.filter-subpill');
   await expect(subs.first()).toHaveText('All Sports');
-  // "Other" is the rendered fallback for `sports`/null, not a stored row.
-  await expect(subs.last()).toHaveText('Other');
+  // Only the subsections in use (NEWS-114) — Soccer and Tennis here, and no
+  // "Other", because no Sports topic lacks a subsection.
+  await expect(subs).toHaveText(['All Sports', 'Soccer', 'Tennis']);
 
   await page.locator('[data-filter-subcategory=soccer]').click();
   await expect.poll(async () => new Set(await page.locator('.item .item-topic').allTextContents())).toEqual(
@@ -116,7 +117,10 @@ test('selecting a section reveals its subsections (FR-22.10)', async ({ page }) 
   // Switching section resets the subsection — a sub from the old parent would
   // match nothing at all.
   await page.locator('[data-filter-category=style]').click();
-  await expect(page.locator('.filter-subpill.active')).toHaveText('All Style');
+  // Style has one subsection in use, so it offers no subsection row (NEWS-114).
+  // The feed is what proves the reset: had "soccer" survived the switch, this
+  // would be empty rather than showing the Style topic.
+  await expect(page.locator('.filter-subpill')).toHaveCount(0);
   await expect.poll(async () => new Set(await page.locator('.item .item-topic').allTextContents())).toEqual(
     new Set(['Fashion week']),
   );
@@ -158,6 +162,60 @@ test('the bar composes with search rather than replacing it', async ({ page }) =
   await page.fill('.search-input', 'fashion');
   await expect.poll(async () => page.locator('.item').count()).toBe(0);
   await page.locator('[data-action=clear-search]').click();
+});
+
+// Empty options are hidden (NEWS-114). A pill for a section nobody watches is a
+// button that can only ever produce an empty feed, and eleven of them crowd out
+// the two or three that mean something.
+
+test('the bar shows only sections in use', async ({ page }) => {
+  await page.goto('/');
+  await expect(page.locator('.filter-pill').first()).toBeVisible();
+
+  const labels = await page.locator('.filter-pill').allTextContents();
+  // The fixtures cover Sports, Style, Politics — plus All and Uncategorized,
+  // since one fixture topic is deliberately unclassified.
+  expect(labels).toContain('Sports');
+  expect(labels).toContain('Style');
+  expect(labels).toContain('Uncategorized');
+  // ...and nothing for the sections no fixture uses.
+  expect(labels).not.toContain('Health');
+  expect(labels).not.toContain('Business');
+  expect(labels).not.toContain('Society');
+});
+
+test('a section with only one subsection in use offers no subsection row', async ({ page }) => {
+  // "All Style" and "Fashion" would select exactly the same stories, so
+  // offering both is a control that does nothing.
+  await page.goto('/');
+  await page.locator('[data-filter-category=style]').click();
+  await expect(page.locator('.filter-subpill')).toHaveCount(0);
+  // The section filter itself still applies.
+  await expect.poll(async () => new Set(await page.locator('.item .item-topic').allTextContents())).toEqual(
+    new Set(['Fashion week']),
+  );
+});
+
+test('the active section stays visible after its last topic goes', async ({ page }) => {
+  // Otherwise deleting the last topic in the section you are filtered to removes
+  // the only control showing a filter is on — an empty feed with no visible
+  // cause and no way back to All.
+  await page.goto('/');
+  await page.locator('[data-filter-category=style]').click();
+  await expect(page.locator('.filter-pill.active')).toHaveText('Style');
+
+  await topicAction(page, page.locator('.topic', { hasText: 'Fashion week' }), 'delete');
+  // Wait for the client to have *seen* the deletion before asserting anything
+  // about the bar. Without this the pill is still there only because the state
+  // hasn't refreshed yet, and the test passes whatever the rule does — verified:
+  // it did exactly that before this line was added.
+  await expect(page.locator('.topic', { hasText: 'Fashion week' })).toHaveCount(0);
+
+  await expect(page.locator('.filter-pill.active')).toHaveText('Style');
+  await page.locator('[data-filter-category=""]').click();
+  await expect(page.locator('.filter-pill.active')).toHaveText('All');
+  // Now that nothing is filed under it and it isn't selected, it goes.
+  await expect.poll(async () => page.locator('.filter-pill').allTextContents()).not.toContain('Style');
 });
 
 test('clean up the category topics', async ({ page }) => {

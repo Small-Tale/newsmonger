@@ -7,8 +7,11 @@ import {
   CategoryTableSchema,
   findCategory,
   findSubcategory,
+  hasUncategorized,
   NO_SUBCATEGORY_LABEL,
   UNCATEGORIZED_LABEL,
+  visibleCategories,
+  visibleSubcategories,
 } from '../../src/categories.js';
 
 // The category taxonomy (NEWS-97). These cover the seed table's shape and the
@@ -156,5 +159,106 @@ describe('the no-subcategory label', () => {
     expect(BUILTIN_CATEGORIES.flatMap((c) => c.subcategories.map((s) => s.label))).not.toContain(
       NO_SUBCATEGORY_LABEL,
     );
+  });
+});
+
+describe('filter-bar visibility (NEWS-114)', () => {
+  const t = (category: string | null, subcategory: string | null = null) => ({ category, subcategory });
+
+  describe('visibleCategories', () => {
+    it('shows only sections something is filed under', () => {
+      const shown = visibleCategories(BUILTIN_CATEGORIES, [t('sports', 'soccer'), t('culture', 'books')]);
+      expect(shown.map((c) => c.slug)).toEqual(['sports', 'culture']);
+    });
+
+    it('shows nothing when no topic is classified', () => {
+      expect(visibleCategories(BUILTIN_CATEGORIES, [t(null), t(null)])).toEqual([]);
+    });
+
+    it('keeps the selected section even once nothing uses it', () => {
+      // Deleting the last Sports topic while filtered to Sports would otherwise
+      // remove the only control showing a filter is on — leaving an empty feed
+      // with no visible cause and no way back to All.
+      const shown = visibleCategories(BUILTIN_CATEGORIES, [t('culture', 'books')], 'sports');
+      expect(shown.map((c) => c.slug)).toEqual(['sports', 'culture']);
+    });
+
+    it('does not resurrect a retired section just because a topic holds it', () => {
+      const table = BUILTIN_CATEGORIES.map((c) => (c.slug === 'sports' ? { ...c, retired: true } : c));
+      expect(visibleCategories(table, [t('sports', 'soccer')]).map((c) => c.slug)).toEqual([]);
+    });
+
+    it('ignores a slug the taxonomy does not have', () => {
+      expect(visibleCategories(BUILTIN_CATEGORIES, [t('weather')])).toEqual([]);
+    });
+  });
+
+  describe('hasUncategorized', () => {
+    it('is true only when some topic has no section', () => {
+      expect(hasUncategorized([t('sports', 'soccer')])).toBe(false);
+      expect(hasUncategorized([t('sports', 'soccer'), t(null)])).toBe(true);
+      expect(hasUncategorized([])).toBe(false);
+    });
+
+    it('stays true while it is the active filter, so it can be switched off', () => {
+      expect(hasUncategorized([t('sports', 'soccer')], 'uncategorized')).toBe(true);
+    });
+  });
+
+  describe('visibleSubcategories', () => {
+    it('lists only the subcategories in use', () => {
+      const subs = visibleSubcategories(BUILTIN_CATEGORIES, 'sports', [
+        t('sports', 'soccer'),
+        t('sports', 'tennis'),
+        t('culture', 'books'),
+      ]);
+      expect(subs.map((s) => s.slug)).toEqual(['soccer', 'tennis']);
+    });
+
+    it('returns nothing when only one subcategory is in use', () => {
+      // "All Sports" and "Soccer" would select exactly the same stories, so
+      // offering both is a control that does nothing.
+      expect(visibleSubcategories(BUILTIN_CATEGORIES, 'sports', [t('sports', 'soccer'), t('sports', 'soccer')])).toEqual(
+        [],
+      );
+    });
+
+    it('returns nothing when the section has no subcategorised topics at all', () => {
+      expect(visibleSubcategories(BUILTIN_CATEGORIES, 'sports', [t('sports', null)])).toEqual([]);
+    });
+
+    it('counts "Other" as one of the options', () => {
+      // One real sub plus some unsubcategorised topics is a genuine choice.
+      const subs = visibleSubcategories(BUILTIN_CATEGORIES, 'sports', [t('sports', 'soccer'), t('sports', null)]);
+      expect(subs.map((s) => s.label)).toEqual(['Soccer', 'Other']);
+      // The absence has no slug of its own.
+      expect(subs.at(-1)?.slug).toBeNull();
+    });
+
+    it('orders subcategories by the taxonomy, not by first use', () => {
+      // So the row doesn't reshuffle as topics come and go.
+      const subs = visibleSubcategories(BUILTIN_CATEGORIES, 'sports', [t('sports', 'tennis'), t('sports', 'soccer')]);
+      expect(subs.map((s) => s.slug)).toEqual(['soccer', 'tennis']);
+    });
+
+    it('keeps the selected subcategory even once nothing uses it', () => {
+      const subs = visibleSubcategories(
+        BUILTIN_CATEGORIES,
+        'sports',
+        [t('sports', 'soccer'), t('sports', 'golf')],
+        'tennis',
+      );
+      expect(subs.map((s) => s.slug)).toEqual(['soccer', 'tennis', 'golf']);
+    });
+
+    it('returns nothing for a section the taxonomy does not have', () => {
+      expect(visibleSubcategories(BUILTIN_CATEGORIES, 'weather', [t('weather', 'forecasts')])).toEqual([]);
+    });
+
+    it('ignores topics from other sections', () => {
+      expect(
+        visibleSubcategories(BUILTIN_CATEGORIES, 'sports', [t('culture', 'books'), t('culture', 'travel')]),
+      ).toEqual([]);
+    });
   });
 });

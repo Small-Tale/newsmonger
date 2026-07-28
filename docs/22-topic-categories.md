@@ -82,6 +82,14 @@ Three placements were reviewed specifically:
 
   Both rows scroll horizontally rather than wrapping: a wrapped bar changes height as you select, shifting the whole feed down.
 
+- **FR-22.13** *(Shipped, NEWS-114)* The bar shows **only options something is filed under**. A pill for a section nobody watches is a button that can only ever produce an empty feed, and eleven of them crowd out the two or three that mean something. *Uncategorized* appears only when a topic actually lacks a section.
+
+- **FR-22.14** *(Shipped, NEWS-114)* A section offers **no subsection row at all** when fewer than two subsections are in use. A lone option is not a choice: with every Sports topic under Soccer, "All Sports" and "Soccer" select exactly the same stories.
+
+  Read literally the request was "don't show options other than All", which would leave a single always-active "All Sports" button — a control that does nothing, which is the clutter the ticket is about. Hiding the row is the reading taken; the top row already shows which section is active. Easy to change back if the literal reading was meant.
+
+- **FR-22.15** *(Shipped, NEWS-114)* The **currently selected** section and subsection stay visible even once nothing uses them. Deleting the last Sports topic while filtered to Sports would otherwise remove the only control showing that a filter is on — an empty feed with no visible cause and no way back to All. Once deselected, it disappears normally.
+
 - **FR-22.11** *(Shipped)* The filter is **resolved server-side** as `category`/`subcategory` params on `/api/items`, not client-side over the fetched page. The client holds one page, so filtering there would silently miss matches deeper in history — the bug NEWS-74 existed to fix. It composes with Solo, Saved and Search rather than replacing them.
 
   Two sentinel slugs carry the selections a table row cannot express: `uncategorized` (topic has no category) and `other` (topic has a category but no subcategory). They live in `src/categories.ts` beside the taxonomy so the client and `Store.queryItems` cannot disagree about their spelling — the client must not import from `db/`, which pulls in `node:sqlite`.
@@ -105,6 +113,8 @@ Recorded so they aren't re-litigated. All three were the owner's calls on 2026-0
 ## Testing
 
 `tests/e2e/categories.spec.ts` asserts the label is not clipped by **measuring** it — `scrollWidth` against `clientWidth` for the longest path the taxonomy can produce — and that it sits below the name rather than beside it. The measurement carries a guard against its own vacuous pass: a row re-rendered by the 4 s poll can report `scrollWidth === clientWidth === 0` for an instant, and `0 <= 0 + 1` would "prove" the label fits. It did exactly that at first, passing against a deliberately re-broken layout until the non-zero-width check was added.
+
+Visibility (FR-22.13–22.15) is decided by `visibleCategories` / `visibleSubcategories` / `hasUncategorized` in `src/categories.ts` — pure functions over the topic list, so the rules are unit-tested rather than only observed through the DOM.
 
 `tests/e2e/categories.spec.ts` also drives the real bar: pills appearing after classification, narrowing to a section, the sub-row appearing and resetting when the section changes, the Uncategorized pill, composing with search, and the filter not surviving a reload. `tests/unit/items-query.test.ts` covers the server-side filter — both sentinels, composition with saved/search, and pagination *within* a filter.
 
