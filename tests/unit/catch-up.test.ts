@@ -5,7 +5,7 @@ import { createMockProvider } from '../../src/ai/providers/index.js';
 import { Attendance } from '../../src/attendance.js';
 import { CheckRunner } from '../../src/checks.js';
 import { Store } from '../../src/db/store.js';
-import { fakeProvider } from '../helpers/provider.js';
+import { fakeProvider, instantRetry } from '../helpers/provider.js';
 import { tmpDataDir } from '../helpers/tmp.js';
 
 const HOUR = 3_600_000;
@@ -100,13 +100,38 @@ describe('coveredThroughAt survives failures', () => {
     store.markTopicChecked(topic.id, fiveDaysAgo);
     store.markTopicCovered(topic.id, fiveDaysAgo);
 
-    const failing = fakeProvider(() => Promise.reject(new Error('rate limited')));
-    await new CheckRunner(store, () => Promise.resolve(failing)).checkTopic(topic.id);
+    // A generic failure. (This test used to say "rate limited" here, which
+    // NEWS-109 gave a specific meaning — see the test below, where the clock
+    // deliberately does *not* move.)
+    const failing = fakeProvider(() => Promise.reject(new Error('boom')));
+    await new CheckRunner(store, () => Promise.resolve(failing), undefined, null, null, instantRetry).checkTopic(topic.id);
 
     const after = store.getTopic(topic.id);
     // The attempt clock moved, so the scheduler waits before retrying...
     expect(Date.parse(after?.lastCheckedAt ?? '')).toBeGreaterThan(fiveDaysAgo.getTime());
     // ...but the covered-through point did not, so the news is still pending.
+    expect(after?.coveredThroughAt).toBe(fiveDaysAgo.toISOString());
+  });
+
+  it('a rate-limited check does not advance the attempt clock either (NEWS-109)', async () => {
+    // Throttling is a temporary condition of the *account*, not a problem with
+    // the topic. Advancing the clock for it would turn a few seconds of
+    // throttling into a full interval — up to a day — of missed news, which is
+    // the failure NEWS-109 exists to prevent. The global gate is what stops the
+    // topic being retried in a hot loop.
+    const store = new Store(tmpDataDir());
+    const topic = store.addTopic('fusion energy');
+    const fiveDaysAgo = new Date(Date.now() - 5 * DAY);
+    store.markTopicChecked(topic.id, fiveDaysAgo);
+    store.markTopicCovered(topic.id, fiveDaysAgo);
+
+    const limited = fakeProvider(() => Promise.reject(new Error('429 too many requests')));
+    await new CheckRunner(store, () => Promise.resolve(limited), undefined, null, null, instantRetry).checkTopic(
+      topic.id,
+    );
+
+    const after = store.getTopic(topic.id);
+    expect(after?.lastCheckedAt).toBe(fiveDaysAgo.toISOString());
     expect(after?.coveredThroughAt).toBe(fiveDaysAgo.toISOString());
   });
 
@@ -118,7 +143,7 @@ describe('coveredThroughAt survives failures', () => {
     store.markTopicCovered(topic.id, fiveDaysAgo);
 
     const failing = fakeProvider(() => Promise.reject(new Error('rate limited')));
-    await new CheckRunner(store, () => Promise.resolve(failing)).checkTopic(topic.id);
+    await new CheckRunner(store, () => Promise.resolve(failing), undefined, null, null, instantRetry).checkTopic(topic.id);
 
     const provider = createMockProvider();
     await new CheckRunner(store, () => Promise.resolve(provider)).checkTopic(topic.id);
@@ -135,7 +160,7 @@ describe('coveredThroughAt survives failures', () => {
     store.markTopicCovered(topic.id, start);
 
     const failing = fakeProvider(() => Promise.reject(new Error('down')));
-    const runner = new CheckRunner(store, () => Promise.resolve(failing));
+    const runner = new CheckRunner(store, () => Promise.resolve(failing), undefined, null, null, instantRetry);
     await runner.checkTopic(topic.id);
     await runner.checkTopic(topic.id);
     await runner.checkTopic(topic.id);
@@ -203,11 +228,11 @@ describe('coveredThroughAt survives failures', () => {
 
     const attendance = new Attendance();
     const failing = fakeProvider(() => Promise.reject(new Error('flaky')), { attended: true });
-    await new CheckRunner(store, () => Promise.resolve(failing), attendance).checkDue(new Date());
+    await new CheckRunner(store, () => Promise.resolve(failing), attendance, null, null, instantRetry).checkDue(new Date());
     expect(store.getTopic(topic.id)?.coveredThroughAt).toBe(start.toISOString());
 
     attendance.record();
-    await new CheckRunner(store, () => Promise.resolve(failing), attendance).checkDue(new Date());
+    await new CheckRunner(store, () => Promise.resolve(failing), attendance, null, null, instantRetry).checkDue(new Date());
     expect(store.getTopic(topic.id)?.coveredThroughAt).toBe(start.toISOString());
 
     const provider = createMockProvider({ attended: true });

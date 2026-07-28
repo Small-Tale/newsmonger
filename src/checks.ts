@@ -1,5 +1,15 @@
 import { filterNewItems } from './ai/dedupe.js';
-import type { CategoryOption, FoundNewsItem, KnownItem, NewsProvider, TopicClassification } from './ai/types.js';
+import type { BackoffConfig, FailureKind } from './ai/retry.js';
+import { backoffDelayMs, classifyFailure, DEFAULT_BACKOFF, retryAfterMs } from './ai/retry.js';
+import type {
+  CategoryOption,
+  CheckResult,
+  FoundNewsItem,
+  KnownItem,
+  NewsProvider,
+  TopicClassification,
+  TopicContext,
+} from './ai/types.js';
 import type { LinkProbe } from './ai/verify-links.js';
 import { verifyItemLinks } from './ai/verify-links.js';
 import { Attendance } from './attendance.js';
@@ -8,6 +18,20 @@ import type { NewsItem, Settings, Topic } from './db/schemas.js';
 import type { Store } from './db/store.js';
 import type { ImageFetcher } from './images/index.js';
 import { liveImageHashes, pruneImageCache } from './images/index.js';
+
+/**
+ * A provider failure that made it through the retry policy, carrying how it was
+ * classified so the failure path can tell "throttled" from "broken" (NEWS-109).
+ */
+class CheckFailure extends Error {
+  constructor(
+    readonly cause: unknown,
+    readonly kind: FailureKind,
+  ) {
+    super(cause instanceof Error ? cause.message : String(cause));
+    this.name = 'CheckFailure';
+  }
+}
 
 /**
  * Whether a topic still wants an automatic section (NEWS-97).
@@ -77,7 +101,72 @@ export class CheckRunner {
      * check — what `--ai-test` passes, since the mock's URLs are fictional.
      */
     private readonly probeLink: LinkProbe | null = null,
-  ) {}
+    /**
+     * Retry tuning (NEWS-109). An object rather than two more positional
+     * parameters — this constructor is already five deep, and filling in
+     * `undefined, null, null` just to reach a sleep function reads as noise at
+     * every call site.
+     *
+     * `sleep` exists so tests don't wait real seconds; production passes nothing
+     * and gets a real timer.
+     */
+    opts: { sleep?: (ms: number) => Promise<void>; backoff?: BackoffConfig } = {},
+  ) {
+    this.sleep = opts.sleep ?? ((ms) => new Promise((resolve) => setTimeout(resolve, ms)));
+    this.backoff = opts.backoff ?? DEFAULT_BACKOFF;
+  }
+
+  private readonly sleep: (ms: number) => Promise<void>;
+  private readonly backoff: BackoffConfig;
+
+  /**
+   * When set, no *scheduled* check may start until this moment (NEWS-109).
+   *
+   * Rate limiting is an account-wide condition, not a per-topic one: if one
+   * check is limited, every other topic's would be too. Without a shared gate,
+   * a sweep of twenty topics answers a 429 by making twenty more requests,
+   * which is precisely what the limit is asking us to stop doing.
+   *
+   * Manual checks deliberately ignore it — the user asked, and one request is
+   * how you find out whether the window has reopened.
+   */
+  private rateLimitedUntil = 0;
+
+  /** Ask the provider for news, retrying transient failures (NEWS-109). */
+  private async checkWithRetry(
+    provider: NewsProvider,
+    topicName: string,
+    known: KnownItem[],
+    sinceIso: string | null,
+    context: TopicContext,
+  ): Promise<{ result: CheckResult; kind: null } | { result: null; kind: FailureKind; error: unknown }> {
+    let lastError: unknown;
+    let lastKind: FailureKind = 'retryable';
+    for (let attempt = 1; attempt <= this.backoff.maxAttempts; attempt++) {
+      try {
+        return { result: await provider.checkTopic(topicName, known, sinceIso, context), kind: null };
+      } catch (err) {
+        lastError = err;
+        lastKind = classifyFailure(err);
+        // A fatal error fails identically however many times it is asked, so
+        // retrying only delays the report the user needs to see.
+        if (lastKind === 'fatal') break;
+        if (lastKind === 'rate-limited') {
+          // The server's own answer beats our guess — it knows when the window
+          // resets. Recorded globally so other topics stop too, not just this one.
+          const asked = retryAfterMs(err, new Date(), this.backoff.maxMs);
+          this.rateLimitedUntil = Date.now() + (asked ?? backoffDelayMs(attempt, this.backoff));
+        }
+        if (attempt === this.backoff.maxAttempts) break;
+        const wait =
+          lastKind === 'rate-limited'
+            ? (retryAfterMs(err, new Date(), this.backoff.maxMs) ?? backoffDelayMs(attempt, this.backoff))
+            : backoffDelayMs(attempt, this.backoff);
+        await this.sleep(wait);
+      }
+    }
+    return { result: null, kind: lastKind, error: lastError };
+  }
 
   /** Topic ids currently being checked. */
   checking(): string[] {
@@ -114,7 +203,7 @@ export class CheckRunner {
       const offTopicTitles = this.store.offTopicTitlesForTopic(topicId);
       // Ask from what we've actually *covered*, not the last attempt: a run
       // that failed with news pending must not shrink the next window.
-      const found = await provider.checkTopic(topic.name, known, topic.coveredThroughAt, {
+      const attempt = await this.checkWithRetry(provider, topic.name, known, topic.coveredThroughAt, {
         guidance: topic.guidance,
         offTopicTitles,
         // Only asked for while the topic still needs it (NEWS-97): a labelled
@@ -122,6 +211,8 @@ export class CheckRunner {
         // could answer differently each time.
         ...(needsClassifying(topic) ? { categoryOptions: classifierOptions() } : {}),
       });
+      if (attempt.result === null) throw new CheckFailure(attempt.error, attempt.kind);
+      const found = attempt.result;
       // Check the citations resolve before anything is stored (NEWS-83). Done
       // *before* dedup so a story kept only by a dead link can't claim a dedupe
       // key that then blocks the real version of the same story later.
@@ -177,7 +268,17 @@ export class CheckRunner {
       // before retrying instead of hammering a broken provider — but leave
       // `coveredThroughAt` alone, so whatever news was pending is still asked
       // for on the next successful check.
-      this.store.markTopicChecked(topicId, new Date());
+      //
+      // **Except when we were rate-limited** (NEWS-109). That is a temporary
+      // condition of the account, not a problem with the topic, and advancing
+      // the clock for it would turn a few seconds of throttling into a whole
+      // interval — up to a day — of missed news. Leaving the clock alone makes
+      // the topic due again immediately; `rateLimitedUntil` is what stops that
+      // becoming a hot loop, and it is set from `Retry-After` when the server
+      // supplied one.
+      if (!(err instanceof CheckFailure && err.kind === 'rate-limited')) {
+        this.store.markTopicChecked(topicId, new Date());
+      }
       this.store.finishRun(run.id, {
         status: 'failed',
         newItems: 0,
@@ -299,6 +400,10 @@ export class CheckRunner {
    * resolution covers the whole sweep rather than one per topic.
    */
   private async mayRunScheduled(now: Date): Promise<boolean> {
+    // Account-wide throttling gate (NEWS-109). Checked before anything else,
+    // because the point is to make *no* request until the window reopens —
+    // resolving a provider is harmless, but a sweep that proceeds is not.
+    if (now.getTime() < this.rateLimitedUntil) return false;
     let provider: NewsProvider;
     try {
       provider = await this.resolveProvider();

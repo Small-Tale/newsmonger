@@ -30,6 +30,7 @@ src/
     pricing.ts        BUILTIN_PRICES (seed/fallback) + estimateCostUsd/formatUsd — cost derived at display time (NEWS-79)
     price-schema.ts   ModelPrice/PriceTable zod shapes — browser-safe, no node built-ins (NEWS-93)
     price-store.ts    PriceStore (<data-dir>/prices.json, mtime-cached) + refreshPricesFromManifest (NEWS-93)
+    retry.ts          backoff + failure classification + Retry-After parsing (NEWS-109)
     verify-links.ts   probeLink/verifyItemLinks — citation checking before storage (NEWS-83)
     verify-key.ts     verifyApiKey — vendor-side key check before saving; 401/403 = invalid, else unknown (NEWS-78)
     api-keys.ts       resolveApiKey/saveApiKey/deleteApiKey — env then keychain, never the database
@@ -141,6 +142,7 @@ Data dir: `--data-dir` flag → `NEWS_DATA_DIR` → `~/.news`. Also holds `news.
 | Diagnostics / "why did a check fail" | `src/client/diagnostics.ts` (pure, unit-tested) + the Settings Diagnostics section; `appVersion` on `/api/state`. Topic names redacted unless opted in. See `docs/3-ui.md` FR-3.25–3.28 |
 | Solo filter (set arithmetic, menu + double-click) | `src/client/solo.ts` (`toggleSolo`, `isAllSoloed`), used by `runTopicAction` and the `dblclick` delegate in `app.tsx`. See `docs/3-ui.md` FR-3.40 |
 | Topic categories / taxonomy | `src/categories.ts` (`BUILTIN_CATEGORIES`, `categoryLabel`, `activeCategories`). See `docs/22-topic-categories.md` |
+| Provider retries / rate limiting | `src/ai/retry.ts` (`backoffDelayMs`, `classifyFailure`, `retryAfterMs`); `checkWithRetry` + `rateLimitedUntil` in `checks.ts`. See `docs/23-retries-and-rate-limits.md` |
 | Section filter bar / sidebar pills | `filterBarJsx` + `[data-filter-category]`/`[data-filter-subcategory]` delegates in `client/app.tsx`; `.filter-bar` in `styles.scss`; server filter in `Store.queryItems`. See `docs/22-topic-categories.md` FR-22.9–22.12 |
 | Automatic topic classification | `needsClassifying`/`classifierOptions`/`applyClassification` in `checks.ts`; prompt + parsing in `ai/prompt.ts`. See `docs/22-topic-categories.md` FR-22.8 |
 | Run history / spend horizon | `RUN_RETENTION_DAYS` (400) + `MAX_RUNS_KEPT` (25k) and `Store.pruneOldRuns` in `db/store.ts`, called from the housekeeping sweep. See `docs/19-cost-visibility.md` FR-19.13 |

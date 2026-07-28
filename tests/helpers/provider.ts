@@ -1,3 +1,4 @@
+import type { BackoffConfig } from '../../src/ai/retry.js';
 import type { CheckResult, FoundNewsItem, NewsProvider, NewsService } from '../../src/ai/types.js';
 import type { ProviderResolver } from '../../src/checks.js';
 
@@ -24,3 +25,34 @@ export function fakeProvider(
 export function noUsage(items: FoundNewsItem[]): CheckResult {
   return { items, usage: null };
 }
+
+/**
+ * Retry policy with no waiting (NEWS-109).
+ *
+ * The real policy sleeps 15 s before the first retry, so any test that drives a
+ * *failing* provider would otherwise take a minute and a half. Tests about what
+ * a failure records — rather than about the retry timing itself — pass this.
+ *
+ * `maxAttempts` stays at the real value so the number of provider calls a
+ * failure produces is still what production would produce.
+ */
+export const INSTANT_BACKOFF: BackoffConfig = {
+  baseMs: 0,
+  stepMs: 0,
+  maxMs: 0,
+  jitterRatio: 0,
+  maxAttempts: 4,
+};
+
+/** Options that make a `CheckRunner` retry without waiting. */
+export const instantRetry = { backoff: INSTANT_BACKOFF, sleep: () => Promise.resolve() };
+
+/**
+ * Real backoff *durations* with no real waiting.
+ *
+ * Distinct from `instantRetry`, which zeroes the durations too. Anything
+ * asserting on the rate-limit gate needs this: the gate's length is derived from
+ * the backoff, so a zeroed config produces a gate that has already expired —
+ * which looks like the gate not working at all.
+ */
+export const fastRetry = { sleep: () => Promise.resolve() };

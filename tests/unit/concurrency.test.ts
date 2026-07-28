@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import type { CheckResult } from '../../src/ai/types.js';
 import { CheckRunner } from '../../src/checks.js';
 import { Store } from '../../src/db/store.js';
-import { asResolver, fakeProvider, noUsage } from '../helpers/provider.js';
+import { asResolver, fakeProvider, instantRetry, noUsage } from '../helpers/provider.js';
 import { tmpDataDir } from '../helpers/tmp.js';
 
 /**
@@ -136,7 +136,12 @@ describe('bounded-concurrency sweeps (NEWS-81)', () => {
         : Promise.resolve(noUsage([])),
     );
 
-    expect(await new CheckRunner(store, asResolver(provider)).checkDue(new Date())).toBe(3);
+    // `instantRetry`: the failing topic is retried per NEWS-109, and the real
+    // policy would spend 90 s doing it. The retry count is unchanged, so the
+    // sweep behaviour under test is the same.
+    expect(
+      await new CheckRunner(store, asResolver(provider), undefined, null, null, instantRetry).checkDue(new Date()),
+    ).toBe(3);
     const runs = store.listRuns(10);
     expect(runs).toHaveLength(3);
     expect(runs.filter((r) => r.status === 'failed')).toHaveLength(1);
