@@ -100,3 +100,77 @@ test('clean up the layout topics', async ({ page }) => {
     await expect(page.locator('.topic', { hasText: name })).toHaveCount(0);
   }
 });
+
+// Card and sidebar text layout (NEWS-112, NEWS-113). Both are CSS-only, both
+// only misbehave once text is long enough to wrap, and neither is visible to any
+// other test — so they are measured here.
+//
+// Every measurement below guards against its own vacuous pass by requiring a
+// real height first. A row re-rendered by the 4 s poll reports a zero-size box
+// for an instant, and an assertion like "height <= one line" is trivially true
+// of zero (see NEWS-111, where exactly that shipped a test that guarded nothing).
+
+const LONG_TOPIC = 'Apple (the company and their products, not the fruit)';
+
+test('a relative timestamp never wraps (NEWS-112)', async ({ page }) => {
+  // A long topic pill beside the timestamp squeezed it until "57m ago" broke
+  // across two lines, reading as two facts rather than one.
+  await page.setViewportSize({ width: 900, height: 800 });
+  await page.goto('/');
+  await page.fill('.add-topic input', LONG_TOPIC);
+  await page.press('.add-topic input', 'Enter');
+  await expect(page.locator('.item').first()).toBeVisible({ timeout: 15_000 });
+
+  const time = page.locator('.item .item-time').first();
+  const box = await time.evaluate((el) => ({
+    height: el.getBoundingClientRect().height,
+    lineHeight: parseFloat(getComputedStyle(el).lineHeight),
+    // The pill next to it really is long enough to have caused the squeeze —
+    // otherwise this test would pass on a card that never had the problem.
+    pillWidth: el.parentElement?.querySelector('.item-topic')?.getBoundingClientRect().width ?? 0,
+  }));
+
+  expect(box.height, 'the timestamp should have been measured, not mid-render').toBeGreaterThan(5);
+  expect(box.pillWidth, 'the topic pill should be long enough to crowd the timestamp').toBeGreaterThan(200);
+  expect(box.height, 'the timestamp should be a single line').toBeLessThan(box.lineHeight * 1.6);
+});
+
+test('a source link’s arrow aligns with the first line, not the middle (NEWS-113)', async ({ page }) => {
+  await page.setViewportSize({ width: 900, height: 800 });
+  await page.goto('/');
+  await expect(page.locator('.sources a').first()).toBeVisible({ timeout: 15_000 });
+
+  // The mock's source titles are short, so the wrap is forced here rather than
+  // faked in the app: the rule under test is where the arrow sits *once* a link
+  // wraps, and this is the cheapest way to produce that condition honestly.
+  await page.addStyleTag({ content: '.sources a { max-width: 60px; }' });
+
+  const link = page.locator('.sources a').first();
+  const m = await link.evaluate((el) => {
+    const icon = el.querySelector('.icon');
+    const linkBox = el.getBoundingClientRect();
+    const iconBox = icon?.getBoundingClientRect();
+    return {
+      linkHeight: linkBox.height,
+      iconHeight: iconBox?.height ?? 0,
+      offsetFromTop: (iconBox?.top ?? 0) - linkBox.top,
+    };
+  });
+
+  expect(m.iconHeight, 'the arrow should have been measured, not mid-render').toBeGreaterThan(5);
+  expect(m.linkHeight, 'the link should have wrapped, or this asserts nothing').toBeGreaterThan(m.iconHeight * 2);
+
+  // Compared against where *centring* would put it, rather than against a fixed
+  // number of pixels. A fixed bound looked fine and wasn't: with a two-line
+  // wrap, centred sits ~11px down and "less than the icon's 13px height" was
+  // true of both layouts, so the test passed against the bug it was written for.
+  const centred = (m.linkHeight - m.iconHeight) / 2;
+  expect(m.offsetFromTop, 'the arrow should sit on the first line, not centred').toBeLessThan(centred * 0.6);
+});
+
+test('clean up the card-layout topic', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 1000 });
+  await resetTopics(test.info().project.use.baseURL ?? '');
+  await page.goto('/');
+  await expect(page.locator('.topic', { hasText: LONG_TOPIC })).toHaveCount(0);
+});

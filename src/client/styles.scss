@@ -605,6 +605,8 @@ h2.eyebrow {
 }
 
 .topic-meta {
+  // Same reasoning as `.item-time` (NEWS-112): "checked 55m ago" is one unit.
+  white-space: nowrap;
   font-family: var(--mono);
   font-size: 10.5px;
   color: var(--ink-soft);
@@ -817,7 +819,14 @@ h2.eyebrow {
   padding: 2px 7px;
 }
 
+// "57m ago" is one unit and must read as one (NEWS-112). The card header is a
+// flex row, so a long topic pill beside it squeezes the timestamp until it
+// breaks across two lines — which reads as two facts rather than one, and looks
+// broken next to the action icons. `flex: 0 0 auto` stops it being the item
+// that gives way; the pill wraps instead, which it can afford to.
 .item-time {
+  flex: 0 0 auto;
+  white-space: nowrap;
   font-family: var(--mono);
   font-size: 10.5px;
   color: var(--ink-soft);
@@ -834,9 +843,14 @@ h2.eyebrow {
 
   a {
     display: inline-flex;
-    align-items: center;
+    // `flex-start`, not `center` (NEWS-113): a headline long enough to wrap
+    // pushed the arrow to the vertical middle of the block, where it points at
+    // the gap between two lines instead of at the start of the link. It is a
+    // bullet for the first line, so it belongs beside the first line.
+    align-items: flex-start;
     gap: 5px;
     font-size: 12.5px;
+    line-height: 1.45;
     color: var(--ink-soft);
     text-decoration: none;
     transition: color 120ms ease;
@@ -844,6 +858,11 @@ h2.eyebrow {
     .icon {
       color: var(--pine);
       stroke-width: 2.2;
+      // Nudged down to sit on the first line's optical centre rather than its
+      // very top — flex-start aligns the box, and a 13px glyph against a
+      // ~18px line box would otherwise ride high.
+      flex: 0 0 auto;
+      margin-top: 2px;
     }
 
     &:hover {

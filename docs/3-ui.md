@@ -96,6 +96,14 @@ each(s.topics, (t) => topicRowJsx(...), (t) => `${selected.has(t.id)}|${solo.has
 
 **The menu backdrop wraps the menu, so a shared close action swallows the item click.** `[data-action=close-menu]` matches by ancestor walk, so a click on a menu item also matched the backdrop; the menu closed and cleared `contextMenu` before the item handler could read it, and the action silently did nothing. The handler now closes only when the click landed on the backdrop element itself. This is the same trap the settings dialog hit — worth checking on any future overlay.
 
+## Card and sidebar text layout
+
+- **FR-3.41** *(Shipped, NEWS-112)* A relative timestamp (`57m ago`, `checked 3h ago`) **never wraps**. The card header is a flex row, so a long topic pill beside the timestamp squeezed it until it broke across two lines — which reads as two facts rather than one. `flex: 0 0 auto` stops the timestamp being the item that gives way; the pill wraps instead, which it can afford to.
+
+- **FR-3.42** *(Shipped, NEWS-113)* A source link's arrow aligns with the **first line** of the link text, not the vertical middle. Once a headline wrapped, a centred arrow pointed at the gap between two lines; it is a bullet for the first line, so it belongs beside the first line. `align-items: flex-start` plus a 2px nudge, so a 13px glyph sits on the first line's optical centre rather than riding its very top.
+
+Both are measured in `tests/e2e/layout.spec.ts` rather than eyeballed, and both measurements guard against a vacuous pass — see the note there.
+
 ## Section filter bar (NEWS-97)
 
 The bar under the masthead is documented in [docs/22-topic-categories.md](./22-topic-categories.md) (FR-22.9–22.12). Two structural points belong here with the other kerf conventions:
