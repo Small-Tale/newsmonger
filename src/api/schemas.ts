@@ -11,7 +11,22 @@ import {
 
 // Request schemas (validated server-side).
 
-export const CreateTopicReqSchema = z.object({ name: z.string().min(1).max(200) });
+/**
+ * Body of a topic creation.
+ *
+ * The optional fields exist for discovery (NEWS-126): a topic added from a
+ * suggestion arrives with a guidance steer (FR-24.12) and a pre-validated
+ * classification (FR-24.13). They are set **in the same request** rather than
+ * PATCHed afterwards because creating a topic fires its first check immediately
+ * (FR-1.12) — a follow-up PATCH would land after that check had already run
+ * unsteered, which is precisely what FR-24.12 exists to prevent.
+ */
+export const CreateTopicReqSchema = z.object({
+  name: z.string().min(1).max(200),
+  guidance: z.string().max(MAX_GUIDANCE_LENGTH).optional(),
+  category: z.string().min(1).optional(),
+  subcategory: z.string().min(1).optional(),
+});
 export type CreateTopicReq = z.infer<typeof CreateTopicReqSchema>;
 
 // A topic PATCH may toggle pause / high-priority, set guidance, and/or set the
@@ -127,6 +142,8 @@ export const TopicSuggestionSchema = z.object({
   /** Already validated against the live taxonomy server-side (FR-24.13). */
   classification: z.object({ category: z.string(), subcategory: z.string().nullable() }).nullable(),
 });
+
+export type TopicSuggestion = z.infer<typeof TopicSuggestionSchema>;
 
 export const DiscoverRespSchema = z.object({
   suggestions: z.array(TopicSuggestionSchema),

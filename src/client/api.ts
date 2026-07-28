@@ -1,5 +1,12 @@
 import type { ProviderName } from '../ai/types.js';
-import { ItemsRespSchema, KeysRespSchema, ProvidersRespSchema, StateRespSchema } from '../api/schemas.js';
+import type { DiscoverReq, DiscoverResp, TopicSuggestion } from '../api/schemas.js';
+import {
+  DiscoverRespSchema,
+  ItemsRespSchema,
+  KeysRespSchema,
+  ProvidersRespSchema,
+  StateRespSchema,
+} from '../api/schemas.js';
 import { noteState } from './notifications.js';
 import { appStore } from './stores.js';
 
@@ -126,6 +133,45 @@ export async function withRefresh(fn: () => Promise<unknown>): Promise<void> {
 
 export function addTopic(name: string): Promise<void> {
   return withRefresh(() => request('/api/topics', { method: 'POST', body: JSON.stringify({ name }) }));
+}
+
+/**
+ * Create a topic from a discovery suggestion (NEWS-126).
+ *
+ * The guidance and classification travel with the create rather than in a
+ * follow-up PATCH: creating a topic fires its first check immediately (FR-1.12),
+ * so a second request would land after that check had already run unsteered —
+ * exactly what the suggestion's guidance exists to prevent (FR-24.12).
+ *
+ * Errors are thrown rather than swallowed into the global banner: the caller
+ * shows them on the card, next to the button that failed.
+ */
+export async function addSuggestedTopic(suggestion: TopicSuggestion): Promise<void> {
+  await request('/api/topics', {
+    method: 'POST',
+    body: JSON.stringify({
+      name: suggestion.name,
+      ...(suggestion.guidance === '' ? {} : { guidance: suggestion.guidance }),
+      ...(suggestion.classification === null
+        ? {}
+        : {
+            category: suggestion.classification.category,
+            ...(suggestion.classification.subcategory === null
+              ? {}
+              : { subcategory: suggestion.classification.subcategory }),
+          }),
+    }),
+  });
+  await refreshState();
+}
+
+/** Ask for topic suggestions (FR-24.1). */
+export async function discoverTopics(scope: DiscoverReq['scope'], limit?: number): Promise<DiscoverResp> {
+  const body = await request('/api/discover', {
+    method: 'POST',
+    body: JSON.stringify({ scope, ...(limit === undefined ? {} : { limit }) }),
+  });
+  return DiscoverRespSchema.parse(body);
 }
 
 export function deleteTopic(id: string): Promise<void> {

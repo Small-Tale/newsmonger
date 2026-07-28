@@ -42,6 +42,16 @@ So the containers are no longer KF-377 scar tissue; they are ordinary good struc
 
 The topics list also now carries an explicit `key: 'topics'` (kerf 3.x). Unkeyed lists are identified by their position among a render's `each()` calls; this is the only `each()` in the app today, so the position cannot currently shift, but the key means adding a second list later can't silently rebuild this one.
 
+### Two delegates must never match nodes the morph can turn into each other (NEWS-126)
+
+The discovery dialog's section grid and its subcategory chips are both `<button>`s in the same position of the same container. When the pane switches, the morph does what it is supposed to do — **reuses the node** and rewrites its attributes — so the tile *becomes* the chip.
+
+That broke a rule nobody had written down. `delegate()` registers one listener per selector on the shared root, and they all run for the same click. The first handler (`[data-discover-section]`) re-rendered synchronously; by the time the second handler (`[data-discover-sub]`) walked up from the very same `e.target`, that node was carrying the chip's attribute — so it fired too. **One physical click ran two different actions**, jumping the user from "Sports" straight into results for whichever subcategory happened to land under the cursor.
+
+The fix is one delegate on one attribute (`data-discover-nav`), branching on its value. The rule generalises: when two interactive states can occupy the same position in the same container, **give them one action attribute and one handler** — because the morph reusing the node is the whole point of the morph, and a handler that re-renders before its siblings run is unavoidable.
+
+Caught by the E2E suite, which is the only place it *could* be caught: the mistake typechecks, lints, and looks right in the source.
+
 ### Enumerated attributes take keyword strings (kerf 4.0.0, NEWS-123)
 
 `draggable`, `spellCheck`, `contentEditable`, `translate` and `autocorrect` are HTML **enumerated** attributes, not boolean ones: they carry keyword strings (`"true"` / `"false"`, `"yes"` / `"no"`, `"on"` / `"off"`), and *omitting* them selects a third state — inherit-from-parent — rather than "off". kerf ≤3 accepted the boolean JSX form and rendered nothing for `{false}`, which is why the API key field's `spellcheck={false}` compiled cleanly and never reached the browser. kerf 4 makes the boolean form a type error; write `spellcheck="false"`.

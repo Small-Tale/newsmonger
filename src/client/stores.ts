@@ -1,6 +1,6 @@
 import { defineStore } from 'kerfjs';
 
-import type { ItemsResp, KeysResp, ProviderInfo, StateResp } from '../api/schemas.js';
+import type { ItemsResp, KeysResp, ProviderInfo, StateResp, TopicSuggestion } from '../api/schemas.js';
 
 type NewsItem = ItemsResp['items'][number];
 
@@ -33,6 +33,60 @@ export const STARTER_TOPICS = [
   'Cybersecurity',
 ] as const;
 
+/**
+ * Where a result list came from, for the heading and for re-running it.
+ *
+ * Kept as the *request* rather than a rendered string so the pane can re-ask
+ * without reconstructing what was asked — which is what a "try again" after a
+ * provider failure needs.
+ */
+export type DiscoverSource =
+  | { kind: 'describe'; query: string }
+  | { kind: 'section'; category: string; subcategory: string | null };
+
+/** The discovery dialog's state (NEWS-126, `docs/24-topic-discovery.md`). */
+export interface DiscoverState {
+  /**
+   * Which pane is showing. `browse` is the section grid, `results` the cards.
+   * Both doors produce `results`, which is the point — neither is primary.
+   */
+  view: 'browse' | 'results';
+  /** The section being drilled into, or null for the 11-tile grid. */
+  section: string | null;
+  /** Current contents of the free-text box. */
+  query: string;
+  loading: boolean;
+  error: string | null;
+  suggestions: TopicSuggestion[];
+  /** What produced the current results, for the heading and for retrying. */
+  source: DiscoverSource | null;
+  /** True when the last answer came free from the cache (FR-24.15). */
+  cached: boolean;
+  /**
+   * Names added during this dialog session.
+   *
+   * The card shows "Added" rather than vanishing: a row disappearing under the
+   * cursor as you click down a list is how the *next* one gets clicked by
+   * accident. They also can't simply be re-filtered out of `suggestions`,
+   * because the server's exclusion list is what it was when the call was made.
+   */
+  added: string[];
+}
+
+export function emptyDiscover(): DiscoverState {
+  return {
+    view: 'browse',
+    section: null,
+    query: '',
+    loading: false,
+    error: null,
+    suggestions: [],
+    source: null,
+    cached: false,
+    added: [],
+  };
+}
+
 export interface AppState {
   loaded: boolean;
   /** Last error shown in the banner, or null. */
@@ -57,6 +111,8 @@ export interface AppState {
   settingsTab: 'schedule' | 'source' | 'data' | 'app';
   /** Whether the privacy dialog is open (NEWS-121). Ephemeral, like every dialog. */
   privacyOpen: boolean;
+  /** Topic discovery (NEWS-126), or null when the dialog is closed. */
+  discover: DiscoverState | null;
   /** Whether the settings dialog is open. */
   settingsOpen: boolean;
   /**
@@ -290,6 +346,7 @@ export const appStore = defineStore({
     providers: [],
     settingsTab: 'schedule',
     privacyOpen: false,
+    discover: null,
     settingsOpen: false,
     onboarding: 'auto',
     onboardingTopics: [],
@@ -401,6 +458,26 @@ export const appStore = defineStore({
     },
     setReviewTopicIds: (reviewTopicIds: string[]) => {
       set({ ...get(), reviewTopicIds, feedLimit: FEED_PAGE });
+    },
+    openDiscover: () => {
+      set({ ...get(), discover: emptyDiscover() });
+    },
+    closeDiscover: () => {
+      set({ ...get(), discover: null });
+    },
+    /**
+     * Patch the discovery pane.
+     *
+     * A patch rather than a whole-state setter because every caller changes one
+     * or two fields of a six-field object, and a full replace is how the
+     * in-flight `loading` flag or the `added` list gets silently reset by an
+     * unrelated update. Ignored when the dialog is closed, so a response
+     * arriving after the user closed it cannot reopen it.
+     */
+    patchDiscover: (patch: Partial<DiscoverState>) => {
+      const current = get().discover;
+      if (current === null) return;
+      set({ ...get(), discover: { ...current, ...patch } });
     },
     openConfirm: (confirm: { message: string; confirmLabel: string; danger: boolean }) => {
       set({ ...get(), confirm });

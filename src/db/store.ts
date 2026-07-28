@@ -322,7 +322,24 @@ export class Store {
     return row === undefined ? undefined : Store.rowToTopic(row);
   }
 
-  addTopic(name: string): Topic {
+  /**
+   * Create a topic.
+   *
+   * `init` carries what a topic added from a discovery suggestion already knows
+   * (NEWS-126): its guidance steer and its classification. They are applied at
+   * creation rather than by a follow-up update because `POST /api/topics` fires
+   * the topic's first check immediately (FR-1.12) — a later write would land
+   * after that check had already run unsteered.
+   *
+   * `categorySource` stays `auto`: the classification came from the model, not
+   * from the user, so a manual change must still be able to override it
+   * (FR-22.7). A topic that arrives already classified is not re-classified on
+   * its first check, which is what saves the extra call (FR-24.13).
+   */
+  addTopic(
+    name: string,
+    init: { guidance?: string; category?: string | null; subcategory?: string | null } = {},
+  ): Topic {
     const trimmed = name.trim();
     if (trimmed === '') throw new Error('topic name must not be empty');
     // Checked here rather than left to the unique index, so the message the API
@@ -336,12 +353,12 @@ export class Store {
       name: trimmed,
       paused: false,
       highPriority: false,
-      guidance: '',
+      guidance: (init.guidance ?? '').trim(),
       createdAt: new Date().toISOString(),
       lastCheckedAt: null,
       coveredThroughAt: null,
-      category: null,
-      subcategory: null,
+      category: init.category ?? null,
+      subcategory: init.category == null ? null : (init.subcategory ?? null),
       categorySource: 'auto',
       consecutiveFailures: 0,
       retryAfter: null,

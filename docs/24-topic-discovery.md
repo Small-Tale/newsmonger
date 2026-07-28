@@ -4,7 +4,7 @@ Naming a topic requires already knowing you want it. That is fine for the two or
 
 See also [1 — Topics and Scheduling](1-topics-and-scheduling.md), [20 — First-Run Onboarding](20-onboarding.md), [22 — Topic Categories](22-topic-categories.md), [18 — Topic Guidance](18-topic-guidance.md), [6 — AI Providers](6-providers.md).
 
-## Status: partial — provider capability (NEWS-124) and server (NEWS-125) built; no UI yet (NEWS-126–128)
+## Status: partial — both doors shipped (NEWS-124/125/126); tuner and onboarding still to come (NEWS-127/128)
 
 Four variations were wireframed and reviewed (recorded under "Variations considered" below). The approved shape is **two entry doors into one result list, with a keep/skip tuner as the depth control** — not as a third door.
 
@@ -109,8 +109,27 @@ Four shapes were wireframed before the one above was chosen. Recorded because th
 
 - **FR-24.24** *(Shipped)* Both exclusion layers are server-side. The route fills `exclude` from the topic list so the client **cannot** forget (layer 1), and the response is filtered against the same list (layer 2). Matching uses `normalizeTopicName`, deliberately *not* `normalizeTitle` from `ai/dedupe.ts`: that one deletes punctuation because it compares news headlines, whereas in a topic name a hyphen stands in for a space, so "formula-1" and "Formula 1" are the same subject. Using the headline rule would let a re-punctuated duplicate straight through. The same pass also drops a name the model repeated within one batch.
 
+## The dialog (NEWS-126, shipped)
+
+- **FR-24.25** *(Shipped)* Both doors live in one dialog, opened from a compass button beside the add-topic field (FR-24.17). The box and the section grid are visible together — neither is presented as the primary route.
+
+- **FR-24.26** *(Shipped)* Adding a suggestion sends the name, guidance and classification in a **single** `POST /api/topics`. Creating a topic fires its first check immediately (FR-1.12), so a follow-up PATCH would land *after* that check had already run unsteered — which is exactly what FR-24.12's guidance exists to prevent. `categorySource` stays `auto`: the classification came from the model, so a manual change must still win (FR-22.7).
+
+- **FR-24.27** *(Shipped)* An added card **stays in place** and marks itself "Added" rather than disappearing. A row vanishing under the cursor is how the *next* row gets clicked by accident.
+
+- **FR-24.28** *(Shipped)* A provider failure renders **inside the dialog** with a retry, not in the global banner: the user is mid-task, and the message is about that one request.
+
+### Two lessons from building it
+
+Both were caught by the E2E suite and neither would have been caught by typecheck, lint or unit tests.
+
+- **A nested `each()` never binds.** Rendering the grouped result list as `each(groups, … each(group.suggestions, …))` throws in the dev bundle: an inner list inside a row render is flattened to static HTML and silently stops updating. The inner collection is a `.map()`; the outer stays keyed.
+- **Two delegates must never match nodes the morph can turn into each other** — the section tile and the subcategory chip are both buttons in the same slot, so one click fired both handlers. Written up in [3 — Web UI](3-ui.md); it is a general rule, not a discovery quirk.
+
 ### Testing
 
-- **Unit** — `tests/unit/discovery.test.ts` (24): all three entry shapes and their malformed variants, the round bound (including that a rejected round never reaches the provider), both exclusion layers, normalized and within-batch duplicates, classification validation (bad category dropped, bad subcategory degrading to category-only), cache hit / miss / expiry / invalidation-by-new-topic, the recording of succeeded, failed and unresolvable-provider calls, and the 503 when discovery isn't wired up. Verified non-vacuous by removing the layer-2 filter — three tests fail.
+- **E2E** — `tests/e2e/discover.spec.ts` (14): both doors through to a created topic, the empty-box "surprise me" path, drilling and stepping back, grouping and the ongoing/evergreen badges, the added card staying put, an already-followed topic never being suggested (the mock plants one on purpose), a provider failure showing a retry, backdrop-vs-inside click handling, and the topics list surviving the dialog opening and closing.
+- **Unit** — `tests/unit/discover-client.test.ts` (15): grouping, taxonomy ordering at both levels, "Other" vs unclassified, and the headings.
+- **Unit** — `tests/unit/discovery.test.ts` (27): all three entry shapes and their malformed variants, the round bound (including that a rejected round never reaches the provider), both exclusion layers, normalized and within-batch duplicates, classification validation (bad category dropped, bad subcategory degrading to category-only), cache hit / miss / expiry / invalidation-by-new-topic, the recording of succeeded, failed and unresolvable-provider calls, and the 503 when discovery isn't wired up. Verified non-vacuous by removing the layer-2 filter — three tests fail.
 - **Unit** — `tests/unit/suggest-prompt.test.ts` (22): each scope's prompt, the empty-query breadth instruction, skips phrased as a steer rather than an exclusion list, history capping, exclusions, taxonomy-by-slug, and the parser's degrade-don't-fail paths including a bogus slug surviving parsing for the caller to reject. `tests/unit/suggest-providers.test.ts` (12): all five providers through injected runners, the CLI schema wiring, and the mock's determinism scheme.
 - No E2E yet — there is no UI to drive until NEWS-126. The route is exercised through `createApp(...)` + `app.request(...)`, which is this project's server-test convention.

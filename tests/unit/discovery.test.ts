@@ -5,6 +5,7 @@ import { createMockProvider } from '../../src/ai/providers/index.js';
 import type { SuggestRequest, SuggestResult } from '../../src/ai/types.js';
 import { DiscoverRespSchema, DiscoverUsageRespSchema, MAX_TUNE_ROUNDS } from '../../src/api/schemas.js';
 import { CheckRunner } from '../../src/checks.js';
+import { TopicSchema } from '../../src/db/schemas.js';
 import { Store } from '../../src/db/store.js';
 import { DiscoveryService } from '../../src/discovery.js';
 import { createApp } from '../../src/server.js';
@@ -335,5 +336,64 @@ describe('the request the provider actually receives', () => {
     const { app, service } = makeApp();
     await post(app, { ...DESCRIBE, limit: 50 });
     expect(service.suggestCalls[0].limit).toBeLessThanOrEqual(12);
+  });
+});
+
+describe('creating a topic from a suggestion (FR-24.12 / FR-24.13)', () => {
+  it('stores the guidance and classification in the same request as the name', async () => {
+    // Not a follow-up PATCH: creating a topic fires its first check immediately
+    // (FR-1.12), so a second request would land after that check had already
+    // run unsteered — which is the whole thing the guidance exists to prevent.
+    const { app, store } = makeApp();
+
+    const res = await app.request('/api/topics', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        name: 'Formula 1',
+        guidance: 'Race results and team news, not driver gossip.',
+        category: 'sports',
+        subcategory: 'motorsport',
+      }),
+    });
+
+    expect(res.status).toBe(201);
+    const [topic] = store.listTopics();
+    expect(topic.name).toBe('Formula 1');
+    expect(topic.guidance).toBe('Race results and team news, not driver gossip.');
+    expect(topic.category).toBe('sports');
+    expect(topic.subcategory).toBe('motorsport');
+    // `auto`, not `manual`: the classification came from the model, so a later
+    // manual change must still win (FR-22.7).
+    expect(topic.categorySource).toBe('auto');
+  });
+
+  it('still accepts a bare name, unchanged', async () => {
+    // Asserted on the creation response, not on the store: creating a topic
+    // fires its first check (FR-1.12), and that check classifies an unlabelled
+    // topic — so a later store read races with it.
+    const { app } = makeApp();
+    const res = await app.request('/api/topics', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: 'Plain topic' }),
+    });
+    expect(res.status).toBe(201);
+    const created = TopicSchema.parse((await res.json()) as unknown);
+    expect(created.guidance).toBe('');
+    expect(created.category).toBeNull();
+  });
+
+  it('ignores a subcategory sent without its category', async () => {
+    // Storing it would look like a classification while rendering as none.
+    const { app } = makeApp();
+    const res = await app.request('/api/topics', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: 'Orphaned', subcategory: 'motorsport' }),
+    });
+    const created = TopicSchema.parse((await res.json()) as unknown);
+    expect(created.subcategory).toBeNull();
+    expect(created.category).toBeNull();
   });
 });

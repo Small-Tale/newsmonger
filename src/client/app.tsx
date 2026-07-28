@@ -3,6 +3,8 @@ import { delegate, each, mount } from 'kerfjs';
 
 import type { ProviderName } from '../ai/types.js';
 import { PROVIDER_INFO, PROVIDER_MODELS, PROVIDER_NAMES } from '../ai/types.js';
+import type { TopicSuggestion } from '../api/schemas.js';
+import { MAX_DISCOVER_QUERY_LENGTH } from '../api/schemas.js';
 import {
   BUILTIN_CATEGORIES,
   categoryLabel,
@@ -17,9 +19,11 @@ import {
 import type { NewsItem, Topic } from '../db/schemas.js';
 import { MAX_GUIDANCE_LENGTH } from '../db/schemas.js';
 import {
+  addSuggestedTopic,
   addTopic,
   deleteKey,
   deleteTopic,
+  discoverTopics,
   refreshFeed,
   refreshKeys,
   refreshProviders,
@@ -43,6 +47,7 @@ import {
 } from './api.js';
 import { outletFor, publishedLabel } from './attribution.js';
 import { buildDiagnostics, formatDuration, runRows } from './diagnostics.js';
+import { groupSuggestions, kindLabel, resultsHeading, sectionFor, sectionTiles } from './discover.js';
 import { currentFailure } from './failure.js';
 import { icon } from './icons.js';
 import { ensureNotificationPermission, syncTauriNotificationPermission } from './notifications.js';
@@ -50,7 +55,7 @@ import { activeBehindWarnings } from './schedule.js';
 import { itemMatchesQuery } from './search.js';
 import { shareItem } from './share.js';
 import { isAllSoloed, toggleSolo } from './solo.js';
-import type { AppState, OnboardingStep } from './stores.js';
+import type { AppState, DiscoverSource, DiscoverState, OnboardingStep } from './stores.js';
 import {
   appStore,
   FEED_PAGE,
@@ -662,6 +667,178 @@ function guidanceDialogJsx(topic: Topic): SafeHtml {
   );
 }
 
+
+/**
+ * Topic discovery (NEWS-126, `docs/24-topic-discovery.md`).
+ *
+ * Two doors into one result list, and deliberately neither is primary: the box
+ * serves someone who sort of knows what they're into, the section grid serves
+ * someone who wants to see what exists, and each covers the other's failure. An
+ * empty box is "surprise me" (FR-24.3), not an error — which is what stops the
+ * blank field being a wall for the very user this feature is for.
+ */
+function discoverDialogJsx(d: DiscoverState): SafeHtml {
+  return (
+    <div class="dialog-backdrop" data-action="discover-backdrop">
+      <div class="dialog discover" role="dialog" aria-modal="true" aria-label="Discover topics">
+        <div class="discover-head">
+          <h2>Discover topics</h2>
+          <button class="icon-btn" type="button" data-action="close-discover" aria-label="Close">
+            {icon('clear')}
+          </button>
+        </div>
+
+        <form class="discover-search" data-action="discover-search">
+          <input
+            type="text"
+            name="discover-query"
+            placeholder="What are you into? — “i cycle and work in biotech”"
+            maxLength={MAX_DISCOVER_QUERY_LENGTH}
+            autocomplete="off"
+            data-morph-skip-children
+          />
+          <button class="btn primary" type="submit" disabled={d.loading ? true : undefined}>
+            Suggest
+          </button>
+        </form>
+
+        <div class="discover-body">{discoverBodyJsx(d)}</div>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * The pane below the box: the section grid, a section's subcategories, or results.
+ *
+ * One always-present container in the caller holds this, so switching panes
+ * never restructures the dialog's siblings (see `docs/3-ui.md`).
+ */
+function discoverBodyJsx(d: DiscoverState): SafeHtml {
+  if (d.loading) return <p class="discover-status">Asking…</p>;
+  if (d.error !== null) {
+    return (
+      <div class="discover-status error">
+        <p>{d.error}</p>
+        <button class="btn" type="button" data-action="discover-retry">
+          Try again
+        </button>
+      </div>
+    );
+  }
+  if (d.view === 'results') return discoverResultsJsx(d);
+  return d.section === null ? sectionGridJsx() : subsectionsJsx(d.section);
+}
+
+/**
+ * The 11 section tiles (FR-24.2).
+ *
+ * `.map()`, not `each()` — the sections are a constant array, and `each()`
+ * memoizes per item by object identity, so a constant list would cache forever
+ * and stop re-rendering (kerf hard rule 14).
+ */
+function sectionGridJsx(): SafeHtml {
+  return (
+    <div class="discover-pane">
+      <p class="discover-hint">…or browse by section.</p>
+      <div class="section-grid">
+        {sectionTiles().map((category) => (
+          <button class="section-tile" type="button" data-discover-nav={`section:${category.slug}`}>
+            {category.label}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/** One section's subcategories, plus the escape for someone who knows none of them. */
+function subsectionsJsx(slug: string): SafeHtml {
+  const category = sectionFor(slug);
+  if (category === undefined) return sectionGridJsx();
+  return (
+    <div class="discover-pane">
+      <button class="btn subtle back" type="button" data-action="discover-back">
+        ‹ All sections
+      </button>
+      <h3>{category.label}</h3>
+      <div class="section-chips">
+        {category.subcategories.map((sub) => (
+          <button class="chip" type="button" data-discover-nav={`sub:${slug}/${sub.slug}`}>
+            {sub.label}
+          </button>
+        ))}
+        <button class="chip anything" type="button" data-discover-nav={`sub:${slug}/`}>
+          Anything in {category.label}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * The result list (FR-24.4), grouped by section.
+ *
+ * The grouping doubles as a preview of where each topic will file itself in the
+ * filter bar once added.
+ */
+function discoverResultsJsx(d: DiscoverState): SafeHtml {
+  const groups = groupSuggestions(d.suggestions);
+  return (
+    <div class="discover-pane">
+      <div class="discover-results-head">
+        <button class="btn subtle back" type="button" data-action="discover-back">
+          ‹ Back
+        </button>
+        <h3>{d.source === null ? 'Suggestions' : resultsHeading(d.source)}</h3>
+      </div>
+      {groups.length === 0 ? (
+        <p class="discover-status">
+          Nothing new to suggest here — you may already follow everything this turned up.
+        </p>
+      ) : (
+        <div class="suggestion-groups">
+          {/* Outer `each()` for the keyed group list; inner `.map()` because a
+              nested `each()` is never reconciled — the row is flattened to HTML,
+              so the inner list would render as static markup and silently stop
+              updating. kerf throws on this in dev, which is how it was caught. */}
+          {each(
+            groups,
+            (group) => (
+              <div class="suggestion-group" data-key={group.key}>
+                <h4 class="suggestion-group-label">{group.label}</h4>
+                {group.suggestions.map((suggestion) =>
+                  suggestionCardJsx(suggestion, d.added.includes(suggestion.name)),
+                )}
+              </div>
+            ),
+            { key: 'suggestion-groups' },
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** One suggestion. Stays put once added — see `DiscoverState.added`. */
+function suggestionCardJsx(suggestion: TopicSuggestion, added: boolean): SafeHtml {
+  return (
+    <div class={`suggestion ${added ? 'added' : ''}`} data-key={suggestion.name}>
+      <div class="suggestion-main">
+        <span class="suggestion-name">{suggestion.name}</span>
+        <span class={`suggestion-kind ${suggestion.kind}`}>{kindLabel(suggestion.kind)}</span>
+      </div>
+      <p class="suggestion-reason">{suggestion.reason}</p>
+      {added ? (
+        <span class="suggestion-added">{icon('ok')} Added</span>
+      ) : (
+        <button class="btn" type="button" data-add-suggestion={suggestion.name}>
+          + Add
+        </button>
+      )}
+    </div>
+  );
+}
 
 /**
  * First-run flow (NEWS-78).
@@ -1490,6 +1667,7 @@ function appJsx(): SafeHtml {
       <div id="confirm-slot">{s.confirm !== null ? confirmDialogJsx(s.confirm) : ''}</div>
       <div id="guidance-slot">{guidanceTarget !== undefined ? guidanceDialogJsx(guidanceTarget) : ''}</div>
       <div id="privacy-slot">{s.privacyOpen ? privacyDialogJsx(s) : ''}</div>
+      <div id="discover-slot">{s.discover !== null ? discoverDialogJsx(s.discover) : ''}</div>
       {/* Always present because it is a **live region**: assistive technology
           announces mutations to a region it is already observing, so a slot
           created in the same render as its own text has nothing watching it and
@@ -1675,6 +1853,15 @@ function appJsx(): SafeHtml {
           />
           <button class="btn" type="submit">
             Add
+          </button>
+          <button
+            class="icon-btn discover-open"
+            type="button"
+            data-action="open-discover"
+            aria-label="Discover topics"
+            title="Discover topics"
+          >
+            {icon('compass')}
           </button>
         </form>
       </section>
@@ -1875,6 +2062,48 @@ function runTopicAction(action: string, ids: string[]): void {
   }
 }
 
+/**
+ * Run one discovery request and fold the answer into the pane (NEWS-126).
+ *
+ * The `discover === null` guards are the point of doing this in one place: the
+ * user can close the dialog while a request is in flight, and a response that
+ * reopened it — or wrote into a fresh session's state — is the kind of bug that
+ * only shows up on a slow provider.
+ */
+async function runDiscovery(source: DiscoverSource): Promise<void> {
+  appStore.actions.patchDiscover({ loading: true, error: null, view: 'results', source });
+  try {
+    const { suggestions, cached } = await discoverTopics(source);
+    if (appStore.state.value.discover === null) return;
+    appStore.actions.patchDiscover({ loading: false, suggestions, cached, view: 'results' });
+  } catch (err) {
+    if (appStore.state.value.discover === null) return;
+    // Shown inside the dialog next to a retry, not in the global banner: the
+    // user is mid-task here, and the message is about this request.
+    appStore.actions.patchDiscover({
+      loading: false,
+      error: err instanceof Error ? err.message : String(err),
+    });
+  }
+}
+
+/** Create a topic from a suggestion, keeping its card in place (FR-24.12/24.13). */
+async function addSuggestion(name: string): Promise<void> {
+  const current = appStore.state.value.discover;
+  const suggestion = current?.suggestions.find((s) => s.name === name);
+  if (current === null || suggestion === undefined) return;
+  if (current.added.includes(name)) return;
+  try {
+    await addSuggestedTopic(suggestion);
+    if (appStore.state.value.discover === null) return;
+    appStore.actions.patchDiscover({ added: [...appStore.state.value.discover.added, name] });
+    appStore.actions.setToast(`Added “${name}” — checking now`);
+  } catch (err) {
+    if (appStore.state.value.discover === null) return;
+    appStore.actions.patchDiscover({ error: err instanceof Error ? err.message : String(err) });
+  }
+}
+
 function wireEvents(root: HTMLElement): void {
   void delegate(root, 'submit', '[data-action=add-topic-form]', (e, form) => {
     e.preventDefault();
@@ -1884,6 +2113,79 @@ function wireEvents(root: HTMLElement): void {
     if (name === '') return;
     input.value = '';
     void addTopic(name);
+  });
+
+  // --- Topic discovery (NEWS-126) -----------------------------------------
+
+  void delegate(root, 'click', '[data-action=open-discover]', () => {
+    appStore.actions.openDiscover();
+  });
+
+  void delegate(root, 'click', '[data-action=close-discover]', () => {
+    appStore.actions.closeDiscover();
+  });
+
+  void delegate(root, 'click', '[data-action=discover-backdrop]', (e, el) => {
+    // Only a click on the backdrop itself, never one that bubbled out of the
+    // dialog — the same rule the settings dialog needed (see keys.spec.ts).
+    if (e.target === el) appStore.actions.closeDiscover();
+  });
+
+  void delegate(root, 'submit', '[data-action=discover-search]', (e, form) => {
+    e.preventDefault();
+    const input = form.querySelector<HTMLInputElement>('input[name=discover-query]');
+    // An empty query is a real request — "surprise me" (FR-24.3) — so this
+    // deliberately does not bail out on a blank field the way add-topic does.
+    void runDiscovery({ kind: 'describe', query: input?.value.trim() ?? '' });
+  });
+
+  /**
+   * One delegate for both browse steps, on one attribute — deliberately not two.
+   *
+   * The section tiles and the subcategory chips are both `<button>`s in the same
+   * position of the same container, so the morph **reuses the node** and merely
+   * rewrites its attributes when the pane switches. Two delegates keyed on two
+   * different attributes then both match the *same* click: the first handler
+   * re-renders synchronously, the tile becomes a chip, and the second handler —
+   * still walking up from that very node — sees the chip's attribute and fires
+   * too. One physical click ran two different actions, jumping the user from
+   * "Sports" straight into results for whichever subcategory landed under the
+   * cursor. Caught by the E2E suite; see `docs/3-ui.md`.
+   */
+  void delegate(root, 'click', '[data-discover-nav]', (_e, el) => {
+    const value = el.getAttribute('data-discover-nav');
+    if (value === null) return;
+    if (value.startsWith('section:')) {
+      appStore.actions.patchDiscover({ section: value.slice('section:'.length), view: 'browse' });
+      return;
+    }
+    if (!value.startsWith('sub:')) return;
+    // "sub:category/subcategory", with an empty tail meaning the whole section.
+    const [category, sub] = value.slice('sub:'.length).split('/');
+    void runDiscovery({ kind: 'section', category, subcategory: sub === '' ? null : sub });
+  });
+
+  void delegate(root, 'click', '[data-action=discover-back]', () => {
+    const current = appStore.state.value.discover;
+    if (current === null) return;
+    // From results, step back to wherever they came from; from a section's
+    // subcategories, back to the grid.
+    if (current.view === 'results' && current.source?.kind === 'section') {
+      appStore.actions.patchDiscover({ view: 'browse', section: current.source.category, error: null });
+      return;
+    }
+    appStore.actions.patchDiscover({ view: 'browse', section: null, error: null });
+  });
+
+  void delegate(root, 'click', '[data-action=discover-retry]', () => {
+    const source = appStore.state.value.discover?.source;
+    if (source) void runDiscovery(source);
+    else appStore.actions.patchDiscover({ error: null, view: 'browse', section: null });
+  });
+
+  void delegate(root, 'click', '[data-add-suggestion]', (_e, el) => {
+    const name = el.getAttribute('data-add-suggestion');
+    if (name !== null) void addSuggestion(name);
   });
 
   void delegate(root, 'change', '[data-action=interval]', (_e, el) => {

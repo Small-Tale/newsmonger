@@ -134,7 +134,11 @@ export function registerApi(app: Hono<AppEnv>): void {
     if (!body) return c.json({ error: 'invalid request: expected { name }' }, 400);
     let topic;
     try {
-      topic = c.get('store').addTopic(body.name);
+      topic = c.get('store').addTopic(body.name, {
+        guidance: body.guidance,
+        category: body.category,
+        subcategory: body.subcategory,
+      });
     } catch (err) {
       return c.json({ error: err instanceof Error ? err.message : String(err) }, 409);
     }

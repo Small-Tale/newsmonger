@@ -1913,3 +1913,238 @@ button.off-topic-pill {
     background: rgba(255, 255, 255, 0.08);
   }
 }
+
+/* --- Topic discovery (NEWS-126) -------------------------------------------
+   Wider than the other dialogs because it is the only one showing a *list* of
+   things to compare rather than a form to fill in — a 460px column turns the
+   section grid into a single file and the suggestion cards into slivers. */
+.dialog.discover {
+  max-width: 720px;
+  display: flex;
+  flex-direction: column;
+  max-height: min(80vh, 760px);
+}
+
+.discover-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+
+  h2 {
+    margin: 0;
+  }
+}
+
+.discover-search {
+  display: flex;
+  gap: 8px;
+  margin: 16px 0 4px;
+
+  input {
+    flex: 1;
+    min-width: 0;
+  }
+}
+
+/* The scrolling half. Only the body scrolls, so the box and the heading stay
+   put while a long result list moves under them. */
+.discover-body {
+  flex: 1;
+  min-height: 220px;
+  overflow-y: auto;
+  margin-top: 12px;
+}
+
+.discover-hint {
+  color: var(--ink-soft);
+  font-size: 0.9rem;
+  margin: 0 0 10px;
+}
+
+.discover-status {
+  color: var(--ink-soft);
+  padding: 24px 4px;
+  text-align: center;
+
+  &.error {
+    color: var(--ink);
+
+    p {
+      margin: 0 0 12px;
+    }
+  }
+}
+
+.section-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 8px;
+}
+
+.section-tile {
+  font-family: var(--sans);
+  font-size: 0.95rem;
+  padding: 14px 12px;
+  background: var(--paper);
+  color: var(--ink);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  cursor: pointer;
+  transition: border-color 120ms ease, background 120ms ease;
+
+  &:hover {
+    border-color: var(--pine);
+    background: var(--pine-soft);
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--pine);
+    outline-offset: 1px;
+  }
+}
+
+.section-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+
+  .chip {
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    padding: 7px 13px;
+    background: var(--paper);
+    color: var(--ink);
+
+    &:hover {
+      border-color: var(--pine);
+    }
+  }
+
+  .chip.anything {
+    font-style: italic;
+    color: var(--ink-soft);
+  }
+}
+
+.discover-pane {
+  .back {
+    padding-left: 0;
+  }
+
+  h3 {
+    margin: 10px 0 12px;
+  }
+}
+
+.discover-results-head {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+
+  h3 {
+    margin: 10px 0 12px;
+  }
+}
+
+.suggestion-group-label {
+  font-family: var(--sans);
+  font-size: 0.72rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+  margin: 18px 0 8px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--line);
+}
+
+.suggestion {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: start;
+  gap: 4px 14px;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--line);
+
+  &:last-child {
+    border-bottom: none;
+  }
+
+  &.added {
+    opacity: 0.6;
+  }
+
+  .btn {
+    grid-row: 1 / span 2;
+    grid-column: 2;
+    align-self: center;
+  }
+}
+
+.suggestion-main {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.suggestion-name {
+  font-family: var(--serif);
+  font-size: 1.05rem;
+  color: var(--ink);
+}
+
+/* Ongoing vs evergreen (FR-24.10) — the badge is the honest answer to "why did
+   this topic go quiet?" months later, so it is styled to be read, not ignored. */
+.suggestion-kind {
+  font-family: var(--sans);
+  font-size: 0.68rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 2px 7px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  color: var(--ink-soft);
+
+  &.ongoing {
+    background: var(--warn-bg);
+    border-color: transparent;
+    color: var(--marigold);
+  }
+
+  &.evergreen {
+    background: var(--pine-soft);
+    border-color: transparent;
+    color: var(--pine);
+  }
+}
+
+.suggestion-reason {
+  grid-column: 1;
+  margin: 0;
+  color: var(--ink-soft);
+  font-size: 0.9rem;
+}
+
+.suggestion-added {
+  grid-row: 1 / span 2;
+  grid-column: 2;
+  align-self: center;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-family: var(--sans);
+  font-size: 0.85rem;
+  color: var(--pine);
+  white-space: nowrap;
+}
+
+.add-topic .discover-open {
+  flex: 0 0 auto;
+}
+
+@media (prefers-color-scheme: dark) {
+  .section-tile {
+    background: var(--paper);
+  }
+}
