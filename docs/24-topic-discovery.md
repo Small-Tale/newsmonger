@@ -2,203 +2,85 @@
 
 Naming a topic requires already knowing you want it. That is fine for the two or three subjects anyone can list from memory, and it is the whole reason the sidebar stops at three: the app asks for a search query when what the user actually wants is a *browsing* surface. The gap shows up hardest at first run — onboarding offers six hard-coded starter chips (FR-20.6) and nothing behind them — but it does not close afterwards. A month in, the feed reflects the topics its owner could think of on day one.
 
-See also [1 — Topics and Scheduling](1-topics-and-scheduling.md), [20 — First-Run Onboarding](20-onboarding.md), [22 — Topic Categories](22-topic-categories.md), [6 — AI Providers](6-providers.md).
+See also [1 — Topics and Scheduling](1-topics-and-scheduling.md), [20 — First-Run Onboarding](20-onboarding.md), [22 — Topic Categories](22-topic-categories.md), [18 — Topic Guidance](18-topic-guidance.md), [6 — AI Providers](6-providers.md).
 
-## Status: design only — direction not chosen (NEWS-116)
+## Status: design only — approved shape, not yet built (NEWS-116)
 
-This document is a **brainstorm**, recorded before implementation because the shape is genuinely open. Four variations are described below with wireframes, followed by the decisions that apply whichever one wins, and a recommendation. Nothing here is built.
+Four variations were wireframed and reviewed (recorded under "Variations considered" below). The approved shape is **two entry doors into one result list, with a keep/skip tuner as the depth control** — not as a third door.
 
-## What the existing code decides for us
+That last part is the decision worth stating plainly, because it is what the brainstorm got wrong. The tuner was proposed as a *rival* entry point, and its problem was that it forced everyone through a slow, expensive round-trip loop before they saw anything. As a **depth control** it costs nothing until someone asks to go deeper, and it answers the two questions a static result list cannot: *narrower than this* and *more like this*.
 
-Four constraints are already fixed, and they narrow the design more than any preference does.
-
-- **There is exactly one AI entry point.** `NewsService` has a single method, `checkTopic`. Discovery is a different question ("what might I want to follow?" rather than "what is new about X?"), so it needs a **second capability on the provider interface**, implemented by all five providers — `anthropic`, `openai`, `claude-cli`, `codex-cli`, and the deterministic `mock`. That work is identical across every variation below; only the request shape differs.
-- **The taxonomy already exists.** NEWS-97 seeded 11 categories and ~60 subcategories, and the classifier already maps a topic into them. A discovery browser can navigate *that same tree*, which means suggestions arrive pre-classified — the topic created from a suggestion lands in the right filter-bar section without a second AI call to classify it.
-- **Every call costs.** Checks are metered against a spend cap, and subscription providers are `attended` — scheduled work is gated on someone being at the app. Discovery is user-initiated, so attendance is never in question, but **the spend has to be visible**: a browsing surface that quietly issues an AI call per click is a cost leak that no existing screen would report.
-- **Model output is untrusted.** The classifier already treats a returned category slug as untrusted and validates before storing (FR-22.8). Suggestions are the same: names, categories and any URLs come back through zod, and an unresolvable slug degrades to unclassified rather than being written.
-
-## Cross-cutting decisions (independent of which shape wins)
-
-- **Current-events *and* evergreen, labelled.** The prompt asks for a deliberate mix, and each suggestion carries which kind it is: an *ongoing story* ("2026 midterms") burns out, an *evergreen* topic ("Formula 1") does not. The distinction is worth surfacing rather than hiding, because it tells the user what they are signing up for — and it is the honest answer to "why is this topic quiet now?" three months later.
-- **Never suggest what they already follow.** Existing topic names go into the request as exclusions, *and* results are matched against the current topics client-side before rendering. Two layers because the model will occasionally ignore the first, and a duplicate suggestion is the single most obviously-broken thing this feature could do.
-- **A suggestion is a name plus a reason plus a steer.** Topics already support `guidance` (FR-18) — a free-text steer stored per topic. A suggestion that fills it in ("Formula 1 — race results and team news, not driver gossip") produces a *better first check* than the bare name, and it costs nothing extra: the model is already writing prose to justify the suggestion.
-- **Cache by request, in memory.** Re-opening the same subcategory should not re-bill. An in-process cache keyed by the request (category, depth, exclusions) with a short TTL covers the browsing pattern that actually happens — click in, click out, click back. Losing it on restart is fine and keeps it out of the schema.
-- **Discovery calls are recorded and capped.** They appear in the run records like any other spend, distinguished by kind. Without that, the one screen that can issue unbounded calls is also the one screen invisible to the cost reporting.
-
----
-
-## Variation A — Catalogue (drill-down browser)
-
-Navigate the existing taxonomy deterministically; call the AI only at the leaf.
+## The shape
 
 ```
-┌─ Discover topics ────────────────────────────────── ✕ ─┐
-│                                                        │
-│  Browse by section                                     │
-│                                                        │
-│  ┌────────┐ ┌────────┐ ┌────────┐ ┌────────┐           │
-│  │ World  │ │Politics│ │Business│ │  Tech  │           │
-│  └────────┘ └────────┘ └────────┘ └────────┘           │
-│  ┌────────┐ ┌────────┐ ┌────────┐ ┌────────┐           │
-│  │Science │ │ Health │ │ Sports │ │ Enter… │           │
-│  └────────┘ └────────┘ └────────┘ └────────┘           │
-│  ┌────────┐ ┌────────┐ ┌────────┐                      │
-│  │Culture │ │ Style  │ │Society │                      │
-│  └────────┘ └────────┘ └────────┘                      │
-└────────────────────────────────────────────────────────┘
-                          │  click "Sports"
-                          ▼
-┌─ Discover ▸ Sports ──────────────────────────────── ✕ ─┐
-│  ‹ All sections                                        │
-│  Soccer · Football · Basketball · Baseball · Hockey     │
-│  Tennis · Golf · Motorsport · Combat · Olympics ·       │
-│  College                          [ Anything in Sports ]│
-└────────────────────────────────────────────────────────┘
-                          │  click "Motorsport"  → AI call
-                          ▼
-┌─ Discover ▸ Sports ▸ Motorsport ─────────────────── ✕ ─┐
-│  ‹ Sports                                              │
-│  ┌──────────────────────────────────────────────────┐  │
-│  │ Formula 1                          [evergreen]   │  │
-│  │ Race weekends, team politics, regulation changes │  │
-│  │                              [ + Add ]  [ ⌄ ]    │  │
-│  ├──────────────────────────────────────────────────┤  │
-│  │ 2026 F1 engine regulations        [ongoing]      │  │
-│  │ The new power-unit rules and who they favour     │  │
-│  │                              [ + Add ]  [ ⌄ ]    │  │
-│  ├──────────────────────────────────────────────────┤  │
-│  │ MotoGP                             [evergreen]   │  │
-│  │ …                                [ + Add ]  [ ⌄ ]│  │
-│  └──────────────────────────────────────────────────┘  │
-│                                     [ More like these ] │
-└────────────────────────────────────────────────────────┘
-                          │  click "⌄" (go deeper on F1)
-                          ▼
-        ┌──────────────────────────────────────────────┐
-        │ Formula 1 ▸ narrower                         │
-        │  · F1 driver market and contracts            │
-        │  · F1 technical regulations                  │
-        │  · Formula 1 in the United States            │
-        └──────────────────────────────────────────────┘
+                  ┌──────────────────────────┐
+   "Discover" ───▶│   describe it (a box)    │──┐
+                  └──────────────────────────┘  │
+                  ┌──────────────────────────┐  ├──▶  result list  ──▶ [ + Add ]
+                  │  browse the 11 sections  │──┘         │
+                  └──────────────────────────┘            │  [ ⌄ narrower ] / [ ≈ similar ]
+                                                          ▼
+                                                   keep / skip tuner
+                                                   (rounds, until Done)
+                                                          │
+                                                          └──▶ back to the list, enriched
 ```
 
-**Progressive depth** = taxonomy depth (2 levels) + an unbounded "⌄ narrower" on any card, which re-prompts scoped to that suggestion.
+- **FR-24.1** Discovery is reachable from **two doors that produce the same result list**: a free-text box ("what are you into?") and a grid of the 11 taxonomy sections. Neither is primary. The box serves the user who sort of knows; the grid serves the user who wants to see what exists. Each covers the other's failure, which is why both ship together rather than one first.
 
-**Good**: cost is predictable and user-triggered per leaf; the frame renders offline; suggestions arrive pre-classified; trivially cacheable per leaf; "Anything in Sports" covers the user who doesn't know the subcategory names.
-**Bad**: the taxonomy is a ceiling — nothing surfaces that doesn't fit a section, which is exactly where the interesting topics live; it reads as a directory, and directories reward people who already know what they're looking for. That is the user this feature is *not* for.
+- **FR-24.2** The section grid drills **section → subcategory → suggestions**, reusing the NEWS-97 taxonomy rather than a discovery-specific list. A section offers an "Anything in *X*" escape for the user who doesn't recognise the subcategory names.
 
----
+- **FR-24.3** The free-text box accepts anything, including nothing: an empty submission means "surprise me" and returns a broad spread across sections rather than an error. The blank-box wall is the one failure mode this door has, and the empty state is where it gets fixed.
 
-## Variation B — Tuner (revealed preference)
+- **FR-24.4** Results are **cards, grouped by category**, each carrying: the topic name, a one-line reason, whether it is *ongoing* or *evergreen*, and an **Add** button. The grouping doubles as a preview of where the topic will file itself in the filter bar.
 
-No navigation. A stream of candidates; keep or skip; each round re-prompts on the accumulated signal.
+### The tuner (depth)
 
-```
-┌─ Find topics for me ─────────────────────────────── ✕ ─┐
-│                                        round 2 of ~4   │
-│  ┌──────────────────────────────────────────────────┐  │
-│  │                                                  │  │
-│  │   Semiconductor supply chains       [ongoing]    │  │
-│  │                                                  │  │
-│  │   Fabs, export controls, and who can build       │  │
-│  │   what where.                                    │  │
-│  │                                                  │  │
-│  │   because you kept: AI policy, Chip design       │  │
-│  │                                                  │  │
-│  └──────────────────────────────────────────────────┘  │
-│                                                        │
-│        [  ✕  Skip  ]          [  ♥  Follow  ]          │
-│                                                        │
-│  Kept so far:  AI policy · Chip design · Taiwan        │
-│                                            [ Done ]    │
-└────────────────────────────────────────────────────────┘
-```
+- **FR-24.5** Any result card offers **⌄ narrower** (more specific than this) and **≈ similar** (adjacent to this). Either enters the tuner scoped to that card. The result *set* offers the same two actions scoped to the whole list.
 
-**Progressive depth** = each round narrows on what was kept; round 1 is broad, round 4 is specific.
+- **FR-24.6** The tuner presents candidates one at a time with **keep / skip**, and each round re-prompts on the accumulated keeps *and* skips. Skips matter as much as keeps — "not that kind of cycling" is the signal that makes round three worth reaching.
 
-**Good**: the only variation that genuinely serves "I have no idea what I want" — it requires no vocabulary from the user, just reactions. The deeper-and-more-specific requirement falls out of the mechanic rather than being bolted on. It is also the most pleasant to use.
-**Bad**: an AI call per round, and the rounds are the point — this is the most expensive shape by a wide margin, on a feature where cost is already the sharpest constraint. No way to jump to a subject you *do* know you want. One card at a time is slow for a user who would happily scan twenty. Hard to E2E-test meaningfully.
+- **FR-24.7** The tuner is **always entered deliberately and always exits back to the result list**, with everything kept added to the list rather than silently created. Nothing is created without an explicit Add, in the tuner or out of it.
 
----
+- **FR-24.8** Each round shows **why** a candidate is being offered ("because you kept: AI policy, chip design"). Without it the loop is a slot machine; with it, it is legible, and a user who sees the model has misread them can skip out rather than abandon the feature.
 
-## Variation C — Describe it (one box)
+- **FR-24.9** The tuner shows its round count and is **bounded** — it does not loop indefinitely, and every round is a billable call. It ends by itself and can be ended at any point.
 
-A single free-text box; the model returns clustered suggestions. The "search engine for topics" shape.
+### Suggestion quality
 
-```
-┌─ Discover topics ────────────────────────────────── ✕ ─┐
-│                                                        │
-│  What are you into?                                    │
-│  ┌──────────────────────────────────────────────────┐  │
-│  │ i cycle and i work in biotech                    │  │
-│  └──────────────────────────────────────────────────┘  │
-│                    or  [ Surprise me ]  [ Browse ▸ ]   │
-│                                                        │
-│  ── Sports ─────────────────────────────────────────   │
-│   ⊕ Pro cycling — Grand Tours, classics    [evergreen]  │
-│   ⊕ Cycling infrastructure & policy        [evergreen]  │
-│                                                        │
-│  ── Health ─────────────────────────────────────────   │
-│   ⊕ Biotech funding & FDA approvals          [ongoing]  │
-│   ⊕ CRISPR therapeutics                    [evergreen]  │
-│                                                        │
-│  ── Business ───────────────────────────────────────   │
-│   ⊕ Pharma M&A                               [ongoing]  │
-│                                                        │
-│                              [ More like these ▾ ]     │
-└────────────────────────────────────────────────────────┘
-```
+- **FR-24.10** Every request asks for a deliberate **mix of ongoing and evergreen** topics, and each suggestion is labelled with which it is. An ongoing story burns out and an evergreen topic does not; that is the honest answer to "why is this topic quiet now?" three months later, and it belongs on the card rather than in a support conversation.
 
-**Progressive depth** = refine the box, or "more like these" scoped to a cluster.
+- **FR-24.11** **Nothing already followed is ever suggested.** Existing topic names go into the request as exclusions *and* results are matched against the current topics before rendering. Two layers, because the model will occasionally ignore the first and a duplicate suggestion is the most obviously-broken thing this feature could produce.
 
-**Good**: fastest path for the user with a *vague* idea, which is most of them; one call per query; handles subjects the taxonomy has no section for; the clusters double as a preview of where each topic will file itself.
-**Bad**: the blank box is a wall for someone with no idea at all — mitigable with "Surprise me" and a browse affordance, but the empty state is doing a lot of work. Less browsable; you get what you asked for, which is the opposite of discovery.
+- **FR-24.12** A suggestion carries a **guidance steer** (FR-18), not just a name — "Formula 1: race results and team news, not driver gossip". Adding the topic stores it, so the *first* check is already narrowed. This costs nothing extra: the model is writing the justification prose anyway.
 
----
+- **FR-24.13** Suggestions arrive **pre-classified** into the taxonomy, so a topic added from discovery lands in the right filter-bar section without a second classification call. The returned slug is untrusted and validated exactly as FR-22.8 requires — an unresolvable slug degrades to unclassified rather than being written.
 
-## Variation D — Newsstand (a persistent surface)
+### Cost, which is the sharpest constraint here
 
-Not a dialog. A second view beside the feed, laid out like a front page, refreshed periodically.
+- **FR-24.14** Discovery is the only surface in the app that can issue **unbounded** AI calls, so every call is **recorded like a check and counted against the spend cap**. A screen that can leak cost must not also be invisible to cost reporting.
 
-```
-┌────────────────────────────────────────────────────────────────┐
-│  News            [ Feed ]  [ Discover ]                    ⚙   │
-├────────────────────────────────────────────────────────────────┤
-│                                                                │
-│  ┌── TRENDING NOW ──────────────┐  ┌── WORTH FOLLOWING ─────┐  │
-│  │                              │  │                        │  │
-│  │  2026 midterms       ⊕       │  │  Formula 1        ⊕    │  │
-│  │  Politics ▸ Elections        │  │  Sports ▸ Motorsport   │  │
-│  │                              │  │                        │  │
-│  │  EU AI Act enforcement ⊕     │  │  Space launch    ⊕     │  │
-│  │  Technology ▸ AI             │  │  Science ▸ Space       │  │
-│  │                              │  │                        │  │
-│  │  Red Sea shipping     ⊕      │  │  Architecture    ⊕     │  │
-│  │  World ▸ Middle East         │  │  Culture ▸ Art         │  │
-│  └──────────────────────────────┘  └────────────────────────┘  │
-│                                                                │
-│  ── Because you follow AI policy ───────────────────────────   │
-│   ⊕ Chip export controls   ⊕ AI safety research   ⊕ EU tech…   │
-│                                                                │
-│  ── Browse ────────────────────────────────────────────────    │
-│   World · Politics · Business · Technology · Science · Health   │
-│   Sports · Entertainment · Culture · Style · Society            │
-│                                                                │
-│                                          refreshed 2 hours ago │
-└────────────────────────────────────────────────────────────────┘
-```
+- **FR-24.15** Results are **cached in memory per request** (door, section, depth, exclusions) with a short TTL, so the click-in / click-out / click-back pattern does not re-bill. Losing the cache on restart is fine and keeps it out of the schema.
 
-**Progressive depth** = the browse strip drops into Variation A; "because you follow X" is depth the user never had to ask for.
+- **FR-24.16** Every call is **user-initiated**. Nothing in discovery refreshes on a timer — that is the property that keeps this affordable, and it is the reason the newsstand variation was deferred rather than built.
 
-**Good**: the only variation that serves the *after* setup case well — discovery you stumble into rather than go looking for, which is how anyone actually finds a new interest. Matches the newspaper metaphor the rest of the UI already uses. "Because you follow X" is genuinely useful and impossible in the dialog shapes.
-**Bad**: refreshing on a schedule spends money for a screen nobody may open — the one shape whose cost is not user-triggered. Largest build by some distance, and it still needs Variation A underneath it for the browse strip. Wrong thing to build first.
+### Where it appears
 
----
+- **FR-24.17** A **Discover** entry point sits beside the add-topic field, for the ongoing case.
 
-## Recommendation
+- **FR-24.18** Onboarding's **Topics** step (FR-20.6) offers the same surface in place of its six hard-coded chips. Setup is where the need is sharpest, and a new user has no existing topics, which makes it the one place suggestions are guaranteed unfiltered.
 
-**A + C as one surface, with D as the follow-up.** The catalogue and the describe-it box are not competing designs; they are two doors into the same result list, and each one covers the other's failure. The box handles "I sort of know", the section grid handles "no idea, show me what exists", and every card gets the same "⌄ narrower" for depth. One AI capability serves both — the request differs only in whether it carries a section or a free-text steer.
+## Variations considered
 
-That leaves the tuner and the newsstand as later, independent bets: B is the better *experience* but the worst cost profile, and it can be added as a third door once real usage says whether cost is a live problem. D is the right long-term home for discovery-after-setup, and it reuses everything A+C builds.
+Four shapes were wireframed before the one above was chosen. Recorded because the rejected ones explain the approved one.
 
-Where it appears: the onboarding **Topics** step (FR-20.6) replaces its six hard-coded chips with the same surface, and a **Discover** entry point sits next to the add-topic field for the ongoing case.
+- **A — Catalogue.** Drill the taxonomy, AI only at the leaf. Cheap, predictable, pre-classified. Rejected *alone* because the taxonomy is a ceiling: nothing surfaces that doesn't fit a section, and a directory rewards people who already know what they want — the user this feature is not for. **Approved as the second door.**
+- **B — Tuner.** Keep/skip rounds from the start. The best experience for "I have no idea", but an AI call per round made it the most expensive shape by a wide margin, and there was no way to jump to something you *did* know you wanted. **Approved as the depth control instead of an entry point** — the mechanic survives, the cost profile doesn't.
+- **C — Describe it.** One free-text box, clustered results. Fastest path for a vague idea; handles subjects the taxonomy has no section for. Weak alone: the blank box is a wall for a user with no idea at all. **Approved as the first door.**
+- **D — Newsstand.** A persistent front-page view rather than a dialog: trending / evergreen / "because you follow X" / a browse strip. The only shape that serves discovery *after* setup, and the only one that spends on a schedule for a screen nobody may open. **Deferred** — it reuses everything the approved shape builds, so it stays cheap to add later.
+
+## What the existing code decides
+
+- **`NewsService` has exactly one method** (`checkTopic`). Discovery needs a **second capability on the provider interface**, implemented by all five providers — `anthropic`, `openai`, `claude-cli`, `codex-cli`, and the deterministic `mock`. Both doors and the tuner are the *same* call with a different request shape, which is what makes shipping them together cheap rather than three times the work.
+- **The mock provider must be deterministic**, keyed off the request the way it currently keys off topic name, or none of this is E2E-testable.
+- **Retries and rate limiting already exist** (`src/ai/retry.ts`) and apply unchanged — discovery is user-initiated and therefore always attended, so the FR-6.5 attendance gate never blocks it.

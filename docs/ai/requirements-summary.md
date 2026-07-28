@@ -2,10 +2,12 @@
 
 Status markers: **Shipped** · **Partial** · **Design only** · **Deferred**. Source docs win on conflict.
 
-## [24 — Topic Discovery](../24-topic-discovery.md) — **Design only** (brainstorm, direction not chosen)
+## [24 — Topic Discovery](../24-topic-discovery.md) — **Design only** (shape approved, nothing built)
 
-- NEWS-116: four variations wireframed — **A** catalogue (drill down the NEWS-97 taxonomy, AI at the leaf), **B** tuner (keep/skip rounds on revealed preference), **C** describe-it box (one query → clustered suggestions), **D** newsstand (persistent front-page view). Recommendation: **A + C as one surface**, D as the follow-up, B as a later bet.
-- Nothing is built. The one piece common to every variation: `NewsService` has a single method (`checkTopic`), so discovery needs a **second provider capability** implemented across all five providers.
+- FR-24.1–24.18, NEWS-116. Approved shape: **two doors into one result list** — a free-text box (FR-24.3) and a grid of the 11 NEWS-97 sections (FR-24.2) — with a **keep/skip tuner as the depth control**, not a third door (FR-24.5–24.9). Reached from beside the add-topic field and from onboarding's Topics step, replacing its six hard-coded chips.
+- Variation **D** (persistent newsstand view) deferred: it is the only shape that spends on a schedule rather than on a click, and it reuses everything this builds.
+- Nothing is built. Foundation for all of it: `NewsService` has a single method (`checkTopic`), so discovery needs a **second provider capability** across all five providers — both doors and the tuner are that same call with different request shapes.
+- Cost is the governing constraint: every call recorded and capped like a check (FR-24.14), in-memory cache per request (FR-24.15), nothing on a timer (FR-24.16).
 
 ## [1 — Topics and Scheduling](../1-topics-and-scheduling.md) — Shipped
 
