@@ -71,6 +71,88 @@ export type CheckReq = z.infer<typeof CheckReqSchema>;
 export const OpenExternalReqSchema = z.object({ url: z.url() });
 export type OpenExternalReq = z.infer<typeof OpenExternalReqSchema>;
 
+/**
+ * Hard ceiling on tuner rounds (FR-24.9), enforced at the trust boundary.
+ *
+ * Declared here rather than in `src/discovery.ts` because the client needs the
+ * same number to stop offering another round, and two copies would eventually
+ * disagree — the disagreement being a client that offers a button the server
+ * rejects. Kept out of the server module so importing it can't pull server-only
+ * code into the browser bundle.
+ */
+export const MAX_TUNE_ROUNDS = 6;
+
+/** Longest free-text description the discover box accepts. */
+export const MAX_DISCOVER_QUERY_LENGTH = 500;
+
+/**
+ * Body of a discovery request (NEWS-125, `docs/24-topic-discovery.md`).
+ *
+ * The three entry paths are a discriminated union so an invalid combination —
+ * a tuner round with no anchor, a section request carrying a query — is a 400
+ * rather than a silently half-honoured call to the model.
+ *
+ * `exclude` is deliberately **not** part of this: the server fills it in from
+ * the topic list so the client cannot forget to (FR-24.11).
+ */
+export const DiscoverReqSchema = z.object({
+  scope: z.discriminatedUnion('kind', [
+    z.object({ kind: z.literal('describe'), query: z.string().max(MAX_DISCOVER_QUERY_LENGTH) }),
+    z.object({
+      kind: z.literal('section'),
+      category: z.string().min(1),
+      subcategory: z.string().min(1).nullable(),
+    }),
+    z.object({
+      kind: z.literal('tune'),
+      anchor: z.string().min(1),
+      direction: z.enum(['narrower', 'similar']),
+      kept: z.array(z.string()).max(100).default([]),
+      skipped: z.array(z.string()).max(100).default([]),
+      // Each round is a billable call, so the bound is enforced server-side and
+      // not merely respected by a cooperative client.
+      round: z.number().int().min(1).max(MAX_TUNE_ROUNDS),
+    }),
+  ]),
+  limit: z.number().int().min(1).max(50).optional(),
+});
+export type DiscoverReq = z.infer<typeof DiscoverReqSchema>;
+
+/** One suggested topic as it reaches the client. */
+export const TopicSuggestionSchema = z.object({
+  name: z.string(),
+  reason: z.string(),
+  kind: z.enum(['ongoing', 'evergreen']),
+  guidance: z.string(),
+  /** Already validated against the live taxonomy server-side (FR-24.13). */
+  classification: z.object({ category: z.string(), subcategory: z.string().nullable() }).nullable(),
+});
+
+export const DiscoverRespSchema = z.object({
+  suggestions: z.array(TopicSuggestionSchema),
+  /** True when this answer cost nothing because it came from the cache (FR-24.15). */
+  cached: z.boolean(),
+});
+export type DiscoverResp = z.infer<typeof DiscoverRespSchema>;
+
+/** What discovery has spent this process lifetime (FR-24.14). */
+export const DiscoverUsageRespSchema = z.object({
+  calls: z.number().int(),
+  recent: z.array(
+    z.object({
+      at: z.string(),
+      scope: z.enum(['describe', 'section', 'tune']),
+      provider: z.string().nullable(),
+      model: z.string().nullable(),
+      status: z.enum(['succeeded', 'failed']),
+      returned: z.number().int(),
+      cached: z.boolean(),
+      error: z.string().nullable(),
+    }),
+  ),
+});
+export type DiscoverUsageResp = z.infer<typeof DiscoverUsageRespSchema>;
+
 /** Body of an item update: bookmark and/or off-topic flag; at least one. */
 export const SaveItemReqSchema = z
   .object({ saved: z.boolean(), offTopic: z.boolean() })

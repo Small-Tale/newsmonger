@@ -13,6 +13,7 @@ import type { ItemsResp, KeysResp, ProvidersResp, StateResp } from '../api/schem
 import {
   CheckReqSchema,
   CreateTopicReqSchema,
+  DiscoverReqSchema,
   OpenExternalReqSchema,
   SaveItemReqSchema,
   SaveKeyReqSchema,
@@ -236,6 +237,43 @@ export function registerApi(app: Hono<AppEnv>): void {
       console.error('news: check-all failed:', err);
     });
     return c.json({ started });
+  });
+
+  /**
+   * Ask for topic suggestions (NEWS-125, `docs/24-topic-discovery.md`).
+   *
+   * Every call here costs money or plan quota, and unlike a check nothing
+   * upstream bounds how often it can be made — so the guards that keep it
+   * affordable all live on this path: the round ceiling is in the schema
+   * (FR-24.9), repeat requests are served from the cache (FR-24.15), and the
+   * call is recorded either way (FR-24.14).
+   */
+  app.post('/api/discover', async (c) => {
+    const body = await parseBody(c, DiscoverReqSchema);
+    if (!body) return c.json({ error: 'invalid request: expected { scope, limit? }' }, 400);
+    const discovery = c.get('discovery');
+    if (!discovery) return c.json({ error: 'topic discovery is not available' }, 503);
+    try {
+      const result = await discovery.suggest(body.scope, body.limit);
+      return c.json(result);
+    } catch (err) {
+      // The provider failing is an ordinary outcome here (no key, offline, rate
+      // limited), not a server fault — the message is what the user needs to see.
+      return c.json({ error: err instanceof Error ? err.message : 'topic discovery failed' }, 502);
+    }
+  });
+
+  /**
+   * What discovery has spent this process lifetime (FR-24.14).
+   *
+   * Its own endpoint rather than a field on `/api/state`, which NEWS-75/76
+   * deliberately slimmed — a list that grows with usage does not belong on a
+   * payload polled every 4 seconds.
+   */
+  app.get('/api/discover/usage', (c) => {
+    const discovery = c.get('discovery');
+    if (!discovery) return c.json({ calls: 0, recent: [] });
+    return c.json({ calls: discovery.callCount(), recent: discovery.recentCalls() });
   });
 
   /**

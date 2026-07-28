@@ -8,6 +8,7 @@ import { CheckRunner } from './checks.js';
 import { parseArgs } from './config.js';
 import type { Settings } from './db/schemas.js';
 import { Store } from './db/store.js';
+import { DiscoveryService } from './discovery.js';
 import { createImageFetcher, liveImageHashes, pruneImageCache } from './images/index.js';
 import { openInBrowser } from './routes/api.js';
 import { startScheduler } from './scheduler.js';
@@ -86,9 +87,14 @@ async function main(): Promise<void> {
   // No link probing under --ai-test either: the mock's URLs are fictional, so
   // every story would be dropped as unreachable.
   const runner = new CheckRunner(store, resolve, attendance, fetchImage, options.aiTest ? null : probeLink);
+  // Shares the resolver with the runner so discovery follows the same provider
+  // setting, but is its own object: `CheckRunner` is topic-shaped throughout and
+  // a discovery call has no topic (NEWS-125).
+  const discovery = new DiscoveryService(store, resolve);
   const app = createApp({
     store,
     runner,
+    discovery,
     attendance,
     dataDir: options.dataDir,
     // Under --ai-test nothing talks to a vendor, so a live key check would only

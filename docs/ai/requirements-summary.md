@@ -2,12 +2,14 @@
 
 Status markers: **Shipped** · **Partial** · **Design only** · **Deferred**. Source docs win on conflict.
 
-## [24 — Topic Discovery](../24-topic-discovery.md) — **Partial** (provider capability shipped; UI unbuilt)
+## [24 — Topic Discovery](../24-topic-discovery.md) — **Partial** (provider + server shipped; UI unbuilt)
 
 - FR-24.1–24.18, NEWS-116. Approved shape: **two doors into one result list** — a free-text box (FR-24.3) and a grid of the 11 NEWS-97 sections (FR-24.2) — with a **keep/skip tuner as the depth control**, not a third door (FR-24.5–24.9). Reached from beside the add-topic field and from onboarding's Topics step, replacing its six hard-coded chips.
 - Variation **D** (persistent newsstand view) deferred: it is the only shape that spends on a schedule rather than on a click, and it reuses everything this builds.
 - FR-24.19–24.21 **Shipped** (NEWS-124): `NewsService.suggestTopics` across all five providers, prompting in `src/ai/suggest-prompt.ts`, CLI JSON Schema passed as a runner parameter, and a deterministic mock keyed off a request seed. The mock **deliberately suggests an already-followed topic** when exclusions are present, so FR-24.11's second layer stays testable.
-- FR-24.1–24.18 unbuilt: no route, no cache, no cost recording, no UI (NEWS-125–128).
+- FR-24.22–24.24 + 24.14/24.15 **Shipped** (NEWS-125): `POST /api/discover` (zod discriminated union → 400 on a mixed-up scope, 502 carrying the provider's message), `GET /api/discover/usage`, `src/discovery.ts` with the request cache, both exclusion layers and classification validation.
+- **FR-24.14 corrected**: it said discovery calls are "counted against the spend cap", but NEWS-119 removed the cap, the budget and the price table. There is nothing to count against — calls are *recorded* for visibility, and the real cost protection is structural (round ceiling + cache + user-initiated-only). The log is in memory: persisting would mean reusing the topic-shaped `runs` table, which drives the failure banner and falling-behind detector.
+- FR-24.1–24.8, 24.12, 24.16–24.18 unbuilt: no UI at all (NEWS-126–128).
 - Cost is the governing constraint: every call recorded and capped like a check (FR-24.14), in-memory cache per request (FR-24.15), nothing on a timer (FR-24.16).
 
 ## [1 — Topics and Scheduling](../1-topics-and-scheduling.md) — Shipped

@@ -4,7 +4,7 @@ Naming a topic requires already knowing you want it. That is fine for the two or
 
 See also [1 — Topics and Scheduling](1-topics-and-scheduling.md), [20 — First-Run Onboarding](20-onboarding.md), [22 — Topic Categories](22-topic-categories.md), [18 — Topic Guidance](18-topic-guidance.md), [6 — AI Providers](6-providers.md).
 
-## Status: partial — the provider capability is built (NEWS-124); nothing above it is (NEWS-125–128)
+## Status: partial — provider capability (NEWS-124) and server (NEWS-125) built; no UI yet (NEWS-126–128)
 
 Four variations were wireframed and reviewed (recorded under "Variations considered" below). The approved shape is **two entry doors into one result list, with a keep/skip tuner as the depth control** — not as a third door.
 
@@ -58,9 +58,15 @@ That last part is the decision worth stating plainly, because it is what the bra
 
 ### Cost, which is the sharpest constraint here
 
-- **FR-24.14** Discovery is the only surface in the app that can issue **unbounded** AI calls, so every call is **recorded like a check and counted against the spend cap**. A screen that can leak cost must not also be invisible to cost reporting.
+- **FR-24.14** *(Shipped, NEWS-125)* Discovery is the only surface in the app that can issue **unbounded** AI calls, so every call is **recorded** — entry path, provider, model, outcome, and whether it was served free from the cache. `GET /api/discover/usage`.
 
-- **FR-24.15** Results are **cached in memory per request** (door, section, depth, exclusions) with a short TTL, so the click-in / click-out / click-back pattern does not re-bill. Losing the cache on restart is fine and keeps it out of the schema.
+  **This was originally written as "counted against the spend cap", which is not possible: [NEWS-119](ai/requirements-summary.md) removed spend estimation, the monthly budget and the price table outright.** There is no cap to count against, so the recording is for *visibility* and the actual protection against runaway cost is structural — the round ceiling (FR-24.9), the cache (FR-24.15), and user-initiated-only (FR-24.16). Those three are load-bearing precisely because no budget backstops them.
+
+  The log is **in memory, not in the database**. Persisting it would mean either a schema migration or reusing the `runs` table, and `runs` is topic-shaped throughout — it drives the per-topic failure banner, the falling-behind detector and the diagnostics table, all of which would need a filter that someone will eventually forget to add. A discovery call has no topic.
+
+- **FR-24.15** *(Shipped, NEWS-125)* Results are **cached in memory per request** (scope, exclusions, limit) with a 10-minute TTL, so the click-in / click-out / click-back pattern does not re-bill. Losing the cache on restart is fine and keeps it out of the schema.
+
+  **The exclusions are part of the cache key**, which matters more than it looks: adding a topic changes what a valid answer is, so an entry computed before the change could otherwise suggest the topic the user just added — the one thing FR-24.11 exists to prevent.
 
 - **FR-24.16** Every call is **user-initiated**. Nothing in discovery refreshes on a timer — that is the property that keeps this affordable, and it is the reason the newsstand variation was deferred rather than built.
 
@@ -93,7 +99,18 @@ Four shapes were wireframed before the one above was chosen. Recorded because th
 
 - **Retries and rate limiting already exist** (`src/ai/retry.ts`) and apply unchanged — discovery is user-initiated and therefore always attended, so the FR-6.5 attendance gate never blocks it.
 
+## The server (NEWS-125, shipped)
+
+`src/discovery.ts` sits between the route and the provider and owns the four things the provider deliberately does not: who to exclude, how long an answer stays reusable, which classifications are real, and what the call cost. It is **not** part of `CheckRunner` — that class is topic-shaped all the way down (retry state, in-flight guard, run records all keyed by topic) and a discovery call has no topic.
+
+- **FR-24.22** *(Shipped)* `POST /api/discover` takes the three entry shapes as a **zod discriminated union**, so an invalid combination — a tuner round with no anchor, a section with no category — is a 400 rather than a silently half-honoured call to the model. A provider failure is a **502 carrying the provider's own message**: no key, offline, rate-limited are ordinary outcomes the user needs to read, not server faults.
+
+- **FR-24.23** *(Shipped)* The tuner round ceiling (FR-24.9) is enforced **in the schema**, so an out-of-range round never reaches the provider. `MAX_TUNE_ROUNDS` lives in `src/api/schemas.ts` rather than the server module because the client needs the same number to stop offering another round, and two copies would eventually disagree — the disagreement being a button the server rejects.
+
+- **FR-24.24** *(Shipped)* Both exclusion layers are server-side. The route fills `exclude` from the topic list so the client **cannot** forget (layer 1), and the response is filtered against the same list (layer 2). Matching uses `normalizeTopicName`, deliberately *not* `normalizeTitle` from `ai/dedupe.ts`: that one deletes punctuation because it compares news headlines, whereas in a topic name a hyphen stands in for a space, so "formula-1" and "Formula 1" are the same subject. Using the headline rule would let a re-punctuated duplicate straight through. The same pass also drops a name the model repeated within one batch.
+
 ### Testing
 
+- **Unit** — `tests/unit/discovery.test.ts` (24): all three entry shapes and their malformed variants, the round bound (including that a rejected round never reaches the provider), both exclusion layers, normalized and within-batch duplicates, classification validation (bad category dropped, bad subcategory degrading to category-only), cache hit / miss / expiry / invalidation-by-new-topic, the recording of succeeded, failed and unresolvable-provider calls, and the 503 when discovery isn't wired up. Verified non-vacuous by removing the layer-2 filter — three tests fail.
 - **Unit** — `tests/unit/suggest-prompt.test.ts` (22): each scope's prompt, the empty-query breadth instruction, skips phrased as a steer rather than an exclusion list, history capping, exclusions, taxonomy-by-slug, and the parser's degrade-don't-fail paths including a bogus slug surviving parsing for the caller to reject. `tests/unit/suggest-providers.test.ts` (12): all five providers through injected runners, the CLI schema wiring, and the mock's determinism scheme.
-- No E2E yet — there is no UI to drive until NEWS-126.
+- No E2E yet — there is no UI to drive until NEWS-126. The route is exercised through `createApp(...)` + `app.request(...)`, which is this project's server-test convention.

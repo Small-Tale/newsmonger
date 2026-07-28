@@ -10,6 +10,7 @@ import { verifyApiKey } from './ai/verify-key.js';
 import { Attendance } from './attendance.js';
 import type { CheckRunner } from './checks.js';
 import type { Store } from './db/store.js';
+import type { DiscoveryService } from './discovery.js';
 import { originGuard } from './origin-guard.js';
 import { registerApi } from './routes/api.js';
 import { registerPages } from './routes/pages.js';
@@ -46,6 +47,11 @@ export function createApp(deps: {
    * the check — what `--ai-test` passes, so E2E can save obviously-fake keys.
    */
   verifyKey?: KeyVerifier | null;
+  /**
+   * Topic discovery (NEWS-125). Optional so tests that never touch `/api/discover`
+   * need not construct one; the route 503s rather than throwing when it is absent.
+   */
+  discovery?: DiscoveryService;
 }): Hono<AppEnv> {
   const app = new Hono<AppEnv>();
   // Same instance the CheckRunner consults, when the caller passes one; tests
@@ -59,6 +65,7 @@ export function createApp(deps: {
     c.set('attendance', attendance);
     c.set('dataDir', deps.dataDir ?? deps.store.dataDir);
     c.set('verifyKey', deps.verifyKey === undefined ? verifyApiKey : deps.verifyKey);
+    c.set('discovery', deps.discovery ?? null);
     // Debug aid (e.g. verifying the Tauri webview actually hits the server).
     if (process.env['NEWS_LOG_REQUESTS'] === '1') {
       console.error(`[req] ${c.req.method} ${c.req.path}`);

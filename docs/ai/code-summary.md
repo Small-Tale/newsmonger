@@ -13,8 +13,9 @@ src/
   server.ts           createApp (Hono, DI via middleware) + startServer (127.0.0.1, port fallback), /static handler
   export.ts           toMarkdown/toJson/toAtom + escapeXml — export & feed rendering, pure (NEWS-85)
   origin-guard.ts     Host/Origin check on every route — cross-origin + DNS-rebinding guard (NEWS-86)
+  discovery.ts        DiscoveryService: topic-suggestion exclusions + in-memory request cache + classification validation + call log (NEWS-125)
   scheduler.ts        startScheduler: 60s tick + 3s startup sweep, non-overlapping; drains an overrun cycle (NEWS-57)
-  checks.ts           CheckRunner (checkTopic/checkDue/checkAll, in-flight guard) + isDue()/isDueDaily()/isDueUnderSchedule()/lastSlotBefore() (NEWS-84) + effectiveInterval() + byCheckOrder() (most-overdue-first, NEWS-58) + isOverBudget() (NEWS-79)
+  checks.ts           CheckRunner (checkTopic/checkDue/checkAll, in-flight guard) + isDue()/isDueDaily()/isDueUnderSchedule()/lastSlotBefore() (NEWS-84) + effectiveInterval() + byCheckOrder() (most-overdue-first, NEWS-58). No budget logic — NEWS-119 removed it
   types.ts            Hono AppEnv (store, runner injected)
   keychain.ts         OS credential store via platform CLI (security/secret-tool/cmdkey)
   images/             og:image scrape + local cache; safety.ts holds the SSRF guards
@@ -44,7 +45,7 @@ src/
   api/
     schemas.ts        zod request schemas + StateResp (shared client/server)
   routes/
-    api.ts            /api/state (topics/settings/runs/checking + latestItemIds + flaggedByTopic; NO items), /api/items (paginated feed: filter+sort+cursor), /api/providers, /api/topics, /api/items/:id (save/flag), /api/settings, /api/keys, /api/foreground, /api/check, /api/open-external, /api/export.md, /api/export.json, /feed.xml, /healthz
+    api.ts            /api/discover + /api/discover/usage (NEWS-125), /api/state (topics/settings/runs/checking + latestItemIds + flaggedByTopic; NO items), /api/items (paginated feed: filter+sort+cursor), /api/providers, /api/topics, /api/items/:id (save/flag), /api/settings, /api/keys, /api/foreground, /api/check, /api/open-external, /api/export.md, /api/export.json, /feed.xml, /healthz
     pages.tsx         GET / — SSR shell
   components/
     layout.tsx        HTML shell
@@ -72,7 +73,7 @@ scripts/
 .github/              CI: gate job (test:all) + rust job (fmt + clippy, BOTH profiles); dependabot
 tests/
   helpers/            tmp.ts (tmp data dirs), provider.ts (asResolver/fakeProvider)
-  unit/               vitest: dedupe, store, checks, scheduler, config, parse-result, providers, openai, api, api-keys, api-keys-routes, attendance, catch-up, sanitize, origin-guard, guidance, key-verify, diagnostics, retention, export, daily-schedule, verify-links, attribution, concurrency, suggest-prompt, suggest-providers
+  unit/               vitest: dedupe, store, checks, scheduler, config, parse-result, providers, openai, api, api-keys, api-keys-routes, attendance, catch-up, sanitize, origin-guard, guidance, key-verify, diagnostics, retention, export, daily-schedule, verify-links, attribution, concurrency, suggest-prompt, suggest-providers, discovery
   e2e/                playwright, serial, mock AI (--ai-test), port 4189: app.spec.ts, keys.spec.ts, topics.spec.ts, a11y.spec.ts (axe-core, both themes), categories.spec.ts (NEWS-97), layout.spec.ts (full-window layout + column count at several viewports, NEWS-96). `resetTopics` in a beforeAll gives every attempt — first run or serial retry — an empty server (NEWS-101)
 docs/                 numbered requirements (1–21), ai/ summaries, manual-test-plan.md
 ```
@@ -141,7 +142,7 @@ Data dir: `--data-dir` flag → `NEWS_DATA_DIR` → `~/.news`. Also holds `news.
 | Diagnostics / "why did a check fail" | `src/client/diagnostics.ts` (pure, unit-tested) + the Settings Diagnostics section; `appVersion` on `/api/state`. Topic names redacted unless opted in. See `docs/3-ui.md` FR-3.25–3.28 |
 | Solo filter (set arithmetic, menu + double-click) | `src/client/solo.ts` (`toggleSolo`, `isAllSoloed`), used by `runTopicAction` and the `dblclick` delegate in `app.tsx`. See `docs/3-ui.md` FR-3.40 |
 | Topic categories / taxonomy | `src/categories.ts` (`BUILTIN_CATEGORIES`, `categoryLabel`, `activeCategories`). See `docs/22-topic-categories.md` |
-| Topic discovery / suggestions | `NewsService.suggestTopics` + `SuggestRequest`/`SuggestScope`/`TopicSuggestion` in `src/ai/types.ts`; prompting + parsing in `src/ai/suggest-prompt.ts`; implemented in all 5 providers (NEWS-124). **No route, cache, cost recording or UI yet** — NEWS-125–128. See `docs/24-topic-discovery.md` |
+| Topic discovery / suggestions | `NewsService.suggestTopics` + `SuggestRequest`/`SuggestScope`/`TopicSuggestion` in `src/ai/types.ts`; prompting + parsing in `src/ai/suggest-prompt.ts`; all 5 providers (NEWS-124). Server: `src/discovery.ts` (`DiscoveryService` — exclusions, request cache, classification validation, call log) + `POST /api/discover` / `GET /api/discover/usage` (NEWS-125). **No UI yet** — NEWS-126–128. See `docs/24-topic-discovery.md` |
 | Provider retries / rate limiting | `src/ai/retry.ts` (`backoffDelayMs`, `classifyFailure`, `retryAfterMs`, `DEFAULT_BACKOFF` vs `FAILURE_COOLDOWN`); `checkWithRetry` + `rateLimitedUntil` in `checks.ts`. See `docs/23-retries-and-rate-limits.md` |
 | A topic held back after failures | `consecutiveFailures`/`retryAfter` columns; `recordCheckFailure`/`clearCheckFailures` in `db/store.ts`; the cooldown check at the top of `isDueUnderSchedule`. See FR-23.7 |
 | Settings tabs / panels | `SETTINGS_TABS`, `settingsTabsJsx`, `settingsPanelJsx` in `client/app.tsx`; `settingsTab` in `stores.ts`; `.settings-tabs` in `styles.scss`. See `docs/3-ui.md` FR-3.45 |
