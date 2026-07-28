@@ -1,18 +1,76 @@
 import type {
+  CategoryOption,
   CheckResult,
   KnownItem,
   NewsProvider,
+  SuggestRequest,
+  SuggestResult,
   TokenUsage,
   TopicClassification,
   TopicContext,
+  TopicSuggestion,
 } from '../types.js';
 
-/** One recorded call, so tests can assert on what the runner passed through. */
+/** One recorded check, so tests can assert on what the runner passed through. */
 interface MockCall {
   topicName: string;
   known: KnownItem[];
   sinceIso: string | null;
   context: TopicContext;
+}
+
+/**
+ * The word a suggestion request is keyed off (NEWS-124).
+ *
+ * Discovery has three entry shapes but only one useful notion of "what was
+ * asked for", so they collapse to a single string and the `fail` / `empty`
+ * keywords work identically across all three — the same scheme `checkTopic`
+ * already uses on the topic name, so there is one convention to learn.
+ */
+function requestSeed(request: SuggestRequest): string {
+  const { scope } = request;
+  if (scope.kind === 'describe') return scope.query.trim() === '' ? 'Surprise' : scope.query.trim();
+  if (scope.kind === 'section') return scope.subcategory ?? scope.category;
+  return scope.anchor;
+}
+
+/**
+ * Deterministic suggestions for one request (NEWS-124).
+ *
+ * Two properties matter more than realism here, because the whole discovery UI
+ * is tested through this:
+ *
+ * - **Every field varies with the request.** Names encode the round and
+ *   direction for a tuner call, so a test can tell round 2 from round 1 — the
+ *   bug where the tuner re-issues the same round is otherwise invisible.
+ * - **It deliberately suggests something the user already follows** when
+ *   `exclude` is non-empty. That is the one case FR-24.11's *second* layer
+ *   exists for — a model ignoring the exclusion list — and a mock that filtered
+ *   perfectly would make that layer permanently untestable. The request is also
+ *   recorded, so the first layer is assertable independently.
+ */
+function mockSuggestions(request: SuggestRequest): TopicSuggestion[] {
+  const seed = requestSeed(request);
+  const options = request.categoryOptions ?? [];
+  const count = Math.max(1, Math.min(request.limit ?? 4, 12));
+  const { scope } = request;
+  const suffix = scope.kind === 'tune' ? ` ${scope.direction} r${String(scope.round)}` : '';
+
+  const names: string[] = [];
+  // The planted duplicate goes first, where a filter that only checks the tail
+  // of the list would miss it.
+  if (request.exclude.length > 0) names.push(request.exclude[0]);
+  for (let i = names.length; i < count; i++) names.push(`${seed}${suffix} topic ${String(i + 1)}`);
+
+  return names.map((name, i) => ({
+    name,
+    reason: `A deterministic mock suggestion for ${seed}.`,
+    // Alternating, so the mixed-kind rendering (FR-24.10) is always exercised
+    // rather than depending on which fixture a test happened to pick.
+    kind: i % 2 === 0 ? ('evergreen' as const) : ('ongoing' as const),
+    guidance: `Focus on ${seed}, and skip anything tangential.`,
+    classification: classify(name.toLowerCase(), options),
+  }));
 }
 
 /**
@@ -22,6 +80,9 @@ interface MockCall {
  * Returns the same two stories for a topic on every call, so a second check
  * exercises the dedupe path. Topics whose name contains "empty" return no
  * stories; topics containing "fail" throw. It never touches the network.
+ *
+ * `suggestTopics` (NEWS-124) follows the same convention keyed off the request
+ * seed — see `requestSeed` and `mockSuggestions`.
  *
  * `attended` is settable so the foreground gate (`src/attendance.ts`) can be
  * tested end to end without a real subscription-backed CLI. It defaults to
@@ -41,8 +102,7 @@ interface MockCall {
  * Returns null when nothing asked for a classification, which is what a check on
  * an already-labelled topic looks like.
  */
-function classify(lowerName: string, context: TopicContext): TopicClassification | null {
-  const options = context.categoryOptions ?? [];
+function classify(lowerName: string, options: CategoryOption[]): TopicClassification | null {
   if (options.length === 0) return null;
   if (lowerName.includes('uncategorized')) return null;
   if (lowerName.includes('bogus')) return { category: 'not-a-real-category', subcategory: null };
@@ -66,7 +126,7 @@ function classify(lowerName: string, context: TopicContext): TopicClassification
 
 export function createMockProvider(
   config: { attended?: boolean; usage?: TokenUsage | null } = {},
-): NewsProvider & { calls: MockCall[] } {
+): NewsProvider & { calls: MockCall[]; suggestCalls: SuggestRequest[] } {
   // Deterministic and small, so cost assertions read as arithmetic rather than
   // magic. Null is settable so the unknown-usage path is testable too.
   const usage: TokenUsage | null =
@@ -74,12 +134,21 @@ export function createMockProvider(
       ? { inputTokens: 1000, cacheReadTokens: 0, cacheWriteTokens: 0, outputTokens: 500, webSearches: 2 }
       : config.usage;
   const calls: MockCall[] = [];
+  const suggestCalls: SuggestRequest[] = [];
   return {
     name: 'mock',
     model: 'mock',
     attended: config.attended ?? false,
     calls,
+    suggestCalls,
     isAvailable: () => Promise.resolve(true),
+    suggestTopics(request: SuggestRequest): Promise<SuggestResult> {
+      suggestCalls.push(request);
+      const seed = requestSeed(request).toLowerCase();
+      if (seed.includes('fail')) return Promise.reject(new Error('mock suggestion failure'));
+      if (seed.includes('empty')) return Promise.resolve({ suggestions: [], usage });
+      return Promise.resolve({ suggestions: mockSuggestions(request), usage });
+    },
     checkTopic(
       topicName: string,
       known: KnownItem[],
@@ -89,11 +158,12 @@ export function createMockProvider(
       calls.push({ topicName, known, sinceIso, context });
       const lower = topicName.toLowerCase();
       if (lower.includes('fail')) return Promise.reject(new Error('mock news service failure'));
-      if (lower.includes('empty')) return Promise.resolve({ items: [], usage, classification: classify(lower, context) });
+      if (lower.includes('empty'))
+        return Promise.resolve({ items: [], usage, classification: classify(lower, context.categoryOptions ?? []) });
       const slug = lower.replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
       return Promise.resolve({
         usage,
-        classification: classify(lower, context),
+        classification: classify(lower, context.categoryOptions ?? []),
         items: [
         {
           title: `Major development in ${topicName}`,

@@ -25,8 +25,9 @@ src/
     sqlite.ts         schema DDL, SCHEMA_VERSION + MIGRATIONS (user_version based), openDb (WAL + sanity probe), backupUnreadableDb, dbPath
     warnings.ts       filters ONLY node:sqlite's ExperimentalWarning; imported before the require in sqlite.ts
   ai/
-    types.ts          NewsService + NewsProvider interfaces, TopicContext, CheckResult/TokenUsage, PROVIDER_NAMES/INFO, FoundNewsItem, KnownItem
+    types.ts          NewsService (checkTopic + suggestTopics) + NewsProvider, TopicContext, CheckResult/TokenUsage, SuggestRequest/SuggestScope/TopicSuggestion (NEWS-124), PROVIDER_NAMES/INFO, FoundNewsItem, KnownItem
     prompt.ts         searchingSystemPrompt, buildUserPrompt, parseNewsResult, NEWS_JSON_SCHEMA
+    suggest-prompt.ts topic *discovery* prompting: suggestSystemPrompt, buildSuggestPrompt, parseSuggestResult, SUGGEST_JSON_SCHEMA (NEWS-124)
     retry.ts          two backoffs (in-check DEFAULT_BACKOFF, per-topic FAILURE_COOLDOWN), failure classification, Retry-After parsing (NEWS-109/110)
     verify-links.ts   probeLink/verifyItemLinks — citation checking before storage (NEWS-83)
     verify-key.ts     verifyApiKey — vendor-side key check before saving; 401/403 = invalid, else unknown (NEWS-78)
@@ -39,7 +40,7 @@ src/
       claude-cli.ts   createClaudeCliProvider — Claude subscription via the Claude Code CLI; attended: true
       codex-cli.ts    createCodexCliProvider — ChatGPT subscription via Codex (-s read-only); attended: true
       openai.ts       createOpenAIProvider (Responses API + hosted web_search, output_text); OPENAI_BASE_URL
-      mock.ts         createMockProvider (--ai-test; deterministic; "fail"→throws, "empty"→[])
+      mock.ts         createMockProvider (--ai-test; deterministic; "fail"→throws, "empty"→[]); suggestTopics keys off a request seed and plants an excluded name on purpose (NEWS-124)
   api/
     schemas.ts        zod request schemas + StateResp (shared client/server)
   routes/
@@ -71,7 +72,7 @@ scripts/
 .github/              CI: gate job (test:all) + rust job (fmt + clippy, BOTH profiles); dependabot
 tests/
   helpers/            tmp.ts (tmp data dirs), provider.ts (asResolver/fakeProvider)
-  unit/               vitest: dedupe, store, checks, scheduler, config, parse-result, providers, openai, api, api-keys, api-keys-routes, attendance, catch-up, sanitize, origin-guard, guidance, key-verify, diagnostics, retention, export, daily-schedule, verify-links, attribution, concurrency
+  unit/               vitest: dedupe, store, checks, scheduler, config, parse-result, providers, openai, api, api-keys, api-keys-routes, attendance, catch-up, sanitize, origin-guard, guidance, key-verify, diagnostics, retention, export, daily-schedule, verify-links, attribution, concurrency, suggest-prompt, suggest-providers
   e2e/                playwright, serial, mock AI (--ai-test), port 4189: app.spec.ts, keys.spec.ts, topics.spec.ts, a11y.spec.ts (axe-core, both themes), categories.spec.ts (NEWS-97), layout.spec.ts (full-window layout + column count at several viewports, NEWS-96). `resetTopics` in a beforeAll gives every attempt — first run or serial retry — an empty server (NEWS-101)
 docs/                 numbered requirements (1–21), ai/ summaries, manual-test-plan.md
 ```
@@ -140,7 +141,7 @@ Data dir: `--data-dir` flag → `NEWS_DATA_DIR` → `~/.news`. Also holds `news.
 | Diagnostics / "why did a check fail" | `src/client/diagnostics.ts` (pure, unit-tested) + the Settings Diagnostics section; `appVersion` on `/api/state`. Topic names redacted unless opted in. See `docs/3-ui.md` FR-3.25–3.28 |
 | Solo filter (set arithmetic, menu + double-click) | `src/client/solo.ts` (`toggleSolo`, `isAllSoloed`), used by `runTopicAction` and the `dblclick` delegate in `app.tsx`. See `docs/3-ui.md` FR-3.40 |
 | Topic categories / taxonomy | `src/categories.ts` (`BUILTIN_CATEGORIES`, `categoryLabel`, `activeCategories`). See `docs/22-topic-categories.md` |
-| Topic discovery / suggestions | **Nothing built yet** — `docs/24-topic-discovery.md` is a design-only brainstorm (NEWS-116). Note it needs a *second* method on `NewsService`, which today has only `checkTopic` |
+| Topic discovery / suggestions | `NewsService.suggestTopics` + `SuggestRequest`/`SuggestScope`/`TopicSuggestion` in `src/ai/types.ts`; prompting + parsing in `src/ai/suggest-prompt.ts`; implemented in all 5 providers (NEWS-124). **No route, cache, cost recording or UI yet** — NEWS-125–128. See `docs/24-topic-discovery.md` |
 | Provider retries / rate limiting | `src/ai/retry.ts` (`backoffDelayMs`, `classifyFailure`, `retryAfterMs`, `DEFAULT_BACKOFF` vs `FAILURE_COOLDOWN`); `checkWithRetry` + `rateLimitedUntil` in `checks.ts`. See `docs/23-retries-and-rate-limits.md` |
 | A topic held back after failures | `consecutiveFailures`/`retryAfter` columns; `recordCheckFailure`/`clearCheckFailures` in `db/store.ts`; the cooldown check at the top of `isDueUnderSchedule`. See FR-23.7 |
 | Settings tabs / panels | `SETTINGS_TABS`, `settingsTabsJsx`, `settingsPanelJsx` in `client/app.tsx`; `settingsTab` in `stores.ts`; `.settings-tabs` in `styles.scss`. See `docs/3-ui.md` FR-3.45 |

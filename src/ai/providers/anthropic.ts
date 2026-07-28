@@ -2,7 +2,16 @@ import Anthropic from '@anthropic-ai/sdk';
 
 import { resolveApiKey } from '../api-keys.js';
 import { buildUserPrompt, parseNewsResult, searchingSystemPrompt } from '../prompt.js';
-import type { CheckResult, KnownItem, NewsProvider, TokenUsage, TopicContext } from '../types.js';
+import { buildSuggestPrompt, parseSuggestResult, suggestSystemPrompt } from '../suggest-prompt.js';
+import type {
+  CheckResult,
+  KnownItem,
+  NewsProvider,
+  SuggestRequest,
+  SuggestResult,
+  TokenUsage,
+  TopicContext,
+} from '../types.js';
 
 export const DEFAULT_ANTHROPIC_MODEL = 'claude-opus-4-8';
 
@@ -100,6 +109,10 @@ export function createAnthropicProvider(config: {
         model,
       );
       return { ...parseNewsResult(text), usage };
+    },
+    async suggestTopics(request: SuggestRequest): Promise<SuggestResult> {
+      const { text, usage } = await runner.run(suggestSystemPrompt(), buildSuggestPrompt(request), model);
+      return { suggestions: parseSuggestResult(text), usage };
     },
   };
 }

@@ -90,6 +90,87 @@ export interface TopicContext {
   categoryOptions?: CategoryOption[];
 }
 
+/**
+ * Whether a suggested topic will keep producing news indefinitely (NEWS-116).
+ *
+ * `ongoing` is a live story that burns out — "2026 midterms". `evergreen` is a
+ * standing subject that doesn't — "Formula 1". Surfaced on the card rather than
+ * hidden (FR-24.10), because it is the honest answer to "why is this topic
+ * quiet now?" three months after it was added.
+ */
+export type SuggestionKind = 'ongoing' | 'evergreen';
+
+/** One suggested topic, before anything has been created from it. */
+export interface TopicSuggestion {
+  name: string;
+  /** One line on why this is being offered — shown on the card (FR-24.4). */
+  reason: string;
+  kind: SuggestionKind;
+  /**
+   * A ready-made steer for the topic's `guidance` field (FR-24.12), so a topic
+   * added from discovery has a narrowed *first* check rather than a bare name.
+   * Empty when the model didn't supply one.
+   */
+  guidance: string;
+  /**
+   * Where this belongs in the taxonomy (FR-24.13), so an added topic files
+   * itself without a second classification call.
+   *
+   * **Untrusted**, exactly as `CheckResult.classification` is: the slugs come
+   * from the model and are validated against the live table by the caller. Null
+   * means the model declined or wasn't asked.
+   */
+  classification: TopicClassification | null;
+}
+
+/**
+ * Which of the three entry paths a suggestion request came from.
+ *
+ * They are one union rather than three methods because they are one call to the
+ * model with a different framing — which is what makes shipping both doors and
+ * the tuner together cheap rather than three times the work.
+ */
+export type SuggestScope =
+  /** The free-text door (FR-24.3). An empty query means "surprise me". */
+  | { kind: 'describe'; query: string }
+  /** The section grid (FR-24.2). A null subcategory means "anything in here". */
+  | { kind: 'section'; category: string; subcategory: string | null }
+  /** A tuner round (FR-24.6) — the depth control, never an entry point. */
+  | {
+      kind: 'tune';
+      /** What the tuning is relative to: one suggestion, or the whole result set. */
+      anchor: string;
+      /** `narrower` = more specific than the anchor; `similar` = adjacent to it. */
+      direction: 'narrower' | 'similar';
+      /** Names the user kept so far. */
+      kept: string[];
+      /** Names the user skipped — as much signal as the keeps (FR-24.6). */
+      skipped: string[];
+      /** 1-based round number. Bounded by the caller (FR-24.9). */
+      round: number;
+    };
+
+/** One request for topic suggestions. */
+export interface SuggestRequest {
+  scope: SuggestScope;
+  /**
+   * Topic names the user already follows. Never suggest these (FR-24.11) — the
+   * first of the two layers, the second being the caller's own filter, because
+   * a model will occasionally ignore this one.
+   */
+  exclude: string[];
+  /** Taxonomy to classify into (FR-24.13). Absent or empty means don't ask. */
+  categoryOptions?: CategoryOption[];
+  /** How many suggestions to aim for. The provider may return fewer. */
+  limit?: number;
+}
+
+/** What one suggestion call produced. `usage` is null when unknowable — see `CheckResult`. */
+export interface SuggestResult {
+  suggestions: TopicSuggestion[];
+  usage: TokenUsage | null;
+}
+
 /** Abstraction over "ask an LLM for news" so tests can substitute a mock. */
 export interface NewsService {
   /** `context` is optional so callers and tests need not supply it. */
@@ -99,6 +180,14 @@ export interface NewsService {
     sinceIso: string | null,
     context?: TopicContext,
   ): Promise<CheckResult>;
+  /**
+   * Suggest topics the user might want to follow (NEWS-116).
+   *
+   * Required rather than optional: discovery has no "this provider can't do it"
+   * state in the design, and making it optional would push a capability check
+   * into the UI that FR-24 never describes. Every provider implements it.
+   */
+  suggestTopics(request: SuggestRequest): Promise<SuggestResult>;
 }
 
 /**

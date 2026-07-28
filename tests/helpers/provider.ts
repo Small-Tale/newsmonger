@@ -8,10 +8,17 @@ export function asResolver(provider: NewsProvider): ProviderResolver {
   return () => Promise.resolve(provider);
 }
 
-/** A minimal NewsProvider around a bare checkTopic, for CheckRunner tests. */
+/**
+ * A minimal NewsProvider around a bare checkTopic, for CheckRunner tests.
+ *
+ * `suggestTopics` is required by the interface (NEWS-124) but irrelevant to
+ * anything driving checks, so it defaults to a stub that rejects rather than
+ * returning an empty list — a test that reaches it by accident should say so
+ * loudly instead of quietly asserting against nothing.
+ */
 export function fakeProvider(
   checkTopic: NewsService['checkTopic'],
-  opts: Partial<Pick<NewsProvider, 'name' | 'model' | 'attended'>> = {},
+  opts: Partial<Pick<NewsProvider, 'name' | 'model' | 'attended' | 'suggestTopics'>> = {},
 ): NewsProvider {
   return {
     name: opts.name ?? 'mock',
@@ -19,6 +26,8 @@ export function fakeProvider(
     attended: opts.attended ?? false,
     isAvailable: () => Promise.resolve(true),
     checkTopic,
+    suggestTopics:
+      opts.suggestTopics ?? (() => Promise.reject(new Error('fakeProvider: suggestTopics not configured'))),
   };
 }
 

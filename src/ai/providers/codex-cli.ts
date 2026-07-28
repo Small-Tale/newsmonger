@@ -4,7 +4,16 @@ import os from 'node:os';
 import path from 'node:path';
 
 import { buildUserPrompt, NEWS_JSON_SCHEMA, parseNewsResult, searchingSystemPrompt } from '../prompt.js';
-import type { CheckResult, ConcreteProviderName, KnownItem, NewsProvider, TopicContext } from '../types.js';
+import { buildSuggestPrompt, parseSuggestResult, SUGGEST_JSON_SCHEMA, suggestSystemPrompt } from '../suggest-prompt.js';
+import type {
+  CheckResult,
+  ConcreteProviderName,
+  KnownItem,
+  NewsProvider,
+  SuggestRequest,
+  SuggestResult,
+  TopicContext,
+} from '../types.js';
 
 /**
  * Run checks against the user's **ChatGPT subscription** rather than an
@@ -25,7 +34,8 @@ const CHECK_TIMEOUT_MS = 10 * 60 * 1000;
 
 /** Seam over the CLI so tests never spawn a real process. */
 export interface CodexCliRunner {
-  run(system: string, prompt: string, model: string | undefined): Promise<string>;
+  /** `schema` is written to the file `--output-schema` reads — see `ClaudeCliRunner`. */
+  run(system: string, prompt: string, model: string | undefined, schema: object): Promise<string>;
   available(): Promise<boolean>;
 }
 
@@ -70,7 +80,7 @@ function spawnRunner(binary: string): CodexCliRunner {
     });
 
   return {
-    async run(system, prompt, model) {
+    async run(system, prompt, model, schema) {
       // Both the schema and the final message go through temp files: Codex
       // takes the schema as a path, and reading the answer from a file beats
       // scraping it out of the progress log on stdout.
@@ -78,7 +88,7 @@ function spawnRunner(binary: string): CodexCliRunner {
       const schemaFile = path.join(dir, 'schema.json');
       const outFile = path.join(dir, 'last-message.txt');
       try {
-        fs.writeFileSync(schemaFile, JSON.stringify(NEWS_JSON_SCHEMA));
+        fs.writeFileSync(schemaFile, JSON.stringify(schema));
         const args = [
           'exec',
           '--search', // the native Responses web_search tool
@@ -167,10 +177,20 @@ export function createCodexCliProvider(
         searchingSystemPrompt(),
         buildUserPrompt(topicName, known, sinceIso, context),
         model !== '' ? model : undefined,
+        NEWS_JSON_SCHEMA,
       );
       // A subscription check spends plan quota, not metered dollars, and the
       // CLI reports no token counts — so usage is genuinely unknown, not zero.
       return { ...parseNewsResult(text), usage: null };
+    },
+    async suggestTopics(request: SuggestRequest): Promise<SuggestResult> {
+      const text = await runner.run(
+        suggestSystemPrompt(),
+        buildSuggestPrompt(request),
+        model !== '' ? model : undefined,
+        SUGGEST_JSON_SCHEMA,
+      );
+      return { suggestions: parseSuggestResult(text), usage: null };
     },
   };
 }

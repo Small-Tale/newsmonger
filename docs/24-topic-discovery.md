@@ -4,7 +4,7 @@ Naming a topic requires already knowing you want it. That is fine for the two or
 
 See also [1 — Topics and Scheduling](1-topics-and-scheduling.md), [20 — First-Run Onboarding](20-onboarding.md), [22 — Topic Categories](22-topic-categories.md), [18 — Topic Guidance](18-topic-guidance.md), [6 — AI Providers](6-providers.md).
 
-## Status: design only — approved shape, not yet built (NEWS-116)
+## Status: partial — the provider capability is built (NEWS-124); nothing above it is (NEWS-125–128)
 
 Four variations were wireframed and reviewed (recorded under "Variations considered" below). The approved shape is **two entry doors into one result list, with a keep/skip tuner as the depth control** — not as a third door.
 
@@ -79,8 +79,21 @@ Four shapes were wireframed before the one above was chosen. Recorded because th
 - **C — Describe it.** One free-text box, clustered results. Fastest path for a vague idea; handles subjects the taxonomy has no section for. Weak alone: the blank box is a wall for a user with no idea at all. **Approved as the first door.**
 - **D — Newsstand.** A persistent front-page view rather than a dialog: trending / evergreen / "because you follow X" / a browse strip. The only shape that serves discovery *after* setup, and the only one that spends on a schedule for a screen nobody may open. **Deferred** — it reuses everything the approved shape builds, so it stays cheap to add later.
 
-## What the existing code decides
+## The provider capability (NEWS-124, shipped)
 
-- **`NewsService` has exactly one method** (`checkTopic`). Discovery needs a **second capability on the provider interface**, implemented by all five providers — `anthropic`, `openai`, `claude-cli`, `codex-cli`, and the deterministic `mock`. Both doors and the tuner are the *same* call with a different request shape, which is what makes shipping them together cheap rather than three times the work.
-- **The mock provider must be deterministic**, keyed off the request the way it currently keys off topic name, or none of this is E2E-testable.
+`NewsService` gained a second method, `suggestTopics(request)`, implemented by all five providers — `anthropic`, `openai`, `claude-cli`, `codex-cli`, and `mock`. Both doors and the tuner are the *same* call with a different request shape (`SuggestScope`), which is what makes shipping them together cheap rather than three times the work.
+
+- **FR-24.19** *(Shipped)* Prompting lives in `src/ai/suggest-prompt.ts`, kept out of `prompt.ts` because it asks a different question. Malformed model output degrades rather than failing the batch: an unrecognised `kind` becomes `evergreen` (the safer default — mislabelling a burning-out story as standing merely disappoints later, where the reverse promises news that won't come), and a missing guidance becomes empty.
+
+- **FR-24.20** *(Shipped)* The two subscription CLIs take the JSON Schema as a **runner parameter** rather than a module constant, since checks and discovery return different shapes through the same binary. See [6 — AI Providers](6-providers.md) FR-6.11.
+
+- **FR-24.21** *(Shipped)* The **mock is deterministic, keyed off a single "request seed"** derived from whichever scope was used, so the existing `fail` / `empty` keyword convention works identically across all three entry shapes and there is one convention to learn.
+
+  Two properties of the mock matter more than realism, because the whole discovery UI will be tested through it. Tuner names encode the round and direction, so a tuner that re-issues the same round is distinguishable from one that advanced — otherwise that bug is invisible. And **it deliberately suggests a topic the user already follows** whenever exclusions are present, placed *first* in the list. That is the exact case FR-24.11's second layer exists for, and a mock that filtered perfectly would make that layer permanently untestable. The request is recorded separately (`suggestCalls`), so the first layer stays assertable on its own.
+
 - **Retries and rate limiting already exist** (`src/ai/retry.ts`) and apply unchanged — discovery is user-initiated and therefore always attended, so the FR-6.5 attendance gate never blocks it.
+
+### Testing
+
+- **Unit** — `tests/unit/suggest-prompt.test.ts` (22): each scope's prompt, the empty-query breadth instruction, skips phrased as a steer rather than an exclusion list, history capping, exclusions, taxonomy-by-slug, and the parser's degrade-don't-fail paths including a bogus slug surviving parsing for the caller to reject. `tests/unit/suggest-providers.test.ts` (12): all five providers through injected runners, the CLI schema wiring, and the mock's determinism scheme.
+- No E2E yet — there is no UI to drive until NEWS-126.

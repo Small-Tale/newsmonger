@@ -1,7 +1,16 @@
 import { spawn } from 'node:child_process';
 
 import { buildUserPrompt, NEWS_JSON_SCHEMA, parseNewsResult, searchingSystemPrompt } from '../prompt.js';
-import type { CheckResult, ConcreteProviderName, KnownItem, NewsProvider, TopicContext } from '../types.js';
+import { buildSuggestPrompt, parseSuggestResult, SUGGEST_JSON_SCHEMA, suggestSystemPrompt } from '../suggest-prompt.js';
+import type {
+  CheckResult,
+  ConcreteProviderName,
+  KnownItem,
+  NewsProvider,
+  SuggestRequest,
+  SuggestResult,
+  TopicContext,
+} from '../types.js';
 
 /**
  * Run checks against the user's Claude Pro/Max **subscription** rather than an
@@ -23,8 +32,14 @@ const CHECK_TIMEOUT_MS = 10 * 60 * 1000;
 
 /** Seam over the CLI so tests never spawn a real process. */
 export interface ClaudeCliRunner {
-  /** Resolves the agent's final text, or rejects with an actionable message. */
-  run(system: string, prompt: string, model: string | undefined): Promise<string>;
+  /**
+   * Resolves the agent's final text, or rejects with an actionable message.
+   *
+   * `schema` is the JSON Schema handed to `--json-schema`. It is a parameter
+   * rather than a constant because checks and topic discovery (NEWS-116) return
+   * different shapes through the same CLI.
+   */
+  run(system: string, prompt: string, model: string | undefined, schema: object): Promise<string>;
   /** Whether the CLI is installed and holds usable credentials. */
   available(): Promise<boolean>;
 }
@@ -87,7 +102,7 @@ function spawnRunner(binary: string): ClaudeCliRunner {
     });
 
   return {
-    async run(system, prompt, model) {
+    async run(system, prompt, model, schema) {
       const args = [
         '-p',
         prompt,
@@ -100,7 +115,7 @@ function spawnRunner(binary: string): ClaudeCliRunner {
         '--output-format',
         'json',
         '--json-schema',
-        JSON.stringify(NEWS_JSON_SCHEMA),
+        JSON.stringify(schema),
       ];
       if (model !== undefined && model !== '') args.push('--model', model);
 
@@ -179,10 +194,20 @@ export function createClaudeCliProvider(
         searchingSystemPrompt(),
         buildUserPrompt(topicName, known, sinceIso, context),
         model !== '' ? model : undefined,
+        NEWS_JSON_SCHEMA,
       );
       // A subscription check spends plan quota, not metered dollars, and the
       // CLI reports no token counts — so usage is genuinely unknown, not zero.
       return { ...parseNewsResult(text), usage: null };
+    },
+    async suggestTopics(request: SuggestRequest): Promise<SuggestResult> {
+      const text = await runner.run(
+        suggestSystemPrompt(),
+        buildSuggestPrompt(request),
+        model !== '' ? model : undefined,
+        SUGGEST_JSON_SCHEMA,
+      );
+      return { suggestions: parseSuggestResult(text), usage: null };
     },
   };
 }

@@ -10,6 +10,10 @@ News checks run through a pluggable provider abstraction so you can choose which
 
 - **FR-6.1** `NewsProvider` (`src/ai/types.ts`) extends `NewsService` with `name`, `model`, and `isAvailable()`. Providers are plain factory functions returning object literals (no base class), registered in `src/ai/providers/index.ts`.
 
+- **FR-6.11** *(Shipped, NEWS-124)* `NewsService` has **two** methods: `checkTopic` (what is new about X) and `suggestTopics` (what might you want to follow at all — see [24 — Topic Discovery](24-topic-discovery.md)). `suggestTopics` is **required rather than optional**: discovery has no "this provider can't do it" state in the design, and making it optional would push a capability check into the UI that FR-24 never describes.
+
+  The two subscription CLIs take the JSON Schema as a **parameter** on their runner seam rather than closing over a constant, because they return different shapes through the same binary. Handing the CLI the news schema for a discovery call makes it reject a perfectly good answer, so the wiring is asserted per provider in `tests/unit/suggest-providers.test.ts`.
+
 ## Selection & config
 
 - **FR-6.2** Provider, model, and endpoint are **persisted settings** (`Settings.provider` / `.model` / `.endpoint`), changeable at runtime from the UI's Source block (`PATCH /api/settings`) or seeded at startup by `--provider auto|anthropic|openai|mock`, `--model <id>`, `--endpoint <url>` / `NEWS_PROVIDER`, `NEWS_MODEL`, `NEWS_ENDPOINT`. `--ai-test` forces the mock provider without touching settings.

@@ -2,7 +2,16 @@ import OpenAI from 'openai';
 
 import { resolveApiKey } from '../api-keys.js';
 import { buildUserPrompt, parseNewsResult, searchingSystemPrompt } from '../prompt.js';
-import type { CheckResult, KnownItem, NewsProvider, TokenUsage, TopicContext } from '../types.js';
+import { buildSuggestPrompt, parseSuggestResult, suggestSystemPrompt } from '../suggest-prompt.js';
+import type {
+  CheckResult,
+  KnownItem,
+  NewsProvider,
+  SuggestRequest,
+  SuggestResult,
+  TokenUsage,
+  TopicContext,
+} from '../types.js';
 
 export const DEFAULT_OPENAI_MODEL = 'gpt-5';
 
@@ -94,6 +103,10 @@ export function createOpenAIProvider(config: {
         model,
       );
       return { ...parseNewsResult(text), usage };
+    },
+    async suggestTopics(request: SuggestRequest): Promise<SuggestResult> {
+      const { text, usage } = await runner.run(suggestSystemPrompt(), buildSuggestPrompt(request), model);
+      return { suggestions: parseSuggestResult(text), usage };
     },
   };
 }
