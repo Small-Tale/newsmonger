@@ -6,10 +6,11 @@ import { z } from 'zod';
  * Newspaper-section shaped, two levels deep, with subcategories only where they
  * earn their place — Sports and Technology need them, Style doesn't.
  *
- * **The list below is a seed, not a contract.** Everything that reads a category
- * reads it from the stored table, which is materialised from these built-ins on
- * first run and owned by the user afterwards. Adding, renaming or retiring a
- * category is a data write, not a release.
+ * **Edited in code, by design** (FR-22.1) — there is no settings UI and no stored
+ * copy, so this module is the single source of truth for both the server and the
+ * client. Gaps are expected: add a category here, and the classifier offers it on
+ * the next check. Prefer `retired: true` to deleting an entry, so topics already
+ * holding the slug keep their label.
  */
 
 /** A second-level category. */
@@ -127,6 +128,20 @@ export const UNCATEGORIZED_LABEL = 'Uncategorized';
  */
 export const NO_SUBCATEGORY_LABEL = 'Other';
 
+/**
+ * Sentinel slugs for the filter bar's two "absence" selections (NEWS-97).
+ *
+ * They are query values rather than taxonomy entries because they select the
+ * *absence* of a value, which no table row can represent. Kept here so the
+ * client and `Store.queryItems` cannot disagree about their spelling — the
+ * client must not import from `db/`, which pulls in `node:sqlite`.
+ *
+ * Neither is a valid slug (nothing slugifies to them from the built-ins), so a
+ * real category can never collide with one.
+ */
+export const UNCATEGORIZED_FILTER = 'uncategorized';
+export const NO_SUBCATEGORY_FILTER = 'other';
+
 /** Look up a category by slug, retired or not. Unknown slugs resolve to undefined. */
 export function findCategory(table: CategoryTable, slug: string | null): Category | undefined {
   if (slug === null) return undefined;
@@ -158,6 +173,25 @@ export function categoryLabel(
   if (category === undefined) return UNCATEGORIZED_LABEL;
   const sub = findSubcategory(table, categorySlug, subSlug);
   return sub === undefined ? category.label : `${category.label} · ${sub.label}`;
+}
+
+/**
+ * The single most specific label, for somewhere with no room for a path.
+ *
+ * The sidebar row has about twelve characters between the topic name and the
+ * edge — "Sports · Soccer" truncates to "SPORTS ·…", which reads as broken
+ * rather than abbreviated. One word does fit, and the *subcategory* is the more
+ * informative half: the filter bar already supplies the section, and the full
+ * path is in the row's tooltip.
+ */
+export function shortCategoryLabel(
+  table: CategoryTable,
+  categorySlug: string | null,
+  subSlug: string | null,
+): string {
+  const category = findCategory(table, categorySlug);
+  if (category === undefined) return UNCATEGORIZED_LABEL;
+  return findSubcategory(table, categorySlug, subSlug)?.label ?? category.label;
 }
 
 /** Categories offered in the filter bar and to the classifier — retired ones excluded. */

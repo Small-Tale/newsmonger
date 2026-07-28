@@ -88,3 +88,135 @@ describe('Store.queryItems (NEWS-74)', () => {
     expect(store.queryItems({ mode: 'normal', topicIds: [apple.id], limit: 1 }).total).toBe(2);
   });
 });
+
+describe('category filtering (NEWS-97)', () => {
+  /** Two topics in different sections, one uncategorized, one story each. */
+  function categorised(): { store: Store; ids: Record<string, string> } {
+    const store = new Store(tmpDataDir());
+    const soccer = store.addTopic('Soccer');
+    const tennis = store.addTopic('Tennis');
+    const sportsOnly = store.addTopic('Skiing');
+    const none = store.addTopic('Unlabelled');
+    store.setTopicCategory(soccer.id, 'sports', 'soccer', 'auto');
+    store.setTopicCategory(tennis.id, 'sports', 'tennis', 'auto');
+    // A category with no subcategory — the "Other" case (FR-22.6).
+    store.setTopicCategory(sportsOnly.id, 'sports', null, 'auto');
+    const culture = store.addTopic('Books');
+    store.setTopicCategory(culture.id, 'culture', 'books', 'auto');
+
+    let n = 0;
+    for (const t of [soccer, tennis, sportsOnly, none, culture]) {
+      n += 1;
+      store.addItems([
+        {
+          topicId: t.id,
+          title: `${t.name} story`,
+          summary: 's',
+          sources: [],
+          dedupeKey: `k${String(n)}`,
+          foundAt: `2026-07-2${String(n)}T00:00:00.000Z`,
+        },
+      ]);
+    }
+    return {
+      store,
+      ids: { soccer: soccer.id, tennis: tennis.id, sportsOnly: sportsOnly.id, none: none.id, culture: culture.id },
+    };
+  }
+
+  const titles = (r: { items: { title: string }[] }): string[] => r.items.map((i) => i.title).sort();
+
+  it('filters to a category, including its subcategories', () => {
+    const { store } = categorised();
+    const r = store.queryItems({ mode: 'normal', category: 'sports', limit: 50 });
+    expect(titles(r)).toEqual(['Skiing story', 'Soccer story', 'Tennis story']);
+    // `total` must reflect the filter too, or "Show more" would lie.
+    expect(r.total).toBe(3);
+  });
+
+  it('filters to a subcategory', () => {
+    const { store } = categorised();
+    expect(titles(store.queryItems({ mode: 'normal', category: 'sports', subcategory: 'soccer', limit: 50 }))).toEqual(
+      ['Soccer story'],
+    );
+  });
+
+  it('selects topics in a category with no subcategory via the "other" sentinel', () => {
+    const { store } = categorised();
+    expect(titles(store.queryItems({ mode: 'normal', category: 'sports', subcategory: 'other', limit: 50 }))).toEqual(
+      ['Skiing story'],
+    );
+  });
+
+  it('selects uncategorized topics via the sentinel', () => {
+    const { store } = categorised();
+    expect(titles(store.queryItems({ mode: 'normal', category: 'uncategorized', limit: 50 }))).toEqual([
+      'Unlabelled story',
+    ]);
+  });
+
+  it('returns everything with no category filter', () => {
+    const { store } = categorised();
+    expect(store.queryItems({ mode: 'normal', limit: 50 }).items).toHaveLength(5);
+  });
+
+  it('returns nothing for a category no topic holds', () => {
+    const { store } = categorised();
+    expect(store.queryItems({ mode: 'normal', category: 'health', limit: 50 }).items).toEqual([]);
+  });
+
+  it('composes with search and saved rather than replacing them', () => {
+    const { store, ids } = categorised();
+    const soccerItem = store.listItems(ids.soccer)[0];
+    store.setItemSaved(soccerItem.id, true);
+
+    // Sports + saved → only the saved sports story.
+    expect(titles(store.queryItems({ mode: 'normal', category: 'sports', saved: true, limit: 50 }))).toEqual([
+      'Soccer story',
+    ]);
+    // Sports + a search that only the tennis story matches.
+    expect(titles(store.queryItems({ mode: 'normal', category: 'sports', q: 'tennis', limit: 50 }))).toEqual([
+      'Tennis story',
+    ]);
+    // Culture + a sports search → nothing, because they intersect.
+    expect(store.queryItems({ mode: 'normal', category: 'culture', q: 'tennis', limit: 50 }).items).toEqual([]);
+  });
+
+  it('paginates within the filter', () => {
+    const { store } = categorised();
+    // Newest first, so the three sports stories page as Skiing/Tennis, then
+    // Soccer — asserted in order, since a cursor bug shows up as a wrong split
+    // rather than a wrong count.
+    const first = store.queryItems({ mode: 'normal', category: 'sports', limit: 2 });
+    expect(first.items.map((i) => i.title)).toEqual(['Skiing story', 'Tennis story']);
+    expect(first.total).toBe(3);
+    expect(first.nextCursor).not.toBeNull();
+
+    const second = store.queryItems({ mode: 'normal', category: 'sports', limit: 2, before: first.nextCursor });
+    // No overlap, still only sports, and the page ends there.
+    expect(second.items.map((i) => i.title)).toEqual(['Soccer story']);
+    expect(second.nextCursor).toBeNull();
+  });
+
+  it('counts a story whose topic is gone as uncategorized', () => {
+    // Orphans stay visible in the feed by design (the LEFT JOIN, NEWS-94/105).
+    // They have no topic and therefore no category, so this is where they land —
+    // worth pinning, since it falls out of the join rather than being written.
+    const { store, ids } = categorised();
+    store.deleteTopic(ids.tennis);
+    store.addItems([
+      {
+        topicId: ids.tennis,
+        title: 'Orphan story',
+        summary: 's',
+        sources: [],
+        dedupeKey: 'orphan',
+        foundAt: '2026-07-28T00:00:00.000Z',
+      },
+    ]);
+
+    expect(titles(store.queryItems({ mode: 'normal', category: 'uncategorized', limit: 50 }))).toContain(
+      'Orphan story',
+    );
+  });
+});

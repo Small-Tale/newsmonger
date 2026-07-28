@@ -126,6 +126,8 @@ export function registerApi(app: Hono<AppEnv>): void {
       topicIds,
       saved: c.req.query('saved') === '1',
       q: c.req.query('q') ?? '',
+      category: c.req.query('category'),
+      subcategory: c.req.query('subcategory'),
       limit,
       before,
     });

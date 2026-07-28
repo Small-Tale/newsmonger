@@ -74,7 +74,7 @@ scripts/
 tests/
   helpers/            tmp.ts (tmp data dirs), provider.ts (asResolver/fakeProvider)
   unit/               vitest: dedupe, store, checks, scheduler, config, parse-result, providers, openai, api, api-keys, api-keys-routes, attendance, catch-up, sanitize, origin-guard, guidance, cost, key-verify, diagnostics, retention, export, daily-schedule, verify-links, attribution, concurrency, price-store
-  e2e/                playwright, serial, mock AI (--ai-test), port 4189: app.spec.ts, keys.spec.ts, topics.spec.ts, a11y.spec.ts (axe-core, both themes), layout.spec.ts (full-window layout + column count at several viewports, NEWS-96). `resetTopics` in a beforeAll gives every attempt — first run or serial retry — an empty server (NEWS-101)
+  e2e/                playwright, serial, mock AI (--ai-test), port 4189: app.spec.ts, keys.spec.ts, topics.spec.ts, a11y.spec.ts (axe-core, both themes), categories.spec.ts (NEWS-97), layout.spec.ts (full-window layout + column count at several viewports, NEWS-96). `resetTopics` in a beforeAll gives every attempt — first run or serial retry — an empty server (NEWS-101)
 docs/                 numbered requirements (1–21), ai/ summaries, manual-test-plan.md
 ```
 
@@ -141,6 +141,7 @@ Data dir: `--data-dir` flag → `NEWS_DATA_DIR` → `~/.news`. Also holds `news.
 | Diagnostics / "why did a check fail" | `src/client/diagnostics.ts` (pure, unit-tested) + the Settings Diagnostics section; `appVersion` on `/api/state`. Topic names redacted unless opted in. See `docs/3-ui.md` FR-3.25–3.28 |
 | Solo filter (set arithmetic, menu + double-click) | `src/client/solo.ts` (`toggleSolo`, `isAllSoloed`), used by `runTopicAction` and the `dblclick` delegate in `app.tsx`. See `docs/3-ui.md` FR-3.40 |
 | Topic categories / taxonomy | `src/categories.ts` (`BUILTIN_CATEGORIES`, `categoryLabel`, `activeCategories`). See `docs/22-topic-categories.md` |
+| Section filter bar / sidebar pills | `filterBarJsx` + `[data-filter-category]`/`[data-filter-subcategory]` delegates in `client/app.tsx`; `.filter-bar` in `styles.scss`; server filter in `Store.queryItems`. See `docs/22-topic-categories.md` FR-22.9–22.12 |
 | Automatic topic classification | `needsClassifying`/`classifierOptions`/`applyClassification` in `checks.ts`; prompt + parsing in `ai/prompt.ts`. See `docs/22-topic-categories.md` FR-22.8 |
 | Run history / spend horizon | `RUN_RETENTION_DAYS` (400) + `MAX_RUNS_KEPT` (25k) and `Store.pruneOldRuns` in `db/store.ts`, called from the housekeeping sweep. See `docs/19-cost-visibility.md` FR-19.13 |
 | Stale refresh overwriting newer state | sequence guards in `refreshState`/`refreshFeed` (`src/client/api.ts`). See `docs/17-server-pagination.md` FR-17.9 |

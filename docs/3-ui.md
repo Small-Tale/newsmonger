@@ -96,6 +96,13 @@ each(s.topics, (t) => topicRowJsx(...), (t) => `${selected.has(t.id)}|${solo.has
 
 **The menu backdrop wraps the menu, so a shared close action swallows the item click.** `[data-action=close-menu]` matches by ancestor walk, so a click on a menu item also matched the backdrop; the menu closed and cleared `contextMenu` before the item handler could read it, and the action silently did nothing. The handler now closes only when the click landed on the backdrop element itself. This is the same trap the settings dialog hit — worth checking on any future overlay.
 
+## Section filter bar (NEWS-97)
+
+The bar under the masthead is documented in [docs/22-topic-categories.md](./22-topic-categories.md) (FR-22.9–22.12). Two structural points belong here with the other kerf conventions:
+
+- The sub-row is **always in the DOM**, empty when no section is selected, rather than conditionally rendered — it sits above the keyed topics list, and the E2E suite runs with `invariants: 'throw'` (NEWS-100), so a conditional sibling there would fail at the render that caused it. It also stops the bar's height jumping as you select.
+- The topic row's memo key includes `category`/`subcategory`. The pill is part of the row now, so a topic classified by a background check would otherwise keep its stale row until something else about it changed.
+
 ## Feed grid on wide displays (NEWS-64, NEWS-96)
 
 Stories lay out in a **responsive CSS grid** (per day group), not a single column: `repeat(auto-fill, minmax(min(100%, 400px), 1fr))`. Column count follows the available width, with no JS and no media query. Grid rows **stretch every card to the tallest on that line**, so a row reads as one unit. The day header and a flagged one-liner span all columns (`grid-column: 1 / -1`).

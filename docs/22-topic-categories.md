@@ -2,7 +2,7 @@
 
 Topics are classified into newspaper-style sections so the sidebar can label them and the feed can be filtered to one section at a time. Related: [topics and scheduling](./1-topics-and-scheduling.md), [UI](./3-ui.md), [topic guidance](./18-topic-guidance.md).
 
-**Status: partly built.** Everything but the UI is shipped (FR-22.1–22.8) — topics classify themselves on their first check. The sidebar pills and filter bar are not built yet (FR-22.9–22.10) — NEWS-108.
+**Status: shipped** (FR-22.1–22.10). Topics classify themselves on their first check, the sidebar labels them, and the filter bar narrows the feed to a section.
 
 ## The taxonomy
 
@@ -68,9 +68,23 @@ Three placements were reviewed specifically:
 
   `category`/`subcategory` are declared in `NEWS_JSON_SCHEMA` but not required: `additionalProperties: false` means a structured-output provider would otherwise *reject* a classification, while most checks don't ask for one.
 
-- **FR-22.9** *(Not built — NEWS-108)* The sidebar shows a pill per topic with the most specific label, coloured by top-level category.
+- **FR-22.9** *(Shipped)* The sidebar shows a pill per topic with the **single most specific label** — the subcategory when there is one, else the category. Not the full path: the row has about twelve characters between the topic name and the edge, and "Sports · Soccer" truncates to "SPORTS ·…", which reads as broken rather than abbreviated. The subcategory is the more informative half anyway, since the filter bar already supplies the section, and the full path is in the row's `title`.
 
-- **FR-22.10** *(Not built — NEWS-108)* A horizontally scrollable filter bar sits between the page header and the sidebar+content area, filtering the feed to a category. Selecting a category reveals a **second row of its subcategories**, styled differently from the first — a newspaper masthead and its subsections.
+  An unclassified topic gets **no pill at all** rather than an "Uncategorized" badge — a badge on every unclassified row is noise, and absence already reads as "not yet".
+
+- **FR-22.10** *(Shipped)* A horizontally scrollable filter bar sits directly under the header, above the banners and the sidebar+feed area. **All** · the 11 sections · **Uncategorized** — 13 pills, which is why the taxonomy stops at 11.
+
+  Selecting a section reveals a **second row of its subsections**, styled deliberately unlike the first: the top row is small-caps sans, the sub-row is italic serif separated by hairlines. A newspaper masthead and its subsections — which is what makes "which level am I on" legible without a label saying so. The sub-row is always in the DOM (empty when nothing is selected) rather than conditionally rendered, since it sits above the keyed topics list.
+
+  Both rows scroll horizontally rather than wrapping: a wrapped bar changes height as you select, shifting the whole feed down.
+
+- **FR-22.11** *(Shipped)* The filter is **resolved server-side** as `category`/`subcategory` params on `/api/items`, not client-side over the fetched page. The client holds one page, so filtering there would silently miss matches deeper in history — the bug NEWS-74 existed to fix. It composes with Solo, Saved and Search rather than replacing them.
+
+  Two sentinel slugs carry the selections a table row cannot express: `uncategorized` (topic has no category) and `other` (topic has a category but no subcategory). They live in `src/categories.ts` beside the taxonomy so the client and `Store.queryItems` cannot disagree about their spelling — the client must not import from `db/`, which pulls in `node:sqlite`.
+
+  A story whose topic was deleted mid-check has no topic and therefore no category, so it appears under *Uncategorized*. That falls out of the LEFT JOIN rather than being written anywhere, so it is pinned by a test.
+
+- **FR-22.12** *(Shipped)* The filter is **ephemeral** — cleared on reload, like Solo and for the same reason (`docs/3-ui.md`): a filter that quietly survived a restart would hide news days later, and "the app stopped finding anything" is a far worse failure than re-applying a filter. The sidebar collapse and topic sort *are* persisted, because they change how the app looks rather than what it is willing to show.
 
 ## Decisions made
 
@@ -85,6 +99,8 @@ Recorded so they aren't re-litigated. All three were the owner's calls on 2026-0
 3. **Sub-pills ship as a second row** below the top-level row, styled differently — the newspaper masthead-and-subsection look — rather than being deferred.
 
 ## Testing
+
+`tests/e2e/categories.spec.ts` drives the real bar: pills appearing after classification, narrowing to a section, the sub-row appearing and resetting when the section changes, the Uncategorized pill, composing with search, and the filter not surviving a reload. `tests/unit/items-query.test.ts` covers the server-side filter — both sentinels, composition with saved/search, and pagination *within* a filter.
 
 `tests/unit/classify.test.ts` covers the classification path — when the request is made and withheld, and every way a model answer is rejected. Verified non-vacuous: removing the taxonomy validation fails exactly the four tests that assert rejection.
 

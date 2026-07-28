@@ -108,6 +108,17 @@ export interface AppState {
    * anything" is a much worse failure than re-applying a filter.
    */
   soloTopicIds: string[];
+  /**
+   * Filter-bar selection (NEWS-97): a category slug, `'uncategorized'`, or null
+   * for "All". `subcategory` is the second-row selection within it.
+   *
+   * **Ephemeral, like Solo and for the same reason** (`docs/3-ui.md`): a filter
+   * that quietly survived a restart would hide news days later, and "the app
+   * stopped finding anything" is a far worse failure than re-applying a filter.
+   * The sidebar collapse and topic sort *are* persisted — they change how the
+   * app looks, not what it is willing to show you.
+   */
+  categoryFilter: { category: string; subcategory: string | null } | null;
   /** Open topic context menu, positioned in viewport coordinates. */
   contextMenu: { x: number; y: number; topicIds: string[] } | null;
   /** Open story context menu (bookmark / share / flag), viewport coords (NEWS-61). */
@@ -303,6 +314,7 @@ export const appStore = defineStore({
     searchQuery: '',
     feedLimit: FEED_PAGE,
     soloTopicIds: [],
+    categoryFilter: null,
     contextMenu: null,
     itemMenu: null,
     recentlyFlaggedItems: [],
@@ -351,6 +363,9 @@ export const appStore = defineStore({
     // fresh list, shown from the top (NEWS-62).
     setSolo: (soloTopicIds: string[]) => {
       set({ ...get(), soloTopicIds, feedLimit: FEED_PAGE });
+    },
+    setCategoryFilter: (categoryFilter: AppState['categoryFilter']) => {
+      set({ ...get(), categoryFilter, feedLimit: FEED_PAGE });
     },
     setSavedFilter: (savedFilter: boolean) => {
       set({ ...get(), savedFilter, feedLimit: FEED_PAGE });

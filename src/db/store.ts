@@ -6,6 +6,7 @@ import type { DatabaseSync } from 'node:sqlite';
 import { PriceStore } from '../ai/price-store.js';
 import { estimateCostUsd } from '../ai/pricing.js';
 import type { TokenUsage } from '../ai/types.js';
+import { NO_SUBCATEGORY_FILTER, UNCATEGORIZED_FILTER } from '../categories.js';
 import type { CheckRun, NewsItem, Settings, Topic } from './schemas.js';
 import {
   CheckRunSchema,
@@ -51,9 +52,20 @@ export interface ItemQuery {
   topicIds?: string[];
   saved?: boolean;
   q?: string;
+  /**
+   * Filter-bar selection (NEWS-97). A category slug, or `'uncategorized'` for
+   * topics with no category at all. Absent means no category filter.
+   */
+  category?: string;
+  /** Second-level slug within `category`, or `'other'` for topics with none. */
+  subcategory?: string;
   limit: number;
   before?: ItemCursor | null;
 }
+
+// Re-exported so server-side callers don't need to know the constants live with
+// the taxonomy; see `src/categories.ts` for why they do.
+export { NO_SUBCATEGORY_FILTER, UNCATEGORIZED_FILTER };
 
 /** SQLite has no boolean type; every column that means one is 0/1. */
 function bit(value: boolean): number {
@@ -486,6 +498,21 @@ export class Store {
         params.push(...topicIds);
       }
       if (query.saved === true) where.push('i.saved = 1');
+      // Category filter (NEWS-97). Resolved here rather than in the client
+      // because the client holds one page — filtering there would silently miss
+      // matches deeper in history, which is the bug NEWS-74 existed to fix.
+      if (query.category === UNCATEGORIZED_FILTER) {
+        where.push('t.category IS NULL');
+      } else if (query.category !== undefined && query.category !== '') {
+        where.push('t.category = ?');
+        params.push(query.category);
+        if (query.subcategory === NO_SUBCATEGORY_FILTER) {
+          where.push('t.subcategory IS NULL');
+        } else if (query.subcategory !== undefined && query.subcategory !== '') {
+          where.push('t.subcategory = ?');
+          params.push(query.subcategory);
+        }
+      }
       const q = (query.q ?? '').trim().toLowerCase();
       if (q !== '') {
         // `escape` keeps a literal % or _ in the query from turning into a

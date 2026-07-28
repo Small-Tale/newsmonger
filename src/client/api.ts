@@ -89,6 +89,12 @@ export async function refreshFeed(): Promise<void> {
     if (s.savedFilter) params.set('saved', '1');
     const q = s.searchQuery.trim();
     if (q !== '') params.set('q', q);
+    // Resolved server-side (NEWS-97): the client holds one page, so filtering
+    // here would miss matches deeper in history — the NEWS-74 bug.
+    if (s.categoryFilter !== null) {
+      params.set('category', s.categoryFilter.category);
+      if (s.categoryFilter.subcategory !== null) params.set('subcategory', s.categoryFilter.subcategory);
+    }
   }
   const seq = ++feedSeq;
   try {

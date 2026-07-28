@@ -5,6 +5,17 @@ import { formatUsd } from '../ai/pricing.js';
 import type { ProviderName } from '../ai/types.js';
 import { PROVIDER_INFO, PROVIDER_MODELS, PROVIDER_NAMES } from '../ai/types.js';
 import type { StateResp } from '../api/schemas.js';
+import {
+  activeCategories,
+  BUILTIN_CATEGORIES,
+  categoryLabel,
+  findCategory,
+  NO_SUBCATEGORY_FILTER,
+  NO_SUBCATEGORY_LABEL,
+  shortCategoryLabel,
+  UNCATEGORIZED_FILTER,
+  UNCATEGORIZED_LABEL,
+} from '../categories.js';
 import type { NewsItem, Topic } from '../db/schemas.js';
 import { MAX_GUIDANCE_LENGTH } from '../db/schemas.js';
 import {
@@ -202,6 +213,16 @@ function topicRowJsx(
       </div>
       {/* Always-present slot so the badge appearing can't restructure the row. */}
       <span class="topic-flags">
+        {topic.category === null ? (
+          ''
+        ) : (
+          <span
+            class={`topic-category cat-${topic.category}`}
+            title={`Section: ${categoryLabel(BUILTIN_CATEGORIES, topic.category, topic.subcategory)}`}
+          >
+            {shortCategoryLabel(BUILTIN_CATEGORIES, topic.category, topic.subcategory)}
+          </span>
+        )}
         {topic.guidance !== '' ? (
           <span class="flag guided" title={`Guidance: ${topic.guidance}`}>
             {icon('guidance', 13)}
@@ -219,6 +240,93 @@ function topicRowJsx(
         {soloed ? <span class="flag">{icon('solo', 13)}</span> : ''}
       </span>
     </li>
+  );
+}
+
+/**
+ * The section filter bar (NEWS-97) — a newspaper's section navigation.
+ *
+ * Two rows, and the second is deliberately styled unlike the first: the top row
+ * is the masthead's sections, the sub-row is that section's subsections. Same
+ * shape a newspaper uses, and it keeps "which level am I on" legible without a
+ * label saying so.
+ *
+ * The sub-row only appears once a category is selected — 11 categories plus
+ * their ~60 subcategories in one bar would be a wall rather than navigation.
+ */
+function filterBarJsx(selected: AppState['categoryFilter']): SafeHtml {
+  const table = activeCategories(BUILTIN_CATEGORIES);
+  const current = selected === null ? null : findCategory(table, selected.category);
+  return (
+    <nav class="filter-bar" aria-label="Filter by section">
+      <div class="filter-row filter-row-top">
+        <button
+          class={`filter-pill${selected === null ? ' active' : ''}`}
+          type="button"
+          data-filter-category=""
+          aria-pressed={selected === null ? 'true' : 'false'}
+        >
+          All
+        </button>
+        {table.map((category) => (
+          <button
+            class={`filter-pill${selected?.category === category.slug ? ' active' : ''}`}
+            type="button"
+            data-filter-category={category.slug}
+            aria-pressed={selected?.category === category.slug ? 'true' : 'false'}
+          >
+            {category.label}
+          </button>
+        ))}
+        {/* Selects the absence of a category, which no table row can express —
+            hence a sentinel slug rather than an entry in the taxonomy. */}
+        <button
+          class={`filter-pill${selected?.category === UNCATEGORIZED_FILTER ? ' active' : ''}`}
+          type="button"
+          data-filter-category={UNCATEGORIZED_FILTER}
+          aria-pressed={selected?.category === UNCATEGORIZED_FILTER ? 'true' : 'false'}
+        >
+          {UNCATEGORIZED_LABEL}
+        </button>
+      </div>
+      {/* Always present, even when empty: this sits above the keyed topics list,
+          and a row that comes and going would be a conditional sibling
+          (docs/3-ui.md). It also keeps the bar's height from jumping. */}
+      <div class="filter-row filter-row-sub">
+        {current === undefined || current === null
+          ? ''
+          : [
+              <button
+                class={`filter-subpill${selected?.subcategory === null ? ' active' : ''}`}
+                type="button"
+                data-filter-subcategory=""
+                aria-pressed={selected?.subcategory === null ? 'true' : 'false'}
+              >
+                All {current.label}
+              </button>,
+              ...current.subcategories.map((sub) => (
+                <button
+                  class={`filter-subpill${selected?.subcategory === sub.slug ? ' active' : ''}`}
+                  type="button"
+                  data-filter-subcategory={sub.slug}
+                  aria-pressed={selected?.subcategory === sub.slug ? 'true' : 'false'}
+                >
+                  {sub.label}
+                </button>
+              )),
+              // The topics that landed in this section without a subcategory —
+              // "Other" is a rendered fallback, not a stored row (FR-22.6).
+              <button
+                class={`filter-subpill${selected?.subcategory === NO_SUBCATEGORY_FILTER ? ' active' : ''}`}
+                type="button"
+                data-filter-subcategory={NO_SUBCATEGORY_FILTER}
+                aria-pressed={selected?.subcategory === NO_SUBCATEGORY_FILTER ? 'true' : 'false'}
+              >
+                {NO_SUBCATEGORY_LABEL}
+              </button>,
+            ]}
+      </div>
+    </nav>
   );
 }
 
@@ -1344,6 +1452,10 @@ function appJsx(): SafeHtml {
         {s.toast !== null ? <div class="toast">{s.toast}</div> : ''}
       </div>
 
+      {/* Section navigation sits directly under the masthead, as a newspaper's
+          does — above the banners and above the sidebar+feed area (FR-22.10). */}
+      <div id="filter-slot">{filterBarJsx(s.categoryFilter)}</div>
+
       {/* Banners appear in response to background events (a failed check, a
           blown budget), so they have to announce rather than wait to be found —
           which is why the container is always present. A live region has to
@@ -1495,7 +1607,10 @@ function appJsx(): SafeHtml {
               // `highPriority` is in the key too so toggling it re-renders the
               // star and the dial's interval without waiting for the next poll.
               cacheKey: (topic: Topic) =>
-                `${String(selected.has(topic.id))}|${String(solo.has(topic.id))}|${String(solo.size)}|${String(
+                // The category is part of the row now, so it belongs in the memo
+              // key — a topic classified by a background check would otherwise
+              // keep its stale row until something else changed.
+              `${String(topic.category)}|${String(topic.subcategory)}|${String(selected.has(topic.id))}|${String(solo.has(topic.id))}|${String(solo.size)}|${String(
                   s.checking.includes(topic.id),
                 )}|${String(topic.highPriority)}`,
               // A stable list identity (kerf 3.x). Unkeyed lists are identified by
@@ -1975,6 +2090,24 @@ function wireEvents(root: HTMLElement): void {
     // Cmd on macOS, Ctrl elsewhere — reading both is simpler and more forgiving
     // than sniffing the platform, and no OS uses them for conflicting meanings.
     selectTopic(id, { toggle: e.metaKey || e.ctrlKey, range: e.shiftKey });
+  });
+
+  // --- section filter bar (NEWS-97) ----------------------------------------
+
+  void delegate(root, 'click', '[data-filter-category]', (_e, el) => {
+    const slug = el.getAttribute('data-filter-category') ?? '';
+    // Selecting a category always resets the sub-row: the previous subcategory
+    // belongs to a different parent and would match nothing.
+    appStore.actions.setCategoryFilter(slug === '' ? null : { category: slug, subcategory: null });
+    void refreshFeed();
+  });
+
+  void delegate(root, 'click', '[data-filter-subcategory]', (_e, el) => {
+    const current = appStore.state.value.categoryFilter;
+    if (current === null) return;
+    const slug = el.getAttribute('data-filter-subcategory') ?? '';
+    appStore.actions.setCategoryFilter({ category: current.category, subcategory: slug === '' ? null : slug });
+    void refreshFeed();
   });
 
   // Double-click toggles solo (NEWS-95) — the one topic action common enough to

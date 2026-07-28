@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
-import { createMockProvider } from '../../src/ai/providers/index.js';
 import { buildUserPrompt, NEWS_JSON_SCHEMA, parseNewsResult } from '../../src/ai/prompt.js';
+import { createMockProvider } from '../../src/ai/providers/index.js';
 import { CheckRunner } from '../../src/checks.js';
 import { Store } from '../../src/db/store.js';
 import { asResolver, fakeProvider } from '../helpers/provider.js';
