@@ -34,6 +34,7 @@ Topic-based news tracker. The user enters topics; on a configurable interval (de
 - **Never commit red.** If the gates don't pass, the work isn't done — fix it or leave it uncommitted.
 - **Message style**: `<Summary> (NEWS-NN)` subject, then prose explaining *why* and what was decided, bullets for substance, and a closing line for tests/docs. Long lines unwrapped. **No `Co-Authored-By` or `Claude-Session` trailers** — the user has asked for these to stay out.
 - **Never `git push`** without being asked explicitly. Committing is routine; publishing is not.
+- `npm run commit:msg` drafts a message from the staged diff with [gitgist](https://www.npmjs.com/package/gitgist). **Its output is a starting point, not a message to paste**: gitgist emits *Conventional Commits* (`feat:`, `build:`, …), which is not this project's convention. Take the summary of *what changed* from it and rewrite it in the style above — the subject line with the ticket id, and prose explaining why. gitgist reads the actual diff, so it is good at noticing changes a human would forget to mention, and bad at knowing which of them mattered.
 - Commits land on `main` — that's this repo's history and the user's workflow. Don't open a branch unless asked.
 ## Ticket-Driven Work
 
