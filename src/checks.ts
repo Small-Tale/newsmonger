@@ -1,6 +1,6 @@
 import { filterNewItems } from './ai/dedupe.js';
 import type { BackoffConfig, FailureKind } from './ai/retry.js';
-import { backoffDelayMs, classifyFailure, DEFAULT_BACKOFF, retryAfterMs } from './ai/retry.js';
+import { backoffDelayMs, classifyFailure, DEFAULT_BACKOFF, FAILURE_COOLDOWN, retryAfterMs } from './ai/retry.js';
 import type {
   CategoryOption,
   CheckResult,
@@ -248,6 +248,10 @@ export class CheckRunner {
         this.store.markTopicChecked(topicId, checkedAt);
         // Succeeded, so news is now covered through this moment.
         this.store.markTopicCovered(topicId, checkedAt);
+        // ...and the failure streak is over, so the next failure starts its
+        // cooldown from the bottom rather than from wherever it left off
+        // (NEWS-110).
+        this.store.clearCheckFailures(topicId);
       }
       // Prune here rather than only at startup: an always-on install would
       // otherwise never reclaim anything (NEWS-87). Cheap — a filter over an
@@ -276,8 +280,27 @@ export class CheckRunner {
       // the topic due again immediately; `rateLimitedUntil` is what stops that
       // becoming a hot loop, and it is set from `Retry-After` when the server
       // supplied one.
-      if (!(err instanceof CheckFailure && err.kind === 'rate-limited')) {
+      const kind = err instanceof CheckFailure ? err.kind : 'retryable';
+      if (kind === 'rate-limited') {
+        // Handled entirely by the account-wide gate — no per-topic cooldown,
+        // or the two would compound into a much longer wait than either meant.
+        this.store.recordCheckFailure(topicId, null);
+      } else if (kind === 'fatal') {
+        // Nothing will change until a human does something (a bad key, a model
+        // that doesn't exist), so this keeps the old behaviour: advance the
+        // clock and wait a full interval. A cooldown here would just be a
+        // shorter wait for the same certain failure, and "Check now" is the
+        // route back the moment the user fixes it.
         this.store.markTopicChecked(topicId, new Date());
+        this.store.recordCheckFailure(topicId, null);
+      } else {
+        // Retryable and still failing after the in-process attempts (NEWS-110).
+        // Leave `lastCheckedAt` alone — no check happened, and claiming one did
+        // is what made a five-minute outage cost a whole interval — and set a
+        // cooldown that grows with the streak so a broken provider isn't asked
+        // every tick.
+        const streak = (this.store.getTopic(topicId)?.consecutiveFailures ?? 0) + 1;
+        this.store.recordCheckFailure(topicId, new Date(Date.now() + backoffDelayMs(streak, FAILURE_COOLDOWN)));
       }
       this.store.finishRun(run.id, {
         status: 'failed',
@@ -600,10 +623,22 @@ export function isDueDaily(
  * unscheduled forever.
  */
 export function isDueUnderSchedule(
-  topic: { paused: boolean; lastCheckedAt: string | null; highPriority: boolean },
+  topic: {
+    paused: boolean;
+    lastCheckedAt: string | null;
+    highPriority: boolean;
+    /** Failure cooldown (NEWS-110); absent in callers that predate it. */
+    retryAfter?: string | null;
+  },
   settings: Settings,
   now: Date,
 ): boolean {
+  // The cooldown outranks the schedule: a topic whose checks are failing is
+  // still *due* by the schedule every tick, and that is exactly what would
+  // hammer a broken provider. It gates rather than replaces, so once it expires
+  // the normal rules apply and an overdue topic runs immediately.
+  const cooldown = topic.retryAfter ?? null;
+  if (cooldown !== null && now.getTime() < Date.parse(cooldown)) return false;
   if (settings.scheduleMode === 'daily' && !topic.highPriority && settings.dailyTimes.length > 0) {
     return isDueDaily(topic, settings.dailyTimes, now);
   }

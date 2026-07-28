@@ -31,7 +31,7 @@ const { DatabaseSync } = createRequire(import.meta.url)('node:sqlite') as {
  */
 
 /** Bumped when `SCHEMA` changes in a way an existing database must be migrated for. */
-export const SCHEMA_VERSION = 2;
+export const SCHEMA_VERSION = 3;
 
 /**
  * Upgrades for a database created by an older `SCHEMA_VERSION`.
@@ -48,6 +48,12 @@ const MIGRATIONS: Partial<Record<number, (db: DatabaseSyncType) => void>> = {
     db.exec(`ALTER TABLE topics ADD COLUMN category TEXT`);
     db.exec(`ALTER TABLE topics ADD COLUMN subcategory TEXT`);
     db.exec(`ALTER TABLE topics ADD COLUMN category_source TEXT NOT NULL DEFAULT 'auto'`);
+  },
+  // v2 → v3: per-topic failure cooldown (NEWS-110). Additive and defaulted, so
+  // an existing topic starts with a clean slate, which is what it has.
+  2: (db) => {
+    db.exec(`ALTER TABLE topics ADD COLUMN consecutive_failures INTEGER NOT NULL DEFAULT 0`);
+    db.exec(`ALTER TABLE topics ADD COLUMN retry_after TEXT`);
   },
 };
 
@@ -85,7 +91,9 @@ CREATE TABLE IF NOT EXISTS topics (
   covered_through_at TEXT,
   category           TEXT,
   subcategory        TEXT,
-  category_source    TEXT NOT NULL DEFAULT 'auto'
+  category_source    TEXT NOT NULL DEFAULT 'auto',
+  consecutive_failures INTEGER NOT NULL DEFAULT 0,
+  retry_after        TEXT
 );
 
 -- Backstop for the case-insensitive uniqueness addTopic enforces in code. The

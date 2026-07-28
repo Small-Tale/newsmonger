@@ -27,7 +27,7 @@ export interface BackoffConfig {
 }
 
 /**
- * The default policy: 15 s, then 30 s, then 45 s, capped at 240 s, ±20 % jitter.
+ * Retries **inside** one check: one retry after 15 s, ±20 %, capped at 240 s.
  *
  * **Linear rather than exponential** because the thing being retried is a check
  * that takes minutes and may cost money. Exponential backoff is tuned for cheap
@@ -35,11 +35,12 @@ export interface BackoffConfig {
  * thundering herd is large; here the request is expensive and the herd is at
  * most `checkConcurrency` wide.
  *
- * **Four attempts, not sixteen.** Walking 15 s → 240 s in 15 s steps would hold
- * a check open for over half an hour, occupying one of only `checkConcurrency`
- * slots the whole time. Three retries bound the extra wait at about 90 s; a
- * failure that outlives that is handled by *not advancing the attempt clock*,
- * so the scheduler comes back within a minute rather than a day.
+ * **Two attempts, cut from four in NEWS-110.** Every second spent waiting here
+ * holds one of only `checkConcurrency` slots, and the per-topic cooldown
+ * (`FAILURE_COOLDOWN`) now brings the scheduler back in about two minutes
+ * without holding anything. So this loop only has to cover the genuinely
+ * momentary blip — a single dropped socket — and anything longer is cheaper to
+ * wait out in the scheduler.
  *
  * The 240 s ceiling still matters: `Retry-After` can ask for a longer wait than
  * the step sequence would ever reach, and this is what bounds honouring it.
@@ -49,7 +50,7 @@ export const DEFAULT_BACKOFF: BackoffConfig = {
   stepMs: 15_000,
   maxMs: 240_000,
   jitterRatio: 0.2,
-  maxAttempts: 4,
+  maxAttempts: 2,
 };
 
 /**
@@ -163,3 +164,31 @@ export function retryAfterMs(err: unknown, now: Date = new Date(), maxMs = DEFAU
   if (Number.isNaN(at)) return null;
   return Math.min(Math.max(0, at - now.getTime()), maxMs);
 }
+
+/**
+ * Cooldown between *checks* of a topic whose provider keeps failing (NEWS-110).
+ *
+ * A different job from `DEFAULT_BACKOFF`, hence different numbers. That one
+ * governs retries **inside** one check, where every second spent waiting holds
+ * one of only `checkConcurrency` slots — so it is short and gives up quickly.
+ * This one governs when the *scheduler* comes back, which costs nothing to
+ * wait on, so it can afford to reach into the tens of minutes.
+ *
+ * 2 min, 4, 6 … capped at 30. A blip recovers on the next tick or two; a
+ * provider that has been broken for an hour is asked twice an hour rather than
+ * sixty times. Both are enormously better than the previous behaviour, which was
+ * to wait a full check interval — up to a day.
+ *
+ * The floor matters: the scheduler ticks once a minute, so a cooldown shorter
+ * than that would be indistinguishable from none.
+ */
+export const FAILURE_COOLDOWN: BackoffConfig = {
+  baseMs: 2 * 60_000,
+  stepMs: 2 * 60_000,
+  maxMs: 30 * 60_000,
+  jitterRatio: 0.2,
+  // Unused here — a cooldown has no attempt cap, it just keeps growing to the
+  // ceiling. Set to the linear step count that first reaches `maxMs`, so the
+  // value is at least meaningful if something ever reads it.
+  maxAttempts: 15,
+};

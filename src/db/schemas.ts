@@ -74,6 +74,21 @@ export const TopicSchema = z.object({
    * overwrites a choice the user made by hand (FR-22.7).
    */
   categorySource: z.enum(['auto', 'manual']).default('auto').catch('auto'),
+  /**
+   * Consecutive failed checks, reset to 0 by any success (NEWS-110). Drives the
+   * length of `retryAfter`, so a provider that stays broken is retried less and
+   * less often instead of every tick.
+   */
+  consecutiveFailures: z.number().int().nonnegative().default(0).catch(0),
+  /**
+   * ISO timestamp before which this topic must not be checked again (NEWS-110).
+   *
+   * Set after a retryable failure *instead of* advancing `lastCheckedAt`. The
+   * two express different things: `lastCheckedAt` means "we have news up to
+   * here", and moving it for a network outage claimed a check had happened that
+   * hadn't — which is what made a five-minute outage cost a whole interval.
+   */
+  retryAfter: z.string().nullable().default(null),
 });
 export type Topic = z.infer<typeof TopicSchema>;
 

@@ -1,4 +1,5 @@
 import type { BackoffConfig } from '../../src/ai/retry.js';
+import { DEFAULT_BACKOFF } from '../../src/ai/retry.js';
 import type { CheckResult, FoundNewsItem, NewsProvider, NewsService } from '../../src/ai/types.js';
 import type { ProviderResolver } from '../../src/checks.js';
 
@@ -33,15 +34,17 @@ export function noUsage(items: FoundNewsItem[]): CheckResult {
  * *failing* provider would otherwise take a minute and a half. Tests about what
  * a failure records — rather than about the retry timing itself — pass this.
  *
- * `maxAttempts` stays at the real value so the number of provider calls a
- * failure produces is still what production would produce.
+ * Spread from `DEFAULT_BACKOFF` so `maxAttempts` tracks the real value — the
+ * number of provider calls a failure produces stays what production produces.
+ * It was written out by hand once and went stale the moment the real cap
+ * changed, which is the sort of drift a test helper should not have.
  */
 export const INSTANT_BACKOFF: BackoffConfig = {
+  ...DEFAULT_BACKOFF,
   baseMs: 0,
   stepMs: 0,
   maxMs: 0,
   jitterRatio: 0,
-  maxAttempts: 4,
 };
 
 /** Options that make a `CheckRunner` retry without waiting. */

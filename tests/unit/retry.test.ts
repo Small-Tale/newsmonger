@@ -4,6 +4,7 @@ import {
   backoffDelayMs,
   classifyFailure,
   DEFAULT_BACKOFF,
+  FAILURE_COOLDOWN,
   retryAfterMs,
 } from '../../src/ai/retry.js';
 import { CheckRunner } from '../../src/checks.js';
@@ -137,12 +138,12 @@ describe('CheckRunner retry behaviour (NEWS-109)', () => {
     let calls = 0;
     const flaky = fakeProvider(() => {
       calls += 1;
-      return calls < 3 ? Promise.reject(new Error('socket hang up')) : Promise.resolve(noUsage([]));
+      return calls < 2 ? Promise.reject(new Error('socket hang up')) : Promise.resolve(noUsage([]));
     });
 
     const runner = new CheckRunner(store, asResolver(flaky), undefined, null, null, instantRetry);
     expect(await runner.checkTopic(topicId)).toBe(0);
-    expect(calls).toBe(3);
+    expect(calls).toBe(2);
     // The run is recorded as a success, because it was one.
     expect(store.listRuns(1)[0]?.status).toBe('succeeded');
   });
@@ -191,9 +192,11 @@ describe('CheckRunner retry behaviour (NEWS-109)', () => {
     });
     await runner.checkTopic(topicId);
 
-    // Three retries after the first attempt, increasing linearly — and no sleep
-    // after the last attempt, which would be pure delay before giving up.
-    expect(waits).toEqual([15_000, 30_000, 45_000]);
+    // One retry after the first attempt (NEWS-110 cut this from three, since
+    // the per-topic cooldown now does the longer waiting without holding a
+    // concurrency slot) — and no sleep after the last attempt, which would be
+    // pure delay before giving up.
+    expect(waits).toEqual([15_000]);
   });
 
   it('honours Retry-After over the computed backoff', async () => {
@@ -214,7 +217,7 @@ describe('CheckRunner retry behaviour (NEWS-109)', () => {
 
     // The server said 90s; the computed schedule would have said 15/30/45. It
     // knows when the window resets and we are guessing.
-    expect(waits).toEqual([90_000, 90_000, 90_000]);
+    expect(waits).toEqual([90_000]);
   });
 
   it('pauses scheduled checks for every topic after a rate limit', async () => {
@@ -277,5 +280,148 @@ describe('CheckRunner retry behaviour (NEWS-109)', () => {
     // ...but open again once the window has passed.
     fail = false;
     expect(await runner.checkDue(new Date(Date.now() + 2000))).toBe(1);
+  });
+});
+
+describe('per-topic failure cooldown (NEWS-110)', () => {
+  function storeWithTopics(names: string[]): Store {
+    const store = new Store(tmpDataDir());
+    for (const n of names) store.addTopic(n);
+    return store;
+  }
+
+  it('grows the cooldown with the failure streak', () => {
+    // 2 min, 4, 6 … so a blip recovers on the next tick or two while a provider
+    // broken for an hour is asked twice an hour rather than sixty times.
+    const noJitter = (): number => 0.5;
+    expect(backoffDelayMs(1, FAILURE_COOLDOWN, noJitter)).toBe(120_000);
+    expect(backoffDelayMs(2, FAILURE_COOLDOWN, noJitter)).toBe(240_000);
+    expect(backoffDelayMs(3, FAILURE_COOLDOWN, noJitter)).toBe(360_000);
+    expect(backoffDelayMs(100, FAILURE_COOLDOWN, noJitter)).toBe(30 * 60_000);
+  });
+
+  it('is longer than the scheduler tick, or it would be indistinguishable from none', () => {
+    expect(FAILURE_COOLDOWN.baseMs).toBeGreaterThan(60_000);
+  });
+
+  it('holds a failing topic back from the next sweep, then lets it through', async () => {
+    const store = storeWithTopics(['Fusion']);
+    let calls = 0;
+    const broken = fakeProvider(() => {
+      calls += 1;
+      return Promise.reject(new Error('socket hang up'));
+    });
+    const runner = new CheckRunner(store, asResolver(broken), undefined, null, null, instantRetry);
+
+    await runner.checkDue(new Date());
+    const afterFirst = calls;
+    expect(afterFirst).toBeGreaterThan(0);
+
+    // A tick later, still inside the cooldown: no request at all.
+    expect(await runner.checkDue(new Date(Date.now() + 60_000))).toBe(0);
+    expect(calls).toBe(afterFirst);
+
+    // Past the cooldown, it runs again — the whole point, versus waiting a
+    // full check interval.
+    expect(await runner.checkDue(new Date(Date.now() + 4 * 60_000))).toBe(1);
+    expect(calls).toBeGreaterThan(afterFirst);
+  });
+
+  it('lengthens the cooldown on each consecutive failure', async () => {
+    const store = storeWithTopics(['Fusion']);
+    const topicId = store.listTopics()[0].id;
+    const broken = fakeProvider(() => Promise.reject(new Error('socket hang up')));
+    const runner = new CheckRunner(store, asResolver(broken), undefined, null, null, instantRetry);
+
+    await runner.checkTopic(topicId);
+    const first = store.getTopic(topicId);
+    expect(first?.consecutiveFailures).toBe(1);
+    const firstWait = Date.parse(first?.retryAfter ?? '') - Date.now();
+
+    await runner.checkTopic(topicId);
+    const second = store.getTopic(topicId);
+    expect(second?.consecutiveFailures).toBe(2);
+    const secondWait = Date.parse(second?.retryAfter ?? '') - Date.now();
+
+    // ±20% jitter on 2 min and 4 min can't overlap, so this is a safe assertion.
+    expect(secondWait).toBeGreaterThan(firstWait);
+  });
+
+  it('clears the streak and the cooldown on a success', async () => {
+    const store = storeWithTopics(['Fusion']);
+    const topicId = store.listTopics()[0].id;
+    let fail = true;
+    const provider = fakeProvider(() =>
+      fail ? Promise.reject(new Error('socket hang up')) : Promise.resolve(noUsage([])),
+    );
+    const runner = new CheckRunner(store, asResolver(provider), undefined, null, null, instantRetry);
+
+    await runner.checkTopic(topicId);
+    expect(store.getTopic(topicId)?.consecutiveFailures).toBe(1);
+
+    fail = false;
+    await runner.checkTopic(topicId);
+    const after = store.getTopic(topicId);
+    // A later failure starts its cooldown from the bottom, not from where the
+    // previous streak left off.
+    expect(after?.consecutiveFailures).toBe(0);
+    expect(after?.retryAfter).toBeNull();
+  });
+
+  it('does not hold back a manual check', async () => {
+    // The cooldown is about not hammering on a schedule. If the user asks, the
+    // outage may well be over — and they are the ones who would know.
+    const store = storeWithTopics(['Fusion']);
+    const topicId = store.listTopics()[0].id;
+    let calls = 0;
+    const broken = fakeProvider(() => {
+      calls += 1;
+      return Promise.reject(new Error('socket hang up'));
+    });
+    const runner = new CheckRunner(store, asResolver(broken), undefined, null, null, instantRetry);
+
+    await runner.checkTopic(topicId);
+    const afterFirst = calls;
+    await runner.checkTopic(topicId, { manual: true });
+    expect(calls).toBeGreaterThan(afterFirst);
+  });
+
+  it('does not set a cooldown for a rate limit — the global gate owns that', async () => {
+    // Both would compound into a much longer wait than either meant.
+    const store = storeWithTopics(['Fusion']);
+    const topicId = store.listTopics()[0].id;
+    const limited = fakeProvider(() =>
+      Promise.reject(Object.assign(new Error('Too Many Requests'), { status: 429 })),
+    );
+    const runner = new CheckRunner(store, asResolver(limited), undefined, null, null, fastRetry);
+
+    await runner.checkTopic(topicId);
+    expect(store.getTopic(topicId)?.retryAfter).toBeNull();
+  });
+
+  it('holds back only the failing topic, not its neighbours', async () => {
+    // A per-topic cooldown must stay per-topic: one broken feed shouldn't stop
+    // the rest of the sweep. (The global gate is for rate limiting, which is
+    // account-wide; this isn't.)
+    const store = storeWithTopics(['Broken', 'Fine']);
+    const provider = fakeProvider((topicName) =>
+      topicName === 'Broken' ? Promise.reject(new Error('socket hang up')) : Promise.resolve(noUsage([])),
+    );
+    const runner = new CheckRunner(store, asResolver(provider), undefined, null, null, instantRetry);
+
+    await runner.checkDue(new Date());
+    const broken = store.listTopics().find((t) => t.name === 'Broken');
+    const fine = store.listTopics().find((t) => t.name === 'Fine');
+    expect(broken?.retryAfter).not.toBeNull();
+    expect(fine?.retryAfter).toBeNull();
+    expect(fine?.lastCheckedAt).not.toBeNull();
+
+    // And the cooldown is *honoured* per topic on the next sweep: the healthy
+    // one is simply not due yet (it just succeeded), the broken one is held
+    // back by its cooldown rather than by the schedule.
+    expect(await runner.checkDue(new Date(Date.now() + 60_000))).toBe(0);
+    // Past the cooldown, only the broken one comes back — the healthy topic is
+    // still inside its normal interval.
+    expect(await runner.checkDue(new Date(Date.now() + 4 * 60_000))).toBe(1);
   });
 });

@@ -5,7 +5,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { describe, expect, it, vi } from 'vitest';
 
 import { DEFAULT_RETENTION_DAYS } from '../../src/db/schemas.js';
-import { dbPath } from '../../src/db/sqlite.js';
+import { dbPath, SCHEMA_VERSION } from '../../src/db/sqlite.js';
 import { Store } from '../../src/db/store.js';
 import { tmpDataDir } from '../helpers/tmp.js';
 
@@ -657,7 +657,7 @@ describe('schema migration v1 → v2 (NEWS-97)', () => {
     store.close();
 
     const db = new DatabaseSync(dbPath(dir));
-    expect((db.prepare('PRAGMA user_version').get() as { user_version: number }).user_version).toBe(2);
+    expect((db.prepare('PRAGMA user_version').get() as { user_version: number }).user_version).toBe(SCHEMA_VERSION);
     db.close();
   });
 
@@ -678,11 +678,100 @@ describe('schema migration v1 → v2 (NEWS-97)', () => {
     store.close();
 
     const db = new DatabaseSync(dbPath(dir));
-    expect((db.prepare('PRAGMA user_version').get() as { user_version: number }).user_version).toBe(2);
+    expect((db.prepare('PRAGMA user_version').get() as { user_version: number }).user_version).toBe(SCHEMA_VERSION);
     // The columns come from SCHEMA, not from a migration that a new file skips.
     const cols = (db.prepare('PRAGMA table_info(topics)').all() as { name: string }[]).map((c) => c.name);
     expect(cols).toContain('category');
     expect(cols).toContain('category_source');
     db.close();
+  });
+});
+
+describe('schema migration v2 → v3 (NEWS-110)', () => {
+  /** A v2 database: has the category columns, not the failure-cooldown ones. */
+  function v2Database(dir: string): void {
+    const db = new DatabaseSync(dbPath(dir));
+    db.exec(`
+      CREATE TABLE topics (
+        id TEXT PRIMARY KEY, name TEXT NOT NULL, paused INTEGER NOT NULL DEFAULT 0,
+        high_priority INTEGER NOT NULL DEFAULT 0, guidance TEXT NOT NULL DEFAULT '',
+        created_at TEXT NOT NULL, last_checked_at TEXT, covered_through_at TEXT,
+        category TEXT, subcategory TEXT, category_source TEXT NOT NULL DEFAULT 'auto'
+      );
+      CREATE TABLE items (
+        id TEXT PRIMARY KEY, topic_id TEXT NOT NULL, title TEXT NOT NULL, summary TEXT NOT NULL,
+        sources TEXT NOT NULL, image TEXT, dedupe_key TEXT NOT NULL, found_at TEXT NOT NULL,
+        saved INTEGER NOT NULL DEFAULT 0, off_topic INTEGER NOT NULL DEFAULT 0
+      );
+      CREATE TABLE runs (
+        id TEXT PRIMARY KEY, topic_id TEXT NOT NULL, started_at TEXT NOT NULL, finished_at TEXT,
+        status TEXT NOT NULL, new_items INTEGER NOT NULL DEFAULT 0, error TEXT,
+        provider TEXT, model TEXT, usage TEXT
+      );
+      CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+      PRAGMA user_version = 2;
+    `);
+    db.prepare(
+      `INSERT INTO topics (id, name, created_at, category, subcategory, category_source)
+       VALUES ('t1', 'Tennis', '2026-07-01T00:00:00.000Z', 'sports', 'tennis', 'manual')`,
+    ).run();
+    db.close();
+  }
+
+  it('adds the cooldown columns and starts the topic with a clean slate', () => {
+    const dir = tmpDataDir();
+    v2Database(dir);
+
+    const store = new Store(dir);
+    const topic = store.getTopic('t1');
+    // The v2 data survives...
+    expect(topic?.name).toBe('Tennis');
+    expect(topic?.category).toBe('sports');
+    expect(topic?.categorySource).toBe('manual');
+    // ...and the new columns arrive as "no failures", which is what it has.
+    expect(topic?.consecutiveFailures).toBe(0);
+    expect(topic?.retryAfter).toBeNull();
+  });
+
+  it('runs both migrations in order for a v1 database', () => {
+    // The case a single-step migration would miss: a database that has been
+    // sitting since before either change needs v1→v2 *and* v2→v3.
+    const dir = tmpDataDir();
+    const db = new DatabaseSync(dbPath(dir));
+    db.exec(`
+      CREATE TABLE topics (
+        id TEXT PRIMARY KEY, name TEXT NOT NULL, paused INTEGER NOT NULL DEFAULT 0,
+        high_priority INTEGER NOT NULL DEFAULT 0, guidance TEXT NOT NULL DEFAULT '',
+        created_at TEXT NOT NULL, last_checked_at TEXT, covered_through_at TEXT
+      );
+      CREATE TABLE items (
+        id TEXT PRIMARY KEY, topic_id TEXT NOT NULL, title TEXT NOT NULL, summary TEXT NOT NULL,
+        sources TEXT NOT NULL, image TEXT, dedupe_key TEXT NOT NULL, found_at TEXT NOT NULL,
+        saved INTEGER NOT NULL DEFAULT 0, off_topic INTEGER NOT NULL DEFAULT 0
+      );
+      CREATE TABLE runs (
+        id TEXT PRIMARY KEY, topic_id TEXT NOT NULL, started_at TEXT NOT NULL, finished_at TEXT,
+        status TEXT NOT NULL, new_items INTEGER NOT NULL DEFAULT 0, error TEXT,
+        provider TEXT, model TEXT, usage TEXT
+      );
+      CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+      PRAGMA user_version = 1;
+    `);
+    db.prepare(`INSERT INTO topics (id, name, created_at) VALUES ('t1', 'Ancient', '2026-01-01T00:00:00.000Z')`).run();
+    db.close();
+
+    const store = new Store(dir);
+    const topic = store.getTopic('t1');
+    expect(topic?.name).toBe('Ancient');
+    // From v1→v2...
+    expect(topic?.category).toBeNull();
+    expect(topic?.categorySource).toBe('auto');
+    // ...and from v2→v3.
+    expect(topic?.consecutiveFailures).toBe(0);
+    store.close();
+
+    const check = new DatabaseSync(dbPath(dir));
+    expect((check.prepare('PRAGMA user_version').get() as { user_version: number }).user_version).toBe(SCHEMA_VERSION);
+    check.close();
   });
 });

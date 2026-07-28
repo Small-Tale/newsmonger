@@ -100,17 +100,39 @@ describe('coveredThroughAt survives failures', () => {
     store.markTopicChecked(topic.id, fiveDaysAgo);
     store.markTopicCovered(topic.id, fiveDaysAgo);
 
-    // A generic failure. (This test used to say "rate limited" here, which
-    // NEWS-109 gave a specific meaning — see the test below, where the clock
-    // deliberately does *not* move.)
+    // A generic (retryable) failure. Since NEWS-110 this leaves *both* clocks
+    // alone and sets a cooldown instead — no check happened, so claiming one
+    // did was the bug. A fatal failure still advances it; see below.
     const failing = fakeProvider(() => Promise.reject(new Error('boom')));
     await new CheckRunner(store, () => Promise.resolve(failing), undefined, null, null, instantRetry).checkTopic(topic.id);
 
     const after = store.getTopic(topic.id);
-    // The attempt clock moved, so the scheduler waits before retrying...
-    expect(Date.parse(after?.lastCheckedAt ?? '')).toBeGreaterThan(fiveDaysAgo.getTime());
-    // ...but the covered-through point did not, so the news is still pending.
+    expect(after?.lastCheckedAt).toBe(fiveDaysAgo.toISOString());
+    // The covered-through point did not move either, so the news is still pending.
     expect(after?.coveredThroughAt).toBe(fiveDaysAgo.toISOString());
+    // ...and the cooldown is what stops it being retried every tick.
+    expect(after?.retryAfter).not.toBeNull();
+    expect(after?.consecutiveFailures).toBe(1);
+  });
+
+  it('a fatal failure still advances the attempt clock (NEWS-110)', async () => {
+    // Nothing will change until a human fixes the key, so a short cooldown
+    // would just be a shorter wait for the same certain failure.
+    const store = new Store(tmpDataDir());
+    const topic = store.addTopic('fusion energy');
+    const fiveDaysAgo = new Date(Date.now() - 5 * DAY);
+    store.markTopicChecked(topic.id, fiveDaysAgo);
+    store.markTopicCovered(topic.id, fiveDaysAgo);
+
+    const badKey = fakeProvider(() => Promise.reject(Object.assign(new Error('Unauthorized'), { status: 401 })));
+    await new CheckRunner(store, () => Promise.resolve(badKey), undefined, null, null, instantRetry).checkTopic(
+      topic.id,
+    );
+
+    const after = store.getTopic(topic.id);
+    expect(Date.parse(after?.lastCheckedAt ?? '')).toBeGreaterThan(fiveDaysAgo.getTime());
+    expect(after?.coveredThroughAt).toBe(fiveDaysAgo.toISOString());
+    expect(after?.retryAfter).toBeNull();
   });
 
   it('a rate-limited check does not advance the attempt clock either (NEWS-109)', async () => {

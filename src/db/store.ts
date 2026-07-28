@@ -215,6 +215,8 @@ export class Store {
       category: row['category'] ?? null,
       subcategory: row['subcategory'] ?? null,
       categorySource: row['category_source'] ?? 'auto',
+      consecutiveFailures: asCount(row['consecutive_failures']),
+      retryAfter: row['retry_after'] ?? null,
     });
   }
 
@@ -252,8 +254,9 @@ export class Store {
     this.db
       .prepare(
         `INSERT INTO topics (id, name, paused, high_priority, guidance, created_at, last_checked_at,
-                             covered_through_at, category, subcategory, category_source)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                             covered_through_at, category, subcategory, category_source,
+                             consecutive_failures, retry_after)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         topic.id,
@@ -267,6 +270,8 @@ export class Store {
         topic.category,
         topic.subcategory,
         topic.categorySource,
+        topic.consecutiveFailures,
+        topic.retryAfter,
       );
   }
 
@@ -345,6 +350,8 @@ export class Store {
       category: null,
       subcategory: null,
       categorySource: 'auto',
+      consecutiveFailures: 0,
+      retryAfter: null,
     };
     this.insertTopic(topic);
     return topic;
@@ -407,6 +414,30 @@ export class Store {
     const topic = this.getTopic(id);
     if (topic === undefined) throw new Error(`no such topic: ${id}`);
     return topic;
+  }
+
+  /**
+   * Record a failed check and when the topic may be tried again (NEWS-110).
+   *
+   * Deliberately separate from `markTopicChecked`: that one means "we have news
+   * up to here", and moving it for a network outage claims a check happened
+   * when none did — which is what made a five-minute outage cost a whole
+   * interval. This records the failure without that claim.
+   *
+   * Silently does nothing for a deleted topic, like the other check-time
+   * writers: a check can outlive the topic that started it.
+   */
+  recordCheckFailure(id: string, retryAfter: Date | null): void {
+    this.db
+      .prepare(
+        `UPDATE topics SET consecutive_failures = consecutive_failures + 1, retry_after = ? WHERE id = ?`,
+      )
+      .run(retryAfter === null ? null : retryAfter.toISOString(), id);
+  }
+
+  /** Clear the failure streak after a success (NEWS-110). */
+  clearCheckFailures(id: string): void {
+    this.db.prepare('UPDATE topics SET consecutive_failures = 0, retry_after = NULL WHERE id = ?').run(id);
   }
 
   /**

@@ -35,6 +35,8 @@ function topic(over: Partial<Topic> = {}): Topic {
     category: null,
     subcategory: null,
     categorySource: 'auto',
+    consecutiveFailures: 0,
+    retryAfter: null,
     ...over,
   };
 }
