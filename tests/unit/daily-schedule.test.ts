@@ -121,14 +121,23 @@ describe('the daily schedule end to end (NEWS-84)', () => {
     store.updateSettings({ scheduleMode: 'daily', dailyTimes: ['08:00'] });
     store.addTopic('Fusion');
 
+    // Anchored to the real current day rather than a fixed date. `checkDue`
+    // takes a simulated `now`, but a completed check records `new Date()` — so a
+    // hard-coded timeline silently becomes wrong the moment the wall clock
+    // passes it, and the test fails on a day nobody changed anything. (It did:
+    // the original dates were 2026-07-27/28, and it started failing on the 28th.)
+    const today = new Date();
+    const at = (dayOffset: number, hour: number, min = 0): Date =>
+      new Date(today.getFullYear(), today.getMonth(), today.getDate() + dayOffset, hour, min, 0, 0);
+
     // Never checked → due immediately.
-    expect(await runner.checkDue(local(2026, 7, 27, 9))).toBe(1);
+    expect(await runner.checkDue(at(0, 9))).toBe(1);
     // Same slot, a minute later: nothing.
-    expect(await runner.checkDue(local(2026, 7, 27, 9, 1))).toBe(0);
+    expect(await runner.checkDue(at(0, 9, 1))).toBe(0);
     // Later the same day, still the 08:00 slot: nothing.
-    expect(await runner.checkDue(local(2026, 7, 27, 23))).toBe(0);
+    expect(await runner.checkDue(at(0, 23))).toBe(0);
     // Tomorrow's slot: due again.
-    expect(await runner.checkDue(local(2026, 7, 28, 8, 5))).toBe(1);
+    expect(await runner.checkDue(at(1, 8, 5))).toBe(1);
   });
 
   it('sorts and de-duplicates the time list on save', () => {
