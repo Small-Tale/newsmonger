@@ -98,19 +98,26 @@ each(s.topics, (t) => topicRowJsx(...), (t) => `${selected.has(t.id)}|${solo.has
 
 ## Icons (NEWS-115)
 
-Source art lives in `assets/`, and each file has exactly one home:
+Source art lives in `assets/`. Which file goes where turns on one question — **does the platform apply its own shape?**
 
-| File | Used for |
-|---|---|
-| `logo.svg` | The desktop app icon — `npx tauri icon assets/logo.svg` regenerates `src-tauri/icons/` |
-| `favicon.svg` | The browser/webview tab, via `<link rel="icon">` |
-| `mask-icon.svg` | **Nothing yet** — see below |
+| File | Used for | Shape |
+|---|---|---|
+| `logo.svg` | Desktop app icon — `npx tauri icon assets/logo.svg` regenerates `src-tauri/icons/` | Pre-rounded |
+| `logo-full-bleed.svg` | Manifest icon, `purpose: "maskable"` | Hard square, bleeds to the edges |
+| `favicon.svg` | Tab icon, and manifest `purpose: "any"` | Mark on transparent |
+| `mask-icon.svg` | **Nothing** — see below | Opaque square |
 
-- **FR-3.43** *(Shipped)* The page serves an **SVG favicon only**. Every browser this app runs in — and the Tauri webview — supports it, so one vector file beats a ladder of PNG sizes. `build:client` copies it into `dist/client/`, and `scripts/build-sidecar.sh` stages it beside the other client assets, or the desktop build's tab icon 404s.
+- **FR-3.43** *(Shipped)* The page serves an **SVG favicon only**. Every browser this app runs in — and the Tauri webview — supports it, so one vector file beats a ladder of PNG sizes.
 
-  A unit test parses the `rel="icon"` href out of the served page and fetches it. The link and the file come from different places — the page template and the client build — so the thing worth asserting is that they agree.
+- **FR-3.44** *(Shipped)* A **web app manifest** is served at `/manifest.webmanifest`, from a route rather than as a static file. A file would need copying by `build:client` *and* by the sidecar staging; the favicon demonstrated that a client asset with two build paths is an asset with two chances to be forgotten. A route has none.
 
-- **`mask-icon.svg` is deliberately unused.** Its name suggests a Safari pinned-tab icon (`rel="mask-icon"`), but Safari tints *every painted area* of a mask icon, and this file is an opaque white square with the mark on top. Wired as a mask icon it would render as a solid green block rather than the "N". It is full-bleed square, which is the shape a **PWA maskable icon** wants — but there is no web app manifest here. Left unwired rather than shipped rendering wrongly.
+  It advertises two icons, and the distinction is the reason to have a manifest at all: `favicon.svg` as `purpose: "any"` is drawn as-is, while `logo-full-bleed.svg` as `purpose: "maskable"` is cropped by the platform to a circle, squircle or rounded rect — so it must bleed to the edges with the mark inside the safe zone. Handing the rounded `logo.svg` to a maskable slot gets its corners cut off twice.
+
+  **`logo.svg` is deliberately not in the manifest**, and the full-bleed one is deliberately not the desktop icon: macOS does not mask `.icns`, it expects the shape drawn in. A full-bleed square would sit as a hard-edged tile among rounded neighbours in the Dock.
+
+  A unit test reads the manifest href out of the served page, fetches it, and asserts **every icon path it names is actually served** — nothing but a string links the manifest to the client build, and a maskable icon that 404s is invisible until someone installs the app.
+
+- **`mask-icon.svg` remains unused.** Its name points at a Safari pinned-tab icon, but Safari tints *every painted area* of a mask icon and this file is an opaque white square with the mark on top — wired as one it renders as a solid green block, not the "N". A pinned-tab icon would need a transparent ground with only the mark painted, which is what `favicon.svg` already is.
 
 ## Card and sidebar text layout
 

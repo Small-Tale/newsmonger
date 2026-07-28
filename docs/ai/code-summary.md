@@ -144,6 +144,7 @@ Data dir: `--data-dir` flag → `NEWS_DATA_DIR` → `~/.news`. Also holds `news.
 | Topic categories / taxonomy | `src/categories.ts` (`BUILTIN_CATEGORIES`, `categoryLabel`, `activeCategories`). See `docs/22-topic-categories.md` |
 | Provider retries / rate limiting | `src/ai/retry.ts` (`backoffDelayMs`, `classifyFailure`, `retryAfterMs`, `DEFAULT_BACKOFF` vs `FAILURE_COOLDOWN`); `checkWithRetry` + `rateLimitedUntil` in `checks.ts`. See `docs/23-retries-and-rate-limits.md` |
 | A topic held back after failures | `consecutiveFailures`/`retryAfter` columns; `recordCheckFailure`/`clearCheckFailures` in `db/store.ts`; the cooldown check at the top of `isDueUnderSchedule`. See FR-23.7 |
+| Icons, favicon, web app manifest | `assets/*.svg` sources; `manifest()` + the `/manifest.webmanifest` route in `src/routes/pages.tsx`; `<link>`s in `src/components/layout.tsx`. See `docs/3-ui.md` FR-3.43–3.44 |
 | Which filter pills are shown | `visibleCategories`/`visibleSubcategories`/`hasUncategorized` in `src/categories.ts` (pure, over the topic list). See `docs/22-topic-categories.md` FR-22.13–22.15 |
 | Section filter bar / sidebar pills | `filterBarJsx` + `[data-filter-category]`/`[data-filter-subcategory]` delegates in `client/app.tsx`; `.filter-bar` in `styles.scss`; server filter in `Store.queryItems`. See `docs/22-topic-categories.md` FR-22.9–22.12 |
 | Automatic topic classification | `needsClassifying`/`classifierOptions`/`applyClassification` in `checks.ts`; prompt + parsing in `ai/prompt.ts`. See `docs/22-topic-categories.md` FR-22.8 |

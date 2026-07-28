@@ -340,6 +340,39 @@ describe('API', () => {
     expect(sneaky.status).toBe(404);
   });
 
+  it('serves a manifest whose icons all resolve (NEWS-115)', async () => {
+    // The manifest names icons by path, and those files come from the client
+    // build. Nothing links the two but a string, so the assertion worth making
+    // is that every path it advertises is actually served — a maskable icon
+    // that 404s is invisible until someone installs the app.
+    const { app } = makeApp();
+    const html = await (await app.request('/')).text();
+    const href = /<link[^>]+rel="manifest"[^>]+href="([^"]+)"/.exec(html)?.[1];
+    expect(href, 'the page should reference a manifest').toBeDefined();
+
+    const res = await app.request(href ?? '');
+    expect(res.status).toBe(200);
+    expect(res.headers.get('content-type')).toBe('application/manifest+json');
+
+    const parsed = JSON.parse(await res.text()) as {
+      icons: { src: string; purpose: string }[];
+      start_url: string;
+    };
+    expect(parsed.start_url).toBe('/');
+    // Both purposes are present, and they are different files: a maskable icon
+    // must bleed to the edges, an "any" icon must not be cropped.
+    const byPurpose = new Map(parsed.icons.map((i) => [i.purpose, i.src]));
+    expect(byPurpose.get('any')).toBeDefined();
+    expect(byPurpose.get('maskable')).toBeDefined();
+    expect(byPurpose.get('any')).not.toBe(byPurpose.get('maskable'));
+
+    for (const icon of parsed.icons) {
+      const asset = await app.request(icon.src);
+      expect(asset.status, `${icon.src} (purpose=${icon.purpose}) should be served`).toBe(200);
+      expect(await asset.text()).toContain('<svg');
+    }
+  });
+
   it('serves the favicon the page asks for (NEWS-115)', async () => {
     // A favicon that 404s is invisible until someone looks at the tab, and the
     // link and the file are produced by different things — the page template and

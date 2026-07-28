@@ -11,6 +11,8 @@ export function Layout({ title, children }: { title: string; children?: unknown 
             Tauri webview — supports it, and one vector file beats a ladder of
             PNG sizes. */}
         <link rel="icon" href="/static/favicon.svg" type="image/svg+xml" />
+        <link rel="manifest" href="/manifest.webmanifest" />
+        <meta name="theme-color" content="#17604f" />
         <link rel="stylesheet" href="/static/styles.css" />
       </head>
       <body>
