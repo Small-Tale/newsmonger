@@ -96,6 +96,22 @@ each(s.topics, (t) => topicRowJsx(...), (t) => `${selected.has(t.id)}|${solo.has
 
 **The menu backdrop wraps the menu, so a shared close action swallows the item click.** `[data-action=close-menu]` matches by ancestor walk, so a click on a menu item also matched the backdrop; the menu closed and cleared `contextMenu` before the item handler could read it, and the action silently did nothing. The handler now closes only when the click landed on the backdrop element itself. This is the same trap the settings dialog hit — worth checking on any future overlay.
 
+## Icons (NEWS-115)
+
+Source art lives in `assets/`, and each file has exactly one home:
+
+| File | Used for |
+|---|---|
+| `logo.svg` | The desktop app icon — `npx tauri icon assets/logo.svg` regenerates `src-tauri/icons/` |
+| `favicon.svg` | The browser/webview tab, via `<link rel="icon">` |
+| `mask-icon.svg` | **Nothing yet** — see below |
+
+- **FR-3.43** *(Shipped)* The page serves an **SVG favicon only**. Every browser this app runs in — and the Tauri webview — supports it, so one vector file beats a ladder of PNG sizes. `build:client` copies it into `dist/client/`, and `scripts/build-sidecar.sh` stages it beside the other client assets, or the desktop build's tab icon 404s.
+
+  A unit test parses the `rel="icon"` href out of the served page and fetches it. The link and the file come from different places — the page template and the client build — so the thing worth asserting is that they agree.
+
+- **`mask-icon.svg` is deliberately unused.** Its name suggests a Safari pinned-tab icon (`rel="mask-icon"`), but Safari tints *every painted area* of a mask icon, and this file is an opaque white square with the mark on top. Wired as a mask icon it would render as a solid green block rather than the "N". It is full-bleed square, which is the shape a **PWA maskable icon** wants — but there is no web app manifest here. Left unwired rather than shipped rendering wrongly.
+
 ## Card and sidebar text layout
 
 - **FR-3.41** *(Shipped, NEWS-112)* A relative timestamp (`57m ago`, `checked 3h ago`) **never wraps**. The card header is a flex row, so a long topic pill beside the timestamp squeezed it until it broke across two lines — which reads as two facts rather than one. `flex: 0 0 auto` stops the timestamp being the item that gives way; the pill wraps instead, which it can afford to.

@@ -71,7 +71,7 @@ mkdir -p "$SERVER_DIR/client"
 cp dist/cli.js "$SERVER_DIR/"
 # The server resolves client assets as ./client relative to cli.js (see
 # clientDir() in src/server.ts), so these must sit next to it.
-cp dist/client/app.global.js dist/client/styles.css "$SERVER_DIR/client/"
+cp dist/client/app.global.js dist/client/styles.css dist/client/favicon.svg "$SERVER_DIR/client/"
 
 # A package.json beside cli.js does two things: it pins the dependency set that
 # `npm install` below resolves, and its `"type": "module"` declares the bundle as

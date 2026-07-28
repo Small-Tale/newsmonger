@@ -340,6 +340,21 @@ describe('API', () => {
     expect(sneaky.status).toBe(404);
   });
 
+  it('serves the favicon the page asks for (NEWS-115)', async () => {
+    // A favicon that 404s is invisible until someone looks at the tab, and the
+    // link and the file are produced by different things — the page template and
+    // the client build. This asserts they agree.
+    const { app } = makeApp();
+    const html = await (await app.request('/')).text();
+    const href = /<link[^>]+rel="icon"[^>]+href="([^"]+)"/.exec(html)?.[1];
+    expect(href, 'the page should reference a favicon').toBeDefined();
+
+    const res = await app.request(href ?? '');
+    expect(res.status, `${href ?? ''} should be served`).toBe(200);
+    expect(res.headers.get('content-type')).toBe('image/svg+xml');
+    expect(await res.text()).toContain('<svg');
+  });
+
   it('healthz responds ok', async () => {
     const { app } = makeApp();
     const res = await app.request('/healthz');
