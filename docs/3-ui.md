@@ -42,6 +42,14 @@ So the containers are no longer KF-377 scar tissue; they are ordinary good struc
 
 The topics list also now carries an explicit `key: 'topics'` (kerf 3.x). Unkeyed lists are identified by their position among a render's `each()` calls; this is the only `each()` in the app today, so the position cannot currently shift, but the key means adding a second list later can't silently rebuild this one.
 
+### Enumerated attributes take keyword strings (kerf 4.0.0, NEWS-123)
+
+`draggable`, `spellCheck`, `contentEditable`, `translate` and `autocorrect` are HTML **enumerated** attributes, not boolean ones: they carry keyword strings (`"true"` / `"false"`, `"yes"` / `"no"`, `"on"` / `"off"`), and *omitting* them selects a third state — inherit-from-parent — rather than "off". kerf ≤3 accepted the boolean JSX form and rendered nothing for `{false}`, which is why the API key field's `spellcheck={false}` compiled cleanly and never reached the browser. kerf 4 makes the boolean form a type error; write `spellcheck="false"`.
+
+Real boolean attributes (`hidden`, `checked`, `disabled`, `autofocus`, `required`, `inert`) are unchanged and still take `{true}` / `{false}`. The distinction is which spelling the HTML standard gives the attribute, not how it reads in English. The rendered value is asserted in `keys.spec.ts` — a silently-absent attribute is exactly the failure that got through the first time, so the test checks the value rather than the element.
+
+Two other kerf 4 breaks don't apply here but are worth knowing before writing new markup: `<select value>` / `<textarea value>` no longer typecheck (neither element has a `value` content attribute — use `<option selected>` and `<textarea>{draft}</textarea>`, which is already how the guidance dialog seeds its draft), and lowercase `autofocus` no longer accepts `"true"` / `"false"`.
+
 ## Bookmarking stories (Saved)
 
 Each story card has a bookmark button (NEWS-42). Saving sets `item.saved` in the store — a persistent property of the story, so it survives restarts but goes with the story if its topic is deleted. The toggle is `PATCH /api/items/:id { saved }`.

@@ -548,7 +548,7 @@ function keyRowJsx(key: AppState['keys'][number], keychainLabel: string, keychai
           class="key-input"
           placeholder={keychainAvailable ? 'Paste API key' : `Set ${key.envVar} instead`}
           autocomplete="off"
-          spellcheck={false}
+          spellcheck="false"
           disabled={keychainAvailable ? undefined : true}
           data-morph-skip-children
         />
@@ -625,7 +625,7 @@ function resolveConfirm(ok: boolean): void {
 /**
  * Editor for a topic's guidance (NEWS-80).
  *
- * The textarea is uncontrolled — `defaultValue` seeds it from server state and
+ * The textarea is uncontrolled — its JSX children seed it from server state and
  * nothing re-renders it while the user types. Binding it to a signal would fight
  * the 4 s state poll for the cursor, and there is nothing to derive from the
  * draft until it's saved.

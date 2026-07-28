@@ -58,6 +58,10 @@ test('lists both keyed providers as unconfigured', async ({ page }) => {
   await expect(page.locator(`${OPENAI_ROW} .key-input`)).toBeVisible();
   // Keys must never render as readable text.
   await expect(page.locator(`${ANTHROPIC_ROW} .key-input`)).toHaveAttribute('type', 'password');
+  // `spellcheck` is an *enumerated* attribute, so the boolean form kerf ≤3 accepted
+  // (`spellcheck={false}`) emitted nothing at all and left the browser default in
+  // place (NEWS-123). Assert the rendered value, which only the keyword form produces.
+  await expect(page.locator(`${ANTHROPIC_ROW} .key-input`)).toHaveAttribute('spellcheck', 'false');
 });
 
 test('saving a key stores it and swaps the field for a status line', async ({ page }) => {

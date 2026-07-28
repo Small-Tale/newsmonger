@@ -117,7 +117,7 @@ Data dir: `--data-dir` flag → `NEWS_DATA_DIR` → `~/.news`. Also holds `news.
 | How far back a check asks | `coveredThroughAt` on the topic → `sinceIso` → `windowLine()` in `src/ai/prompt.ts`; **not** `lastCheckedAt` |
 | How much a check returns | `searchingSystemPrompt()` volume rule (portable); `max_uses: 8` in `anthropic.ts` is a cost guard, not the mechanism |
 | Persistence / schema change | `src/db/schemas.ts` + `src/db/store.ts` — **removing an enum value needs `.catch()`** or old files get reset (see the migration tests) |
-| UI change | `src/client/app.tsx` (+ `styles.scss`); mind the kerf structural rules in `docs/3-ui.md`. **kerfjs 3.0.0-beta.1** — dev diagnostics are opt-in by import (we don't import them; NEWS-100), and KF-377 is fixed (NEWS-99) |
+| UI change | `src/client/app.tsx` (+ `styles.scss`); mind the kerf structural rules in `docs/3-ui.md`. **kerfjs 4.0.0** — dev diagnostics are opt-in by import (we don't import them; NEWS-100), KF-377 is fixed (NEWS-99), and enumerated attributes take keyword strings (NEWS-123) |
 | New CLI flag | `src/config.ts` + `src/cli.ts` |
 | Tauri shell | `src-tauri/src/lib.rs` (`running at ` marker must match `src/cli.ts`) |
 | Release bundling / sidecar | `scripts/build-sidecar.sh` + `src-tauri/tauri.conf.json` (`externalBin`, `resources`) |
