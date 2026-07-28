@@ -53,6 +53,10 @@ export interface AppState {
   diagIncludeTopics: boolean;
   /** Provider list + availability (fetched on demand, not every poll). */
   providers: ProviderInfo[];
+  /** Which settings tab is showing (NEWS-118). Resets to the first on reopen. */
+  settingsTab: 'schedule' | 'source' | 'data' | 'app';
+  /** Whether the privacy dialog is open (NEWS-121). Ephemeral, like every dialog. */
+  privacyOpen: boolean;
   /** Whether the settings dialog is open. */
   settingsOpen: boolean;
   /**
@@ -284,6 +288,8 @@ export const appStore = defineStore({
     appVersion: '',
     diagIncludeTopics: false,
     providers: [],
+    settingsTab: 'schedule',
+    privacyOpen: false,
     settingsOpen: false,
     onboarding: 'auto',
     onboardingTopics: [],
@@ -325,6 +331,12 @@ export const appStore = defineStore({
         ? current.onboardingTopics.filter((t) => t !== name)
         : [...current.onboardingTopics, name];
       set({ ...current, onboardingTopics: chosen });
+    },
+    setSettingsTab: (settingsTab: AppState['settingsTab']) => {
+      set({ ...get(), settingsTab });
+    },
+    setPrivacyOpen: (privacyOpen: boolean) => {
+      set({ ...get(), privacyOpen });
     },
     setSettingsOpen: (settingsOpen: boolean) => {
       set({ ...get(), settingsOpen, keyError: null });

@@ -95,7 +95,7 @@ The backdrop and the ✕ deliberately use **different** actions (`settings-backd
 
 The app sends the user's topic names to a third party on a schedule. That is what they asked for by using it, but nothing said so anywhere, and "assume it's obvious" is not a disclosure.
 
-- **FR-7.13** *(Shipped)* A **Privacy** section in the settings dialog, mirrored in the README and summarised on the onboarding welcome step, states three things:
+- **FR-7.13** *(Shipped, moved NEWS-121)* A **Privacy dialog**, opened from a footer link at the bottom of the main page — mirrored in the README and summarised on the onboarding welcome step. It states three things:
   1. **Sent on every check**, to the active provider: the topic's name, its guidance, the titles already reported for that topic (how repeats are avoided), and the titles flagged off-topic (how intent is inferred). Nothing else — not the feed, not other topics, not bookmarks.
   2. **Stored locally only**, under `~/.news`: topics, stories, cached images. **Keys are not there** — they are in the OS keychain (FR-7.2).
   3. **No servers, no telemetry.** The only other outbound traffic is image fetching (proxied — see [8 — Article Images](8-article-images.md)) and opening links the user clicks.

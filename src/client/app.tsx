@@ -886,6 +886,30 @@ function diagnosticsJsx(s: AppState): SafeHtml {
   );
 }
 
+/**
+ * Privacy, as its own dialog reached from the footer (NEWS-121).
+ *
+ * It was a section at the bottom of Settings, which is the wrong place twice
+ * over: it isn't a setting — nothing on it can be changed — and burying "what
+ * leaves this machine" under six screens of configuration is the opposite of
+ * how a privacy note earns trust. A footer link is where people look for one.
+ */
+function privacyDialogJsx(s: AppState): SafeHtml {
+  return (
+    <div class="dialog-backdrop" data-action="privacy-backdrop">
+      <div class="dialog privacy-dialog" role="dialog" aria-modal="true" aria-labelledby="privacy-title">
+        <div class="dialog-head">
+          <h2 id="privacy-title">Privacy</h2>
+          <button class="btn icon" type="button" data-action="close-privacy" aria-label="Close privacy">
+            {icon('clear', 17)}
+          </button>
+        </div>
+        {privacyNoteJsx(s)}
+      </div>
+    </div>
+  );
+}
+
 function privacyNoteJsx(s: AppState): SafeHtml {
   const provider = PROVIDER_INFO[s.settings.provider].label;
   return (
@@ -908,21 +932,64 @@ function privacyNoteJsx(s: AppState): SafeHtml {
   );
 }
 
-function settingsDialogJsx(): SafeHtml {
-  const s = appStore.state.value;
+/**
+ * Settings tabs (NEWS-118).
+ *
+ * The dialog had grown to roughly two screens of unrelated controls in one
+ * column — scheduling next to API keys next to export links — so nothing was
+ * findable except by scrolling past everything else. Four groups, each of which
+ * answers a different question:
+ *
+ * | Tab | Answers |
+ * |---|---|
+ * | Schedule | *when* does it check |
+ * | Source | *who* does it ask |
+ * | Data | *what* is kept, and how do I get it out |
+ * | App | everything about the app itself |
+ *
+ * Lucide icons, from the same set as the rest of the UI (`icons.tsx`) — a label
+ * alone made the strip read as prose rather than as controls.
+ */
+const SETTINGS_TABS = [
+  { id: 'schedule', label: 'Schedule', icon: 'clock' },
+  { id: 'source', label: 'Source', icon: 'bot' },
+  { id: 'data', label: 'Data', icon: 'database' },
+  { id: 'app', label: 'App', icon: 'bell' },
+] as const;
+
+type SettingsTab = (typeof SETTINGS_TABS)[number]['id'];
+
+function settingsTabsJsx(active: SettingsTab): SafeHtml {
+  return (
+    <div class="settings-tabs" role="tablist" aria-label="Settings sections">
+      {SETTINGS_TABS.map((tab) => (
+        <button
+          class={`settings-tab${tab.id === active ? ' active' : ''}`}
+          type="button"
+          role="tab"
+          id={`settings-tab-${tab.id}`}
+          aria-selected={tab.id === active ? 'true' : 'false'}
+          aria-controls="settings-panel"
+          // Only the selected tab is in the tab order; the rest are reached with
+          // the arrow keys, which is the WAI-ARIA tabs pattern.
+          tabindex={tab.id === active ? '0' : '-1'}
+          data-settings-tab={tab.id}
+        >
+          {icon(tab.icon, 14)}
+          <span>{tab.label}</span>
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function settingsPanelJsx(s: AppState): SafeHtml {
   const provider = s.settings.provider;
   const info = PROVIDER_INFO[provider];
-
-  return (
-    <div class="dialog-backdrop" data-action="settings-backdrop">
-      <div class="dialog" role="dialog" aria-modal="true" aria-labelledby="settings-title">
-        <div class="dialog-head">
-          <h2 id="settings-title">Settings</h2>
-          <button class="btn icon" type="button" data-action="close-settings" aria-label="Close settings">
-            {icon('clear', 17)}
-          </button>
-        </div>
-
+  switch (s.settingsTab) {
+    case 'schedule':
+      return (
+        <div>
         <label class="field">
           <span class="field-label">Schedule</span>
           <select data-action="schedule-mode">
@@ -965,7 +1032,10 @@ function settingsDialogJsx(): SafeHtml {
 
         <label class="field">
           <span class="field-label">
-            {icon('star', 13)} High-priority topics every
+            {/* Just "High-priority" (NEWS-117): the row sits directly under
+                "Check every", so "topics every" was restating the column it is in —
+                and it wrapped to a second line to do it. */}
+            {icon('star', 13)} High-priority
           </span>
           <select data-action="hp-interval">
             {INTERVAL_OPTIONS.map((opt) => (
@@ -978,8 +1048,25 @@ function settingsDialogJsx(): SafeHtml {
         <p class="field-hint">
           Kept at or below the default interval — changing either adjusts the other to keep that true.
         </p>
-
-        <h3 class="eyebrow">Source</h3>
+        <label class="field">
+          <span class="field-label">Check at once</span>
+          <select data-action="concurrency">
+            {[1, 2, 3, 4, 6, 8].map((n) => (
+              <option value={String(n)} selected={n === s.settings.checkConcurrency ? true : undefined}>
+                {n === 1 ? 'One topic at a time' : `${String(n)} topics`}
+              </option>
+            ))}
+          </select>
+        </label>
+        <p class="note">
+          A real check takes minutes, so a sweep over many topics runs for a long time one at a time. Raising
+          this finishes sooner — up to a point: too high and the provider starts refusing requests instead.
+        </p>
+        </div>
+      );
+    case 'source':
+      return (
+        <div>
         <label class="field">
           <span class="field-label">Provider</span>
           <select data-action="provider" title="Which AI finds and summarizes news">
@@ -1052,28 +1139,6 @@ function settingsDialogJsx(): SafeHtml {
             ''
           )}
         </div>
-
-        <h3 class="eyebrow">Notifications</h3>
-        <label class="field checkbox-field">
-          <input
-            type="checkbox"
-            data-action="notify-toggle"
-            checked={s.settings.notifyOnNewItems ? true : undefined}
-          />
-          <span>Notify me when new stories arrive while News isn’t focused</span>
-        </label>
-        {/* Always-present slot for the permission note (KF-377). */}
-        <div class="notify-note">
-          {s.notifyPermissionDenied ? (
-            <p class="note warn">
-              Notifications are blocked for this app in your browser or system settings. Enable them there to turn
-              this on.
-            </p>
-          ) : (
-            ''
-          )}
-        </div>
-
         <h3 class="eyebrow">API keys</h3>
         <div class="keys">{s.keys.map((k) => keyRowJsx(k, s.keychainLabel, s.keychainAvailable))}</div>
 
@@ -1092,22 +1157,11 @@ function settingsDialogJsx(): SafeHtml {
           Keys are stored in your {s.keychainLabel} — never in ~/.news/news.db, and never sent anywhere but the
           provider you chose.
         </p>
-
-        <label class="field">
-          <span class="field-label">Check at once</span>
-          <select data-action="concurrency">
-            {[1, 2, 3, 4, 6, 8].map((n) => (
-              <option value={String(n)} selected={n === s.settings.checkConcurrency ? true : undefined}>
-                {n === 1 ? 'One topic at a time' : `${String(n)} topics`}
-              </option>
-            ))}
-          </select>
-        </label>
-        <p class="note">
-          A real check takes minutes, so a sweep over many topics runs for a long time one at a time. Raising
-          this finishes sooner — up to a point: too high and the provider starts refusing requests instead.
-        </p>
-
+        </div>
+      );
+    case 'data':
+      return (
+        <div>
         <label class="field">
           <span>Keep stories for</span>
           <select data-action="retention">
@@ -1122,8 +1176,6 @@ function settingsDialogJsx(): SafeHtml {
           Older stories are dropped so the data file doesn’t grow without bound. Bookmarked stories are always
           kept, and so are ones you flagged off-topic — those still teach each topic what you meant.
         </p>
-
-        <h3 class="eyebrow">Export &amp; feed</h3>
         <div class="export-row">
           <a class="btn" href="/api/export.md?scope=all" download="">
             All stories (.md)
@@ -1144,17 +1196,70 @@ function settingsDialogJsx(): SafeHtml {
           localhost, so a reader on another device can’t reach it.
         </p>
 
-        <h3 class="eyebrow">Diagnostics</h3>
-        {diagnosticsJsx(s)}
-
-        <h3 class="eyebrow">Privacy</h3>
-        {privacyNoteJsx(s)}
-
+        </div>
+      );
+    case 'app':
+      return (
+        <div>
+        <label class="field checkbox-field">
+          <input
+            type="checkbox"
+            data-action="notify-toggle"
+            checked={s.settings.notifyOnNewItems ? true : undefined}
+          />
+          <span>Notify me when new stories arrive while News isn’t focused</span>
+        </label>
+        {/* Always-present slot for the permission note (KF-377). */}
+        <div class="notify-note">
+          {s.notifyPermissionDenied ? (
+            <p class="note warn">
+              Notifications are blocked for this app in your browser or system settings. Enable them there to turn
+              this on.
+            </p>
+          ) : (
+            ''
+          )}
+        </div>
         <p class="note">
           <button class="btn subtle" type="button" data-action="rerun-onboarding">
             Show the setup guide again
           </button>
         </p>
+        {/* Collapsed by default (NEWS-120): a bug-report bundle is an advanced,
+            rarely-used tool, and an always-open run log is the loudest thing on
+            a settings screen while being the least often wanted. Inside the App
+            tab *and* collapsed, so it takes two deliberate steps — but it stays
+            nameable in support ("open Settings → App and expand Diagnostics")
+            rather than hidden behind a gesture nobody can be talked through. */}
+        <details class="advanced">
+          <summary>
+            {icon('bug', 13)}
+            <span>Diagnostics</span>
+          </summary>
+          {diagnosticsJsx(s)}
+        </details>
+        </div>
+      );
+  }
+}
+
+function settingsDialogJsx(): SafeHtml {
+  const s = appStore.state.value;
+
+  return (
+    <div class="dialog-backdrop" data-action="settings-backdrop">
+      <div class="dialog" role="dialog" aria-modal="true" aria-labelledby="settings-title">
+        <div class="dialog-head">
+          <h2 id="settings-title">Settings</h2>
+          <button class="btn icon" type="button" data-action="close-settings" aria-label="Close settings">
+            {icon('clear', 17)}
+          </button>
+        </div>
+
+        {settingsTabsJsx(s.settingsTab)}
+        <div class="settings-panel" id="settings-panel" role="tabpanel" aria-labelledby={`settings-tab-${s.settingsTab}`}>
+          {settingsPanelJsx(s)}
+        </div>
       </div>
     </div>
   );
@@ -1384,6 +1489,7 @@ function appJsx(): SafeHtml {
       <div id="item-menu-slot">{s.itemMenu !== null ? itemMenuJsx(s.itemMenu, feedAndFlagged()) : ''}</div>
       <div id="confirm-slot">{s.confirm !== null ? confirmDialogJsx(s.confirm) : ''}</div>
       <div id="guidance-slot">{guidanceTarget !== undefined ? guidanceDialogJsx(guidanceTarget) : ''}</div>
+      <div id="privacy-slot">{s.privacyOpen ? privacyDialogJsx(s) : ''}</div>
       {/* Always present because it is a **live region**: assistive technology
           announces mutations to a region it is already observing, so a slot
           created in the same render as its own text has nothing watching it and
@@ -1601,6 +1707,15 @@ function appJsx(): SafeHtml {
           )}
         </div>
       </section>
+
+      {/* Site footer (NEWS-121). Where a privacy note belongs: findable without
+          hunting, and not filed under "settings" — nothing on it is settable. */}
+      <footer class="app-footer">
+        <button class="btn link" type="button" data-action="open-privacy">
+          {icon('shield', 13)}
+          <span>Privacy</span>
+        </button>
+      </footer>
     </div>
   );
 }
@@ -1823,11 +1938,56 @@ function wireEvents(root: HTMLElement): void {
   });
 
   void delegate(root, 'click', '[data-action=open-settings]', () => {
+    // Always reopen on the first tab: wherever you left off is rarely where you
+    // want to be next time, and a dialog that remembers is a dialog that opens
+    // somewhere surprising.
+    appStore.actions.setSettingsTab('schedule');
     appStore.actions.setSettingsOpen(true);
     // Status can go stale while the dialog is closed — a key added in another
     // window, or an environment variable set since load.
     void refreshKeys();
     void refreshProviders();
+  });
+
+  void delegate(root, 'click', '[data-settings-tab]', (_e, el) => {
+    const tab = el.getAttribute('data-settings-tab');
+    if (tab !== null) appStore.actions.setSettingsTab(tab as AppState['settingsTab']);
+  });
+
+  // Arrow keys move between tabs, which the WAI-ARIA tabs pattern requires:
+  // only the selected tab is in the tab order, so without this the others are
+  // unreachable from the keyboard entirely.
+  void delegate(root, 'keydown', '[data-settings-tab]', (e, el) => {
+    if (!(e instanceof KeyboardEvent)) return;
+    const step = e.key === 'ArrowRight' ? 1 : e.key === 'ArrowLeft' ? -1 : 0;
+    if (step === 0) return;
+    e.preventDefault();
+    const tabs = [...root.querySelectorAll<HTMLElement>('[data-settings-tab]')];
+    const here = tabs.indexOf(el as HTMLElement);
+    // Wraps at both ends, as the pattern specifies.
+    const next = tabs[(here + step + tabs.length) % tabs.length];
+    const id = next.getAttribute('data-settings-tab');
+    if (id !== null) {
+      appStore.actions.setSettingsTab(id as AppState['settingsTab']);
+      // Focus follows selection here; the panel is rendered fresh, so the tab
+      // element is replaced and has to be re-found after the render.
+      queueMicrotask(() => root.querySelector<HTMLElement>(`[data-settings-tab="${id}"]`)?.focus());
+    }
+  });
+
+  void delegate(root, 'click', '[data-action=open-privacy]', () => {
+    appStore.actions.setPrivacyOpen(true);
+  });
+
+  void delegate(root, 'click', '[data-action=close-privacy]', () => {
+    appStore.actions.setPrivacyOpen(false);
+  });
+
+  // Only a click on the backdrop itself dismisses — the backdrop wraps the
+  // dialog, so matching descendants would close it before any inner control
+  // could act (docs/3-ui.md).
+  void delegate(root, 'click', '[data-action=privacy-backdrop]', (e, el) => {
+    if (e.target === el) appStore.actions.setPrivacyOpen(false);
   });
 
   void delegate(root, 'click', '[data-action=close-settings]', () => {
@@ -2265,6 +2425,10 @@ function wireGlobalKeysAndDismiss(): void {
       // Innermost first: a dialog opened over another closes alone.
       if (s.guidanceTopicId !== null) {
         appStore.actions.closeGuidance();
+        return;
+      }
+      if (s.privacyOpen) {
+        appStore.actions.setPrivacyOpen(false);
         return;
       }
       if (s.settingsOpen) {

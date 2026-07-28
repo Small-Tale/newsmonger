@@ -1,6 +1,6 @@
 import type { Page } from '@playwright/test';
 
-import { expect, resetTopics, test, topicAction } from './fixtures.js';
+import { expect, openSettingsTab, resetTopics, test, topicAction } from './fixtures.js';
 
 // Tests run serially against one shared server (see playwright.config.ts) and
 // build on each other's state where noted. The server runs with --ai-test, so
@@ -135,14 +135,14 @@ test('a failing topic surfaces a warning banner', async ({ page }) => {
 
 test('the provider picker persists a choice across reload', async ({ page }) => {
   await page.goto('/');
-  await openSettings(page);
+  await openSettingsTab(page, 'Source');
   await expect(page.locator('[data-action=provider]')).toBeVisible();
 
   await page.selectOption('[data-action=provider]', 'openai');
   // OpenAI is endpoint-configurable, so the endpoint field appears.
   await expect(page.locator('[data-action=endpoint]')).toBeVisible();
   await page.reload();
-  await openSettings(page);
+  await openSettingsTab(page, 'Source');
   await expect(page.locator('[data-action=provider]')).toHaveValue('openai');
 
   // Reset to auto so later tests aren't affected. (Checks still run the mock
@@ -242,7 +242,7 @@ test('every icon is Lucide artwork, never a text glyph', async ({ page }) => {
 
 test('the model field is a combobox with per-provider suggestions (NEWS-37)', async ({ page }) => {
   await page.goto('/');
-  await openSettings(page);
+  await openSettingsTab(page, 'Source');
   await page.selectOption('[data-action=provider]', 'anthropic');
 
   const model = page.locator('[data-action=model]');
@@ -260,7 +260,7 @@ test('the model field is a combobox with per-provider suggestions (NEWS-37)', as
   await model.fill('my-custom-model');
   await model.blur();
   await page.reload();
-  await openSettings(page);
+  await openSettingsTab(page, 'Source');
   await expect(page.locator('[data-action=model]')).toHaveValue('my-custom-model');
 
   // Reset so later tests see a clean provider config.
@@ -280,13 +280,13 @@ test('notification toggle persists when permission is granted (NEWS-38)', async 
     (window as unknown as { Notification: unknown }).Notification = Rec;
   });
   await page.goto('/');
-  await openSettings(page);
+  await openSettingsTab(page, 'App');
 
   await page.check('[data-action=notify-toggle]');
   await expect(page.locator('[data-action=notify-toggle]')).toBeChecked();
   // Survives a reload — it's a real persisted setting.
   await page.reload();
-  await openSettings(page);
+  await openSettingsTab(page, 'App');
   await expect(page.locator('[data-action=notify-toggle]')).toBeChecked();
   await expect(page.locator('.notify-note .note')).toHaveCount(0);
 
@@ -305,7 +305,7 @@ test('a refused notification permission shows a note and leaves the toggle off (
     (window as unknown as { Notification: unknown }).Notification = Rec;
   });
   await page.goto('/');
-  await openSettings(page);
+  await openSettingsTab(page, 'App');
 
   await page.click('[data-action=notify-toggle]');
   await expect(page.locator('.notify-note .note')).toBeVisible();
@@ -750,7 +750,7 @@ test('the first-run guide walks through setup and is re-openable (NEWS-78)', asy
   await expect(page.locator('.dialog.onboarding')).toHaveCount(0);
 
   // Settings reopens it on demand.
-  await openSettings(page);
+  await openSettingsTab(page, 'App');
   await page.locator('[data-action=rerun-onboarding]').click();
   const wizard = page.locator('.dialog.onboarding');
   await expect(wizard).toBeVisible();
@@ -780,9 +780,11 @@ test('the first-run guide walks through setup and is re-openable (NEWS-78)', asy
   await expect(page.locator('.topic')).toHaveCount(before);
 });
 
-test('Settings discloses what leaves the machine (NEWS-91)', async ({ page }) => {
+test('the privacy note discloses what leaves the machine (NEWS-91)', async ({ page }) => {
+  // Moved out of Settings into its own footer-linked dialog (NEWS-121). The
+  // claims it has to make are unchanged; only where you find it moved.
   await page.goto('/');
-  await openSettings(page);
+  await page.locator('[data-action=open-privacy]').click();
   const privacy = page.locator('.privacy');
   await expect(privacy).toBeVisible();
   // The three claims the note has to make, each load-bearing: what is sent,
@@ -791,7 +793,7 @@ test('Settings discloses what leaves the machine (NEWS-91)', async ({ page }) =>
   await expect(privacy).toContainText('~/.news');
   await expect(privacy).toContainText('API keys are not stored there');
   await expect(privacy).toContainText('no telemetry');
-  await closeSettings(page);
+  await page.keyboard.press('Escape');
 });
 
 test('Settings shows recent checks and copies a diagnostics bundle (NEWS-88)', async ({ page, context }) => {
@@ -805,7 +807,9 @@ test('Settings shows recent checks and copies a diagnostics bundle (NEWS-88)', a
   const row = page.locator('.topic', { hasText: 'Diagnostics Probe' });
   await expect(row).toBeVisible();
 
-  await openSettings(page);
+  await openSettingsTab(page, 'App');
+  // Collapsed since NEWS-120 — expand it before asserting on its contents.
+  await page.locator('details.advanced summary').click();
   await expect(page.locator('.diagnostics .run').first()).toBeVisible({ timeout: 15_000 });
 
   await page.locator('[data-action=copy-diagnostics]').click();
@@ -827,7 +831,7 @@ test('Settings shows recent checks and copies a diagnostics bundle (NEWS-88)', a
 
 test('the feed and exports are served over HTTP (NEWS-85)', async ({ page, request }) => {
   await page.goto('/');
-  await openSettings(page);
+  await openSettingsTab(page, 'Data');
   await expect(page.locator('.export-row')).toBeVisible();
   // The download links are real hrefs, not JS handlers — so they work in the
   // Tauri webview too, where a blob download would have nowhere to go.
@@ -897,4 +901,110 @@ test('stories show the outlet they came from (NEWS-82)', async ({ page }) => {
 
   await topicAction(page, row, 'delete');
   await expect(row).toHaveCount(0);
+});
+
+test('settings is organised into tabs (NEWS-118)', async ({ page }) => {
+  await page.goto('/');
+  // Plain open, not `openSettingsTab`: this test is about the default tab.
+  await openSettings(page);
+
+  const tabs = page.locator('.settings-tab');
+  await expect(tabs).toHaveText(['Schedule', 'Source', 'Data', 'App']);
+  // Only one tab is in the tab order — the rest are reached with arrow keys,
+  // which is what the ARIA tabs pattern requires and what makes it usable
+  // without a mouse.
+  await expect(page.locator('.settings-tab[tabindex="0"]')).toHaveCount(1);
+
+  // Each tab shows its own controls and hides the others': the point of tabs is
+  // that the panel actually changes, not that a strip appears above one column.
+  // `schedule-mode`, not `interval`: the interval select is swapped for a list
+  // of times in daily mode, and an earlier test may have left it there.
+  await expect(page.locator('[data-action=schedule-mode]')).toBeVisible();
+  await expect(page.locator('[data-action=provider]')).toHaveCount(0);
+
+  await tabs.filter({ hasText: 'Source' }).click();
+  await expect(page.locator('[data-action=provider]')).toBeVisible();
+  await expect(page.locator('[data-action=schedule-mode]')).toHaveCount(0);
+
+  await tabs.filter({ hasText: 'Data' }).click();
+  await expect(page.locator('[data-action=retention]')).toBeVisible();
+
+  // Arrow keys move selection, wrapping at the end.
+  await page.locator('.settings-tab.active').press('ArrowRight');
+  await expect(page.locator('.settings-tab.active')).toHaveText('App');
+  await page.locator('.settings-tab.active').press('ArrowRight');
+  await expect(page.locator('.settings-tab.active')).toHaveText('Schedule');
+
+  await closeSettings(page);
+  // Reopening starts from the first tab rather than wherever you left off.
+  await openSettings(page);
+  await expect(page.locator('.settings-tab.active')).toHaveText('Schedule');
+  await closeSettings(page);
+});
+
+test('diagnostics is collapsed and out of the way (NEWS-120)', async ({ page }) => {
+  await page.goto('/');
+  // Plain open: the first assertion is that it is *not* on the default tab.
+  await openSettings(page);
+
+  // Not on the tab that opens by default, and closed even once you reach it.
+  await expect(page.locator('.advanced')).toHaveCount(0);
+  await page.locator('.settings-tab').filter({ hasText: 'App' }).click();
+
+  const details = page.locator('details.advanced');
+  await expect(details).toBeVisible();
+  expect(await details.evaluate((el: HTMLDetailsElement) => el.open)).toBe(false);
+  await expect(page.locator('.diagnostics')).not.toBeVisible();
+
+  // Still one click away — support has to be able to talk someone into it.
+  await details.locator('summary').click();
+  await expect(page.locator('[data-action=copy-diagnostics]')).toBeVisible();
+
+  await closeSettings(page);
+});
+
+test('privacy is its own dialog, opened from the footer (NEWS-121)', async ({ page }) => {
+  await page.goto('/');
+
+  // Not in settings any more — nothing on it is settable.
+  await openSettings(page);
+  await expect(page.locator('.dialog')).not.toContainText('no servers');
+  await closeSettings(page);
+
+  await page.locator('[data-action=open-privacy]').click();
+  const dialog = page.locator('.dialog.privacy-dialog');
+  await expect(dialog).toBeVisible();
+  await expect(dialog).toContainText('Sent on every check');
+  await expect(dialog).toContainText('no servers');
+
+  // Escape closes it, like every other dialog.
+  await page.keyboard.press('Escape');
+  await expect(dialog).toHaveCount(0);
+
+  // ...and so does the backdrop, but not a click inside the dialog itself.
+  await page.locator('[data-action=open-privacy]').click();
+  await expect(dialog).toBeVisible();
+  await dialog.locator('h2').click();
+  await expect(dialog).toBeVisible();
+  await page.locator('[data-action=privacy-backdrop]').click({ position: { x: 5, y: 5 } });
+  await expect(dialog).toHaveCount(0);
+});
+
+test('the high-priority label fits on one line (NEWS-117)', async ({ page }) => {
+  // It read "High-priority topics every" and wrapped, restating the column it
+  // sits in. Measured rather than eyeballed, with the usual guard against a
+  // zero-height box passing vacuously.
+  await page.goto('/');
+  await openSettings(page);
+
+  const label = page.locator('.field', { hasText: 'High-priority' }).locator('.field-label').first();
+  const box = await label.evaluate((el) => ({
+    height: el.getBoundingClientRect().height,
+    lineHeight: parseFloat(getComputedStyle(el).lineHeight),
+  }));
+  expect(box.height, 'the label should have been measured, not mid-render').toBeGreaterThan(5);
+  expect(box.height, 'the label should be a single line').toBeLessThan(box.lineHeight * 1.6);
+  await expect(label).not.toContainText('topics every');
+
+  await closeSettings(page);
 });

@@ -129,6 +129,20 @@ Source art lives in `assets/`, in two shapes — rounded and full-bleed — and 
 
 Both are measured in `tests/e2e/layout.spec.ts` rather than eyeballed, and both measurements guard against a vacuous pass — see the note there.
 
+## The settings dialog
+
+- **FR-3.45** *(Shipped, NEWS-118)* Settings is **tabbed**: Schedule, Source, Data, App, each with a Lucide icon from `icons.tsx`. It had grown to about two screens of unrelated controls in one column — scheduling next to API keys next to export links — so nothing was findable except by scrolling past everything else. Each tab answers a different question: *when* does it check, *who* does it ask, *what* is kept and how do I get it out, and everything about the app itself.
+
+  Standard ARIA tabs: `role="tablist"`/`tab`/`tabpanel`, only the selected tab in the tab order, **arrow keys move between them** and wrap at both ends. Without the arrow keys the unselected tabs would be unreachable from the keyboard entirely, since they carry `tabindex="-1"`.
+
+  Reopening always starts on the first tab. A dialog that remembers where you left off is a dialog that opens somewhere surprising.
+
+- **FR-3.46** *(Shipped, NEWS-120)* **Diagnostics is collapsed and on the App tab** — two deliberate steps to reach. A bug-report bundle is an advanced, rarely-used tool, and an always-open run log was the loudest thing on the screen while being the least often wanted. It stays a `<details>` rather than a hidden gesture so support can talk someone into it: "open Settings → App and expand Diagnostics".
+
+- **FR-3.47** *(Shipped, NEWS-121)* **Privacy is its own dialog**, reached from a footer link under the main content rather than from Settings. It was the wrong place twice over: nothing on it can be changed, so it isn't a setting, and burying "what leaves this machine" under two screens of configuration is the opposite of how a privacy note earns trust. Escape and a backdrop click close it, like every other dialog.
+
+- **FR-3.48** *(Shipped, NEWS-117)* The high-priority interval is labelled just **"High-priority"**. It read "High-priority topics every", which restated the column it sits in — directly under "Check every" — and wrapped to a second line to do it.
+
 ## Section filter bar (NEWS-97)
 
 The bar under the masthead is documented in [docs/22-topic-categories.md](./22-topic-categories.md) (FR-22.9–22.12). Two structural points belong here with the other kerf conventions:

@@ -1,6 +1,6 @@
 import type { Page } from '@playwright/test';
 
-import { acceptConfirm, expect, test, topicAction } from './fixtures.js';
+import { acceptConfirm, expect, openSettingsTab, test, topicAction } from './fixtures.js';
 
 // Runs against the shared server from playwright.config.ts, which sets
 // NEWS_FAKE_KEYCHAIN=1 — the save/remove flows below are real all the way to
@@ -15,9 +15,13 @@ const ANTHROPIC_ROW = '.key-row:has-text("Anthropic")';
 const OPENAI_ROW = '.key-row:has-text("OpenAI")';
 const SECRET = 'sk-ant-e2e-secret-0123456789';
 
+/**
+ * Everything in this spec lives on the Source tab since NEWS-118 — the provider
+ * picker and the API keys are the same question ("who do we ask"), so the whole
+ * file opens there.
+ */
 async function openSettings(page: Page): Promise<void> {
-  await page.click('[data-action=open-settings]');
-  await expect(page.locator('.dialog')).toBeVisible();
+  await openSettingsTab(page, 'Source');
 }
 
 test('the settings dialog opens and closes', async ({ page }) => {

@@ -1,4 +1,4 @@
-import { acceptConfirm, cancelConfirm, expect, resetTopics, test, topicAction } from './fixtures.js';
+import { acceptConfirm, cancelConfirm, expect, openSettingsTab, resetTopics, test, topicAction } from './fixtures.js';
 
 // Selection, the right-click menu, and solo (NEWS-29). Serial and stateful
 // like the rest of the suite: this spec creates its own topics up front and
@@ -328,8 +328,8 @@ test('mark a topic high priority and show a star, then clear it (NEWS-56)', asyn
 test('the high-priority interval is clamped to the default (NEWS-56)', async ({ page }) => {
   const HOUR = 60 * 60 * 1000;
   await page.goto('/');
-  await page.click('[data-action=open-settings]');
-  await expect(page.locator('.dialog')).toBeVisible();
+  // The intervals live on the Schedule tab since NEWS-118.
+  await openSettingsTab(page, 'Schedule');
   const dflt = page.locator('[data-action=interval]');
   const hp = page.locator('[data-action=hp-interval]');
 

@@ -4,7 +4,7 @@ import type { SafeHtml } from 'kerfjs';
  * The handful of Lucide icons the UI needs, inlined.
  *
  * Path data copied verbatim from `lucide-static@1.26.0` rather than taking a
- * runtime dependency: six icons is a few hundred bytes, whereas the package
+ * runtime dependency: a couple of dozen icons is a few hundred bytes, whereas the package
  * would be staged into the desktop sidecar's `node_modules` (see
  * `scripts/build-sidecar.sh`) for the same result. Re-copy from the same
  * source if more are added, so the set stays visually consistent.
@@ -35,10 +35,80 @@ export type IconName =
   | 'star'
   | 'search'
   | 'guidance'
-  | 'flag';
+  | 'flag'
+  | 'bug'
+  | 'shield'
+  | 'clock'
+  | 'key'
+  | 'bell'
+  | 'database'
+  | 'bot';
 
 function paths(name: IconName): SafeHtml {
   switch (name) {
+    case 'bug':
+      return (
+        <g>
+          <path d="M12 20v-9" />
+          <path d="M14 7a4 4 0 0 1 4 4v3a6 6 0 0 1-12 0v-3a4 4 0 0 1 4-4z" />
+          <path d="M14.12 3.88 16 2" />
+          <path d="M21 21a4 4 0 0 0-3.81-4" />
+          <path d="M21 5a4 4 0 0 1-3.55 3.97" />
+          <path d="M22 13h-4" />
+          <path d="M3 21a4 4 0 0 1 3.81-4" />
+          <path d="M3 5a4 4 0 0 0 3.55 3.97" />
+          <path d="M6 13H2" />
+          <path d="m8 2 1.88 1.88" />
+          <path d="M9 7.13V6a3 3 0 1 1 6 0v1.13" />
+        </g>
+      );
+    case 'shield':
+      return (
+        <g>
+          <path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z" />
+        </g>
+      );
+    case 'clock':
+      return (
+        <g>
+          <circle cx="12" cy="12" r="10" />
+          <path d="M12 6v6l4 2" />
+        </g>
+      );
+    case 'key':
+      return (
+        <g>
+          <path d="m15.5 7.5 2.3 2.3a1 1 0 0 0 1.4 0l2.1-2.1a1 1 0 0 0 0-1.4L19 4" />
+          <path d="m21 2-9.6 9.6" />
+          <circle cx="7.5" cy="15.5" r="5.5" />
+        </g>
+      );
+    case 'bell':
+      return (
+        <g>
+          <path d="M10.268 21a2 2 0 0 0 3.464 0" />
+          <path d="M3.262 15.326A1 1 0 0 0 4 17h16a1 1 0 0 0 .74-1.673C19.41 13.956 18 12.499 18 8A6 6 0 0 0 6 8c0 4.499-1.411 5.956-2.738 7.326" />
+        </g>
+      );
+    case 'database':
+      return (
+        <g>
+          <ellipse cx="12" cy="5" rx="9" ry="3" />
+          <path d="M3 5V19A9 3 0 0 0 21 19V5" />
+          <path d="M3 12A9 3 0 0 0 21 12" />
+        </g>
+      );
+    case 'bot':
+      return (
+        <g>
+          <path d="M12 8V4H8" />
+          <rect width="16" height="12" x="4" y="8" rx="2" />
+          <path d="M2 14h2" />
+          <path d="M20 14h2" />
+          <path d="M15 13v2" />
+          <path d="M9 13v2" />
+        </g>
+      );
     case 'check': // rotate-cw
       return (
         <g>

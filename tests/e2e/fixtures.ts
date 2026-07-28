@@ -124,3 +124,17 @@ export const test = base.extend({
     }
   },
 });
+
+/**
+ * Open the settings dialog on a given tab (NEWS-118).
+ *
+ * Settings is tabbed now, so a control is only in the DOM while its own tab is
+ * showing. Tests that reach for a control have to say which tab it lives on —
+ * which is also a readable statement of where the feature belongs.
+ */
+export async function openSettingsTab(page: Page, tab: 'Schedule' | 'Source' | 'Data' | 'App'): Promise<void> {
+  await page.click('[data-action=open-settings]');
+  await expect(page.locator('.dialog')).toBeVisible();
+  await page.locator('.settings-tab').filter({ hasText: tab }).click();
+  await expect(page.locator('.settings-tab.active')).toHaveText(tab);
+}

@@ -101,6 +101,7 @@ Default Anthropic provider (`claude-opus-4-8` + web search), prompt-level exclus
 - FR-17.9 refresh responses apply in **issue order** — sequence guard on `refreshState`/`refreshFeed`, so a slow poll can't overwrite a newer mutation — NEWS-104: **Shipped**
 - FR-4.8c orphan sweep (`pruneOrphans`) for stories/runs written after their topic was deleted — after every check and at startup — NEWS-105: **Shipped**
 - FR-4.8/4.8a/4.8b/4.9 **storage moved to SQLite** (`node:sqlite`, Node 22.5+): per-row writes, zod-validated rows, one-time `data.json` import, no foreign keys (a check can outlive its topic), corrupt-db backup + settings-only fallback. Search stays substring `LIKE`, not FTS5 — NEWS-94: **Shipped**
+- FR-3.45–3.48 (NEWS-117/118/120/121) settings tabbed with ARIA arrow-key nav; diagnostics collapsed on the App tab; privacy moved to its own footer-linked dialog; high-priority label shortened: **Shipped**
 - FR-3.43–3.44 SVG favicon + web app manifest (route, not a static file) with `any`/`maskable` icons; app icons generated from `assets/logo.svg`; `mask-icon.svg` unwired (opaque square would tint as a block) — NEWS-115: **Shipped**
 - FR-3.41–3.42 relative timestamps never wrap; source-link arrow aligns to the first line — NEWS-112/113: **Shipped**
 - FR-3.40 double-click a topic row to toggle solo, sharing `toggleSolo` with the menu item — NEWS-95: **Shipped**
