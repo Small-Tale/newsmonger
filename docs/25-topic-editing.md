@@ -12,6 +12,10 @@ Guidance (FR-18) has been editable since it shipped; this doc covers the **name*
 
 - **FR-25.1** *(Shipped)* A topic is renamed from its context menu — the same single-target rule as guidance, since there is one name. `PATCH /api/topics/:id { name }`.
 
+- **FR-25.1a** *(Shipped, NEWS-162)* The menu item reads **"Edit topic…"**, not "Rename", and the dialog is headed *Edit "…"* with a **Save** button. A rename reads as relabelling something, and this is the one field in the app where that is exactly wrong: the name is the question put to the model, so changing it changes what gets found. The dialog's hint has said so since NEWS-139 — the menu item was the thing contradicting it, promising a cosmetic edit before the consequence was visible. "Edit topic" also pairs with "Edit guidance" beside it, which is the other half of steering a topic.
+
+  The **operation keeps its name** in the API, the route, the handlers and the tests (`rename`, `data-save-rename`, `renameTopic`): `PATCH { name }` is precisely a rename, and the doc-level framing has been "topic editing" all along. What was wrong was the promise made to the user, not the description of the mechanism. The completion toasts still read "Renamed to …" for the same reason — as a past-tense report of what happened they are accurate, and each already names the consequence ("applies from the next check").
+
 - **FR-25.2** *(Shipped)* The name is trimmed and must be unique **case-insensitively**, the same rule creation applies, because they are the same field. Renaming a topic to the name it already has is a **no-op, not a collision with itself**.
 
 - **FR-25.3** *(Shipped)* A duplicate name is a **409, not a 404**. The distinction matters at the UI: 404 sends someone looking for a missing topic, while 409 is a name they can change. The dialog stays open on failure so the correction happens in the field already in front of them.

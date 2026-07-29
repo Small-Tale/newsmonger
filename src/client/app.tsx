@@ -746,7 +746,12 @@ function guidanceDialogJsx(topic: Topic): SafeHtml {
 
 
 /**
- * Rename a topic (NEWS-139).
+ * Edit a topic's name (NEWS-139; relabelled NEWS-162).
+ *
+ * Still a rename in the API and in this code — `PATCH /api/topics/:id { name }`
+ * is exactly what it does — but the *user-facing* verb is "edit", because
+ * "rename" undersells it: the name is the question put to the model, which the
+ * hint below has always said and the menu item used to contradict.
  *
  * The clear-results choice is offered **only when there are results to clear**,
  * and it is off by default: renaming is usually a correction — a typo, a better
@@ -756,9 +761,9 @@ function guidanceDialogJsx(topic: Topic): SafeHtml {
 function renameDialogJsx(topic: Topic, itemCount: number | null): SafeHtml {
   return (
     <div class="dialog-backdrop" data-action="rename-backdrop">
-      <div class="dialog rename" role="dialog" aria-modal="true" aria-label={`Rename ${topic.name}`}>
+      <div class="dialog rename" role="dialog" aria-modal="true" aria-label={`Edit topic ${topic.name}`}>
         <form data-save-rename={topic.id}>
-          <h2>Rename “{topic.name}”</h2>
+          <h2>Edit “{topic.name}”</h2>
           <p class="dialog-hint">
             The name is what the model is asked about, so changing it changes what gets found from the next
             check onwards.
@@ -794,7 +799,7 @@ function renameDialogJsx(topic: Topic, itemCount: number | null): SafeHtml {
               Cancel
             </button>
             <button class="btn primary" type="submit">
-              Rename
+              Save
             </button>
           </div>
         </form>
@@ -1953,7 +1958,12 @@ function contextMenuJsx(menu: NonNullable<AppState['contextMenu']>, topics: Topi
           disabled={only === undefined ? true : undefined}
         >
           {icon('pencil')}
-          <span>Rename…</span>
+          {/* "Edit topic", not "Rename" (NEWS-162). A rename reads as relabelling
+              something, and this is not a label: the name is the question put to
+              the model, so changing it changes what gets found. It also pairs
+              with "Edit guidance" below, which is the other half of steering a
+              topic. */}
+          <span>Edit topic…</span>
         </button>
         <button
           class="menu-item"

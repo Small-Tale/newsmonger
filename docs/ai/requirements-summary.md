@@ -22,6 +22,7 @@ Status markers: **Shipped** · **Partial** · **Design only** · **Deferred**. S
 
 ## [25 — Topic Editing](../25-topic-editing.md) — **Shipped** (NEWS-139)
 
+- FR-25.1a **Shipped** (NEWS-162): the menu item is **"Edit topic…"** and the dialog *Edit "…"* / **Save** — "Rename" promised a cosmetic change to the one field where that's exactly wrong. Internals keep the `rename` name; `PATCH { name }` is precisely what it does.
 - FR-25.1–25.4 rename from the topic menu; unique case-insensitively (renaming to the same name is a no-op, not a self-collision); a duplicate is a **409, not a 404**, and the dialog stays open so the name can be corrected in place.
 - FR-25.5–25.9 optional clearing of that topic's stories, offered only when there are any and unticked by default. Clearing also resets `coveredThroughAt` — stories alone would leave the topic looking fresh while still behaving as covered, so the next check would report nothing. Run history is kept (it is about the app, not the topic). `clearItems` requires `name`, and the rename is applied **first** so a 409 can never land after the stories are gone.
 - Deliberately unchanged by a rename: the **category** (re-classifying would move topics in the filter bar as a side effect of fixing a typo; FR-22.7 says a manual choice survives) and **guidance**.

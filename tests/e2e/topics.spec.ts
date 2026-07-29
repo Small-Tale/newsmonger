@@ -101,12 +101,19 @@ test('right-click opens a menu with icons and separators', async ({ page }) => {
   await row(page, 'Alpha Topic').click({ button: 'right' });
   await expect(page.locator('.menu')).toBeVisible();
 
-  // Check, Pause, High priority, Rename, Guidance, Solo, Review Flagged, Delete
-  // (NEWS-61 added Review Flagged; NEWS-80 Guidance; NEWS-139 Rename).
+  // Check, Pause, High priority, Edit topic, Guidance, Solo, Review Flagged, Delete
+  // (NEWS-61 added Review Flagged; NEWS-80 Guidance; NEWS-139 the topic edit).
   await expect(page.locator('.menu-item')).toHaveCount(8);
   await expect(page.locator('.menu .icon')).toHaveCount(8);
   await expect(page.locator('.menu-sep')).toHaveCount(2);
   await expect(page.locator('.menu-item span').first()).toHaveText('Check now');
+
+  // "Edit topic", never "Rename" (NEWS-162). A rename reads as relabelling
+  // something; the name is the question put to the model, so changing it changes
+  // what gets found. The dialog's hint has always said so — the menu item was
+  // the thing contradicting it.
+  await expect(page.locator('[data-menu-action=rename] span')).toHaveText('Edit topic…');
+  await expect(page.locator('.menu')).not.toContainText('Rename');
 
   // Clicking inside the menu must not dismiss it before the item handler runs —
   // the backdrop wraps the menu, so this is the trap the settings dialog hit.
@@ -506,6 +513,10 @@ test('renaming a topic keeps its stories by default (NEWS-139)', async ({ page }
   await expect(clear).toBeVisible();
   await expect(clear).not.toBeChecked();
 
+  // The dialog says Edit/Save too, not Rename (NEWS-162).
+  await expect(page.locator('.dialog.rename h2')).toContainText('Edit');
+  await expect(page.locator('.dialog.rename button[type=submit]')).toHaveText('Save');
+  await expect(page.locator('.dialog.rename')).toHaveAttribute('aria-label', /^Edit topic /);
   await page.fill('.dialog.rename input[name=topic-name]', 'Renamed Topic');
   await page.click('.dialog.rename button[type=submit]');
 
