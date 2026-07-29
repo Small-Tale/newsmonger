@@ -97,8 +97,11 @@ body {
   grid-area: filters;
 }
 
+// No rule under the bar (NEWS-155). The masthead above already has one, and a
+// second hairline 40px below it read as a boxed-in strip rather than as a
+// newspaper's section line. The bar's own two rows — small-caps sections over
+// italic subsections — are distinct enough to be structure without being fenced.
 .filter-bar {
-  border-bottom: 1px solid var(--line);
   margin-bottom: 14px;
 }
 

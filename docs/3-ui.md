@@ -220,6 +220,7 @@ The bar under the masthead is documented in [docs/22-topic-categories.md](./22-t
 
 - The sub-row is **always in the DOM**, empty when no section is selected, rather than conditionally rendered — it sits above the keyed topics list, and the E2E suite runs with `invariants: 'throw'` (NEWS-100), so a conditional sibling there would fail at the render that caused it. It also stops the bar's height jumping as you select.
 - The topic row's memo key includes `category`/`subcategory`. The pill is part of the row now, so a topic classified by a background check would otherwise keep its stale row until something else about it changed.
+- **FR-3.53** *(Shipped, NEWS-155)* The bar carries **no rule beneath it**. The masthead above already has one, and a second hairline 40px below it read as a boxed-in strip rather than as a newspaper's section line. The bar's own two rows — small-caps sections over italic subsections — are unlike enough to read as structure without being fenced in.
 
 ## Feed grid on wide displays (NEWS-64, NEWS-96)
 

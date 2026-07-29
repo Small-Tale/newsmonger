@@ -168,6 +168,19 @@ test('the bar composes with search rather than replacing it', async ({ page }) =
 // button that can only ever produce an empty feed, and eleven of them crowd out
 // the two or three that mean something.
 
+test('the filter bar carries no rule under it (NEWS-155)', async ({ page }) => {
+  // The masthead above already has one, and a second hairline 40px below it read
+  // as a boxed-in strip rather than as a newspaper's section line. The bar's own
+  // two rows — small-caps sections over italic subsections — are distinct enough
+  // to be structure without being fenced.
+  await page.goto('/');
+  await expect(page.locator('.filter-pill').first()).toBeVisible();
+  const width = await page
+    .locator('.filter-bar')
+    .evaluate((el) => Number.parseFloat(getComputedStyle(el).borderBottomWidth));
+  expect(width).toBe(0);
+});
+
 test('the bar shows only sections in use', async ({ page }) => {
   await page.goto('/');
   await expect(page.locator('.filter-pill').first()).toBeVisible();
