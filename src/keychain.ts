@@ -24,7 +24,7 @@
 import { spawn } from 'node:child_process';
 
 /** Keychain service name; the account is the varying part (see `keyAccount`). */
-const SERVICE = 'news';
+const SERVICE = 'newsmonger';
 
 /** Keychain account for a provider's API key, e.g. `anthropic-api-key`. */
 export function keyAccount(provider: string): string {
@@ -170,7 +170,7 @@ async function readMacPassword(account: string): Promise<string | null> {
 }
 
 /**
- * In-memory stand-in for the OS keychain, enabled by `NEWS_FAKE_KEYCHAIN=1`.
+ * In-memory stand-in for the OS keychain, enabled by `NEWSMONGER_FAKE_KEYCHAIN=1`.
  *
  * The E2E suite drives real save/remove flows through the UI, and those must
  * not reach into the keychain of whoever runs the tests — leaving entries
@@ -180,7 +180,7 @@ async function readMacPassword(account: string): Promise<string | null> {
  */
 const fakeStore = new Map<string, string>();
 function usingFakeKeychain(): boolean {
-  return process.env['NEWS_FAKE_KEYCHAIN'] === '1';
+  return process.env['NEWSMONGER_FAKE_KEYCHAIN'] === '1';
 }
 
 /** Read a secret. Returns null when absent, or when the keychain is unusable. */
@@ -214,8 +214,8 @@ export async function keychainGet(account: string): Promise<string | null> {
       // answer is encoded into ASCII before it crosses.
       const r = await runPowerShell(
         `${WIN_CRED_PS}Write-Output ([Convert]::ToBase64String(` +
-          `[System.Text.Encoding]::Unicode.GetBytes([CredHelper]::Read($env:NEWS_KC_TARGET))))`,
-        { NEWS_KC_TARGET: target },
+          `[System.Text.Encoding]::Unicode.GetBytes([CredHelper]::Read($env:NEWSMONGER_KC_TARGET))))`,
+        { NEWSMONGER_KC_TARGET: target },
       );
       if (r.status !== 0) return null;
       const encoded = r.stdout.trim();
@@ -294,8 +294,8 @@ export async function keychainSet(account: string, value: string): Promise<void>
     // an argv element, so nothing splits or quotes it. `Write-Output` reports
     // the API's own success flag, since a failed CredWrite still exits 0.
     const r = await runPowerShell(
-      `${WIN_CRED_PS}Write-Output ([CredHelper]::Write($env:NEWS_KC_TARGET, '${SERVICE}', $env:NEWS_KC_SECRET))`,
-      { NEWS_KC_TARGET: winTarget(account), NEWS_KC_SECRET: value },
+      `${WIN_CRED_PS}Write-Output ([CredHelper]::Write($env:NEWSMONGER_KC_TARGET, '${SERVICE}', $env:NEWSMONGER_KC_SECRET))`,
+      { NEWSMONGER_KC_TARGET: winTarget(account), NEWSMONGER_KC_SECRET: value },
     );
     if (r.status !== 0) fail('Credential Manager write', r);
     if (!r.stdout.includes('True')) fail('Credential Manager write', r);
@@ -318,8 +318,8 @@ export async function keychainDelete(account: string): Promise<void> {
     } else if (process.platform === 'linux') {
       await run('secret-tool', ['clear', 'service', SERVICE, 'account', account]);
     } else if (process.platform === 'win32') {
-      await runPowerShell(`${WIN_CRED_PS}[void][CredHelper]::Delete($env:NEWS_KC_TARGET)`, {
-        NEWS_KC_TARGET: winTarget(account),
+      await runPowerShell(`${WIN_CRED_PS}[void][CredHelper]::Delete($env:NEWSMONGER_KC_TARGET)`, {
+        NEWSMONGER_KC_TARGET: winTarget(account),
       });
     }
   } catch {

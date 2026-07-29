@@ -8,7 +8,7 @@ const created: string[] = [];
 
 /** Create a temporary data directory, cleaned up after each test. */
 export function tmpDataDir(): string {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'news-test-'));
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'newsmonger-test-'));
   created.push(dir);
   return dir;
 }

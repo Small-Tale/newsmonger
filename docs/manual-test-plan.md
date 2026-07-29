@@ -16,7 +16,7 @@ Verified against the live API (NEWS-3): real current stories with citations that
 
 The E2E suite shares one server whose state earlier specs build up, so it can never be in the no-topics/no-provider state that triggers the guide automatically. That path is manual.
 
-1. `npm run dev --data-dir /tmp/news-fresh` with **no** `ANTHROPIC_API_KEY`/`OPENAI_API_KEY` set and no Claude/Codex CLI signed in, in a browser profile that has never run News (or clear `localStorage` for the origin).
+1. `npm run dev --data-dir /tmp/newsmonger-fresh` with **no** `ANTHROPIC_API_KEY`/`OPENAI_API_KEY` set and no Claude/Codex CLI signed in, in a browser profile that has never run Newsmonger (or clear `localStorage` for the origin).
 2. The setup guide should open by itself, on the welcome step.
 3. Step 2 should say a key is needed. With a signed-in `claude-cli` **or** `codex-cli`, it should instead list it under "Found a signed-in subscription" — verify both branches.
 4. Pick two starter topics, choose an interval, click **Start watching**: both topics appear and both begin checking.
@@ -42,7 +42,7 @@ Unit tests inject the probe; the **live** `probeLink` — real HEAD/ranged-GET b
 Unit tests cover the file and manifest paths with a stub fetch; these are the end-to-end halves.
 
 1. Run the app, open Settings → Spending, note the estimate.
-2. Edit `~/.news/prices.json` — double the input rate for the model in use — and save. Reopen Settings: the estimate should roughly double **without restarting the app**.
+2. Edit `~/.newsmonger/prices.json` — double the input rate for the model in use — and save. Reopen Settings: the estimate should roughly double **without restarting the app**.
 3. Break the file (delete a closing brace). The estimate must be unchanged and stderr should say the file is invalid — not silently drop to "—".
 4. Point **Price updates** at an https URL serving the same JSON shape and restart. stderr should log `model prices updated from …` and `prices.json` should match the manifest.
 5. Point it at a URL that 404s and restart: no crash, no log of success, prices unchanged.
@@ -90,7 +90,7 @@ The E2E suite drives discovery end to end, but only against the deterministic mo
 
 ## Tauri release bundle (needs Rust toolchain) — ✅ macOS verified 2026-07-24
 
-`npm run tauri:build` then launch `src-tauri/target/release/bundle/macos/News.app`. Verified on `aarch64-apple-darwin` (NEWS-2): the sidecar starts, the webview navigates, the real UI loads (`NEWS_LOG_REQUESTS=1` shows `GET /` → assets → `/api/state` → `/api/providers`), and quitting leaves no orphaned `news-node`.
+`npm run tauri:build` then launch `src-tauri/target/release/bundle/macos/Newsmonger.app`. Verified on `aarch64-apple-darwin` (NEWS-2): the sidecar starts, the webview navigates, the real UI loads (`NEWSMONGER_LOG_REQUESTS=1` shows `GET /` → assets → `/api/state` → `/api/providers`), and quitting leaves no orphaned `newsmonger-node`.
 
 Still manual, and **unverified on every other platform**:
 
@@ -109,7 +109,7 @@ macOS (real Keychain), Linux (Docker, both with and without a Secret Service dae
 
 > **When testing the keychain by hand, never use the production account names.** A harness that used `anthropic-api-key` deleted a real stored key on cleanup. Use a scratch account (`harness-scratch-do-not-use`) — the production accounts hold live credentials.
 
-E2E still covers the UI against an in-memory store (`NEWS_FAKE_KEYCHAIN=1`), which by design exercises nothing below `src/keychain.ts`, so the OS layer stays manual.
+E2E still covers the UI against an in-memory store (`NEWSMONGER_FAKE_KEYCHAIN=1`), which by design exercises nothing below `src/keychain.ts`, so the OS layer stays manual.
 
 Still worth doing by hand, since the harness exercises `src/keychain.ts` directly rather than the UI:
 
@@ -121,7 +121,7 @@ Still worth doing by hand, since the harness exercises `src/keychain.ts` directl
 
 Unit tests inject a fake runner and never spawn the CLI, so the live path is manual.
 
-1. With `claude` installed and logged in, and **no** `ANTHROPIC_API_KEY` set, open Settings and pick "Claude subscription (Claude Code)". The status line should read ready, and a note should explain that scheduled checks run only while News is open.
+1. With `claude` installed and logged in, and **no** `ANTHROPIC_API_KEY` set, open Settings and pick "Claude subscription (Claude Code)". The status line should read ready, and a note should explain that scheduled checks run only while Newsmonger is open.
 2. Check a topic with active coverage — expect real current stories with working links. Takes minutes, not seconds (a measured run was 161 s / 21 turns).
 3. Run `claude logout`, then check again — expect an actionable "Claude Code is not signed in" error rather than a hang.
 4. With `auto` selected and both a subscription and an API key available, confirm the run uses the subscription (the feed's "last check via" says `claude-cli`).
@@ -159,4 +159,4 @@ Browser-verified both paths (OS-sheet path via a stubbed `navigator.share`, and 
 ## Automated Coverage Summary
 
 - Topics CRUD, scheduling logic, dedup, parsing, API validation, and full UI flows are covered by `npm test` + `npm run test:e2e` (mock AI service).
-- API key precedence, the `/api/keys` routes, and the Settings dialog save/remove flows are covered by `tests/unit/api-keys*.test.ts` and `tests/e2e/keys.spec.ts`, against the in-memory keychain (`NEWS_FAKE_KEYCHAIN=1`). The OS keychain layer itself stays manual per platform, above.
+- API key precedence, the `/api/keys` routes, and the Settings dialog save/remove flows are covered by `tests/unit/api-keys*.test.ts` and `tests/e2e/keys.spec.ts`, against the in-memory keychain (`NEWSMONGER_FAKE_KEYCHAIN=1`). The OS keychain layer itself stays manual per platform, above.

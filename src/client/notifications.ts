@@ -98,7 +98,7 @@ function notificationsArmed(): boolean {
 function fire(count: number): void {
   lastNotifiedAt = clock.now();
   const title = count === 1 ? 'New story' : `${String(count)} new stories`;
-  const body = 'News found something new for you.';
+  const body = 'Newsmonger found something new for you.';
   const tauri = tauriNotification();
   if (isTauri() && tauri?.sendNotification !== undefined) {
     // The Tauri path can't attach a click handler; the dock bounce below still
@@ -110,7 +110,7 @@ function fire(count: number): void {
     }
   } else {
     try {
-      const n = new Notification(title, { body, tag: 'news-new-items' });
+      const n = new Notification(title, { body, tag: 'newsmonger-new-items' });
       n.onclick = (): void => {
         focusAppWindow();
         n.close();

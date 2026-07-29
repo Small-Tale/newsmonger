@@ -11,14 +11,14 @@ function clearEnv(provider: 'anthropic' | 'openai'): void {
 
 // The in-memory keychain: these tests must never touch the developer's real one.
 beforeEach(() => {
-  process.env['NEWS_FAKE_KEYCHAIN'] = '1';
+  process.env['NEWSMONGER_FAKE_KEYCHAIN'] = '1';
   __resetKeychainForTests();
   delete process.env['ANTHROPIC_API_KEY'];
   delete process.env['OPENAI_API_KEY'];
 });
 
 afterEach(() => {
-  delete process.env['NEWS_FAKE_KEYCHAIN'];
+  delete process.env['NEWSMONGER_FAKE_KEYCHAIN'];
   delete process.env['ANTHROPIC_API_KEY'];
   delete process.env['OPENAI_API_KEY'];
   __resetKeychainForTests();
@@ -31,7 +31,7 @@ describe('keychain naming', () => {
   });
 
   it('prefixes the Windows credential target with the service', () => {
-    expect(winTarget('anthropic-api-key')).toBe('news-anthropic-api-key');
+    expect(winTarget('anthropic-api-key')).toBe('newsmonger-anthropic-api-key');
   });
 });
 

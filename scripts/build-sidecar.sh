@@ -31,7 +31,7 @@ esac
 
 EXT=""
 [[ "$TARGET" == *windows* ]] && EXT=".exe"
-SIDECAR="src-tauri/binaries/news-node-${TARGET}${EXT}"
+SIDECAR="src-tauri/binaries/newsmonger-node-${TARGET}${EXT}"
 SERVER_DIR="src-tauri/server"
 
 echo "==> Building sidecar for $TARGET"
@@ -81,7 +81,7 @@ cp dist/client/app.global.js dist/client/styles.css dist/client/favicon.svg dist
 node -e '
   const root = require("./package.json");
   require("fs").writeFileSync("src-tauri/server/package.json", JSON.stringify({
-    name: "news-server", version: root.version, private: true, type: "module",
+    name: "newsmonger-server", version: root.version, private: true, type: "module",
     dependencies: root.dependencies,
   }, null, 2) + "\n");
 '

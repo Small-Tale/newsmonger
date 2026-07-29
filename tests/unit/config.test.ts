@@ -6,12 +6,12 @@ import { describe, expect, it } from 'vitest';
 import { defaultDataDir, parseArgs } from '../../src/config.js';
 
 describe('defaultDataDir', () => {
-  it('prefers NEWS_DATA_DIR when set', () => {
-    expect(defaultDataDir({ NEWS_DATA_DIR: '/tmp/custom' })).toBe('/tmp/custom');
+  it('prefers NEWSMONGER_DATA_DIR when set', () => {
+    expect(defaultDataDir({ NEWSMONGER_DATA_DIR: '/tmp/custom' })).toBe('/tmp/custom');
   });
 
-  it('falls back to ~/.news', () => {
-    expect(defaultDataDir({})).toBe(path.join(os.homedir(), '.news'));
+  it('falls back to ~/.newsmonger', () => {
+    expect(defaultDataDir({})).toBe(path.join(os.homedir(), '.newsmonger'));
   });
 });
 
@@ -20,7 +20,7 @@ describe('parseArgs', () => {
     const opts = parseArgs([], {});
     expect(opts).toEqual({
       port: null,
-      dataDir: path.join(os.homedir(), '.news'),
+      dataDir: path.join(os.homedir(), '.newsmonger'),
       open: true,
       strictPort: false,
       aiTest: false,
@@ -46,7 +46,7 @@ describe('parseArgs', () => {
   });
 
   it('reads provider/model/endpoint from env, with flags overriding', () => {
-    const env = { NEWS_PROVIDER: 'anthropic', NEWS_MODEL: 'claude-x', NEWS_ENDPOINT: 'http://e' };
+    const env = { NEWSMONGER_PROVIDER: 'anthropic', NEWSMONGER_MODEL: 'claude-x', NEWSMONGER_ENDPOINT: 'http://e' };
     expect(parseArgs([], env).provider).toBe('anthropic');
     expect(parseArgs([], env).model).toBe('claude-x');
     expect(parseArgs(['--provider', 'mock'], env).provider).toBe('mock');
@@ -54,7 +54,7 @@ describe('parseArgs', () => {
 
   it('rejects an invalid provider name', () => {
     expect(() => parseArgs(['--provider', 'grok'], {})).toThrow(/--provider must be one of/);
-    expect(() => parseArgs([], { NEWS_PROVIDER: 'grok' })).toThrow(/--provider must be one of/);
+    expect(() => parseArgs([], { NEWSMONGER_PROVIDER: 'grok' })).toThrow(/--provider must be one of/);
   });
 
 

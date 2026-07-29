@@ -29,7 +29,7 @@ async function closeSettings(page: Page): Promise<void> {
 
 test('loads the app shell', async ({ page }) => {
   await page.goto('/');
-  await expect(page.locator('h1')).toHaveText('News.');
+  await expect(page.locator('h1')).toHaveText('Newsmonger.');
   await expect(page.locator('.add-topic input')).toBeVisible();
 });
 
@@ -757,11 +757,11 @@ test('the first-run guide walks through setup and is re-openable (NEWS-78)', asy
   await expect(page.locator('.dialog:not(.onboarding)')).toHaveCount(0);
 
   // Welcome → source → topics.
-  await expect(wizard.locator('h2')).toHaveText('News watches topics, not feeds.');
+  await expect(wizard.locator('h2')).toHaveText('Newsmonger watches topics, not feeds.');
   await wizard.locator('[data-action=onboarding-next]').click();
   await expect(wizard.locator('h2')).toHaveText('Where should the news come from?');
   await wizard.locator('[data-action=onboarding-next]').click();
-  await expect(wizard.locator('h2')).toHaveText('What should News watch?');
+  await expect(wizard.locator('h2')).toHaveText('What should Newsmonger watch?');
 
   // Starter topics toggle, and the count reflects it.
   const first = wizard.locator('.chip.starter').first();
@@ -790,7 +790,7 @@ test('the privacy note discloses what leaves the machine (NEWS-91)', async ({ pa
   // The three claims the note has to make, each load-bearing: what is sent,
   // what is stored locally, and that keys are not in the data file.
   await expect(privacy).toContainText('Sent on every check');
-  await expect(privacy).toContainText('~/.news');
+  await expect(privacy).toContainText('~/.newsmonger');
   await expect(privacy).toContainText('API keys are not stored there');
   await expect(privacy).toContainText('no telemetry');
   await page.keyboard.press('Escape');
@@ -816,7 +816,7 @@ test('Settings shows recent checks and copies a diagnostics bundle (NEWS-88)', a
   await expect(page.locator('.toast')).toContainText('Diagnostics copied');
 
   const copied = await page.evaluate(() => navigator.clipboard.readText());
-  expect(copied).toContain('# News diagnostics');
+  expect(copied).toContain('# Newsmonger diagnostics');
   expect(copied).toContain('provider setting:');
   expect(copied).toContain('## Recent checks');
   // Redacted by default: the run lines refer to "topic N", never a real name.
@@ -983,7 +983,7 @@ test('a single topic can be exported (NEWS-160)', async ({ page }) => {
   // the right topic reached the route rather than a default.
   const download = page.waitForEvent('download');
   await page.locator('.export-dialog a[data-export]').click();
-  expect((await download).suggestedFilename()).toBe('news-exportable-subject.md');
+  expect((await download).suggestedFilename()).toBe('newsmonger-exportable-subject.md');
 
   await closeSettings(page);
   await topicAction(page, page.locator('.topic', { hasText: 'Exportable Subject' }), 'delete');

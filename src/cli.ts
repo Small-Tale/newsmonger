@@ -53,7 +53,7 @@ async function main(): Promise<void> {
       try {
         await resolveProvider({ provider: s.provider, model: s.model, endpoint: s.endpoint });
       } catch (err: unknown) {
-        console.warn(`news: warning: ${err instanceof Error ? err.message : String(err)} (or run with --ai-test)`);
+        console.warn(`newsmonger: warning: ${err instanceof Error ? err.message : String(err)} (or run with --ai-test)`);
       }
     }
   }
@@ -68,7 +68,7 @@ async function main(): Promise<void> {
   // been closed for months should come back trimmed, not with a year of
   // backlog waiting for the first check to clear it.
   const dropped = store.pruneOldItems(new Date());
-  if (dropped > 0) console.error(`news: pruned ${String(dropped)} stories past the retention window`);
+  if (dropped > 0) console.error(`newsmonger: pruned ${String(dropped)} stories past the retention window`);
   // And anything a topic deleted mid-check left behind (NEWS-105) — including
   // from a previous run that was killed before its own sweep got there.
   // Run history bounds the spend window (NEWS-103), so it is pruned on the same
@@ -77,13 +77,13 @@ async function main(): Promise<void> {
   const orphaned = store.pruneOrphans();
   if (orphaned.items > 0 || orphaned.runs > 0) {
     console.error(
-      `news: swept ${String(orphaned.items)} story/ies and ${String(orphaned.runs)} run(s) left by a deleted topic`,
+      `newsmonger: swept ${String(orphaned.items)} story/ies and ${String(orphaned.runs)} run(s) left by a deleted topic`,
     );
   }
   // Reclaim any orphaned cached images at startup — from a topic deleted in a
   // previous run, a crash mid-download, or an older version (NEWS-36).
   const pruned = pruneImageCache(options.dataDir, liveImageHashes(store.listItems()));
-  if (pruned > 0) console.error(`news: pruned ${String(pruned)} orphaned cached image(s)`);
+  if (pruned > 0) console.error(`newsmonger: pruned ${String(pruned)} orphaned cached image(s)`);
   // No link probing under --ai-test either: the mock's URLs are fictional, so
   // every story would be dropped as unreachable.
   const runner = new CheckRunner(store, resolve, attendance, fetchImage, options.aiTest ? null : probeLink);
@@ -108,7 +108,7 @@ async function main(): Promise<void> {
   });
   const url = `http://127.0.0.1:${server.port}`;
   // NOTE: the Tauri shell watches stdout for this exact "running at" line.
-  console.log(`news running at ${url}`);
+  console.log(`newsmonger running at ${url}`);
 
   const stopScheduler = startScheduler(runner);
   if (options.open) openInBrowser(url);
@@ -124,7 +124,7 @@ async function main(): Promise<void> {
   const shutdown = (): void => {
     stopScheduler();
     server.close();
-    // Close the database explicitly so WAL is checkpointed into `news.db`
+    // Close the database explicitly so WAL is checkpointed into `newsmonger.db`
     // rather than left for the next start to replay (NEWS-94).
     store.close();
     if ((process.env['NODE_V8_COVERAGE'] ?? '') !== '') v8.takeCoverage();
@@ -133,13 +133,13 @@ async function main(): Promise<void> {
   process.on('SIGINT', shutdown);
   process.on('SIGTERM', shutdown);
 
-  // When the Tauri shell spawns us (NEWS_WATCH_PARENT=1), exit if the parent
+  // When the Tauri shell spawns us (NEWSMONGER_WATCH_PARENT=1), exit if the parent
   // dies without cleaning us up — a hard kill or a `tauri dev` rebuild restart
   // never fires the shell's exit hook, and each restart would orphan a server.
-  if (process.env['NEWS_WATCH_PARENT'] === '1') {
+  if (process.env['NEWSMONGER_WATCH_PARENT'] === '1') {
     setInterval(() => {
       if (process.ppid === 1) {
-        console.error('news: parent process gone — shutting down');
+        console.error('newsmonger: parent process gone — shutting down');
         shutdown();
       }
     }, 2000).unref();

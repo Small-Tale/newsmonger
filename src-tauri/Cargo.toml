@@ -1,11 +1,11 @@
 [package]
-name = "news"
+name = "newsmonger"
 version = "0.1.0"
-description = "News desktop app"
+description = "Newsmonger desktop app"
 edition = "2021"
 
 [lib]
-name = "news_lib"
+name = "newsmonger_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [build-dependencies]

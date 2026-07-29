@@ -316,13 +316,13 @@ export class CheckRunner {
       const result = await verifyItemLinks(items, this.probeLink);
       if (result.droppedItems > 0 || result.droppedSources > 0) {
         console.error(
-          `news: dropped ${String(result.droppedItems)} story/stories and ` +
+          `newsmonger: dropped ${String(result.droppedItems)} story/stories and ` +
             `${String(result.droppedSources)} source link(s) that did not resolve`,
         );
       }
       return result.items;
     } catch (err: unknown) {
-      console.error('news: link verification failed, keeping stories unverified:', err);
+      console.error('newsmonger: link verification failed, keeping stories unverified:', err);
       return items;
     }
   }
@@ -347,7 +347,7 @@ export class CheckRunner {
       const orphaned = this.store.pruneOrphans();
       if (orphaned.items > 0 || orphaned.runs > 0) {
         console.error(
-          `news: swept ${String(orphaned.items)} story/ies and ${String(orphaned.runs)} run(s) left by a deleted topic`,
+          `newsmonger: swept ${String(orphaned.items)} story/ies and ${String(orphaned.runs)} run(s) left by a deleted topic`,
         );
       }
       // Only items hold images, so a run-only sweep has nothing to reclaim.
@@ -355,7 +355,7 @@ export class CheckRunner {
         pruneImageCache(this.store.dataDir, liveImageHashes(this.store.listItems()));
       }
     } catch (err: unknown) {
-      console.error('news: pruning old stories failed:', err);
+      console.error('newsmonger: pruning old stories failed:', err);
     }
   }
 

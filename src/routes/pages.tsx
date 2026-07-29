@@ -27,8 +27,8 @@ import type { AppEnv } from '../types.js';
  */
 function manifest(): unknown {
   return {
-    name: 'News',
-    short_name: 'News',
+    name: 'Newsmonger',
+    short_name: 'Newsmonger',
     description: 'Topic-based news tracker.',
     start_url: '/',
     scope: '/',
@@ -52,7 +52,7 @@ export function registerPages(app: Hono<AppEnv>): void {
 
   app.get('/', (c) => {
     const html = (
-      <Layout title="News">
+      <Layout title="Newsmonger">
         <div id="app"></div>
       </Layout>
     );

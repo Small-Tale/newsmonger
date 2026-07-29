@@ -144,7 +144,7 @@ export class Store {
       // A database that cannot be opened cannot be repaired from in here, and
       // refusing to start would leave the user with no way in at all.
       const backup = backupUnreadableDb(this.file);
-      console.error(`news: database unreadable (${String(err)}); backed up to ${backup} and starting fresh`);
+      console.error(`newsmonger: database unreadable (${String(err)}); backed up to ${backup} and starting fresh`);
       db = openDb(this.file);
     }
     this.db = db;
@@ -183,7 +183,7 @@ export class Store {
       const backup = `${jsonFile}.corrupt-${String(Date.now())}`;
       fs.copyFileSync(jsonFile, backup);
       fs.rmSync(jsonFile, { force: true });
-      console.error(`news: data file invalid (${String(err)}); backed up to ${backup} and starting fresh`);
+      console.error(`newsmonger: data file invalid (${String(err)}); backed up to ${backup} and starting fresh`);
       return;
     }
 
@@ -811,7 +811,7 @@ export class Store {
     } catch (err) {
       // Settings alone are recoverable — falling back to defaults keeps topics
       // and stories, which is the whole point of not storing them together.
-      console.error(`news: settings unreadable (${String(err)}); using defaults`);
+      console.error(`newsmonger: settings unreadable (${String(err)}); using defaults`);
       const defaults = emptyDataFile().settings;
       this.writeSettings(defaults);
       return defaults;

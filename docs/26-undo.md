@@ -1,6 +1,6 @@
 # 26 — Undo
 
-Almost nothing in News is destructive. Stories accumulate, topics can be paused, a rename applies from the next check and leaves history alone. There are exactly two exceptions, and until NEWS-145 they were guarded very differently: **deleting a topic** asks for confirmation, while **clearing a topic's stories** was a checkbox on the rename dialog.
+Almost nothing in Newsmonger is destructive. Stories accumulate, topics can be paused, a rename applies from the next check and leaves history alone. There are exactly two exceptions, and until NEWS-145 they were guarded very differently: **deleting a topic** asks for confirmation, while **clearing a topic's stories** was a checkbox on the rename dialog.
 
 That asymmetry may look defensible — the topic survives a clear — but the stories do not, and they are the part that cannot be recreated. A check re-fills a cleared topic, but not with the *same* stories, and not for the window that was reset with them. This document covers the undo that makes the checkbox defensible rather than an accident of implementation.
 

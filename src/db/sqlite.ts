@@ -195,5 +195,5 @@ export function backupUnreadableDb(file: string): string {
 
 /** Path of the SQLite database inside a data directory. */
 export function dbPath(dataDir: string): string {
-  return path.join(dataDir, 'news.db');
+  return path.join(dataDir, 'newsmonger.db');
 }

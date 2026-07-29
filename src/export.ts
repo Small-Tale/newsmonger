@@ -25,7 +25,7 @@ function topicNames(topics: Topic[]): Map<string, string> {
  */
 export function toMarkdown(input: ExportInput): string {
   const names = topicNames(input.topics);
-  const lines: string[] = [`# ${input.title}`, '', `Exported ${input.now.toISOString().slice(0, 10)} from News.`, ''];
+  const lines: string[] = [`# ${input.title}`, '', `Exported ${input.now.toISOString().slice(0, 10)} from Newsmonger.`, ''];
   const byTopic = new Map<string, NewsItem[]>();
   for (const item of input.items) {
     const list = byTopic.get(item.topicId);
@@ -94,7 +94,7 @@ export function toAtom(input: ExportInput): string {
   const lines: string[] = [
     '<?xml version="1.0" encoding="utf-8"?>',
     '<feed xmlns="http://www.w3.org/2005/Atom">',
-    `  <title>News — ${escapeXml(input.title)}</title>`,
+    `  <title>Newsmonger — ${escapeXml(input.title)}</title>`,
     `  <id>${escapeXml(`${input.baseUrl}/feed.xml`)}</id>`,
     `  <updated>${escapeXml(updated)}</updated>`,
     `  <link rel="self" href="${escapeXml(`${input.baseUrl}/feed.xml`)}"/>`,

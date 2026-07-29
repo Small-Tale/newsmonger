@@ -24,14 +24,14 @@ async function json(res: Response): Promise<unknown> {
 const SECRET = 'sk-ant-secret-value-do-not-leak';
 
 beforeEach(() => {
-  process.env['NEWS_FAKE_KEYCHAIN'] = '1';
+  process.env['NEWSMONGER_FAKE_KEYCHAIN'] = '1';
   __resetKeychainForTests();
   delete process.env['ANTHROPIC_API_KEY'];
   delete process.env['OPENAI_API_KEY'];
 });
 
 afterEach(() => {
-  delete process.env['NEWS_FAKE_KEYCHAIN'];
+  delete process.env['NEWSMONGER_FAKE_KEYCHAIN'];
   delete process.env['ANTHROPIC_API_KEY'];
   delete process.env['OPENAI_API_KEY'];
   __resetKeychainForTests();

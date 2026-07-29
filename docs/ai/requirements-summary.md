@@ -155,6 +155,7 @@ Header/interval/check-all, topics panel with actions + confirm-delete, newest-fi
 
 Flags, usage errors, readiness line (`running at ` — synced with Tauri shell), clean shutdown, localhost-only Hono server with port fallback, zod-validated API, atomic single-file JSON store with corrupt-file recovery.
 
+- FR-4.12 **Shipped** (NEWS-164): renamed **News → Newsmonger** throughout — package/bin, Tauri productName + identifier + window title, Rust crate, sidecar binary, keychain service, `~/.newsmonger`, `newsmonger.db`, readiness line, `NEWSMONGER_*` env vars, export filenames, temp prefixes. **Not** renamed: `NewsItem`/`NewsProvider`/`NewsService`/`NEWS_JSON_SCHEMA` — those name *news*, not the product. Breaking for existing local installs (fresh data dir; keys must be re-entered, the keychain service moved) — fine pre-launch.
 - FR-4.11 story retention (default 365 days, 0 = forever; bookmarked and flagged stories exempt; prunes at startup + after each check, reclaiming images) — NEWS-87 phase 1: **Shipped**. SQLite (phase 2) is **NEWS-94**.
 - FR-4.5a cross-origin/DNS-rebinding guard (Host + Origin checked on every route, 403 otherwise) — NEWS-86: **Shipped**. Scope is the user's browser, not the machine — an absent `Origin` is allowed, so it is not authentication.
 
@@ -173,8 +174,8 @@ Subscription-backed providers (`attended: true`) run *scheduled* checks only whi
 
 - FR-5.1 dev-mode shell: **Shipped, verified on macOS** (compile + spawn + navigate + page load confirmed via request log)
 - FR-5.2 Tauri detection + external links: **Shipped**
-- FR-5.3 release sidecar bundling: **Shipped, verified on macOS** (`npm run tauri:build` → `News.app`/`.dmg`; built app starts its sidecar, serves the real UI, exits cleanly. Other target triples wired but unbuilt)
-- FR-5.4 orphan protection (`NEWS_WATCH_PARENT` ppid watch): **Shipped, verified**
+- FR-5.3 release sidecar bundling: **Shipped, verified on macOS** (`npm run tauri:build` → `Newsmonger.app`/`.dmg`; built app starts its sidecar, serves the real UI, exits cleanly. Other target triples wired but unbuilt)
+- FR-5.4 orphan protection (`NEWSMONGER_WATCH_PARENT` ppid watch): **Shipped, verified**
 
 ## [7 — API Keys and Settings Dialog](../7-api-keys.md) — Shipped (all three platforms verified)
 
@@ -192,7 +193,7 @@ Subscription-backed providers (`attended: true`) run *scheduled* checks only whi
 - FR-7.10a **Shipped** (NEWS-156): **no Save button** — the key field commits on `change` (blur/Enter), never `input`, because a save verifies the key with its vendor. Enter fires `submit` *and* `change`, so the field is cleared **before** the await, or one keypress sends two `PUT`s. A `.key-saving` "Checking…" note replaces the button as the in-flight signal.
 - FR-7.10 three key-row states; no input when a key exists: **Shipped**
 - FR-7.11 disabled inputs + env-var guidance with no keychain: **Shipped** (rendering path untested — needs a machine without a credential store)
-- FR-7.12 `NEWS_FAKE_KEYCHAIN=1` in-memory store for tests: **Shipped**
+- FR-7.12 `NEWSMONGER_FAKE_KEYCHAIN=1` in-memory store for tests: **Shipped**
 - FR-7.13 privacy disclosure (what's sent / stored locally / never collected), in Settings + README + onboarding — NEWS-91: **Shipped**. A unit test pins the "sent" claim to `buildUserPrompt`, so a change that starts sending more fails rather than making the note quietly untrue.
 
 ## [8 — Article Images](../8-article-images.md) — Shipped (verified against live sites)

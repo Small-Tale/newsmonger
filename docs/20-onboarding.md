@@ -1,6 +1,6 @@
 # 20 — First-Run Onboarding
 
-Before this, a new user opened News to an empty sidebar and a one-line empty state. Nothing told them the app could do *nothing at all* until an AI provider was configured — and the way to configure one was behind a gear icon, in a dialog whose first three fields are about something else. For anyone other than the author, that was the point where the app was abandoned.
+Before this, a new user opened Newsmonger to an empty sidebar and a one-line empty state. Nothing told them the app could do *nothing at all* until an AI provider was configured — and the way to configure one was behind a gear icon, in a dialog whose first three fields are about something else. For anyone other than the author, that was the point where the app was abandoned.
 
 See also [6 — AI Providers](6-providers.md), [7 — API Keys and Settings Dialog](7-api-keys.md).
 

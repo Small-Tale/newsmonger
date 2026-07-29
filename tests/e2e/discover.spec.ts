@@ -363,7 +363,7 @@ async function stepToTopics(page: Page): Promise<void> {
   const wizard = page.locator('.dialog.onboarding');
   await wizard.locator('[data-action=onboarding-next]').click();
   await wizard.locator('[data-action=onboarding-next]').click();
-  await expect(wizard.locator('h2')).toHaveText('What should News watch?');
+  await expect(wizard.locator('h2')).toHaveText('What should Newsmonger watch?');
 }
 
 test('with no usable provider, the Topics step falls back to the starter chips', async ({ page }) => {

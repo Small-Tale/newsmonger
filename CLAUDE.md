@@ -1,4 +1,4 @@
-# News
+# Newsmonger
 
 Topic-based news tracker. The user enters topics; on a configurable interval (default 1 day) the app asks Claude — with web search — for genuinely new news per topic, deduplicates against previously reported stories, and shows summaries with source links in a feed.
 
@@ -8,7 +8,7 @@ Topic-based news tracker. The user enters topics; on a configurable interval (de
 - [kerfjs](https://github.com/brianwestphal/kerf) 4.0 UI (JSX → HTML strings, signals + morph) — **read `.claude/skills/kerf-app/SKILL.md` before touching client code**
 - Hono + `@hono/node-server` (localhost-only, default port 4187)
 - Pluggable AI providers (`src/ai/providers/`, like `~/Documents/gitgist`) behind a `NewsProvider` interface — **only platforms that do their own web search** (Anthropic, OpenAI); default `anthropic` uses `@anthropic-ai/sdk` (`claude-opus-4-8`, adaptive thinking, `web_search_20260209`, streamed). See `docs/6-providers.md`.
-- SQLite storage via built-in `node:sqlite` (`~/.news/news.db`; `--data-dir` / `NEWS_DATA_DIR` override). Rows validated with the same zod schemas on read; a legacy `data.json` is imported once (NEWS-94)
+- SQLite storage via built-in `node:sqlite` (`~/.newsmongermonger/newsmonger.db`; `--data-dir` / `NEWSMONGER_DATA_DIR` override). Rows validated with the same zod schemas on read; a legacy `data.json` is imported once (NEWS-94)
 - Tauri v2 desktop shell (Node-sidecar architecture like glassbox; dev-mode only so far)
 - esbuild + sass for client assets; tsup for the server bundle; eslint flat config with `strictTypeChecked` + `eslint-plugin-kerfjs`
 
@@ -22,8 +22,8 @@ Topic-based news tracker. The user enters topics; on a configurable interval (de
 
 - **Type safety: validate, don't assert.** zod at every trust boundary (API request bodies, client-side state parsing, the data file, Claude's JSON output). No bare `as` casts to cross boundaries.
 - **kerf client rules** (enforced by `eslint-plugin-kerfjs`, documented in `docs/3-ui.md`): state in `defineStore`/signals; events via `delegate()` with `data-*` attributes (never `addEventListener`/inline handlers); `data-key` on list rows; `.map()` not `each()` for static structural arrays. Plus two structural rules (see `docs/3-ui.md`): wrap conditional siblings (banners) in an always-present container, and keep `each()` containers structurally stable. **KF-377 — the kerfjs ≤2.0.1 bug these were written for — is fixed as of 3.0.0**, but the containers stay (NEWS-99): `#banners`/`#toast-slot` are ARIA live regions, which must exist *before* their content or the announcement is lost, and `#topics-panel` is the target of `aria-controls` (removing it fails the axe suite). They are ordinary good structure now, not scar tissue.
-- The server readiness line `news running at <url>` is watched by `src-tauri/src/lib.rs` — keep the `running at ` marker in sync.
-- Tests must never touch `~/.news` — use `tests/helpers/tmp.ts` (unit) or the Playwright-managed temp dir (E2E).
+- The server readiness line `newsmonger running at <url>` is watched by `src-tauri/src/lib.rs` — keep the `running at ` marker in sync.
+- Tests must never touch `~/.newsmonger` — use `tests/helpers/tmp.ts` (unit) or the Playwright-managed temp dir (E2E).
 - The mock news service keys off topic names: containing "fail" → throws, "empty" → no items; anything else → the same two deterministic stories every call (that's what makes dedup testable).
 
 ## Git
@@ -63,7 +63,7 @@ When the user gives you work directly (not via the Hot Sheet channel or events),
 <!-- hotsheet:begin specifics=testing-philosophy v=1 -->
 ### This project's test setup
 
-- **Unit tests** (`tests/unit/**/*.test.ts`, helpers in `tests/helpers/`): vitest, `globals: true`, v8 coverage over `src/**`. Always use `tests/helpers/tmp.ts` for data dirs — never write to `~/.news`. API tests go through `createApp(...)` + `app.request(...)` (no real server). The AI provider is the deterministic `createMockProvider` (or an inline `fakeProvider`), wrapped as a `ProviderResolver` via `tests/helpers/provider.ts` (`asResolver`, `fakeProvider`).
+- **Unit tests** (`tests/unit/**/*.test.ts`, helpers in `tests/helpers/`): vitest, `globals: true`, v8 coverage over `src/**`. Always use `tests/helpers/tmp.ts` for data dirs — never write to `~/.newsmonger`. API tests go through `createApp(...)` + `app.request(...)` (no real server). The AI provider is the deterministic `createMockProvider` (or an inline `fakeProvider`), wrapped as a `ProviderResolver` via `tests/helpers/provider.ts` (`asResolver`, `fakeProvider`).
 - **E2E tests** (`tests/e2e/**/*.spec.ts`): Playwright, serial (`workers: 1`), one shared server started by `playwright.config.ts` on port 4189 with `--ai-test` and a pid-scoped temp data dir. Tests build on each other's state (documented at the top of the spec).
 - **Commands**: unit `npm test` · E2E `npm run test:e2e` · everything `npm run test:all` (typecheck + lint + unit + E2E). Coverage report lands in `coverage/` (unit only for now — merged unit+E2E coverage is a known gap, see follow-up ticket).
 - The real Claude request path and the Tauri shell are covered by `docs/manual-test-plan.md`.

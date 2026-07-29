@@ -158,7 +158,7 @@ describe('an existing data file is cleaned when the store loads it', () => {
     // the same schema, so what lands in the database is already clean (NEWS-94).
     // Read as raw bytes rather than through the store, since the store's own
     // read path would sanitize it a second time and hide a dirty write.
-    const bytes = fs.readFileSync(path.join(dir, 'news.db')).toString('utf8');
+    const bytes = fs.readFileSync(path.join(dir, 'newsmonger.db')).toString('utf8');
     expect(bytes).not.toContain('<cite');
 
     // The imported file is kept under a new name, so it can't re-import — and

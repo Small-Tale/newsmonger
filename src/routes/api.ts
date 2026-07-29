@@ -151,7 +151,7 @@ export function registerApi(app: Hono<AppEnv>): void {
     // poll surfaces the in-flight state and then the items. The in-flight guard
     // means a scheduler tick that also finds this topic due won't double-run it.
     void c.get('runner').checkTopic(topic.id, { manual: true }).catch((err: unknown) => {
-      console.error('news: initial check failed:', err);
+      console.error('newsmonger: initial check failed:', err);
     });
     return c.json(topic, 201);
   });
@@ -271,7 +271,7 @@ export function registerApi(app: Hono<AppEnv>): void {
     if (body.topicId !== undefined) {
       if (!store.getTopic(body.topicId)) return c.json({ error: 'no such topic' }, 404);
       void runner.checkTopic(body.topicId, { manual: true }).catch((err: unknown) => {
-        console.error('news: check failed:', err);
+        console.error('newsmonger: check failed:', err);
       });
       return c.json({ started: [body.topicId] });
     }
@@ -280,7 +280,7 @@ export function registerApi(app: Hono<AppEnv>): void {
       .filter((t) => !t.paused)
       .map((t) => t.id);
     void runner.checkAll().catch((err: unknown) => {
-      console.error('news: check-all failed:', err);
+      console.error('newsmonger: check-all failed:', err);
     });
     return c.json({ started });
   });
@@ -483,12 +483,12 @@ export function registerApi(app: Hono<AppEnv>): void {
     if (kind === 'json') {
       return c.body(toJson(input), 200, {
         'Content-Type': 'application/json; charset=utf-8',
-        'Content-Disposition': `attachment; filename="news-${slug}.json"`,
+        'Content-Disposition': `attachment; filename="newsmonger-${slug}.json"`,
       });
     }
     return c.body(toMarkdown(input), 200, {
       'Content-Type': 'text/markdown; charset=utf-8',
-      'Content-Disposition': `attachment; filename="news-${slug}.md"`,
+      'Content-Disposition': `attachment; filename="newsmonger-${slug}.md"`,
     });
   };
 

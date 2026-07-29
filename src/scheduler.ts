@@ -28,7 +28,7 @@ export function startScheduler(runner: CheckRunner, tickMs: number = DEFAULT_TIC
         checked = await runner.checkDue(new Date());
       } while (checked > 0 && !stopped);
     } catch (err) {
-      console.error('news: scheduled check sweep failed:', err);
+      console.error('newsmonger: scheduled check sweep failed:', err);
     } finally {
       sweeping = false;
     }

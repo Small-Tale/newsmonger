@@ -2,7 +2,7 @@
 
 > Read this + `requirements-summary.md` at the start of a fresh session. Keep both in sync with reality in the same change as the code.
 
-**News**: topic-based news tracker. Node/TS server (Hono) + kerfjs client; Claude (web search) finds news per topic on a schedule, deduplicated against previously seen stories. JSON-file storage. Optional Tauri desktop shell (dev-mode only so far).
+**Newsmonger**: topic-based news tracker. Node/TS server (Hono) + kerfjs client; Claude (web search) finds news per topic on a schedule, deduplicated against previously seen stories. JSON-file storage. Optional Tauri desktop shell (dev-mode only so far).
 
 ## Directory tree
 
@@ -74,7 +74,7 @@ src/
     styles.scss       styling (light/dark via prefers-color-scheme)
 src-tauri/            Tauri v2 shell; one spawn path, dev runs tsx + release runs the sidecar
   src/lib.rs          server_command() picks the command; spawn_server() watches stdout + navigates
-  binaries/           gitignored: news-node-<triple> (real Node binary, externalBin sidecar)
+  binaries/           gitignored: newsmonger-node-<triple> (real Node binary, externalBin sidecar)
   server/             gitignored: staged cli.js + client/ + node_modules (bundled as `resources`)
 scripts/
   build-sidecar.sh    builds/stages the above, then boots it from a temp dir to verify
@@ -86,7 +86,7 @@ tests/
 docs/                 numbered requirements (1–25), ai/ summaries, manual-test-plan.md
 ```
 
-## Data schema (`<data-dir>/news.db`, SQLite — NEWS-94)
+## Data schema (`<data-dir>/newsmonger.db`, SQLite — NEWS-94)
 
 Tables `topics` / `items` / `runs` / `meta` (settings as one JSON row). Booleans are INTEGER 0/1; `sources`, `image` and `usage` are JSON columns. No foreign keys — a check can outlive its topic, so `deleteTopic` cascades explicitly. The shapes below are the zod schemas every row is validated against on read.
 
@@ -95,7 +95,7 @@ Tables `topics` / `items` / `runs` / `meta` (settings as one JSON row). Booleans
 - `settings`: itemRetentionDays (default 365, 0 = forever — NEWS-87), checkIntervalMs (default 1 day, min 5 min), highPriorityIntervalMs (≤ checkIntervalMs, clamped on update+load — NEWS-56), provider (default `auto`, `.catch('auto')` for retired providers), model (''), endpoint (''), notifyOnNewItems, monthlyBudgetUsd (0 = no cap — NEWS-79)
 - `runs[]`: id, topicId, startedAt, finishedAt, status(running|succeeded|failed), newItems, error, provider, model, usage (tokens+searches, null = unknown — NEWS-79) (last 200)
 
-Data dir: `--data-dir` flag → `NEWS_DATA_DIR` → `~/.news`. Also holds `news.db-wal`/`-shm`, `prices.json` (live model rates, user-editable — NEWS-93) and the image cache.
+Data dir: `--data-dir` flag → `NEWSMONGER_DATA_DIR` → `~/.newsmonger`. Also holds `newsmonger.db-wal`/`-shm`, `prices.json` (live model rates, user-editable — NEWS-93) and the image cache.
 
 ## Build / run / test
 
@@ -136,7 +136,7 @@ Data dir: `--data-dir` flag → `NEWS_DATA_DIR` → `~/.news`. Also holds `news.
 | Release bundling / sidecar | `scripts/build-sidecar.sh` + `src-tauri/tauri.conf.json` (`externalBin`, `resources`) |
 | A new runtime dependency | just add it to `package.json` `dependencies` — tsup externalizes it and the sidecar script installs it; no list to update |
 | Mock behavior in tests | `src/ai/providers/mock.ts` (topic name containing "fail"/"empty" triggers those paths) |
-| API keys / keychain | `src/keychain.ts` (OS layer) + `src/ai/api-keys.ts` (env→keychain precedence); `NEWS_FAKE_KEYCHAIN=1` for tests |
+| API keys / keychain | `src/keychain.ts` (OS layer) + `src/ai/api-keys.ts` (env→keychain precedence); `NEWSMONGER_FAKE_KEYCHAIN=1` for tests |
 | Foreground/attendance gate | `src/attendance.ts` + `CheckRunner.checkDue`; provider opts in via `attended: true`. **Manual checks (`{manual:true}`) record attendance** so a long sweep isn't deferred (NEWS-44) |
 | Article images / SSRF guards | `src/images/` — `safety.ts` (URL vetting), `ogimage.ts` (extract), `cache.ts` (fetch+store+`pruneImageCache`), route `/api/image/:hash` is **cache-only** |
 | Image cache pruning | `pruneImageCache`/`liveImageHashes` in `src/images/cache.ts`; called at startup (`cli.ts`) + on `DELETE /api/topics/:id` |

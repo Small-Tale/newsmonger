@@ -3,7 +3,7 @@ import type { Page } from '@playwright/test';
 import { acceptConfirm, expect, openSettingsTab, test, topicAction } from './fixtures.js';
 
 // Runs against the shared server from playwright.config.ts, which sets
-// NEWS_FAKE_KEYCHAIN=1 — the save/remove flows below are real all the way to
+// NEWSMONGER_FAKE_KEYCHAIN=1 — the save/remove flows below are real all the way to
 // the store, but the store is in-memory rather than the developer's keychain.
 //
 // Serial and stateful: each test leaves the keys as it found them so the rest

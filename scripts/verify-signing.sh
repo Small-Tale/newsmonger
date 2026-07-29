@@ -9,14 +9,14 @@
 #
 # Usage:
 #   bash scripts/verify-signing.sh                       # default release paths
-#   bash scripts/verify-signing.sh path/to/News.app      # explicit bundle
+#   bash scripts/verify-signing.sh path/to/Newsmonger.app      # explicit bundle
 #
 # Exits non-zero if the bundle would be rejected. Safe to run on an unsigned
 # build — it says which step failed rather than pretending.
 set -uo pipefail
 cd "$(dirname "$0")/.."
 
-APP="${1:-src-tauri/target/release/bundle/macos/News.app}"
+APP="${1:-src-tauri/target/release/bundle/macos/Newsmonger.app}"
 DMG_DIR="src-tauri/target/release/bundle/dmg"
 
 fail=0
@@ -57,9 +57,9 @@ fi
 # The part most likely to be wrong, and the part that fails *after* a successful
 # notarization: a Node binary re-signed under the hardened runtime cannot run
 # JavaScript without JIT entitlements.
-sidecar="$(find "$APP/Contents" -type f -name 'news-node*' -perm -u+x 2>/dev/null | head -1)"
+sidecar="$(find "$APP/Contents" -type f -name 'newsmonger-node*' -perm -u+x 2>/dev/null | head -1)"
 if [ -z "$sidecar" ]; then
-  bad "no news-node sidecar found inside the bundle"
+  bad "no newsmonger-node sidecar found inside the bundle"
 else
   ok "sidecar: ${sidecar#"$APP"/}"
   ents="$(codesign -d --entitlements - "$sidecar" 2>/dev/null || true)"

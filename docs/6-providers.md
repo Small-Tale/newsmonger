@@ -1,6 +1,6 @@
 # 6 — AI Providers
 
-News checks run through a pluggable provider abstraction so you can choose which AI finds and summarizes news.
+Newsmonger checks run through a pluggable provider abstraction so you can choose which AI finds and summarizes news.
 
 ## Scope: web-searching platforms only
 
@@ -26,7 +26,7 @@ News checks run through a pluggable provider abstraction so you can choose which
 
 ## Selection & config
 
-- **FR-6.2** Provider, model, and endpoint are **persisted settings** (`Settings.provider` / `.model` / `.endpoint`), changeable at runtime from the UI's Source block (`PATCH /api/settings`) or seeded at startup by `--provider auto|anthropic|openai|mock`, `--model <id>`, `--endpoint <url>` / `NEWS_PROVIDER`, `NEWS_MODEL`, `NEWS_ENDPOINT`. `--ai-test` forces the mock provider without touching settings.
+- **FR-6.2** Provider, model, and endpoint are **persisted settings** (`Settings.provider` / `.model` / `.endpoint`), changeable at runtime from the UI's Source block (`PATCH /api/settings`) or seeded at startup by `--provider auto|anthropic|openai|mock`, `--model <id>`, `--endpoint <url>` / `NEWSMONGER_PROVIDER`, `NEWSMONGER_MODEL`, `NEWSMONGER_ENDPOINT`. `--ai-test` forces the mock provider without touching settings.
 - **FR-6.3** `resolveProvider()` runs per check. For `auto` it returns the first available provider in `AUTO_ORDER` (`anthropic`, then `openai`); for an explicit choice it returns that provider if available, else throws an actionable message (e.g. "Anthropic has no API key — add one in Settings, or set ANTHROPIC_API_KEY"). If nothing is available, the check fails with a clear error rather than crashing the app. The provider that ran is recorded on the `CheckRun`.
 - **FR-6.4** A stored provider that no longer exists in the schema degrades to `auto` (`z.enum(...).catch('auto')`) rather than failing the whole data file — see [4 — CLI, Server, and Storage](4-cli-server-storage.md) FR-4.9.
 

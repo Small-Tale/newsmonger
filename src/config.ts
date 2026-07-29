@@ -18,11 +18,11 @@ export interface CliOptions {
   endpoint: string | null;
 }
 
-/** Resolve the data directory: `--data-dir` flag, then NEWS_DATA_DIR, then `~/.news`. */
+/** Resolve the data directory: `--data-dir` flag, then NEWSMONGER_DATA_DIR, then `~/.newsmonger`. */
 export function defaultDataDir(env: NodeJS.ProcessEnv = process.env): string {
-  const fromEnv = env['NEWS_DATA_DIR'];
+  const fromEnv = env['NEWSMONGER_DATA_DIR'];
   if (fromEnv !== undefined && fromEnv !== '') return fromEnv;
-  return path.join(os.homedir(), '.news');
+  return path.join(os.homedir(), '.newsmonger');
 }
 
 function parseProvider(value: string): ProviderName {
@@ -33,9 +33,9 @@ function parseProvider(value: string): ProviderName {
 
 /** Parse CLI arguments. Throws on unknown flags or missing flag values. */
 export function parseArgs(argv: string[], env: NodeJS.ProcessEnv = process.env): CliOptions {
-  const envProvider = env['NEWS_PROVIDER'];
-  const envModel = env['NEWS_MODEL'];
-  const envEndpoint = env['NEWS_ENDPOINT'];
+  const envProvider = env['NEWSMONGER_PROVIDER'];
+  const envModel = env['NEWSMONGER_MODEL'];
+  const envEndpoint = env['NEWSMONGER_ENDPOINT'];
   const options: CliOptions = {
     port: null,
     dataDir: defaultDataDir(env),

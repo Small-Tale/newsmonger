@@ -844,7 +844,7 @@ function onboardingSuggestJsx(s: AppState): SafeHtml {
   if (!providerLikelyUsable(s)) {
     return (
       <p class="suggest-note">
-        Set up a source above and News can suggest topics for you — or just pick from the list.
+        Set up a source above and Newsmonger can suggest topics for you — or just pick from the list.
       </p>
     );
   }
@@ -1200,7 +1200,7 @@ function onboardingJsx(step: OnboardingStep): SafeHtml {
   const index = ONBOARDING_STEPS.indexOf(step);
   return (
     <div class="dialog-backdrop onboarding-backdrop">
-      <div class="dialog onboarding" role="dialog" aria-modal="true" aria-label="Set up News">
+      <div class="dialog onboarding" role="dialog" aria-modal="true" aria-label="Set up Newsmonger">
         <div class="onboarding-body">{onboardingStepJsx(step, s)}</div>
         <div class="onboarding-foot">
           <span class="onboarding-dots" aria-hidden="true">
@@ -1226,9 +1226,9 @@ function onboardingStepJsx(step: OnboardingStep, s: AppState): SafeHtml {
   if (step === 'welcome') {
     return (
       <div>
-        <h2>News watches topics, not feeds.</h2>
+        <h2>Newsmonger watches topics, not feeds.</h2>
         <p class="onboarding-lead">
-          Name the things you want to keep up with. On a schedule you choose, News asks an AI — with live web
+          Name the things you want to keep up with. On a schedule you choose, Newsmonger asks an AI — with live web
           search — whether anything genuinely new has happened, and shows you only that, with links to the
           sources.
         </p>
@@ -1238,7 +1238,7 @@ function onboardingStepJsx(step: OnboardingStep, s: AppState): SafeHtml {
         </p>
         <p class="note">
           A check sends the topic’s name and the titles already reported for it — nothing else leaves this
-          machine, and News has no servers of its own. The full note is in Settings → Privacy.
+          machine, and Newsmonger has no servers of its own. The full note is in Settings → Privacy.
         </p>
       </div>
     );
@@ -1247,7 +1247,7 @@ function onboardingStepJsx(step: OnboardingStep, s: AppState): SafeHtml {
   if (step === 'topics') {
     return (
       <div>
-        <h2>What should News watch?</h2>
+        <h2>What should Newsmonger watch?</h2>
         <p class="onboarding-lead">
           Pick a few to start with — you can add your own, rename them, or delete them at any time.
         </p>
@@ -1310,7 +1310,7 @@ function onboardingSourceJsx(s: AppState): SafeHtml {
         <div>
           <p class="onboarding-lead">
             Found a signed-in subscription on this machine — nothing else to set up. Checks will use it, and
-            run while News is open.
+            run while Newsmonger is open.
           </p>
           <ul class="detected">
             {subscriptions.map((p) => (
@@ -1337,7 +1337,7 @@ function onboardingSourceJsx(s: AppState): SafeHtml {
       ) : (
         <div>
           <p class="onboarding-lead">
-            News needs an AI that can search the web. Either sign in to the Claude or Codex CLI on this
+            Newsmonger needs an AI that can search the web. Either sign in to the Claude or Codex CLI on this
             machine, or paste an API key below — it’s stored in your {s.keychainLabel}, never in a file.
           </p>
           <div class="keys">{s.keys.map((k) => keyRowJsx(k, s.keychainLabel, s.keychainAvailable, s.savingKey === k.provider))}</div>
@@ -1566,11 +1566,11 @@ function privacyNoteJsx(s: AppState): SafeHtml {
         you meant). Nothing else — not the feed, not your other topics, not anything you bookmarked.
       </p>
       <p class="note">
-        <strong>Stored on this machine only</strong>, in ~/.news: your topics, the stories found, and cached
+        <strong>Stored on this machine only</strong>, in ~/.newsmonger: your topics, the stories found, and cached
         article images. <strong>API keys are not stored there</strong> — they live in your {s.keychainLabel}.
       </p>
       <p class="note">
-        <strong>News has no servers and collects no telemetry.</strong> The only outbound traffic is the check
+        <strong>Newsmonger has no servers and collects no telemetry.</strong> The only outbound traffic is the check
         itself, fetching article images, and opening links you click.
       </p>
     </div>
@@ -1657,7 +1657,7 @@ function settingsPanelJsx(s: AppState): SafeHtml {
                 <input type="text" data-action="daily-times" value={s.settings.dailyTimes.join(', ')} placeholder="08:00, 18:00" />
               </label>
               <p class="note">
-                Local times, 24-hour, comma separated. A slot missed while News was closed is served when it
+                Local times, 24-hour, comma separated. A slot missed while Newsmonger was closed is served when it
                 next opens rather than skipped — so a morning briefing is still there at lunchtime.
               </p>
             </div>
@@ -1730,7 +1730,7 @@ function settingsPanelJsx(s: AppState): SafeHtml {
         <div class="source-note">
           {providerIsAttended(s.settings.provider) ? (
             <p class="note">
-              Checks use your subscription, not an API key. Scheduled checks run only while News is open; “Check now”
+              Checks use your subscription, not an API key. Scheduled checks run only while Newsmonger is open; “Check now”
               always works.
             </p>
           ) : (
@@ -1799,7 +1799,7 @@ function settingsPanelJsx(s: AppState): SafeHtml {
           )}
         </div>
         <p class="note">
-          Keys are stored in your {s.keychainLabel} — never in ~/.news/news.db, and never sent anywhere but the
+          Keys are stored in your {s.keychainLabel} — never in ~/.newsmongermonger/newsmonger.db, and never sent anywhere but the
           provider you chose.
         </p>
         </div>
@@ -1854,7 +1854,7 @@ function settingsPanelJsx(s: AppState): SafeHtml {
             data-action="notify-toggle"
             checked={s.settings.notifyOnNewItems ? true : undefined}
           />
-          <span>Notify me when new stories arrive while News isn’t focused</span>
+          <span>Notify me when new stories arrive while Newsmonger isn’t focused</span>
         </label>
         {/* Always-present slot for the permission note (KF-377). */}
         <div class="notify-note">
@@ -2101,7 +2101,7 @@ function appJsx(): SafeHtml {
             {icon('panel', 17)}
           </button>
           <h1 class="wordmark">
-            News<span class="mark-dot">.</span>
+            Newsmonger<span class="mark-dot">.</span>
           </h1>
         </div>
         <div class="header-controls">
@@ -2357,7 +2357,7 @@ function appJsx(): SafeHtml {
         </ul>
         <div class="empty-slot">
           {s.loaded && s.topics.length === 0 ? (
-            <p class="empty">Nothing is being watched yet. Add a topic below — News checks it on your schedule and reports only what's new.</p>
+            <p class="empty">Nothing is being watched yet. Add a topic below — Newsmonger checks it on your schedule and reports only what's new.</p>
           ) : (
             ''
           )}

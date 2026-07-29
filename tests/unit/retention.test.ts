@@ -96,7 +96,7 @@ describe('Store.pruneOldItems (NEWS-87)', () => {
     // in its new form — a DELETE that matches nothing should leave the database
     // byte-identical, and the retention sweep runs on every tick.
     const { store } = storeWith([1]);
-    const db = `${store.dataDir}/news.db`;
+    const db = `${store.dataDir}/newsmonger.db`;
     const size = fs.statSync(db).size;
     const wal = fs.existsSync(`${db}-wal`) ? fs.statSync(`${db}-wal`).size : 0;
 
@@ -181,7 +181,7 @@ describe('pruning runs as part of a check (NEWS-87)', () => {
 describe('Store.pruneOldRuns (NEWS-103)', () => {
   /** Insert `n` runs directly, dated back from `NOW`, oldest first. */
   function seedRuns(store: Store, n: number, dayStep = 0): void {
-    const db = new DatabaseSync(`${store.dataDir}/news.db`);
+    const db = new DatabaseSync(`${store.dataDir}/newsmonger.db`);
     db.exec('BEGIN');
     const insert = db.prepare(
       `INSERT INTO runs (id, topic_id, started_at, finished_at, status, new_items, error, provider, model, usage)

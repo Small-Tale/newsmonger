@@ -85,7 +85,7 @@ function spawnRunner(binary: string): CodexCliRunner {
       // Both the schema and the final message go through temp files: Codex
       // takes the schema as a path, and reading the answer from a file beats
       // scraping it out of the progress log on stdout.
-      const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'news-codex-'));
+      const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'newsmonger-codex-'));
       const schemaFile = path.join(dir, 'schema.json');
       const outFile = path.join(dir, 'last-message.txt');
       try {

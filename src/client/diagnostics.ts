@@ -81,7 +81,7 @@ export interface DiagnosticsOptions {
 export function buildDiagnostics(state: StateResp, opts: DiagnosticsOptions): string {
   const rows = runRows(state);
   const lines: string[] = [];
-  lines.push('# News diagnostics');
+  lines.push('# Newsmonger diagnostics');
   lines.push('');
   lines.push(`version: ${opts.appVersion}`);
   lines.push(`user agent: ${opts.userAgent}`);

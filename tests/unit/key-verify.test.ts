@@ -35,7 +35,7 @@ async function put(app: ReturnType<typeof makeApp>, key: string) {
 
 describe('key verification before save (NEWS-78)', () => {
   beforeEach(() => {
-    process.env['NEWS_FAKE_KEYCHAIN'] = '1';
+    process.env['NEWSMONGER_FAKE_KEYCHAIN'] = '1';
     // The fake keychain is process-global, so a key saved by an earlier test
     // would otherwise make "was it stored?" assertions read the wrong state.
     __resetKeychainForTests();

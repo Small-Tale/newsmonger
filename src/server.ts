@@ -72,7 +72,7 @@ export function createApp(deps: {
     c.set('discovery', deps.discovery ?? null);
     c.set('undo', undo);
     // Debug aid (e.g. verifying the Tauri webview actually hits the server).
-    if (process.env['NEWS_LOG_REQUESTS'] === '1') {
+    if (process.env['NEWSMONGER_LOG_REQUESTS'] === '1') {
       console.error(`[req] ${c.req.method} ${c.req.path}`);
     }
     await next();

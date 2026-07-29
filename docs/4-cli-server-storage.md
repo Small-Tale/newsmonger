@@ -4,17 +4,17 @@
 
 - **FR-4.1** `news` (dev: `npm run dev` → `tsx src/cli.ts`) starts the server and opens the browser. Flags:
   - `--port N` — requested port (default 4187)
-  - `--data-dir PATH` — data directory (default `$NEWS_DATA_DIR` or `~/.news`)
-  - `--provider auto|anthropic|openai|mock` — seed the provider setting (env `NEWS_PROVIDER`)
-  - `--model ID` — seed the model setting (env `NEWS_MODEL`)
-  - `--endpoint URL` — seed the endpoint setting for OpenAI-compatible gateways (env `NEWS_ENDPOINT`)
+  - `--data-dir PATH` — data directory (default `$NEWSMONGER_DATA_DIR` or `~/.newsmonger`)
+  - `--provider auto|anthropic|openai|mock` — seed the provider setting (env `NEWSMONGER_PROVIDER`)
+  - `--model ID` — seed the model setting (env `NEWSMONGER_MODEL`)
+  - `--endpoint URL` — seed the endpoint setting for OpenAI-compatible gateways (env `NEWSMONGER_ENDPOINT`)
   - `--no-open` — don't open the browser
   - `--strict-port` — fail instead of falling back when the port is busy
   - `--ai-test` — force the deterministic mock provider (no API key needed)
 
   Provider/model/endpoint flags **seed** the persisted settings at startup; the UI changes them thereafter. See [6 — AI Providers](6-providers.md) for provider-specific env vars.
 - **FR-4.2** Unknown flags or bad values print a usage line and exit non-zero.
-- **FR-4.3** The server prints `news running at http://127.0.0.1:<port>` on stdout when ready — the Tauri shell watches for this exact `running at ` marker (KEEP IN SYNC with `src-tauri/src/lib.rs`).
+- **FR-4.3** The server prints `newsmonger running at http://127.0.0.1:<port>` on stdout when ready — the Tauri shell watches for this exact `running at ` marker (KEEP IN SYNC with `src-tauri/src/lib.rs`).
 - **FR-4.4** SIGINT/SIGTERM stop the scheduler and server cleanly.
 
 ## Server
@@ -33,7 +33,7 @@
 
 ## Storage
 
-- **FR-4.8** *(Shipped, NEWS-94)* All data lives in a **SQLite database**, `<data-dir>/news.db`: topics, items, settings, and the last 200 check runs. Writes are per-row — toggling one bookmark writes that row, where the previous JSON file re-serialized every topic, story and run on every mutation. Uses the built-in `node:sqlite`, so there is no native dependency and nothing extra to stage into the Tauri sidecar; it needs **Node 22.5+**, which is now the engine floor.
+- **FR-4.8** *(Shipped, NEWS-94)* All data lives in a **SQLite database**, `<data-dir>/newsmonger.db`: topics, items, settings, and the last 200 check runs. Writes are per-row — toggling one bookmark writes that row, where the previous JSON file re-serialized every topic, story and run on every mutation. Uses the built-in `node:sqlite`, so there is no native dependency and nothing extra to stage into the Tauri sidecar; it needs **Node 22.5+**, which is now the engine floor.
 
   Rows are still **validated, not asserted** — every read goes through the same zod schemas the JSON file used, so the trust boundary didn't move, it just applies per row. Settings are one JSON row rather than columns, because `SettingsSchema` defaults every field and that makes adding a setting a zero-migration change.
 
@@ -67,8 +67,16 @@
   The sweep ignores the `saved` / `offTopic` exemptions that `pruneOldItems` honours. Those mean "the user wants this kept", but there is no topic left to keep it under — and a flagged orphan would go on feeding the negative-example list for a topic that no longer exists.
 
 - **FR-4.8b** *(Shipped, NEWS-94)* **No foreign keys on `topic_id`.** `ON DELETE CASCADE` would make `deleteTopic` a single statement, but it would also reject a *write* for a topic deleted mid-check — a race the app has tolerated since `markTopicChecked` was written. A constraint would convert a harmless no-op into a thrown error mid-sweep. `deleteTopic` cascades explicitly, in a transaction.
-- **FR-4.9** A corrupt database is backed up (`news.db.corrupt-<ts>`, along with its `-wal`/`-shm` siblings, which would otherwise be replayed into the replacement) and the app starts fresh rather than crashing. Unreadable **settings** alone fall back to defaults *without* touching topics and stories — that separation is much of the point of leaving one file behind. Schema *evolution* must not trigger this: removed keys are stripped by zod, and a stored `provider` that no longer exists degrades to `auto` (`.catch('auto')`), so retiring a provider never wipes a user's topics.
-- **FR-4.10** Tests never touch `~/.news` — unit tests and E2E use temp dirs.
+- **FR-4.9** A corrupt database is backed up (`newsmonger.db.corrupt-<ts>`, along with its `-wal`/`-shm` siblings, which would otherwise be replayed into the replacement) and the app starts fresh rather than crashing. Unreadable **settings** alone fall back to defaults *without* touching topics and stories — that separation is much of the point of leaving one file behind. Schema *evolution* must not trigger this: removed keys are stripped by zod, and a stored `provider` that no longer exists degrades to `auto` (`.catch('auto')`), so retiring a provider never wipes a user's topics.
+- **FR-4.10** Tests never touch `~/.newsmonger` — unit tests and E2E use temp dirs.
+
+- **FR-4.12** *(Shipped, NEWS-164)* The product was renamed **News → Newsmonger**, and the rename went all the way through rather than stopping at the wordmark. A repo carrying two names for one product is a repo where every later reader has to work out which one is current.
+
+  Moved: the npm package and `bin` name, the Tauri `productName`, bundle `identifier` and window title, the Rust crate (`newsmonger` / `newsmonger_lib`), the sidecar binary (`newsmonger-node`), the keychain **service name**, the data directory (`~/.newsmonger`), the database file (`newsmonger.db`), the readiness line, every `NEWSMONGER_*` environment variable, export filenames, the diagnostics header, and the temp-directory prefixes.
+
+  Deliberately **not** moved: `NewsItem`, `NewsProvider`, `NewsService`, `NEWS_JSON_SCHEMA` and the like. Those name *news* — the thing the app deals in — not the product, and renaming them would have been a category error. The same goes for prose like "News Checks and Deduplication" and "Review Flagged News Items". The `NEWS-nn` ticket prefix is Hot Sheet's project key and is untouched.
+
+  **This is a breaking change for anyone with an existing local install** — a new empty data directory, and API keys must be re-entered because the keychain service name moved. Acceptable only because the app is pre-launch with no users; had it shipped, the data dir would have needed a migration and the keychain a read-old-write-new fallback.
 - **FR-4.11** *(Shipped)* **Story retention** (NEWS-87). Stories older than `settings.itemRetentionDays` are dropped; the default is **365 days** and **0 means keep forever** (the pre-NEWS-87 behaviour). `runs` has been capped at 200 all along and images are pruned by mark-and-sweep — `items` was the one collection with no ceiling at all, and every mutation rewrites the whole file, so unbounded growth was a write-cost problem as much as a disk one.
 
   Two exemptions, both deliberate: **bookmarked** stories, which the user marked as worth keeping (retention is about the pile that accumulates on its own, not the things they chose), and **off-topic flagged** ones, whose titles feed the prompt's negative-example list — pruning those would quietly un-teach the model what the user meant by a topic.

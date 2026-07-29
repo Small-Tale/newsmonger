@@ -5,8 +5,8 @@ import path from 'node:path';
 import { defineConfig } from '@playwright/test';
 
 // Each test run gets its own isolated data dir (pid-scoped) so E2E state never
-// touches the real ~/.news and parallel runs don't collide.
-const dataDir = path.join(os.tmpdir(), `news-e2e-${process.pid}`);
+// touches the real ~/.newsmonger and parallel runs don't collide.
+const dataDir = path.join(os.tmpdir(), `newsmonger-e2e-${process.pid}`);
 fs.rmSync(dataDir, { recursive: true, force: true });
 fs.mkdirSync(dataDir, { recursive: true });
 
@@ -37,7 +37,7 @@ export default defineConfig({
       // Key flows are driven through the real UI, so the server needs a
       // keychain — but never the developer's own, which would leave entries
       // behind and can block on an OS authorization prompt.
-      NEWS_FAKE_KEYCHAIN: '1',
+      NEWSMONGER_FAKE_KEYCHAIN: '1',
       // When E2E_COVERAGE=1 (scripts/test-all.sh), the server process writes V8
       // coverage on exit; scripts/merge-coverage.mjs converts it with c8.
       ...(process.env.E2E_COVERAGE === '1'

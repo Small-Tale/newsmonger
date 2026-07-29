@@ -1,4 +1,4 @@
-//! Tauri shell for the News app.
+//! Tauri shell for the Newsmonger app.
 //!
 //! The app's logic lives in the Node server (`src/cli.ts`); this shell only
 //! launches it and points the webview at it, mirroring the glassbox
@@ -10,7 +10,7 @@
 //!
 //! - **Dev** (`npm run tauri:dev`): the system `node` running `src/cli.ts` from
 //!   source via tsx.
-//! - **Release**: the bundled Node sidecar (`news-node`, shipped beside the app
+//! - **Release**: the bundled Node sidecar (`newsmonger-node`, shipped beside the app
 //!   binary as an `externalBin`) running the tsup bundle staged under
 //!   `resources/server/`. See `scripts/build-sidecar.sh`.
 
@@ -89,9 +89,9 @@ fn server_command(app: &AppHandle) -> Result<Command, String> {
         .parent()
         .ok_or("app executable has no parent directory")?
         .join(if cfg!(windows) {
-            "news-node.exe"
+            "newsmonger-node.exe"
         } else {
-            "news-node"
+            "newsmonger-node"
         });
     if !node.exists() {
         return Err(format!(
@@ -130,7 +130,7 @@ fn spawn_server(app: &AppHandle, mut cmd: Command, window: tauri::WebviewWindow)
     let mut child = match cmd
         // The server exits itself if this process dies without cleaning up
         // (hard kill, `tauri dev` rebuild restart).
-        .env("NEWS_WATCH_PARENT", "1")
+        .env("NEWSMONGER_WATCH_PARENT", "1")
         .stdout(Stdio::piped())
         .stderr(Stdio::inherit())
         .spawn()
