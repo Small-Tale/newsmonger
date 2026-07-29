@@ -579,7 +579,12 @@ function sourceStatusJsx(): SafeHtml {
  * The stored key is never rendered; when one exists there is no field at all,
  * so there's nothing for a screenshot or a password manager to pick up.
  */
-function keyRowJsx(key: AppState['keys'][number], keychainLabel: string, keychainAvailable: boolean): SafeHtml {
+function keyRowJsx(
+  key: AppState['keys'][number],
+  keychainLabel: string,
+  keychainAvailable: boolean,
+  saving: boolean,
+): SafeHtml {
   const inputId = `key-input-${key.provider}`;
 
   if (key.source === 'env') {
@@ -611,6 +616,11 @@ function keyRowJsx(key: AppState['keys'][number], keychainLabel: string, keychai
   return (
     <div class="key-row" data-key={`key-${key.provider}`}>
       <span class="key-provider">{key.label}</span>
+      {/* No Save button (NEWS-156). The field commits on `change` — blur or
+          Enter — which is the same rule the interval and budget fields follow,
+          and for a stronger reason: saving verifies the key with its vendor
+          (FR-20.9), so committing per keystroke would probe the vendor once per
+          character and report every prefix of a key as invalid. */}
       <form class="key-form" data-save-key={key.provider}>
         <input
           type="password"
@@ -623,10 +633,10 @@ function keyRowJsx(key: AppState['keys'][number], keychainLabel: string, keychai
           disabled={keychainAvailable ? undefined : true}
           data-morph-skip-children
         />
-        <button class="btn" type="submit" disabled={keychainAvailable ? undefined : true}>
-          Save
-        </button>
       </form>
+      {/* Losing the button also loses the only sign the app is doing something,
+          and the vendor round-trip is not instant. This is the replacement. */}
+      <span class="key-saving">{saving ? 'Checking…' : ''}</span>
     </div>
   );
 }
@@ -1318,7 +1328,7 @@ function onboardingSourceJsx(s: AppState): SafeHtml {
             News needs an AI that can search the web. Either sign in to the Claude or Codex CLI on this
             machine, or paste an API key below — it’s stored in your {s.keychainLabel}, never in a file.
           </p>
-          <div class="keys">{s.keys.map((k) => keyRowJsx(k, s.keychainLabel, s.keychainAvailable))}</div>
+          <div class="keys">{s.keys.map((k) => keyRowJsx(k, s.keychainLabel, s.keychainAvailable, s.savingKey === k.provider))}</div>
           <div class="key-notes">{s.keyError !== null ? <p class="banner error">{s.keyError}</p> : ''}</div>
           <p class="note">
             Keys are checked with the provider before they’re saved, so a typo shows up here rather than as a
@@ -1641,7 +1651,7 @@ function settingsPanelJsx(s: AppState): SafeHtml {
           )}
         </div>
         <h3 class="eyebrow">API keys</h3>
-        <div class="keys">{s.keys.map((k) => keyRowJsx(k, s.keychainLabel, s.keychainAvailable))}</div>
+        <div class="keys">{s.keys.map((k) => keyRowJsx(k, s.keychainLabel, s.keychainAvailable, s.savingKey === k.provider))}</div>
 
         <div class="key-notes">
           {s.keyError !== null ? <p class="banner error">{s.keyError}</p> : ''}
@@ -2889,19 +2899,39 @@ function wireEvents(root: HTMLElement): void {
     if (e.target === el) appStore.actions.setSettingsOpen(false);
   });
 
-  void delegate(root, 'submit', '[data-save-key]', (e, form) => {
-    e.preventDefault();
+  // No Save button any more (NEWS-156): the field commits on `change`, which
+  // fires on blur and on Enter. `submit` stays because Enter in a single-input
+  // form submits it as well — the two can both fire for one Enter, which is
+  // exactly why `commitKey` empties the field *before* awaiting rather than
+  // after. The second call then sees a blank field and stops.
+  //
+  // `change`, never `input`: saving verifies the key with its vendor (FR-20.9),
+  // so committing per keystroke would probe once per character and report every
+  // prefix of a key as invalid. Same rule the interval and budget fields follow,
+  // for a costlier reason.
+  const commitKey = (form: Element): void => {
     const provider = form.getAttribute('data-save-key');
     const input = form.querySelector<HTMLInputElement>('input[name=api-key]');
     if (provider === null || !input) return;
     const key = input.value.trim();
     if (key === '') return;
-    void saveKey(provider, key).then((ok) => {
-      // Clear the field either way: on success it's stored, and on failure
-      // leaving a key sitting in the DOM serves no purpose.
-      input.value = '';
-      return ok;
+    // Cleared either way: on success it's in the keychain, and on failure
+    // leaving a key sitting in the DOM serves no purpose.
+    input.value = '';
+    appStore.actions.setSavingKey(provider);
+    void saveKey(provider, key).finally(() => {
+      appStore.actions.setSavingKey(null);
     });
+  };
+
+  void delegate(root, 'submit', '[data-save-key]', (e, form) => {
+    e.preventDefault();
+    commitKey(form);
+  });
+
+  void delegate(root, 'change', '[data-save-key] input[name=api-key]', (_e, input) => {
+    const form = input.closest('[data-save-key]');
+    if (form !== null) commitKey(form);
   });
 
   void delegate(root, 'click', '[data-remove-key]', (_e, el) => {

@@ -204,6 +204,14 @@ export interface AppState {
   keychainLabel: string;
   /** Error shown inside the dialog, kept separate from the page banner. */
   keyError: string | null;
+  /**
+   * Provider whose key is being verified and stored right now, or null (NEWS-156).
+   *
+   * The Save button was the only sign the app had heard you, and the vendor
+   * round-trip that verifies a key (FR-20.9) is not instant. Committing on blur
+   * without this would look like nothing happened.
+   */
+  savingKey: string | null;
   /** Whether the topics sidebar is collapsed (per-device, see `SIDEBAR_KEY`). */
   sidebarCollapsed: boolean;
   /** How the topics sidebar is ordered (per-device, NEWS-63). Default A→Z. */
@@ -428,6 +436,7 @@ export const appStore = defineStore({
     keychainAvailable: false,
     keychainLabel: 'system keychain',
     keyError: null,
+    savingKey: null,
     sidebarCollapsed: readSidebarCollapsed(),
     topicSort: readTopicSort(),
     selectedTopicIds: [],
@@ -489,6 +498,9 @@ export const appStore = defineStore({
         keychainAvailable: resp.keychainAvailable,
         keychainLabel: resp.keychainLabel,
       });
+    },
+    setSavingKey: (savingKey: string | null) => {
+      set({ ...get(), savingKey });
     },
     setKeyError: (keyError: string | null) => {
       set({ ...get(), keyError });

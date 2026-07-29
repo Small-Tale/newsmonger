@@ -395,7 +395,7 @@ test('the Topics step opens the real discovery dialog (NEWS-146)', async ({ page
   await page.goto('/');
   await openSettingsTab(page, 'Source');
   await page.fill('.key-row:has-text("Anthropic") .key-input', 'sk-ant-e2e-onboarding');
-  await page.click('.key-row:has-text("Anthropic") button[type=submit]');
+  await page.locator('.key-row:has-text("Anthropic") .key-input').blur();
   await expect(page.locator('.key-row:has-text("Anthropic") .key-state')).toContainText('stored in');
   await page.selectOption('[data-action=provider]', 'anthropic');
   await page.locator('.dialog [data-action=close-settings]').click();

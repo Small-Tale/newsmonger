@@ -183,6 +183,7 @@ Subscription-backed providers (`attended: true`) run *scheduled* checks only whi
 - FR-7.7 key routes (`GET`/`PUT`/`DELETE /api/keys`): **Shipped**
 - FR-7.8 status never carries the key, masked or otherwise: **Shipped**
 - FR-7.9 single settings dialog (interval, provider, model, endpoint, keys): **Shipped**
+- FR-7.10a **Shipped** (NEWS-156): **no Save button** — the key field commits on `change` (blur/Enter), never `input`, because a save verifies the key with its vendor. Enter fires `submit` *and* `change`, so the field is cleared **before** the await, or one keypress sends two `PUT`s. A `.key-saving` "Checking…" note replaces the button as the in-flight signal.
 - FR-7.10 three key-row states; no input when a key exists: **Shipped**
 - FR-7.11 disabled inputs + env-var guidance with no keychain: **Shipped** (rendering path untested — needs a machine without a credential store)
 - FR-7.12 `NEWS_FAKE_KEYCHAIN=1` in-memory store for tests: **Shipped**

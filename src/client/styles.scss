@@ -1257,6 +1257,23 @@ h2.eyebrow {
   }
 }
 
+// The in-flight note that replaced the Save button (NEWS-156). Its own class,
+// not a `.key-state` variant: `.key-state` means "this provider's key status",
+// and a test asserting an unconfigured row has none of those is right to.
+// Hugs its text rather than claiming a flex share — it sits beside a field that
+// must keep its width — and leaves the layout entirely when there is nothing to
+// say, so the row doesn't reserve a gap for a word that is usually absent.
+.key-saving {
+  flex: 0 0 auto;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--ink-soft);
+
+  &:empty {
+    display: none;
+  }
+}
+
 .key-hint {
   flex-basis: 100%;
   padding-left: 130px;

@@ -75,9 +75,15 @@ Verified on a Windows 11 VM. Every one of these exited 0 while doing the wrong t
   |---|---|
   | From the environment | `✓ from ANTHROPIC_API_KEY` and a note that it's set outside the app. **No Remove** — nothing here can unset a variable it didn't set |
   | Stored in the keychain | `✓ stored in Keychain` and **Remove** |
-  | Not configured | `<input type="password">` and **Save** |
+  | Not configured | `<input type="password">` that saves itself |
 
   When a key exists there is **no input at all** — the value is never rendered, so there is nothing for a screenshot or password manager to pick up. The input is cleared after a save attempt either way.
+
+- **FR-7.10a** *(Shipped, NEWS-156)* **There is no Save button.** The field commits on `change` — blur or Enter — the same rule the interval and budget fields follow, and for a costlier reason: a save **verifies the key with its vendor** (FR-20.9), so committing on `input` would probe once per keystroke and report every prefix of a key being typed as invalid. Blurring a field nobody touched saves nothing; an empty `PUT` would read as "clear my key".
+
+  Enter fires **both** `submit` (a single-input form submits on Enter) and `change`, so one keypress reaches the handler twice. The field is therefore emptied *before* the save is awaited rather than after, so the second call finds it blank and stops. Measured: with the clear after the await, one Enter sends **two** `PUT`s and two vendor verifications. The E2E counts the requests rather than checking the key ended up stored — it ends up stored either way, so the obvious assertion passes on the bug.
+
+  Losing the button also loses the only sign the app heard you, and the vendor round-trip is not instant, so a `.key-saving` note reads **Checking…** while a save is in flight. Its own class rather than a `.key-state` variant: `.key-state` means "this provider's key status", and a test asserting an unconfigured row has none of those is right to.
 
 - **FR-7.11** *(Shipped)* Where no credential store is available, the inputs are disabled and the dialog names the environment variable to set instead.
 
@@ -85,7 +91,7 @@ Verified on a Windows 11 VM. Every one of these exited 0 while doing the wrong t
 
 The dialog is a conditional sibling and so lives inside an always-present `#settings-slot` container, per the kerf rule in [3 — UI](3-ui.md) (KF-377).
 
-The backdrop and the ✕ deliberately use **different** actions (`settings-backdrop` vs `close-settings`). Delegation matches against the target's ancestors, and the backdrop wraps the whole dialog — so when both shared one action, every click inside the dialog (including **Save**) matched a `close-settings` ancestor and dismissed the dialog mid-submit, producing a "form is not connected" warning and a save that never happened. Backdrop click-away now fires only when the click landed on the backdrop itself.
+The backdrop and the ✕ deliberately use **different** actions (`settings-backdrop` vs `close-settings`). Delegation matches against the target's ancestors, and the backdrop wraps the whole dialog — so when both shared one action, every click inside the dialog (including the then-present **Save**) matched a `close-settings` ancestor and dismissed the dialog mid-submit, producing a "form is not connected" warning and a save that never happened. Backdrop click-away now fires only when the click landed on the backdrop itself.
 
 ## Testing
 

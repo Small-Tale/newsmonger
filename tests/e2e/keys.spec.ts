@@ -64,12 +64,68 @@ test('lists both keyed providers as unconfigured', async ({ page }) => {
   await expect(page.locator(`${ANTHROPIC_ROW} .key-input`)).toHaveAttribute('spellcheck', 'false');
 });
 
+test('a key saves itself on blur, with no Save button (NEWS-156)', async ({ page }) => {
+  await page.goto('/');
+  await openSettings(page);
+
+  // The button is gone, not merely bypassed.
+  await expect(page.locator(`${ANTHROPIC_ROW} button[type=submit]`)).toHaveCount(0);
+
+  await page.fill(`${ANTHROPIC_ROW} .key-input`, 'sk-ant-autosave-blur');
+  await page.locator(`${ANTHROPIC_ROW} .key-input`).blur();
+  await expect(page.locator(`${ANTHROPIC_ROW} .key-state.ok`)).toContainText('stored in');
+
+  await page.click(`${ANTHROPIC_ROW} [data-remove-key]`);
+  await acceptConfirm(page);
+  await expect(page.locator(`${ANTHROPIC_ROW} .key-input`)).toBeVisible();
+});
+
+test('Enter saves a key too, and does not save it twice (NEWS-156)', async ({ page }) => {
+  // Enter in a single-input form fires `submit` *and* `change`, so both handlers
+  // run for one keypress. `commitKey` empties the field before awaiting, so the
+  // second sees a blank field and stops — without that, one Enter sends two
+  // vendor verifications and two keychain writes (measured: 2 PUTs).
+  //
+  // Counting the requests rather than checking the key ended up stored: it ends
+  // up stored either way, so the obvious assertion passes on the bug.
+  const writes: string[] = [];
+  await page.route('**/api/keys/**', (route) => {
+    if (route.request().method() === 'PUT') writes.push(route.request().url());
+    void route.continue();
+  });
+
+  await page.goto('/');
+  await openSettings(page);
+
+  await page.fill(`${OPENAI_ROW} .key-input`, 'sk-openai-by-enter');
+  await page.press(`${OPENAI_ROW} .key-input`, 'Enter');
+  await expect(page.locator(`${OPENAI_ROW} .key-state.ok`)).toContainText('stored in');
+  await expect(page.locator(`${OPENAI_ROW} .key-input`)).toHaveCount(0);
+  expect(writes).toHaveLength(1);
+
+  await page.click(`${OPENAI_ROW} [data-remove-key]`);
+  await acceptConfirm(page);
+  await expect(page.locator(`${OPENAI_ROW} .key-input`)).toBeVisible();
+});
+
+test('blurring an untouched field saves nothing (NEWS-156)', async ({ page }) => {
+  // Clicking into the field and away again is not a request to store anything,
+  // and an empty PUT would read as "clear my key".
+  await page.goto('/');
+  await openSettings(page);
+
+  await page.locator(`${ANTHROPIC_ROW} .key-input`).click();
+  await page.locator(`${ANTHROPIC_ROW} .key-input`).blur();
+  await expect(page.locator(`${ANTHROPIC_ROW} .key-input`)).toBeVisible();
+  await expect(page.locator(`${ANTHROPIC_ROW} .key-state.ok`)).toHaveCount(0);
+});
+
 test('saving a key stores it and swaps the field for a status line', async ({ page }) => {
   await page.goto('/');
   await openSettings(page);
 
   await page.fill(`${ANTHROPIC_ROW} .key-input`, SECRET);
-  await page.click(`${ANTHROPIC_ROW} button[type=submit]`);
+  await page.locator(`${ANTHROPIC_ROW} .key-input`).blur();
 
   await expect(page.locator(`${ANTHROPIC_ROW} .key-state`)).toContainText('stored in');
   // With a key stored there is no input at all — nothing to read back.
@@ -123,7 +179,7 @@ test('saving, removing and re-saving leaves a working key', async ({ page }) => 
   await openSettings(page);
 
   await page.fill(`${OPENAI_ROW} .key-input`, 'sk-openai-first');
-  await page.click(`${OPENAI_ROW} button[type=submit]`);
+  await page.locator(`${OPENAI_ROW} .key-input`).blur();
   await expect(page.locator(`${OPENAI_ROW} .key-state`)).toContainText('stored in');
 
   await page.click(`${OPENAI_ROW} [data-remove-key]`);
@@ -131,7 +187,7 @@ test('saving, removing and re-saving leaves a working key', async ({ page }) => 
   await expect(page.locator(`${OPENAI_ROW} .key-input`)).toBeVisible();
 
   await page.fill(`${OPENAI_ROW} .key-input`, 'sk-openai-second');
-  await page.click(`${OPENAI_ROW} button[type=submit]`);
+  await page.locator(`${OPENAI_ROW} .key-input`).blur();
   await expect(page.locator(`${OPENAI_ROW} .key-state`)).toContainText('stored in');
 
   await page.click(`${OPENAI_ROW} [data-remove-key]`);
@@ -144,7 +200,7 @@ test('an empty key submission is ignored', async ({ page }) => {
   await openSettings(page);
 
   await page.fill(`${OPENAI_ROW} .key-input`, '   ');
-  await page.click(`${OPENAI_ROW} button[type=submit]`);
+  await page.locator(`${OPENAI_ROW} .key-input`).blur();
 
   // Still unconfigured, and no error banner — nothing was attempted.
   await expect(page.locator(`${OPENAI_ROW} .key-input`)).toBeVisible();
