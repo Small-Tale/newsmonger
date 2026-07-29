@@ -192,6 +192,12 @@ Source art lives in `assets/`, in two shapes — rounded and full-bleed — and 
 
 - **FR-3.42** *(Shipped, NEWS-113)* A source link's arrow aligns with the **first line** of the link text, not the vertical middle. Once a headline wrapped, a centred arrow pointed at the gap between two lines; it is a bullet for the first line, so it belongs beside the first line. `align-items: flex-start` plus a 2px nudge, so a 13px glyph sits on the first line's optical centre rather than riding its very top.
 
+- **FR-3.55** *(Shipped, NEWS-153)* The dial's track is drawn in **translucent ink, not a fixed grey**. `--line` is mixed for the *page* background, so the ring was faint everywhere (1.18:1 in light against the page) and on a selected or hovered row — filled with `--pine-soft` — it all but vanished: about **1.01:1** in light and **1.02:1** in dark. Invisible, and precisely when the user had singled that topic out.
+
+  `--ink` at `stroke-opacity: 0.24` composites over whatever is behind it, so the ring keeps its contrast against any fill the row ever gains rather than against the one background someone had in mind when they chose the grey. Now 1.61–1.97:1 across light/dark × selected/unselected.
+
+  The E2E **composites the stroke over the row itself** and computes a WCAG ratio, because the computed colour is no longer what lands on screen — that is the whole point of the fix, so asserting the declaration would test the wrong thing.
+
 - **FR-3.52** *(Shipped, NEWS-151)* Sidebar rows are separated by **whitespace, not rules**. A row is already a visual block of its own — name, timestamp, section pill, guidance preview — so a hairline between every pair drew a ladder down the rail and competed with the pill borders *inside* each row. The hover and selected fills mark a row's extent at the moment that matters; the rest of the time nothing needs to.
 
 Both are measured in `tests/e2e/layout.spec.ts` rather than eyeballed, and both measurements guard against a vacuous pass — see the note there.

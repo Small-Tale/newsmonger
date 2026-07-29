@@ -796,9 +796,20 @@ h2.eyebrow {
     transform: rotate(-90deg); // ring starts at 12 o'clock
   }
 
+  // Translucent ink, not a fixed grey (NEWS-153). `--line` is mixed for the page
+  // background, so the ring was faint everywhere — 1.18:1 in light against the
+  // page — and on a *selected* or hovered row, filled with `--pine-soft`, it all
+  // but vanished: rgb(37,48,41) on rgb(28,51,44) in dark, rgb(221,227,224) on
+  // rgb(216,231,226) in light, both about 1.01:1. Invisible, and precisely when
+  // the user has singled that topic out.
+  //
+  // Ink at low opacity composites over whatever is behind it, so the ring keeps
+  // its contrast on any fill this row ever gains, rather than against the one
+  // background someone had in mind when they picked the grey.
   .dial-track {
     fill: none;
-    stroke: var(--line);
+    stroke: var(--ink);
+    stroke-opacity: 0.24;
     stroke-width: 2.5;
   }
 

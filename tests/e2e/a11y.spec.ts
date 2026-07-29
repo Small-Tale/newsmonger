@@ -1,7 +1,7 @@
 import AxeBuilder from '@axe-core/playwright';
 import type { Page } from '@playwright/test';
 
-import { expect, test } from './fixtures.js';
+import { expect, test, topicAction } from './fixtures.js';
 
 // Accessibility regression net (NEWS-90). Runs axe against the real rendered
 // app in both colour schemes, then checks the keyboard paths axe cannot see —
@@ -105,4 +105,73 @@ test('clean up the topic this spec created', async ({ page }) => {
   await page.keyboard.press('Delete');
   await page.locator('[data-action=confirm-ok]').click();
   await expect(row).toHaveCount(0);
+});
+
+// --- The dial's track stays visible on a selected row (NEWS-153) ------------
+
+/**
+ * Composite the dial's track over its row and return the WCAG contrast ratio.
+ *
+ * The track is drawn with `stroke-opacity`, so its *computed* colour is not what
+ * lands on screen — the whole point of the fix is that it blends with whatever
+ * fill the row has. Compositing here is what makes the assertion about the ring
+ * the user sees rather than about a CSS declaration.
+ */
+async function dialTrackContrast(page: Page): Promise<number | null> {
+  return page.evaluate(() => {
+    const track = document.querySelector('.topic .dial-track');
+    const row = track?.closest('.topic');
+    if (!track || !row) return null;
+    const parts = (c: string): number[] => (/rgba?\(([^)]+)\)/.exec(c)?.[1] ?? '0,0,0').split(',').map(Number);
+    const style = getComputedStyle(track);
+    const opacity = Number.parseFloat(style.strokeOpacity);
+    const ink = parts(style.stroke);
+    let bg = parts(getComputedStyle(row).backgroundColor);
+    // An unselected row is transparent; the page behind it is the real backdrop.
+    if ((bg[3] ?? 1) === 0) bg = parts(getComputedStyle(document.body).backgroundColor);
+    const composited = [0, 1, 2].map((i) => (ink[i] ?? 0) * opacity + (bg[i] ?? 0) * (1 - opacity));
+    const luminance = (c: number[]): number => {
+      const lin = c.map((v) => {
+        const s = v / 255;
+        return s <= 0.03928 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4;
+      });
+      return 0.2126 * (lin[0] ?? 0) + 0.7152 * (lin[1] ?? 0) + 0.0722 * (lin[2] ?? 0);
+    };
+    const a = luminance(composited);
+    const b = luminance(bg);
+    return (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05);
+  });
+}
+
+test('the dial stays visible on a selected row, in both themes (NEWS-153)', async ({ page }) => {
+  // `--line` is mixed for the *page* background, so the ring was faint
+  // everywhere — 1.18:1 in light against the page — and on a selected or hovered
+  // row, filled with `--pine-soft`, it all but vanished: 1.01:1 in light and
+  // 1.02:1 in dark, i.e. invisible, and precisely when the user had singled that
+  // topic out. Both states are asserted because both were wrong; the selected
+  // one is only where it became impossible to miss.
+  await page.goto('/');
+  await page.fill('.add-topic input', 'Dial Contrast');
+  await page.press('.add-topic input', 'Enter');
+  const row = page.locator('.topic', { hasText: 'Dial Contrast' });
+  await expect(row).toBeVisible();
+
+  for (const scheme of ['light', 'dark'] as const) {
+    await page.emulateMedia({ colorScheme: scheme });
+
+    await page.locator('.topics-head').click();
+    const unselected = await dialTrackContrast(page);
+    expect(unselected, `${scheme} unselected`).not.toBeNull();
+    expect(unselected ?? 0, `${scheme} unselected`).toBeGreaterThan(1.4);
+
+    await row.click();
+    const selected = await dialTrackContrast(page);
+    // Asserted separately from the unselected reading rather than as a single
+    // worst-of, so a regression that only affects the filled row still names
+    // itself instead of hiding behind the page-background case.
+    expect(selected ?? 0, `${scheme} selected`).toBeGreaterThan(1.4);
+  }
+
+  await page.emulateMedia({ colorScheme: 'light' });
+  await topicAction(page, row, 'delete');
 });
