@@ -42,6 +42,12 @@ So the containers are no longer KF-377 scar tissue; they are ordinary good struc
 
 The topics list also now carries an explicit `key: 'topics'` (kerf 3.x). Unkeyed lists are identified by their position among a render's `each()` calls; this is the only `each()` in the app today, so the position cannot currently shift, but the key means adding a second list later can't silently rebuild this one.
 
+### The morph preserves interactive nodes — measured, not assumed (NEWS-131)
+
+A rare E2E failure raised the question of whether a poll-driven re-render can destroy a control the user is interacting with. It cannot, and this is worth recording because the answer was reached by probing rather than reasoning: an expando property set on a `<select>` **and on one of its `<option>`s** survives a full 4-second poll cycle, and a value the user changed survives a re-render after it. So kerf reuses those nodes rather than replacing them, and no interaction is lost to node replacement.
+
+That also rules the morph out as an explanation for settings flakiness, alongside the `refreshState` sequence guard (NEWS-104) and the `<select>` attribute-vs-property trap. What remains is ordinary round-trip latency under a loaded serial suite, which is a timeout question rather than a product one.
+
 ### Two delegates must never match nodes the morph can turn into each other (NEWS-126)
 
 The discovery dialog's section grid and its subcategory chips are both `<button>`s in the same position of the same container. When the pane switches, the morph does what it is supposed to do — **reuses the node** and rewrites its attributes — so the tile *becomes* the chip.

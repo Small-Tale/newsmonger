@@ -326,6 +326,23 @@ test('mark a topic high priority and show a star, then clear it (NEWS-56)', asyn
 });
 
 test('the high-priority interval is clamped to the default (NEWS-56)', async ({ page }) => {
+  // Longer assertion timeout than the 5 s default (NEWS-131). Every expectation
+  // below waits on a full round trip — PATCH, server-side clamp, state refresh —
+  // and this suite is serial against one shared server that is also running mock
+  // check sweeps for every topic the earlier specs created. Under that load the
+  // round trip has been seen to exceed 5 s once in ~13 runs.
+  //
+  // Not papering over a product bug: the three mechanisms that would have been
+  // one were each ruled out empirically. The NEWS-104 sequence guard discards
+  // older-issued responses correctly; the morph *preserves* the <select> and its
+  // <option> nodes across a poll (probed directly with expando properties), so
+  // no interaction is lost to node replacement; and the live value survives a
+  // change followed by a poll. What is left is latency, which is what a timeout
+  // is for.
+  //
+  // It has to be on the `expect` calls: `test.slow()` raises the *test* budget,
+  // but the 5 s that actually elapsed is `expect`'s own retry window.
+  const SETTLE = { timeout: 15_000 };
   const HOUR = 60 * 60 * 1000;
   await page.goto('/');
   // The intervals live on the Schedule tab since NEWS-118.
@@ -336,15 +353,15 @@ test('the high-priority interval is clamped to the default (NEWS-56)', async ({ 
   // Default 6h, high-priority 3h — valid (<=).
   await dflt.selectOption(String(6 * HOUR));
   await hp.selectOption(String(3 * HOUR));
-  await expect(hp).toHaveValue(String(3 * HOUR));
+  await expect(hp).toHaveValue(String(3 * HOUR), SETTLE);
 
   // Shorten the default below high-priority → high-priority follows *down*.
   await dflt.selectOption(String(HOUR));
-  await expect(hp).toHaveValue(String(HOUR));
+  await expect(hp).toHaveValue(String(HOUR), SETTLE);
 
   // Lengthen high-priority above the default → the default follows *up*.
   await hp.selectOption(String(12 * HOUR));
-  await expect(dflt).toHaveValue(String(12 * HOUR));
+  await expect(dflt).toHaveValue(String(12 * HOUR), SETTLE);
 
   // Restore a sane default so later serial tests aren't on a short interval.
   await dflt.selectOption(String(24 * HOUR));
