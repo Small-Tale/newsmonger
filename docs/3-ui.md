@@ -198,6 +198,12 @@ Both are measured in `tests/e2e/layout.spec.ts` rather than eyeballed, and both 
 
 - **FR-3.47** *(Shipped, NEWS-121)* **Privacy is its own dialog**, reached from a footer link under the main content rather than from Settings. It was the wrong place twice over: nothing on it can be changed, so it isn't a setting, and burying "what leaves this machine" under two screens of configuration is the opposite of how a privacy note earns trust. Escape and a backdrop click close it, like every other dialog.
 
+- **FR-3.49** *(Shipped, NEWS-147)* A settings row aligns its label and its control on the **text baseline**, not on the tops of their boxes. The two carry different font metrics and line-heights, so `align-items: flex-start` lined up the *boxes* and left the label's text sitting visibly below the control's — worst on the row whose control is tallest ("Keep stories for"). The previous fix for this was a `padding-top: 8px` on the label, a number correct for exactly one combination of font, size and control height; baseline alignment states the thing actually wanted, and keeps stating it if any of those change.
+
+- **FR-3.50** *(Shipped, NEWS-148)* A field hint sits **below** its field with a positive margin. Its top margin was `-4px`, deliberately pulling it up under the control, which read as a caption crushed against the thing it explains rather than a separate line of guidance.
+
+  Both are pinned in `tests/e2e/app.spec.ts` twice over: the computed **outcome** (label/control offset under 3px on every field of every tab; hint gap at least 4px, where the bug measured `-4`) and the **declaration** (`align-items: baseline`), because the point of FR-3.49 is that alignment no longer depends on a hand-tuned number — reintroducing one fails the test even on a machine where the pixels happen to land well. Verified non-vacuous by restoring each original value and watching the matching test fail.
+
 - **FR-3.48** *(Shipped, NEWS-117)* The high-priority interval is labelled just **"High-priority"**. It read "High-priority topics every", which restated the column it sits in — directly under "Check every" — and wrapped to a second line to do it.
 
 ## Section filter bar (NEWS-97)

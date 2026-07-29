@@ -21,6 +21,7 @@ import { MAX_GUIDANCE_LENGTH } from '../db/schemas.js';
 import {
   addSuggestedTopic,
   addTopic,
+  countItemsForTopic,
   deleteKey,
   deleteTopic,
   discoverTopics,
@@ -28,7 +29,6 @@ import {
   refreshFeed,
   refreshKeys,
   refreshProviders,
-  countItemsForTopic,
   refreshState,
   renameTopic,
   reportForeground,

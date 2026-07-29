@@ -1008,3 +1008,68 @@ test('the high-priority label fits on one line (NEWS-117)', async ({ page }) => 
 
   await closeSettings(page);
 });
+
+// --- Settings field layout (NEWS-147, NEWS-148) ----------------------------
+
+test('every settings field lines its label up with its control (NEWS-147)', async ({ page }) => {
+  // The label used a hand-tuned `padding-top` to fake alignment against the
+  // control's text. That number was correct for exactly one combination of font,
+  // size and control height, and drifted the moment any of them moved. The row
+  // now aligns on the text baseline, which is the property actually wanted.
+  await page.goto('/');
+
+  for (const tab of ['Schedule', 'Source', 'Data'] as const) {
+    await openSettingsTab(page, tab);
+
+    const rows = await page.locator('.dialog .field').evaluateAll((els) =>
+      els
+        .map((el) => {
+          const label = el.firstElementChild;
+          const control = el.querySelector('select, input');
+          if (!(label instanceof HTMLElement) || !(control instanceof HTMLElement)) return null;
+          const range = document.createRange();
+          range.selectNodeContents(label);
+          const text = range.getBoundingClientRect();
+          const box = control.getBoundingClientRect();
+          return {
+            label: label.textContent.trim(),
+            alignItems: getComputedStyle(el).alignItems,
+            offset: Math.abs(text.top + text.height / 2 - (box.top + box.height / 2)),
+          };
+        })
+        .filter((row) => row !== null),
+    );
+
+    expect(rows.length).toBeGreaterThan(0);
+    for (const row of rows) {
+      // The declaration, because the *point* is that alignment no longer depends
+      // on a number someone tuned by eye — reintroducing that fails here even on
+      // a machine where the numbers happen to look right.
+      expect(row.alignItems, `${tab} / ${row.label} alignment mode`).toBe('baseline');
+      // And the outcome, which catches gross drift whatever the cause.
+      expect(row.offset, `${tab} / ${row.label} label vs control`).toBeLessThan(3);
+    }
+
+    await page.locator('.dialog [data-action=close-settings]').click();
+  }
+});
+
+test('a field hint sits below its field, not on top of it (NEWS-148)', async ({ page }) => {
+  await page.goto('/');
+  await openSettingsTab(page, 'Schedule');
+
+  const gap = await page.evaluate(() => {
+    const hint = document.querySelector('.dialog .field-hint');
+    if (!(hint instanceof HTMLElement)) return null;
+    const field = hint.previousElementSibling;
+    if (!(field instanceof HTMLElement)) return null;
+    return hint.getBoundingClientRect().top - field.getBoundingClientRect().bottom;
+  });
+
+  // It had a *negative* top margin, which pulled it up into the control above —
+  // the measured gap was -4px, so this is the assertion that would have failed.
+  expect(gap).not.toBeNull();
+  expect(gap ?? 0).toBeGreaterThanOrEqual(4);
+
+  await page.locator('.dialog [data-action=close-settings]').click();
+});

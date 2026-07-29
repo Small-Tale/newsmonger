@@ -1144,7 +1144,12 @@ h2.eyebrow {
 
 .field {
   display: flex;
-  align-items: flex-start;
+  // Baseline, not flex-start (NEWS-147). The label and the control carry
+  // different font metrics and line-heights, so aligning their *boxes* left the
+  // label's text sitting below the control's. Baseline alignment lines up the
+  // text itself, and keeps doing so if either font or size ever changes — which
+  // the hand-tuned padding it replaces did not.
+  align-items: baseline;
   gap: 12px;
   margin-top: 14px;
 
@@ -1173,7 +1178,6 @@ h2.eyebrow {
 
 .field-label {
   flex: 0 0 132px;
-  padding-top: 8px; // align the label text with the select's text baseline
   font-size: 13px;
   line-height: 1.35;
   color: var(--ink-soft);
@@ -1188,8 +1192,12 @@ h2.eyebrow {
 }
 
 // One-line explanatory hint under a field (e.g. the high-priority clamp rule).
+// Explains the field above it. The margin was **negative** (NEWS-148), which
+// pulled it tight against the control and read as a caption crushed under it.
+// Positive and a little smaller than `.note`'s, so it still groups with the
+// field it belongs to rather than floating between sections.
 .field-hint {
-  margin: -4px 0 0;
+  margin: 8px 0 0;
   font-size: 12px;
   color: var(--ink-soft);
 }
