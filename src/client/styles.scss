@@ -2426,3 +2426,21 @@ button.off-topic-pill {
     width: 40%;
   }
 }
+
+/* Section headings in the sidebar when sorting by section (NEWS-140). Styled
+   like the filter bar's section row rather than like a topic, so the eye reads
+   them as structure and not as another thing to click. */
+.topic-section {
+  list-style: none;
+  font-family: var(--mono);
+  font-size: 0.68rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+  padding: 14px 2px 5px;
+  border-bottom: 1px solid var(--line);
+
+  &:first-child {
+    padding-top: 2px;
+  }
+}

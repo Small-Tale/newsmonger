@@ -440,3 +440,29 @@ test('clean up the topics this spec created', async ({ page }) => {
     await expect(target).toHaveCount(0);
   }
 });
+
+test('sorting by section groups the rail under headings (NEWS-140)', async ({ page }) => {
+  await page.goto('/');
+  // The mock classifies from the name, so these are also their own expectations:
+  // "Soccer transfers" → Sports, "Fashion week" → Style.
+  for (const name of ['Soccer transfers', 'Fashion week']) {
+    await page.fill('.add-topic input', name);
+    await page.press('.add-topic input', 'Enter');
+    await expect(page.locator('.topic', { hasText: name })).toBeVisible();
+  }
+  // Classification lands on the first check, which runs in the background.
+  await expect(page.locator('.topic-category', { hasText: 'Sports' }).first()).toBeVisible({ timeout: 15_000 });
+
+  await page.selectOption('[data-action=topic-sort]', 'category');
+
+  const headings = page.locator('.topic-section');
+  await expect(headings.first()).toBeVisible();
+  // A heading is structure, not an option — a listbox may only contain options,
+  // and claiming otherwise would make it selectable to a screen reader.
+  await expect(headings.first()).toHaveAttribute('role', 'presentation');
+  await expect(page.locator('.topic-section', { hasText: 'Sports' })).toHaveCount(1);
+
+  // Restore the default for the rest of the serial suite.
+  await page.selectOption('[data-action=topic-sort]', 'alpha');
+  await expect(page.locator('.topic-section')).toHaveCount(0);
+});

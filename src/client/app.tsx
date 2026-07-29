@@ -89,7 +89,8 @@ import {
   writeOnboardingSeen,
 } from './stores.js';
 import { openExternalUrl } from './tauri.js';
-import { sortTopics } from './topic-sort.js';
+import type { TopicRow } from './topic-sort.js';
+import { isHeading, sortTopics, topicRows } from './topic-sort.js';
 
 const INTERVAL_OPTIONS: { label: string; ms: number }[] = [
   { label: 'Every hour', ms: 60 * 60 * 1000 },
@@ -2048,15 +2049,24 @@ function appJsx(): SafeHtml {
             announces selection state and roving focus works (NEWS-90). */}
         <ul class="topics" role="listbox" aria-multiselectable="true" aria-label="Topics">
           {each(
-            sortTopics(s.topics, s.topicSort),
-            (topic) =>
-              topicRowJsx(
-                topic,
-                s.checking.includes(topic.id),
-                topic.highPriority ? s.settings.highPriorityIntervalMs : s.settings.checkIntervalMs,
-                selected.has(topic.id),
-                solo.has(topic.id),
-                solo.size > 0 && !solo.has(topic.id),
+            topicRows(s.topics, s.topicSort),
+            (row) =>
+              isHeading(row) ? (
+                // `role="presentation"` because a listbox may only contain
+                // options: a heading that claimed to be one would be selectable
+                // to a screen reader and would fail the axe suite.
+                <li class="topic-section" role="presentation" data-key={row.key}>
+                  {row.label}
+                </li>
+              ) : (
+                topicRowJsx(
+                  row,
+                  s.checking.includes(row.id),
+                  row.highPriority ? s.settings.highPriorityIntervalMs : s.settings.checkIntervalMs,
+                  selected.has(row.id),
+                  solo.has(row.id),
+                  solo.size > 0 && !solo.has(row.id),
+                )
               ),
             {
               // `each()` memoizes per row on object identity, and selection/solo
@@ -2065,13 +2075,16 @@ function appJsx(): SafeHtml {
               // the next poll happens to replace `topics` with fresh objects.
               // `highPriority` is in the key too so toggling it re-renders the
               // star and the dial's interval without waiting for the next poll.
-              cacheKey: (topic: Topic) =>
-                // The category is part of the row now, so it belongs in the memo
-              // key — a topic classified by a background check would otherwise
-              // keep its stale row until something else changed.
-              `${String(topic.category)}|${String(topic.subcategory)}|${String(selected.has(topic.id))}|${String(solo.has(topic.id))}|${String(solo.size)}|${String(
-                  s.checking.includes(topic.id),
-                )}|${String(topic.highPriority)}`,
+              // The category is part of the row, so it belongs in the memo key —
+              // a topic classified by a background check would otherwise keep
+              // its stale row until something else changed. A heading's HTML is
+              // its label, so its key is just that.
+              cacheKey: (row: TopicRow) =>
+                isHeading(row)
+                  ? row.label
+                  : `${String(row.category)}|${String(row.subcategory)}|${String(selected.has(row.id))}|${String(solo.has(row.id))}|${String(solo.size)}|${String(
+                      s.checking.includes(row.id),
+                    )}|${String(row.highPriority)}`,
               // A stable list identity (kerf 3.x). Unkeyed lists are identified by
               // their position among a render's `each()` calls, so a conditional
               // list appearing above this one would rebuild it and cost the rows

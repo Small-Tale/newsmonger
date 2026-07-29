@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import type { StateResp } from '../../src/api/schemas.js';
-import { sortTopics } from '../../src/client/topic-sort.js';
+import { isHeading, sortTopics, topicRows } from '../../src/client/topic-sort.js';
 
 type Topic = StateResp['topics'][number];
 
@@ -54,5 +54,86 @@ describe('sortTopics (NEWS-63)', () => {
     const before = t.map((x) => x.name);
     sortTopics(t, 'alpha');
     expect(t.map((x) => x.name)).toEqual(before);
+  });
+});
+
+describe('sorting by section (NEWS-140)', () => {
+  const t = (name: string, category: string | null): Topic => ({ ...topic(name), category, subcategory: null });
+
+  it('orders by the taxonomy, not alphabetically by section name', () => {
+    // Politics precedes Technology precedes Sports in the taxonomy, which is
+    // deliberately not alphabetical — the rail should match the filter bar.
+    const rows = sortTopics([t('Skiing', 'sports'), t('AI', 'technology'), t('Elections', 'politics')], 'category');
+    expect(rows.map((r) => r.name)).toEqual(['Elections', 'AI', 'Skiing']);
+  });
+
+  it('sorts A→Z within a section', () => {
+    const rows = sortTopics([t('Zebras', 'sports'), t('Archery', 'sports')], 'category');
+    expect(rows.map((r) => r.name)).toEqual(['Archery', 'Zebras']);
+  });
+
+  it('puts unclassified topics last, not first', () => {
+    const rows = sortTopics([t('Mystery', null), t('Skiing', 'sports')], 'category');
+    expect(rows.map((r) => r.name)).toEqual(['Skiing', 'Mystery']);
+  });
+
+  it('treats a slug the taxonomy no longer has as unclassified', () => {
+    // It renders under the Uncategorized heading, so it has to sort there too —
+    // otherwise the heading and the rows beneath it disagree.
+    const rows = sortTopics([t('Stale', 'not-a-section'), t('Skiing', 'sports')], 'category');
+    expect(rows.map((r) => r.name)).toEqual(['Skiing', 'Stale']);
+  });
+});
+
+describe('topicRows', () => {
+  const t = (name: string, category: string | null): Topic => ({ ...topic(name), category, subcategory: null });
+
+  it('adds no headings in any other sort', () => {
+    for (const sort of ['alpha', 'added', 'priority'] as const) {
+      const rows = topicRows([t('Skiing', 'sports'), t('AI', 'technology')], sort);
+      expect(rows.some(isHeading)).toBe(false);
+    }
+  });
+
+  it('passes topics through by reference, so `each()` can still memoize them', () => {
+    // Wrapping each topic in a fresh object per render made every row a cache
+    // miss: rows were rebuilt rather than morphed, and a focused row lost focus
+    // the moment anything re-rendered — which broke keyboard access to the
+    // topic menu entirely. Identity has to survive.
+    const topics = [t('Skiing', 'sports'), t('AI', 'technology')];
+    for (const sort of ['alpha', 'category'] as const) {
+      const rows = topicRows(topics, sort);
+      for (const original of topics) {
+        expect(rows.some((row) => row === original)).toBe(true);
+      }
+    }
+  });
+
+  it('opens each section with one heading', () => {
+    const rows = topicRows([t('Skiing', 'sports'), t('Archery', 'sports'), t('AI', 'technology')], 'category');
+    expect(rows.map((r) => (isHeading(r) ? `# ${r.label}` : r.name))).toEqual([
+      '# Technology',
+      'AI',
+      '# Sports',
+      'Archery',
+      'Skiing',
+    ]);
+  });
+
+  it('names the unclassified section', () => {
+    const rows = topicRows([t('Mystery', null)], 'category');
+    expect(rows[0]).toMatchObject({ kind: 'heading', label: 'Uncategorized' });
+  });
+
+  it('gives headings keys that cannot collide with a topic id', () => {
+    // Both share one `data-key` namespace in the rail's single keyed list.
+    const rows = topicRows([t('Skiing', 'sports')], 'category');
+    const keys = rows.map((r) => (isHeading(r) ? r.key : r.id));
+    expect(new Set(keys).size).toBe(rows.length);
+    expect(keys[0]).toContain('heading:');
+  });
+
+  it('returns nothing for nothing', () => {
+    expect(topicRows([], 'category')).toEqual([]);
   });
 });

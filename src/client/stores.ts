@@ -9,12 +9,13 @@ type NewsItem = ItemsResp['items'][number];
 export const FEED_PAGE = 100;
 
 /** Sidebar ordering options (NEWS-63). */
-export type TopicSort = 'alpha' | 'added' | 'priority';
-export const TOPIC_SORTS: readonly TopicSort[] = ['alpha', 'added', 'priority'];
+export type TopicSort = 'alpha' | 'added' | 'priority' | 'category';
+export const TOPIC_SORTS: readonly TopicSort[] = ['alpha', 'added', 'priority', 'category'];
 export const TOPIC_SORT_LABELS: Record<TopicSort, string> = {
   alpha: 'A → Z',
   added: 'Recently added',
   priority: 'Priority first',
+  category: 'By section',
 };
 
 /** Steps of the first-run flow, in order (NEWS-78). */

@@ -102,6 +102,8 @@ Default Anthropic provider (`claude-opus-4-8` + web search), prompt-level exclus
 
 ## [3 — Web UI](../3-ui.md) — Shipped
 
+- FR-3.2a sidebar sort gained **By section** (NEWS-140): taxonomy order rather than alphabetical, unclassified last, with a `role="presentation"` heading opening each group. Headings are entries in the same flat keyed list as the topics — a nested list would be an `each()` inside an `each()` row, which kerf never reconciles.
+
 - Collapsible topics sidebar (localStorage-persisted, panel stays mounted): **Shipped**
 - Topic selection (click / Cmd-click / Shift-range), right-click context menu with Lucide icons, bulk actions, Delete key: **Shipped**
 - All icons are Lucide; no emoji or text glyphs anywhere in the UI (E2E-guarded): **Shipped**

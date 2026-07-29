@@ -11,7 +11,9 @@ A single-page kerfjs app served by the Node server; the same UI runs in the brow
 - **FR-3.1** Header: serif wordmark, the global check-interval selector (presets 1h / 3h / 6h / 12h / 1d / 2d / 1w), and a "Check all now" button (disabled while any check runs).
 - **FR-3.1a** Source block (top of the Watching rail): an AI-provider picker (Auto / Anthropic / OpenAI / Mock), a model field (shown for non-auto/mock), and an endpoint field (shown for OpenAI), persisted via `PATCH /api/settings`. A status line shows the selected provider's availability (from `GET /api/providers`, probed on demand) and the provider that ran the last check. See [6 — AI Providers](6-providers.md).
 - **FR-3.2** Watching rail: a list of topics — dial, name, status line (checking… / paused / checked \<relative time\> / not checked yet), and per-topic Check / Pause–Resume / Delete actions (revealed on hover/focus on the desktop layout, always shown on touch/narrow). Delete asks for confirmation. Below the list: the add-topic form (submit via button or Enter).
-- **FR-3.2a** *(NEWS-63)* A **sort dropdown** sits on the "Watching" header line (right side, shown once there's more than one topic): **A → Z** (default), **Recently added** (newest first), **Priority first** (high-priority topics on top, then A→Z). Ordering is display-only (the scheduler keeps its own order) and persisted per device (`news:topic-sort`). `sortTopics` in `src/client/topic-sort.ts`; shift-range selection ranges over the *displayed* order.
+- **FR-3.2a** *(NEWS-63, NEWS-140)* A **sort dropdown** sits on the "Watching" header line (right side, shown once there's more than one topic): **A → Z** (default), **Recently added** (newest first), **Priority first** (high-priority topics on top, then A→Z), and **By section** — taxonomy order (not alphabetical, so it matches the filter bar), A→Z within each section, unclassified last, with a heading opening each group.
+
+  The headings are entries in the **same flat list** as the topics rather than a nested structure. A nested list would mean an `each()` inside an `each()` row, which kerf never reconciles (see the delegate/morph section below), and grouping with `.map()` instead would give up the per-row memoization the topic rows rely on. Each heading is `role="presentation"`: a listbox may only contain options, so a heading claiming to be one would be selectable to a screen reader and would fail the axe suite. A topic whose stored slug is no longer in the taxonomy sorts *and* renders as unclassified — the heading and the rows beneath it must agree. Ordering is display-only (the scheduler keeps its own order) and persisted per device (`news:topic-sort`). `sortTopics` in `src/client/topic-sort.ts`; shift-range selection ranges over the *displayed* order.
 - **FR-3.3** Feed: news items across all topics, newest first, **grouped by local calendar day** with Today / Yesterday / "Mon D" headers. Each item has a topic tag, relative found-time, serif title + summary, and source links (prefixed with an arrow) opening in a new tab (`rel="noopener noreferrer"`). Items animate in on first render (respecting `prefers-reduced-motion`).
 - **FR-3.4** Errors from user actions appear in an error banner; the most recent failed check (when no action error is showing) appears in a warning banner naming the topic and error.
 - **FR-3.5** The client polls `/api/state` every 4 s while the tab is visible, so scheduled-check results appear without a reload.
@@ -47,6 +49,18 @@ The topics list also now carries an explicit `key: 'topics'` (kerf 3.x). Unkeyed
 A rare E2E failure raised the question of whether a poll-driven re-render can destroy a control the user is interacting with. It cannot, and this is worth recording because the answer was reached by probing rather than reasoning: an expando property set on a `<select>` **and on one of its `<option>`s** survives a full 4-second poll cycle, and a value the user changed survives a re-render after it. So kerf reuses those nodes rather than replacing them, and no interaction is lost to node replacement.
 
 That also rules the morph out as an explanation for settings flakiness, alongside the `refreshState` sequence guard (NEWS-104) and the `<select>` attribute-vs-property trap. What remains is ordinary round-trip latency under a loaded serial suite, which is a timeout question rather than a product one.
+
+### `each()` items must keep their identity, or focused rows are rebuilt (NEWS-140)
+
+Adding section headings to the sidebar meant the list could no longer be plain topics, and the obvious shape — wrap every entry in `{kind, key, …}` — quietly broke keyboard access to the topic menu.
+
+`each()` memoizes per row on **item identity**. Wrapping each topic in a fresh object every render made every row a permanent cache miss, so rows were rebuilt rather than morphed in place, and **a focused row lost focus the moment anything re-rendered**. The visible symptom was two steps removed from the cause: press Enter to select a row (fine), then Shift+F10 for its menu and nothing happens, because focus had already moved to `<body>`.
+
+The fix is to pass topics through **unwrapped** — `TopicRow = Topic | TopicHeading` — so they keep the identity they arrive with, and only headings are new objects each render. A heading has no focus or selection to lose.
+
+The rule generalises: before putting anything between state and an `each()`, check that items which represent the same thing across renders are still the *same objects*. `data-key` governs DOM matching; identity governs whether the row is re-rendered at all, and the two are not interchangeable.
+
+Caught by `a11y.spec.ts`'s keyboard test, which is exactly what it is for — nothing about the change looks wrong in the source, and the rail renders correctly.
 
 ### Privacy lives at the foot of the sidebar (NEWS-138)
 
