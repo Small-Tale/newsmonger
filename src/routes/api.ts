@@ -173,7 +173,13 @@ export function registerApi(app: Hono<AppEnv>): void {
       // possible outcome of this route (NEWS-139).
       if (body.name !== undefined) {
         topic = store.renameTopic(id, body.name);
-        if (body.clearItems === true) store.clearItemsForTopic(id);
+        // Stash what was removed so the client can offer an undo (NEWS-145).
+        // Only on a clear that actually took something: remembering an empty
+        // snapshot would put a live "Undo" on a clear that did nothing.
+        if (body.clearItems === true) {
+          const cleared = store.clearItemsForTopic(id);
+          if (cleared.items.length > 0) c.get('undo').remember(id, cleared);
+        }
       }
       if (body.paused !== undefined) topic = store.setTopicPaused(id, body.paused);
       if (body.highPriority !== undefined) topic = store.setTopicHighPriority(id, body.highPriority);
@@ -200,6 +206,29 @@ export function registerApi(app: Hono<AppEnv>): void {
       }
       return c.json({ error: 'no such topic' }, 404);
     }
+  });
+
+  /**
+   * Put back the stories a clear removed (NEWS-145).
+   *
+   * A separate route rather than a `PATCH` flag: this is not an edit to the
+   * topic, it is the reversal of one, and it must not be reachable by accident
+   * from a request that meant to rename something.
+   *
+   * **410, not 404**, when the window has passed. The topic is right there — the
+   * thing that is gone is the offer, and a 404 would say the wrong one expired.
+   */
+  app.post('/api/topics/:id/restore-cleared', (c) => {
+    const id = c.req.param('id');
+    const store = c.get('store');
+    // Checked explicitly, and before the snapshot is consumed. `items` has no
+    // foreign key on `topic_id`, so restoring into a topic that was deleted
+    // while the undo was on offer would silently insert rows belonging to
+    // nothing — invisible in the feed, and counted by every aggregate.
+    if (store.getTopic(id) === undefined) return c.json({ error: 'no such topic' }, 404);
+    const cleared = c.get('undo').take(id);
+    if (cleared === null) return c.json({ error: 'nothing to restore' }, 410);
+    return c.json({ restored: store.restoreClearedItems(id, cleared) });
   });
 
   app.delete('/api/topics/:id', (c) => {

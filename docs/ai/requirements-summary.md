@@ -46,6 +46,11 @@ Add/delete/pause topics (unique, case-insensitive); global interval (default 1 d
 - FR-21.6 same-origin guarded; the "absent Origin is allowed" rule is what lets an RSS reader subscribe while a web page still gets 403: **Shipped**
 - FR-21.7 reaching the feed from **another device**: **Deferred** — needs a bearer token + non-loopback bind, coupled to the NEWS-46 mobile line
 
+## [26 — Undo](../26-undo.md) — **Shipped** (NEWS-145)
+
+- FR-26.1–26.14 clearing a topic's stories is undoable for 60s from an Undo in the toast. Restores the stories **and** `coveredThroughAt` together, under the **original item ids** with `saved`/`offTopic` intact. `ClearUndoBuffer` (`src/undo.ts`) is in-memory and per-topic — deliberately not soft-delete, so a reload forfeits the undo (stated, not hidden). `POST /api/topics/:id/restore-cleared`; **410** when the offer expired, **404 + zero inserts** if the topic was deleted (items have no FK on `topic_id`, so a restore would orphan rows).
+- Inline rename from the sidebar row was considered with this and **dropped** — worth doing only if renaming proves frequent, and the dialog is the right shape for the clear choice anyway.
+
 ## [20 — First-Run Onboarding](../20-onboarding.md) — Shipped
 
 - FR-20.1–20.3 auto-opens only with no topics **and** no provider, only after both `/api/state` and `/api/providers` answer; dismissal remembered per device — NEWS-78: **Shipped**

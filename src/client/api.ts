@@ -227,6 +227,20 @@ export async function renameTopic(id: string, name: string, clearItems: boolean)
   await refreshFeed();
 }
 
+/**
+ * Put back the stories a clear removed (NEWS-145).
+ *
+ * The window is server-side and short, so this can legitimately fail with a 410
+ * after the user has already seen the Undo — `request` turns that into a thrown
+ * Error carrying the server's message, which the caller shows as a plain notice
+ * rather than a red banner. Expiring is not an error condition.
+ */
+export async function restoreClearedItems(id: string): Promise<void> {
+  await request(`/api/topics/${encodeURIComponent(id)}/restore-cleared`, { method: 'POST' });
+  await refreshState();
+  await refreshFeed();
+}
+
 export function setTopicPaused(id: string, paused: boolean): Promise<void> {
   return withRefresh(() =>
     request(`/api/topics/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify({ paused }) }),

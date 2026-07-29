@@ -16,7 +16,7 @@ Topic-based news tracker. The user enters topics; on a configurable interval (de
 
 `src/cli.ts` parses flags → constructs `Store` (SQLite), a `ProviderResolver` (resolves the active AI provider per check from settings, or the forced mock under `--ai-test`), and a `CheckRunner` → starts the Hono server (`src/server.ts`, DI via middleware) and the minute-tick scheduler (`src/scheduler.ts`). The client (`src/client/app.tsx`) is a kerf app polling `/api/state` every 4 s. AI providers live behind `NewsProvider` in `src/ai/providers/` (see `docs/6-providers.md`).
 
-**Start every fresh session by reading `docs/ai/code-summary.md` and `docs/ai/requirements-summary.md`.** Requirements docs are numbered `docs/N-topic.md` (1–23).
+**Start every fresh session by reading `docs/ai/code-summary.md` and `docs/ai/requirements-summary.md`.** Requirements docs are numbered `docs/N-topic.md` (1–26).
 
 ## Conventions
 
@@ -85,7 +85,7 @@ Maintain two synthesis docs an AI assistant reads at the start of a fresh sessio
 <!-- hotsheet:begin specifics=requirements-documentation v=1 -->
 ### This project's docs layout
 
-- Requirements docs: numbered `docs/N-topic.md` (currently 1–23), FR-N.M requirement ids, cross-referenced with relative links. New functional area → next number.
+- Requirements docs: numbered `docs/N-topic.md` (currently 1–26), FR-N.M requirement ids, cross-referenced with relative links. New functional area → next number.
 - Codebase map: `docs/ai/code-summary.md` · Requirements summary (with status markers): `docs/ai/requirements-summary.md` — update both in the same change as the code they describe.
 - Manual test plan: `docs/manual-test-plan.md`.
 <!-- hotsheet:end specifics=requirements-documentation -->

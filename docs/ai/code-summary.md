@@ -14,6 +14,7 @@ src/
   export.ts           toMarkdown/toJson/toAtom + escapeXml — export & feed rendering, pure (NEWS-85)
   origin-guard.ts     Host/Origin check on every route — cross-origin + DNS-rebinding guard (NEWS-86)
   discovery.ts        DiscoveryService: topic-suggestion exclusions + in-memory request cache + classification validation + call log (NEWS-125)
+  undo.ts             ClearUndoBuffer: in-memory, per-topic, TTL'd snapshot of a cleared topic's stories + covered window (NEWS-145)
   scheduler.ts        startScheduler: 60s tick + 3s startup sweep, non-overlapping; drains an overrun cycle (NEWS-57)
   checks.ts           CheckRunner (checkTopic/checkDue/checkAll, in-flight guard) + isDue()/isDueDaily()/isDueUnderSchedule()/lastSlotBefore() (NEWS-84) + effectiveInterval() + byCheckOrder() (most-overdue-first, NEWS-58). No budget logic — NEWS-119 removed it
   types.ts            Hono AppEnv (store, runner injected)
@@ -116,6 +117,7 @@ Data dir: `--data-dir` flag → `NEWS_DATA_DIR` → `~/.news`. Also holds `news.
 | Add/change an AI provider | `src/ai/providers/` (+ register in `index.ts`); interface in `src/ai/types.ts` |
 | Change prompts / result parsing | `src/ai/prompt.ts` |
 | Provider selection / auto order | `src/ai/providers/index.ts` (`resolveProvider`, `AUTO_ORDER`) |
+| Undoing a clear | `src/undo.ts` (`ClearUndoBuffer`), `Store.clearItemsForTopic`/`restoreClearedItems`, `POST /api/topics/:id/restore-cleared`, `showUndoToast` + `[data-undo-clear]` in `client/app.tsx`. See `docs/26-undo.md` |
 | Dedup behavior | `src/ai/dedupe.ts` (keys), `src/checks.ts` (application) |
 | Dead / hallucinated source links | `src/ai/verify-links.ts`, called from `CheckRunner.verifyLinks` **before** dedup. Reuses `images/safety.ts` SSRF vetting; null probe under `--ai-test`. See `docs/2-news-checks-and-dedup.md` FR-2.6–2.10 |
 | Scheduling rules | `src/checks.ts` (`isDueUnderSchedule` picks interval vs daily — NEWS-84; `isDue`, `effectiveInterval`, `byCheckOrder`), `src/scheduler.ts` (tick + overrun drain). **Adding a topic checks it immediately** — `POST /api/topics` fires `checkTopic({manual:true})` in the background (NEWS-54, FR-1.12) |

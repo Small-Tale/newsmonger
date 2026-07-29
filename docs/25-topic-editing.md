@@ -2,7 +2,7 @@
 
 A topic's name is not a label — it is the question the app asks. It goes into the prompt verbatim, it is what the classifier reads to file the topic into a section, and it is what dedup compares against. So until now a topic was effectively immutable: a typo, a name that turned out to be ambiguous, or a subject that narrowed over time meant deleting and starting again, losing every story found so far.
 
-See also [1 — Topics and Scheduling](1-topics-and-scheduling.md), [18 — Topic Guidance](18-topic-guidance.md), [22 — Topic Categories](22-topic-categories.md).
+See also [1 — Topics and Scheduling](1-topics-and-scheduling.md), [18 — Topic Guidance](18-topic-guidance.md), [22 — Topic Categories](22-topic-categories.md), [26 — Undo](26-undo.md).
 
 ## Status: shipped (NEWS-139)
 
@@ -21,6 +21,8 @@ Guidance (FR-18) has been editable since it shipped; this doc covers the **name*
 ### Clearing previous results
 
 - **FR-25.5a** *(Shipped)* The story count that decides whether clearing is offered is fetched **when the dialog opens**, from the feed endpoint's `total` (`GET /api/items?topics=<id>&limit=1`). It was briefly carried on `/api/state` instead, which is polled every four seconds by every client — a `GROUP BY` over every story on that path measurably slowed the settings round trip under the full test suite. NEWS-75/76 slimmed that payload deliberately; one dialog needing one number is not a reason to grow it again.
+
+- **FR-25.5b** *(Shipped, NEWS-145)* Clearing is **undoable** for a short window, from the toast that reports it — see [26 — Undo](26-undo.md). That is what makes the asymmetry noted below defensible rather than an accident: deleting a topic confirms first, while clearing its stories is a checkbox, and the stories are the part that cannot be recreated.
 
 - **FR-25.5** *(Shipped)* When a renamed topic already has stories, the dialog offers to clear them — **only when there are stories to clear**, and **unticked by default**. Renaming is usually a correction, and discarding a topic's history should never happen because a box was already checked.
 

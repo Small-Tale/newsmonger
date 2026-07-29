@@ -559,6 +559,69 @@ test('the context menu stays on screen near the window edge (NEWS-149)', async (
   await page.setViewportSize({ width: 1280, height: 800 });
 });
 
+test('a cleared topic can be undone from the toast (NEWS-145)', async ({ page }) => {
+  // Deleting a topic asks for confirmation while clearing its stories was only a
+  // checkbox — and clearing is just as permanent. The Undo is what makes that
+  // asymmetry defensible rather than an accident of implementation.
+  await page.goto('/');
+  await page.fill('.add-topic input', 'Undoable');
+  await page.press('.add-topic input', 'Enter');
+  const row = page.locator('.topic', { hasText: 'Undoable' });
+  await expect(row).toBeVisible();
+  await expect(page.locator('.item', { hasText: 'Undoable' }).first()).toBeVisible({ timeout: 15_000 });
+  const stories = await page.locator('.item', { hasText: 'Undoable' }).count();
+  expect(stories).toBeGreaterThan(0);
+
+  // Bookmark one, to prove the restore brings back the *same* stories and not
+  // fresh copies of them — a new id would keep the text and lose the bookmark.
+  const first = page.locator('.item', { hasText: 'Undoable' }).first();
+  await first.locator('[data-save-item]').click();
+  await expect(first.locator('[data-save-item][data-saved=true]')).toBeVisible();
+
+  await topicAction(page, row, 'rename');
+  await page.fill('.dialog.rename input[name=topic-name]', 'Undone');
+  await page.check('.dialog.rename input[name=clear-items]');
+  await page.click('.dialog.rename button[type=submit]');
+  await expect(page.locator('.dialog.rename')).toHaveCount(0);
+  await expect(page.locator('.item', { hasText: 'Undone' })).toHaveCount(0);
+
+  // The toast names what was lost rather than saying "some stories", and the
+  // count comes from the number the dialog already had (FR-25.5a).
+  const toast = page.locator('.toast');
+  await expect(toast).toContainText(`cleared ${String(stories)}`);
+  await toast.locator('.toast-undo').click();
+
+  await expect(page.locator('.item', { hasText: 'Undone' })).toHaveCount(stories);
+  await expect(page.locator('.toast')).toContainText('Stories restored');
+  // The bookmark survived, so these are the original rows.
+  await expect(page.locator('.item', { hasText: 'Undone' }).locator('[data-save-item][data-saved=true]')).toHaveCount(1);
+
+  await topicAction(page, page.locator('.topic', { hasText: 'Undone' }), 'delete');
+});
+
+test('a plain toast offers no undo, and does not block clicks (NEWS-145)', async ({ page }) => {
+  // `.toast` is `pointer-events: none` precisely so a transient notice can't
+  // swallow a click meant for the page; only the actionable one opts back in.
+  await page.goto('/');
+  await page.fill('.add-topic input', 'Plain Toast');
+  await page.press('.add-topic input', 'Enter');
+  const row = page.locator('.topic', { hasText: 'Plain Toast' });
+  await expect(row).toBeVisible();
+
+  await topicAction(page, row, 'rename');
+  await page.fill('.dialog.rename input[name=topic-name]', 'Plain Toasted');
+  await page.click('.dialog.rename button[type=submit]');
+  await expect(page.locator('.dialog.rename')).toHaveCount(0);
+
+  const toast = page.locator('.toast');
+  await expect(toast).toBeVisible();
+  await expect(toast.locator('.toast-undo')).toHaveCount(0);
+  await expect(toast).not.toHaveClass(/actionable/);
+  expect(await toast.evaluate((el) => getComputedStyle(el).pointerEvents)).toBe('none');
+
+  await topicAction(page, page.locator('.topic', { hasText: 'Plain Toasted' }), 'delete');
+});
+
 test('a duplicate name is refused without closing the dialog', async ({ page }) => {
   await page.goto('/');
   await page.fill('.add-topic input', 'Occupied Name');

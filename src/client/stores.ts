@@ -117,6 +117,20 @@ export function emptyDiscover(): DiscoverState {
   };
 }
 
+/**
+ * A toast, and optionally the one thing it lets you do about it (NEWS-145).
+ *
+ * The action is a **topic id, not a callback**: state here is serialised into
+ * the render and diffed, and a function in it would survive neither. There is
+ * exactly one actionable toast in the app, so naming its subject beats a generic
+ * action shape that would need a registry to interpret.
+ */
+export interface ToastState {
+  message: string;
+  /** Topic whose cleared stories are still restorable, or null for a plain toast. */
+  undoTopicId: string | null;
+}
+
 export interface AppState {
   loaded: boolean;
   /** Last error shown in the banner, or null. */
@@ -282,7 +296,7 @@ export interface AppState {
    * In-app rather than `window.alert` (a WKWebView no-op), used to confirm a
    * share landed on the clipboard when there's no OS share sheet (NEWS-43).
    */
-  toast: string | null;
+  toast: ToastState | null;
   /**
    * Id of the failed check-run whose warning banner the user dismissed. The
    * warning is derived from the runs list (server state), not a piece of
@@ -589,7 +603,7 @@ export const appStore = defineStore({
      * lives in `showToast` in `app.tsx`, so a direct call puts a message on
      * screen and leaves it there. Use `showToast` unless you are it.
      */
-    setToastRaw: (toast: string | null) => {
+    setToastRaw: (toast: ToastState | null) => {
       set({ ...get(), toast });
     },
     setSidebarCollapsed: (sidebarCollapsed: boolean) => {

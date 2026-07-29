@@ -44,6 +44,19 @@ export interface ItemCursor {
   id: string;
 }
 
+/**
+ * What a clear removed, and therefore what an undo has to put back (NEWS-145).
+ *
+ * The check window travels with the stories rather than being recomputed on
+ * restore: clearing sets it to null so the next check spans a sensible period
+ * (FR-25.6), and an undo that left it null would re-report every restored story
+ * as new. Its value before the clear is the only correct thing to return to.
+ */
+export interface ClearedItems {
+  items: NewsItem[];
+  coveredThroughAt: string | null;
+}
+
 /** A feed query for `Store.queryItems` (NEWS-74). */
 export interface ItemQuery {
   mode: 'normal' | 'review';
@@ -412,13 +425,61 @@ export class Store {
    * The run history is deliberately **kept**: it records what the app did, not
    * what the topic is about, and diagnostics would be poorer for losing it.
    */
-  clearItemsForTopic(id: string): number {
+  clearItemsForTopic(id: string): ClearedItems {
     this.db.exec('BEGIN');
     try {
-      const info = this.db.prepare('DELETE FROM items WHERE topic_id = ?').run(id);
+      // Read before deleting, so the caller can offer an undo (NEWS-145). Both
+      // halves have to come back together: restoring the stories while leaving
+      // `coveredThroughAt` null would re-report them all on the next check.
+      const coveredThroughAt = this.coveredThroughAt(id);
+      const items = (this.db.prepare('SELECT * FROM items WHERE topic_id = ? ORDER BY rowid').all(id) as Record<
+        string,
+        unknown
+      >[]).map((r) => Store.rowToItem(r));
+      this.db.prepare('DELETE FROM items WHERE topic_id = ?').run(id);
       this.db.prepare('UPDATE topics SET covered_through_at = NULL WHERE id = ?').run(id);
       this.db.exec('COMMIT');
-      return asCount(info.changes);
+      return { items, coveredThroughAt };
+    } catch (err) {
+      this.db.exec('ROLLBACK');
+      throw err;
+    }
+  }
+
+  private coveredThroughAt(id: string): string | null {
+    const row = this.db.prepare('SELECT covered_through_at AS c FROM topics WHERE id = ?').get(id) as
+      | { c: unknown }
+      | undefined;
+    return typeof row?.c === 'string' ? row.c : null;
+  }
+
+  /**
+   * Put back what `clearItemsForTopic` took (NEWS-145).
+   *
+   * Rows go back **with their original ids**, not as fresh inserts: a story's id
+   * is what a bookmark, an off-topic flag and an open share dialog all refer to,
+   * so re-adding it under a new id would restore the text while quietly breaking
+   * every reference to it. `saved` and `offTopic` ride along in the snapshot for
+   * the same reason — an undo that silently un-bookmarked a story would be a
+   * worse outcome than the clear it was undoing.
+   *
+   * Ignores rows whose id is already present, which is what a double-submitted
+   * undo looks like. The insert would otherwise throw on the primary key and
+   * abort the whole restore, losing the rest of the batch to a duplicate click.
+   */
+  restoreClearedItems(id: string, cleared: ClearedItems): number {
+    this.db.exec('BEGIN');
+    try {
+      let restored = 0;
+      for (const item of cleared.items) {
+        const exists = this.db.prepare('SELECT 1 FROM items WHERE id = ?').get(item.id);
+        if (exists !== undefined) continue;
+        this.insertItem(item);
+        restored += 1;
+      }
+      this.db.prepare('UPDATE topics SET covered_through_at = ? WHERE id = ?').run(cleared.coveredThroughAt, id);
+      this.db.exec('COMMIT');
+      return restored;
     } catch (err) {
       this.db.exec('ROLLBACK');
       throw err;

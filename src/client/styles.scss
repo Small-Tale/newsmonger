@@ -1956,7 +1956,41 @@ button.off-topic-pill {
   font-size: 13px;
   font-weight: 500;
   box-shadow: 0 6px 20px rgba(26, 36, 32, 0.28);
+  // A plain toast must never swallow a click meant for what's behind it.
   pointer-events: none;
+
+  // …but one with an Undo exists to be clicked (NEWS-145).
+  &.actionable {
+    pointer-events: auto;
+    display: inline-flex;
+    align-items: center;
+    gap: 14px;
+  }
+}
+
+.toast-undo {
+  border: 0;
+  background: none;
+  cursor: pointer;
+  padding: 2px 2px;
+  font-family: var(--sans);
+  font-size: 13px;
+  font-weight: 600;
+  // The toast is ink-on-paper inverted, so the accent has to invert with it —
+  // `--pine` is chosen for contrast against the page, and disappears here.
+  color: var(--paper);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+
+  &:hover {
+    opacity: 0.75;
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--paper);
+    outline-offset: 2px;
+    border-radius: 3px;
+  }
 }
 
 @media (prefers-color-scheme: dark) {

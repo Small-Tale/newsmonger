@@ -15,6 +15,7 @@ import { originGuard } from './origin-guard.js';
 import { registerApi } from './routes/api.js';
 import { registerPages } from './routes/pages.js';
 import type { AppEnv } from './types.js';
+import { ClearUndoBuffer } from './undo.js';
 
 export const DEFAULT_PORT = 4187;
 const PORT_FALLBACK_ATTEMPTS = 20;
@@ -52,11 +53,14 @@ export function createApp(deps: {
    * need not construct one; the route 503s rather than throwing when it is absent.
    */
   discovery?: DiscoveryService;
+  /** Undo buffer for cleared topics (NEWS-145). Defaults to a fresh one per app. */
+  undo?: ClearUndoBuffer;
 }): Hono<AppEnv> {
   const app = new Hono<AppEnv>();
   // Same instance the CheckRunner consults, when the caller passes one; tests
   // that don't care get a standalone tracker.
   const attendance = deps.attendance ?? new Attendance();
+  const undo = deps.undo ?? new ClearUndoBuffer();
   // First, before anything reads a body or touches state (NEWS-86).
   app.use('*', originGuard());
   app.use('*', async (c, next) => {
@@ -66,6 +70,7 @@ export function createApp(deps: {
     c.set('dataDir', deps.dataDir ?? deps.store.dataDir);
     c.set('verifyKey', deps.verifyKey === undefined ? verifyApiKey : deps.verifyKey);
     c.set('discovery', deps.discovery ?? null);
+    c.set('undo', undo);
     // Debug aid (e.g. verifying the Tauri webview actually hits the server).
     if (process.env['NEWS_LOG_REQUESTS'] === '1') {
       console.error(`[req] ${c.req.method} ${c.req.path}`);

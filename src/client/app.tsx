@@ -32,6 +32,7 @@ import {
   refreshState,
   renameTopic,
   reportForeground,
+  restoreClearedItems,
   saveKey,
   setItemOffTopic,
   setItemSaved,
@@ -82,7 +83,7 @@ import { activeBehindWarnings } from './schedule.js';
 import { itemMatchesQuery } from './search.js';
 import { shareItem } from './share.js';
 import { isAllSoloed, toggleSolo } from './solo.js';
-import type { AppState, DiscoverSource, DiscoverState, OnboardingStep } from './stores.js';
+import type { AppState, DiscoverSource, DiscoverState, OnboardingStep, ToastState } from './stores.js';
 import {
   appStore,
   FEED_PAGE,
@@ -118,6 +119,19 @@ const RETENTION_OPTIONS: { label: string; days: number }[] = [
 
 /** How long a toast stays up before it fades out on its own. */
 const TOAST_MS = 2600;
+/**
+ * How long a toast that offers an **undo** stays up (NEWS-145).
+ *
+ * Longer than a plain one, because the two ask different things of the reader.
+ * A plain toast only has to be *noticed*; this one has to be read, understood as
+ * reversible, and acted on with the mouse. 2.6s is enough for the first and not
+ * the second, and a window that expires mid-reach is worse than no undo at all —
+ * it teaches that the affordance is unreliable.
+ *
+ * Comfortably inside the server's `UNDO_TTL_MS`, so the button is never on
+ * screen after the snapshot behind it has gone.
+ */
+const UNDO_TOAST_MS = 9000;
 let toastTimer: ReturnType<typeof setTimeout> | undefined;
 
 /** Debounce for the server-side feed search refetch (NEWS-76). */
@@ -133,11 +147,20 @@ let searchDebounce: ReturnType<typeof setTimeout> | undefined;
  * good — which is exactly what shipped in NEWS-141.
  */
 function showToast(message: string): void {
-  appStore.actions.setToastRaw(message);
+  raiseToast({ message, undoTopicId: null }, TOAST_MS);
+}
+
+/** Show a message with an Undo for a topic's just-cleared stories (NEWS-145). */
+function showUndoToast(message: string, topicId: string): void {
+  raiseToast({ message, undoTopicId: topicId }, UNDO_TOAST_MS);
+}
+
+function raiseToast(toast: ToastState, ms: number): void {
+  appStore.actions.setToastRaw(toast);
   clearTimeout(toastTimer);
   toastTimer = setTimeout(() => {
     appStore.actions.setToastRaw(null);
-  }, TOAST_MS);
+  }, ms);
 }
 
 function relativeTime(iso: string): string {
@@ -1990,7 +2013,23 @@ function appJsx(): SafeHtml {
           doubled as a KF-377 workaround — that reason is gone; this one isn't.
           See docs/3-ui.md, NEWS-99.) */}
       <div id="toast-slot" aria-live="polite">
-        {s.toast !== null ? <div class="toast">{s.toast}</div> : ''}
+        {s.toast !== null ? (
+          <div class={`toast ${s.toast.undoTopicId !== null ? 'actionable' : ''}`}>
+            <span>{s.toast.message}</span>
+            {/* One attribute, one delegate — the id rides on the attribute rather
+                than being read back out of the store, so a toast replaced mid-click
+                cannot undo the wrong topic (see docs/3-ui.md). */}
+            {s.toast.undoTopicId !== null ? (
+              <button class="toast-undo" type="button" data-undo-clear={s.toast.undoTopicId}>
+                Undo
+              </button>
+            ) : (
+              ''
+            )}
+          </div>
+        ) : (
+          ''
+        )}
       </div>
 
       {/* Section navigation sits directly under the masthead, as a newspaper's
@@ -2566,14 +2605,38 @@ async function loadMoreSuggestions(): Promise<void> {
 async function saveRename(id: string, name: string, clearItems: boolean): Promise<void> {
   try {
     await renameTopic(id, name, clearItems);
+    const cleared = clearItems ? (appStore.state.value.renameItemCount ?? 0) : 0;
     appStore.actions.closeRename();
-    showToast(
-      clearItems
-        ? `Renamed to “${name}” — previous stories cleared, next check starts fresh`
-        : `Renamed to “${name}” — applies from the next check`,
-    );
+    // The count is the one the dialog already fetched when it opened (FR-25.5a),
+    // so the toast names what was actually lost rather than "some stories".
+    if (cleared > 0) {
+      showUndoToast(`Renamed to “${name}” — cleared ${String(cleared)} ${cleared === 1 ? 'story' : 'stories'}`, id);
+    } else {
+      showToast(
+        clearItems
+          ? `Renamed to “${name}” — previous stories cleared, next check starts fresh`
+          : `Renamed to “${name}” — applies from the next check`,
+      );
+    }
   } catch (err) {
     appStore.actions.setError(err instanceof Error ? err.message : String(err));
+  }
+}
+
+/**
+ * Restore a topic's just-cleared stories (NEWS-145).
+ *
+ * An expired window is **not** an error: the user pressed a button the app was
+ * still showing them, and answering with the red banner reserved for real
+ * failures would read as "something broke" rather than "you were too slow". It
+ * replaces the toast with a plain one saying so.
+ */
+async function undoClear(id: string): Promise<void> {
+  try {
+    await restoreClearedItems(id);
+    showToast('Stories restored');
+  } catch (err) {
+    showToast(err instanceof Error ? err.message : String(err));
   }
 }
 
@@ -2919,6 +2982,11 @@ function wireEvents(root: HTMLElement): void {
   });
 
   // --- first-run flow (NEWS-78) ---------------------------------------------
+
+  void delegate(root, 'click', '[data-undo-clear]', (_e, el) => {
+    const id = el.getAttribute('data-undo-clear');
+    if (id !== null) void undoClear(id);
+  });
 
   void delegate(root, 'click', '[data-starter-topic]', (_e, el) => {
     const name = el.getAttribute('data-starter-topic');
