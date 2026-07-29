@@ -512,6 +512,53 @@ test('renaming can clear that topic’s stories, and only that topic’s', async
   await expect(page.locator('.item')).toHaveCount(otherBefore - targetStories);
 });
 
+test('the context menu stays on screen near the window edge (NEWS-149)', async ({ page }) => {
+  // The menu is `position: fixed` inside a full-screen backdrop, so an item that
+  // lands past the bottom edge cannot be scrolled back — it is simply
+  // unreachable. Delete is the last of eight items, so the bottom edge takes the
+  // most destructive action away first.
+  //
+  // A short viewport is what makes this deterministic: the menu is ~300px tall,
+  // so in 420px of height there is nowhere below a topic row for it to fit, and
+  // the old raw-cursor placement ran straight off the bottom.
+  await page.setViewportSize({ width: 1280, height: 420 });
+  await page.goto('/');
+  await page.fill('.add-topic input', 'Edge Case');
+  await page.press('.add-topic input', 'Enter');
+  const row = page.locator('.topic', { hasText: 'Edge Case' });
+  await expect(row).toBeVisible();
+
+  await row.click({ button: 'right' });
+  await expect(page.locator('.menu')).toBeVisible();
+
+  const fits = await page.evaluate(() => {
+    const menu = document.querySelector('.menu');
+    const last = document.querySelector('[data-menu-action=delete]');
+    if (!menu || !last) return null;
+    const m = menu.getBoundingClientRect();
+    const l = last.getBoundingClientRect();
+    return {
+      menuBottom: m.bottom,
+      viewport: window.innerHeight,
+      menuInside: m.left >= 0 && m.top >= 0 && m.right <= window.innerWidth && m.bottom <= window.innerHeight,
+      // The real question is not "is the box on screen" but "can this be
+      // clicked" — a menu whose box fits while its last item does not is the
+      // exact bug, so the last item is what gets asserted.
+      lastInside: l.bottom <= window.innerHeight && l.right <= window.innerWidth,
+    };
+  });
+  expect(fits).not.toBeNull();
+  expect(fits?.menuInside, `menu bottom ${String(fits?.menuBottom)} vs ${String(fits?.viewport)}`).toBe(true);
+  expect(fits?.lastInside).toBe(true);
+
+  // And it is genuinely clickable, not merely measured to be inside.
+  await page.locator('[data-menu-action=delete]').click();
+  await acceptConfirm(page);
+  await expect(page.locator('.topic', { hasText: 'Edge Case' })).toHaveCount(0);
+
+  await page.setViewportSize({ width: 1280, height: 800 });
+});
+
 test('a duplicate name is refused without closing the dialog', async ({ page }) => {
   await page.goto('/');
   await page.fill('.add-topic input', 'Occupied Name');

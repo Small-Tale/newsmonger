@@ -75,6 +75,7 @@ import {
 } from './discover-progress.js';
 import { currentFailure } from './failure.js';
 import { icon } from './icons.js';
+import { menuStyle } from './menu-position.js';
 import { ensureNotificationPermission, syncTauriNotificationPermission } from './notifications.js';
 import { onboardingCountText } from './onboarding.js';
 import { activeBehindWarnings } from './schedule.js';
@@ -1767,7 +1768,7 @@ function contextMenuJsx(menu: NonNullable<AppState['contextMenu']>, topics: Topi
 
   return (
     <div class="menu-backdrop" data-action="close-menu">
-      <div class="menu" role="menu" style={`left:${String(menu.x)}px;top:${String(menu.y)}px`}>
+      <div class="menu" role="menu" style={menuStyle(menu.x, menu.y, window.innerWidth, window.innerHeight)}>
         <button class="menu-item" role="menuitem" type="button" data-menu-action="check">
           {icon('check')}
           <span>Check now{suffix}</span>
@@ -1840,7 +1841,7 @@ function itemMenuJsx(menu: NonNullable<AppState['itemMenu']>, items: NewsItem[])
   // marked as noise makes no sense (NEWS-70).
   return (
     <div class="menu-backdrop" data-action="close-item-menu">
-      <div class="menu" role="menu" style={`left:${String(menu.x)}px;top:${String(menu.y)}px`}>
+      <div class="menu" role="menu" style={menuStyle(menu.x, menu.y, window.innerWidth, window.innerHeight)}>
         {item.offTopic ? (
           ''
         ) : (

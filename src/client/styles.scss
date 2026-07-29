@@ -1314,6 +1314,11 @@ h2.eyebrow {
 .menu {
   position: fixed;
   min-width: 184px;
+  // Paired with the `max-height` `placeMenu` computes (NEWS-149): the clamp
+  // places the menu using an estimated height, and this is what makes a menu
+  // taller than the estimate — or a viewport shorter than the menu — scroll
+  // rather than run off the bottom with Delete beyond reach.
+  overflow-y: auto;
   padding: 5px;
   background: var(--panel);
   border: 1px solid var(--line);
