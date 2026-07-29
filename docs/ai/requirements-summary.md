@@ -176,6 +176,8 @@ Subscription-backed providers (`attended: true`) run *scheduled* checks only whi
 
 ## [7 — API Keys and Settings Dialog](../7-api-keys.md) — Shipped (all three platforms verified)
 
+- a11y (NEWS-159): the settings dialog is axe-scanned on **all four tabs in both colour schemes** (was: once, in light, on the first tab). **0 violations** — the dark-mode failures NEWS-159 was filed for were artifacts of scanning while a second dialog was open, and do not exist.
+
 - FR-7.1 env → keychain precedence: **Shipped**
 - FR-7.2 keys never written to the data file (no disk fallback): **Shipped**
 - FR-7.3 per-request resolution; SDK client cache keyed on the credential: **Shipped**

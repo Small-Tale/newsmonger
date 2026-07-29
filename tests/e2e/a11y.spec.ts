@@ -34,13 +34,27 @@ test('...and none in dark mode either', async ({ page }) => {
   expect(await scan(page)).toEqual([]);
 });
 
-test('the settings dialog has no serious accessibility violations', async ({ page }) => {
+test('the settings dialog has no serious violations, on any tab, in either theme (NEWS-159)', async ({ page }) => {
+  // Was: one scan, light only, on whichever tab opens first. The main view has
+  // been scanned in both schemes since NEWS-90 precisely because contrast is
+  // theme-specific — the dialog just never got the same treatment, and it holds
+  // most of the app's controls. Each tab is a different set of them, so a scan of
+  // the first one says nothing about the other three.
+  for (const scheme of ['light', 'dark'] as const) {
+    await page.emulateMedia({ colorScheme: scheme });
+    await page.goto('/');
+    await page.click('[data-action=open-settings]');
+    await expect(page.locator('.dialog')).toBeVisible();
+
+    for (const tab of ['Schedule', 'Source', 'Data', 'App'] as const) {
+      await page.locator('.settings-tab', { hasText: tab }).click();
+      await expect(page.locator('.settings-tab.active')).toHaveText(tab);
+      expect(await scan(page), `${scheme} / ${tab}`).toEqual([]);
+    }
+
+    await page.locator('.dialog [data-action=close-settings]').click();
+  }
   await page.emulateMedia({ colorScheme: 'light' });
-  await page.goto('/');
-  await page.click('[data-action=open-settings]');
-  await expect(page.locator('.dialog')).toBeVisible();
-  expect(await scan(page)).toEqual([]);
-  await page.locator('.dialog [data-action=close-settings]').click();
 });
 
 test('the export dialog is labelled, grouped and keyboard-operable (NEWS-158)', async ({ page }) => {

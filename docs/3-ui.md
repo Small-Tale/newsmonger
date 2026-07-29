@@ -284,7 +284,12 @@ The UI grew mouse-first: right-click menus for every topic and story action, Cmd
 
 ### Regression net
 
-`tests/e2e/a11y.spec.ts` runs **axe-core** (`wcag2a/2aa/21a/21aa`, failing on serious/critical) against the main view in **both light and dark** — contrast is theme-specific, so a single-theme scan proves half the point — and against the settings dialog. It currently reports **0 violations across 22 applicable rules**, which also validates the listbox structure (`aria-required-parent` / `aria-required-children` are among the rules that pass).
+`tests/e2e/a11y.spec.ts` runs **axe-core** (`wcag2a/2aa/21a/21aa`, failing on serious/critical) against the main view in **both light and dark** — contrast is theme-specific, so a single-theme scan proves half the point — and, since NEWS-159, against the settings dialog on **all four tabs in both schemes**. It had been scanned once, in light, on whichever tab opens first; each tab is a different set of controls, and the dialog holds most of the app's. Currently **0 violations**, which also validates the listbox structure (`aria-required-parent` / `aria-required-children` are among the rules that pass).
+
+**Two limits of the axe scan, both learned the hard way.**
+
+- **It cannot scan a dialog opened over another dialog.** Both backdrops are `position: fixed; inset: 0` at the same z-index, so axe's overlap detection composites the lower one *over* the upper dialog's opaque panel and reports colours that are not on screen — measured, `#b5b8b6` for a button on `rgb(251,252,251)`, failing contrast that is really ~14:1. `AxeBuilder.include()` makes it worse, not better. NEWS-158's export dialog is therefore checked by asserting the properties axe would have checked, rather than by scanning.
+- **NEWS-159 was filed off those invented numbers** and turned out to be no bug at all. "Check all now" measured **6.43:1**, not the 1.35:1 reported, and the settings tabs **5.65:1**, not 4.1:1 — both comfortably past AA. The lesson is not to distrust axe generally, but to distrust any reading taken while a second dialog is open, and to confirm against `getComputedStyle` before believing a contrast number.
 
 The same spec covers what axe cannot: focus + Enter + Shift+F10 on a topic row, Escape closing each dialog, and 40 consecutive Tab presses never escaping an open dialog.
 
