@@ -66,6 +66,7 @@ src/
     discover.ts       groupSuggestions/resultsHeading/sectionTiles (NEWS-126) + the pure tuner state machine: startTuner/judgeCandidate/nextRound/mergeKept (NEWS-127)
     solo.ts           toggleSolo/isAllSoloed — solo-set arithmetic shared by the context menu and the double-click gesture (NEWS-95)
     dial.ts           dialRemaining — the sidebar ring's countdown fraction (NEWS-144)
+    onboarding.ts     onboardingCountText — the Topics step's running count, which names ticked-but-not-created and already-created separately (NEWS-146)
     topic-sort.ts     sortTopics (NEWS-63) + topicRows — the sidebar's rows, with section headings interleaved in the By-section sort (NEWS-140)
     styles.scss       styling (light/dark via prefers-color-scheme)
 src-tauri/            Tauri v2 shell; one spawn path, dev runs tsx + release runs the sidecar

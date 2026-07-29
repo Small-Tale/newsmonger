@@ -76,6 +76,7 @@ import {
 import { currentFailure } from './failure.js';
 import { icon } from './icons.js';
 import { ensureNotificationPermission, syncTauriNotificationPermission } from './notifications.js';
+import { onboardingCountText } from './onboarding.js';
 import { activeBehindWarnings } from './schedule.js';
 import { itemMatchesQuery } from './search.js';
 import { shareItem } from './share.js';
@@ -768,17 +769,20 @@ function renameDialogJsx(topic: Topic, itemCount: number | null): SafeHtml {
 }
 
 /**
- * Discovery inside onboarding's Topics step (NEWS-128, FR-24.18).
+ * Discovery inside onboarding's Topics step (NEWS-128, then NEWS-146; FR-24.18).
  *
  * Setup is where the need is sharpest, and a brand-new user has no topics yet —
  * which makes this the one place suggestions are guaranteed unfiltered by the
  * FR-24.11 exclusions.
  *
- * Suggestions render as the **same chips** the static starters do, and carry the
- * same `data-starter-topic` attribute. That is deliberate on two counts: picking
- * one is the same act as ticking a starter (nothing is created until Finish), and
- * one attribute means one delegate — two handlers over chips the morph can turn
- * into each other is the bug from NEWS-126 (see `docs/3-ui.md`).
+ * This used to be a **second, smaller discovery**: a free-text box whose results
+ * were chips. It answered the same question as the real dialog with a fraction
+ * of its answer — no section grid for someone who can't yet name what they want,
+ * no reason or ongoing/evergreen label on a suggestion, no narrower/similar, no
+ * second batch. Two implementations of one idea, and the reduced one was the copy
+ * a new user met first. So this is now a door to the real thing (NEWS-146), and
+ * it opens with `data-action=open-discover` — the *same* attribute the sidebar's
+ * compass uses, so there is still exactly one delegate for "open discovery".
  */
 function onboardingSuggestJsx(s: AppState): SafeHtml {
   // Onboarding runs before a provider is necessarily configured — Source comes
@@ -791,8 +795,7 @@ function onboardingSuggestJsx(s: AppState): SafeHtml {
   // whether *any* provider is available gets the explicit case wrong — someone
   // who picked OpenAI and hasn't added a key would be offered a button that
   // cannot work, because an unrelated signed-in CLI happens to be present.
-  const usable = providerLikelyUsable(s);
-  if (!usable) {
+  if (!providerLikelyUsable(s)) {
     return (
       <p class="suggest-note">
         Set up a source above and News can suggest topics for you — or just pick from the list.
@@ -801,39 +804,16 @@ function onboardingSuggestJsx(s: AppState): SafeHtml {
   }
   return (
     <div>
-      <form class="onboarding-suggest-form" data-action="onboarding-suggest">
-        <input
-          type="text"
-          name="onboarding-query"
-          placeholder="Or describe what you’re into — “i cycle and work in biotech”"
-          maxLength={MAX_DISCOVER_QUERY_LENGTH}
-          autocomplete="off"
-          data-morph-skip-children
-        />
-        <button class="btn" type="submit" disabled={s.onboardingLoading ? true : undefined}>
-          Suggest
-        </button>
-      </form>
-      <div class="onboarding-suggest-results">
-        {s.onboardingLoading ? <p class="suggest-note">Asking…</p> : ''}
-        {s.onboardingError !== null ? <p class="suggest-note error-note">{s.onboardingError}</p> : ''}
-        <div class="starter-topics">
-          {s.onboardingSuggestions.map((suggestion) => (
-            <button
-              class={`chip starter ${s.onboardingTopics.includes(suggestion.name) ? 'on' : ''}`}
-              type="button"
-              data-starter-topic={suggestion.name}
-              title={suggestion.reason}
-              aria-pressed={s.onboardingTopics.includes(suggestion.name) ? 'true' : 'false'}
-            >
-              {suggestion.name}
-            </button>
-          ))}
-        </div>
-      </div>
+      <button class="btn" type="button" data-action="open-discover">
+        {icon('compass')} Discover topics
+      </button>
+      <p class="suggest-note">
+        Describe what you’re into, or browse by section. Anything you add there is created straight away.
+      </p>
     </div>
   );
 }
+
 
 /**
  * Topic discovery (NEWS-126, `docs/24-topic-discovery.md`).
@@ -1240,11 +1220,7 @@ function onboardingStepJsx(step: OnboardingStep, s: AppState): SafeHtml {
         {/* Always-present container: the suggestions block appearing must not
             restructure its siblings (see docs/3-ui.md). */}
         <div class="onboarding-suggest">{onboardingSuggestJsx(s)}</div>
-        <p class="note">
-          {s.onboardingTopics.length === 0
-            ? 'None chosen — that’s fine, you can add topics from the sidebar.'
-            : `${String(s.onboardingTopics.length)} chosen. Each is checked on its own, so more topics means more checks.`}
-        </p>
+        <p class="note">{onboardingCountText(s.onboardingTopics.length, s.topics.length - s.onboardingTopicsAtStart)}</p>
       </div>
     );
   }
@@ -2512,26 +2488,6 @@ async function fetchTunerRound(tuner: TunerState, advance: boolean): Promise<voi
   }
 }
 
-/**
- * Fetch suggestions for the onboarding Topics step (NEWS-128).
- *
- * Errors render as a note beside the chips rather than in the global banner:
- * the static starters above are still perfectly usable, so a failure here should
- * read as "that didn't work" and not as "setup is broken".
- */
-async function suggestOnboardingTopics(query: string): Promise<void> {
-  appStore.actions.setOnboardingSuggestions({ loading: true, error: null });
-  try {
-    const { suggestions } = await discoverTopics({ kind: 'describe', query }, 8);
-    appStore.actions.setOnboardingSuggestions({ suggestions, loading: false });
-  } catch (err) {
-    appStore.actions.setOnboardingSuggestions({
-      loading: false,
-      error: err instanceof Error ? err.message : String(err),
-    });
-  }
-}
-
 /** Enter the tuner, scoped to a card or to the whole result set (FR-24.5). */
 async function enterTuner(anchor: string, direction: 'narrower' | 'similar'): Promise<void> {
   const tuner = startTuner(anchor, direction);
@@ -2968,12 +2924,6 @@ function wireEvents(root: HTMLElement): void {
     if (name !== null) appStore.actions.toggleOnboardingTopic(name);
   });
 
-  void delegate(root, 'submit', '[data-action=onboarding-suggest]', (e, form) => {
-    e.preventDefault();
-    const input = form.querySelector<HTMLInputElement>('input[name=onboarding-query]');
-    void suggestOnboardingTopics(input?.value.trim() ?? '');
-  });
-
   void delegate(root, 'click', '[data-action=onboarding-skip]', () => {
     closeOnboarding();
   });
@@ -2987,17 +2937,16 @@ function wireEvents(root: HTMLElement): void {
     if (at >= ONBOARDING_STEPS.length) {
       // Last step: create whatever was chosen, then get out of the way. Topics
       // are added one at a time because each POST fires its own first check.
-      const { onboardingTopics: chosen, onboardingSuggestions } = appStore.state.value;
+      //
+      // Only the starter chips reach here. Anything from discovery was created at
+      // the moment it was added, with its guidance and classification (NEWS-146) —
+      // which is also how it gets a narrowed first check, something a name-only
+      // create could never do.
+      const { onboardingTopics: chosen } = appStore.state.value;
       closeOnboarding();
       void (async () => {
         for (const name of chosen) {
-          // A pick that came from a suggestion is created *with* its guidance and
-          // classification (FR-24.12/24.13) — creating it by name alone would
-          // throw away the steer that makes its first check narrowed, which is
-          // the whole reason the suggestion carries one.
-          const suggestion = onboardingSuggestions.find((item) => item.name === name);
-          if (suggestion === undefined) await addTopic(name);
-          else await addSuggestedTopic(suggestion);
+          await addTopic(name);
         }
       })();
       return;
@@ -3337,6 +3286,13 @@ function wireGlobalKeysAndDismiss(): void {
       }
       if (s.settingsOpen) {
         appStore.actions.setSettingsOpen(false);
+        return;
+      }
+      // Above onboarding, because discovery now opens *over* the Topics step
+      // (NEWS-146). Without this rung Escape closed the wizard underneath and
+      // left discovery floating on top of nothing.
+      if (s.discover !== null) {
+        appStore.actions.closeDiscover();
         return;
       }
       if (s.onboarding !== null && s.onboarding !== 'auto') {

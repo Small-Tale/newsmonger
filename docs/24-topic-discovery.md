@@ -76,9 +76,11 @@ That last part is the decision worth stating plainly, because it is what the bra
 
 - **FR-24.17** A **Discover** entry point sits beside the add-topic field, for the ongoing case.
 
-- **FR-24.18** *(Shipped, NEWS-128)* Onboarding's **Topics** step (FR-20.6) offers suggestions alongside its starter chips. Setup is where the need is sharpest, and a new user has no existing topics, which makes it the one place suggestions are guaranteed unfiltered.
+- **FR-24.18** *(Shipped, NEWS-128; reworked NEWS-146)* Onboarding's **Topics** step (FR-20.6) opens **this dialog** — the same one, not a version of it. Setup is where the need is sharpest, and a new user has no existing topics, which makes it the one place suggestions are guaranteed unfiltered.
 
-  Suggestions render as **more of the same chips**, with the same attribute and the same handler — picking one is the same act as ticking a starter, and one attribute means one delegate (the NEWS-126 lesson applied rather than re-learned). A picked suggestion is created with its guidance and classification, not as a bare name.
+  NEWS-128 first built the step its own describe-box whose results were chips. That was a second, smaller discovery answering the same question with a fraction of the answer: no section grid, no reason or ongoing/evergreen label, no narrower/similar, no More. The half it was missing — browsing by section — is the half a user who cannot yet name what they want needs most, and this was the copy they met first. NEWS-146 replaced it with a **Discover topics** button carrying the *same* `data-action=open-discover` as the sidebar's compass: one attribute, one delegate (the NEWS-126 lesson applied rather than re-learned), and one implementation to keep good.
+
+  The consequence is that **Add creates immediately here too** (FR-24.26), which collides with the wizard's "nothing exists until Finish". Immediate creation won: it is what carries the guidance and classification into the topic, and therefore what makes the first check narrowed and already running by the time the user reaches the schedule step. The wizard reports the two honestly instead of hiding the difference — see FR-20.6a.
 
   The starter chips stay as a **documented fallback**: onboarding runs before a provider is necessarily configured, and the gate mirrors `resolveProvider` — an explicitly-chosen provider must itself be available, since asking merely whether *any* provider is available offers a button that cannot work to someone who picked OpenAI without a key. `AUTO_ORDER` moved to `src/ai/types.ts` so the client can share the one definition instead of keeping a copy that drifts.
 

@@ -383,7 +383,7 @@ test('with no usable provider, the Topics step falls back to the starter chips',
   // must not leave this step empty.
   await expect(page.locator('.chip.starter').first()).toBeVisible();
   await expect(page.locator('.suggest-note')).toContainText('Set up a source');
-  await expect(page.locator('[data-action=onboarding-suggest]')).toHaveCount(0);
+  await expect(page.locator('.onboarding-suggest [data-action=open-discover]')).toHaveCount(0);
   await page.locator('[data-action=onboarding-skip]').click();
 
   await openSettingsTab(page, 'Source');
@@ -391,7 +391,7 @@ test('with no usable provider, the Topics step falls back to the starter chips',
   await page.locator('.dialog [data-action=close-settings]').click();
 });
 
-test('with a provider configured, the Topics step offers suggestions', async ({ page }) => {
+test('the Topics step opens the real discovery dialog (NEWS-146)', async ({ page }) => {
   await page.goto('/');
   await openSettingsTab(page, 'Source');
   await page.fill('.key-row:has-text("Anthropic") .key-input', 'sk-ant-e2e-onboarding');
@@ -404,31 +404,62 @@ test('with a provider configured, the Topics step offers suggestions', async ({ 
   await stepToTopics(page);
 
   const wizard = page.locator('.dialog.onboarding');
-  await expect(wizard.locator('[data-action=onboarding-suggest]')).toBeVisible();
-  const starters = await wizard.locator('.chip.starter').count();
+  await expect(wizard.locator('.note')).toContainText('None yet');
 
-  await wizard.locator('input[name=onboarding-query]').fill('cycling');
-  await wizard.locator('[data-action=onboarding-suggest] button[type=submit]').click();
+  // Onboarding used to carry its own reduced discovery. It now opens the same
+  // dialog the sidebar does, with both doors — the section grid is the half a new
+  // user most needs, and was the half the reduced copy didn't have.
+  await wizard.locator('[data-action=open-discover]').click();
+  const dialog = page.locator('.dialog.discover');
+  await expect(dialog).toBeVisible();
+  await expect(dialog.locator('.section-grid .section-tile').first()).toBeVisible();
 
-  // Suggestions arrive as more of the same chips — picking one is the same act
-  // as ticking a starter, and nothing is created until Finish.
-  await expect(wizard.locator('.onboarding-suggest-results .chip.starter').first()).toBeVisible();
-  expect(await wizard.locator('.chip.starter').count()).toBeGreaterThan(starters);
+  // Escape closes discovery and leaves the wizard standing. Before NEWS-146 the
+  // Escape ladder had no rung for discovery at all, so this closed the wizard
+  // *underneath* it.
+  await page.keyboard.press('Escape');
+  await expect(dialog).toHaveCount(0);
+  await expect(wizard).toBeVisible();
 
-  // Picking a suggestion feeds the same running count as the starters (FR-20.6).
-  const picked = wizard.locator('.onboarding-suggest-results .chip.starter').first();
-  const pickedName = (await picked.textContent()) ?? '';
-  await picked.click();
-  await expect(picked).toHaveAttribute('aria-pressed', 'true');
-  await expect(wizard.locator('.note')).toContainText('1 chosen');
+  await wizard.locator('[data-action=open-discover]').click();
+  await dialog.locator('input[name=discover-query]').fill('cycling');
+  await dialog.locator('[data-action=discover-search] button[type=submit]').click();
+  const card = dialog.locator('.suggestion').first();
+  await expect(card).toBeVisible();
+  const addedName = ((await card.locator('.suggestion-name').textContent()) ?? '').trim();
 
-  // Finishing creates it, and it arrives with the suggestion's guidance
-  // (FR-24.12) rather than as a bare name.
+  // Adding creates the topic there and then (FR-24.26) — the wizard's
+  // "nothing until Finish" rule covers the starter chips, not this.
+  await card.locator('[data-add-suggestion]').click();
+  await expect(card).toContainText('Added');
+  await page.locator('[data-action=close-discover]').click();
+
+  // So the count line has to name both, because only one of them is still
+  // reversible from this step.
+  await expect(wizard.locator('.note')).toContainText('1 added already');
+  await wizard.locator('.chip.starter').first().click();
+  await expect(wizard.locator('.note')).toContainText('1 chosen, created when you finish');
+  await expect(wizard.locator('.note')).toContainText('1 added already');
+
+  // The step's own content must not run into the footer rule. It measured a 0px
+  // gap — the rule flush against the count's descenders — because the footer's
+  // padding is below its border, not above it (NEWS-146).
+  const footGap = await page.evaluate(() => {
+    const note = document.querySelector('.onboarding-body .note');
+    const foot = document.querySelector('.onboarding-foot');
+    if (!note || !foot) return null;
+    return foot.getBoundingClientRect().top - note.getBoundingClientRect().bottom;
+  });
+  expect(footGap).not.toBeNull();
+  expect(footGap ?? 0).toBeGreaterThanOrEqual(8);
+
   await wizard.locator('[data-action=onboarding-next]').click();
   await wizard.locator('[data-action=onboarding-next]').click();
   await expect(wizard).toHaveCount(0);
 
-  const row = page.locator('.topic', { hasText: pickedName.trim() });
+  // The discovered topic arrived with its guidance (FR-24.12), which is what
+  // makes its first check narrowed rather than a bare-name search.
+  const row = page.locator('.topic', { hasText: addedName });
   await expect(row).toBeVisible();
   await topicAction(page, row, 'guidance');
   await expect(page.locator('.dialog.guidance textarea')).not.toBeEmpty();

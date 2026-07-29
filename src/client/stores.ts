@@ -163,15 +163,15 @@ export interface AppState {
    */
   onboardingTopics: string[];
   /**
-   * Suggestions offered in the onboarding Topics step (NEWS-128).
+   * How many topics existed when onboarding opened (NEWS-146).
    *
-   * Kept alongside the picked *names* rather than folded into them, so a picked
-   * suggestion can still be created with its guidance and classification
-   * (FR-24.12/24.13) instead of degrading to a bare name.
+   * The Topics step now opens the real discovery dialog, whose Add creates
+   * immediately, so the step needs to report topics that already exist as well as
+   * ones still only ticked. The difference against `topics.length` is that count.
+   * A baseline rather than a literal zero because Settings can reopen onboarding
+   * for someone who already has topics.
    */
-  onboardingSuggestions: TopicSuggestion[];
-  onboardingLoading: boolean;
-  onboardingError: string | null;
+  onboardingTopicsAtStart: number;
   /**
    * Per-provider key status. Never holds a key value — the server doesn't
    * return one (see `KeyStatusSchema`), so there is nothing here to leak into
@@ -408,9 +408,7 @@ export const appStore = defineStore({
     settingsOpen: false,
     onboarding: 'auto',
     onboardingTopics: [],
-    onboardingSuggestions: [],
-    onboardingLoading: false,
-    onboardingError: null,
+    onboardingTopicsAtStart: 0,
     keys: [],
     keysLoaded: false,
     keychainAvailable: false,
@@ -443,7 +441,15 @@ export const appStore = defineStore({
       set({ ...get(), diagIncludeTopics });
     },
     setOnboarding: (onboarding: 'auto' | OnboardingStep | null) => {
-      set({ ...get(), onboarding });
+      const current = get();
+      // Entering the flow snapshots the topic count, so the Topics step can tell
+      // "added just now, via discovery" from "already had these" (NEWS-146).
+      const entering = current.onboarding === null || current.onboarding === 'auto';
+      const onboardingTopicsAtStart =
+        entering && onboarding !== null && onboarding !== 'auto'
+          ? current.topics.length
+          : current.onboardingTopicsAtStart;
+      set({ ...current, onboarding, onboardingTopicsAtStart });
     },
     toggleOnboardingTopic: (name: string) => {
       const current = get();
@@ -521,17 +527,6 @@ export const appStore = defineStore({
     },
     setReviewTopicIds: (reviewTopicIds: string[]) => {
       set({ ...get(), reviewTopicIds, feedLimit: FEED_PAGE });
-    },
-    setOnboardingSuggestions: (
-      patch: { suggestions?: TopicSuggestion[]; loading?: boolean; error?: string | null },
-    ) => {
-      const current = get();
-      set({
-        ...current,
-        onboardingSuggestions: patch.suggestions ?? current.onboardingSuggestions,
-        onboardingLoading: patch.loading ?? current.onboardingLoading,
-        onboardingError: patch.error === undefined ? current.onboardingError : patch.error,
-      });
     },
     openDiscover: () => {
       set({ ...get(), discover: emptyDiscover() });

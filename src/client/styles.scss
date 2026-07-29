@@ -1486,6 +1486,12 @@ h2.eyebrow {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
+  // The padding is *below* the rule, so without this the rule itself sat flush
+  // against the step's last line — measured at a 0px gap, with descenders
+  // touching it (NEWS-146, and the same shape of bug as NEWS-148). Any step
+  // whose content fills the body hits this; the longer running count is just
+  // what made it visible.
+  margin-top: 16px;
   padding-top: 16px;
   border-top: 1px solid var(--line);
 }
@@ -2321,27 +2327,16 @@ button.off-topic-pill {
   gap: 14px;
 }
 
-/* --- Suggestions inside onboarding's Topics step (NEWS-128) ---------------- */
+/* --- The door to discovery in onboarding's Topics step (NEWS-128, NEWS-146) -
+   Was a second, smaller search box with its own results; it now opens the real
+   discovery dialog, so all that is left is the button and its explanation. */
 .onboarding-suggest {
   margin-top: 16px;
-}
 
-.onboarding-suggest-form {
-  display: flex;
-  gap: 8px;
-
-  input {
-    @extend %text-field;
-    flex: 1;
-    min-width: 0;
-  }
-}
-
-.onboarding-suggest-results {
-  margin-top: 10px;
-
-  .starter-topics {
-    margin-top: 0;
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
   }
 }
 
