@@ -27,7 +27,8 @@
     "lint": "eslint src/ tests/",
     "typecheck": "tsc --noEmit",
     "clean": "rm -rf dist node_modules/.cache",
-    "build:client:dev": "node -e \"require('fs').mkdirSync('dist/client',{recursive:true})\" && node -e \"for (const f of ['favicon.svg','logo-full-bleed.svg','wordmark-light.svg','wordmark-dark.svg']) require('fs').copyFileSync('assets/'+f,'dist/client/'+f)\" && npx esbuild src/client/app.tsx --bundle --format=iife --outfile=dist/client/app.global.js --target=es2020 --sourcemap --jsx=automatic --jsx-import-source=kerfjs --define:__KERF_DEV__=true && npx sass src/client/styles.scss dist/client/styles.css --style compressed --no-source-map"
+    "build:client:dev": "node -e \"require('fs').mkdirSync('dist/client',{recursive:true})\" && node -e \"for (const f of ['favicon.svg','logo-full-bleed.svg','wordmark-light.svg','wordmark-dark.svg']) require('fs').copyFileSync('assets/'+f,'dist/client/'+f)\" && npx esbuild src/client/app.tsx --bundle --format=iife --outfile=dist/client/app.global.js --target=es2020 --sourcemap --jsx=automatic --jsx-import-source=kerfjs --define:__KERF_DEV__=true && npx sass src/client/styles.scss dist/client/styles.css --style compressed --no-source-map",
+    "briefing": "tsx src/briefing/main.ts"
   },
   "files": [
     "dist",
