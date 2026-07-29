@@ -2,7 +2,7 @@
 
 Nothing could get out of the app. Saved stories could only be read inside it, and the digest only at the machine running the server. That is a lock-in smell in a tool whose entire output is text someone else wrote, and a missed distribution channel: the natural home for a daily digest is whatever reader the user already lives in.
 
-See also [11 — Story Actions](11-story-actions.md) (bookmarking) and [4 — CLI, Server, and Storage](4-cli-server-storage.md) (the origin guard this relies on).
+See also [11 — Story Actions](11-story-actions.md) (bookmarking), [4 — CLI, Server, and Storage](4-cli-server-storage.md) (the origin guard this relies on), and [27 — The Briefing Reel](27-briefing-reel.md), which reuses this document's scope rules but is aimed at strangers rather than at the user's own reader.
 
 ## Status: shipped
 
