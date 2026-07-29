@@ -835,10 +835,15 @@ test('the feed and exports are served over HTTP (NEWS-85)', async ({ page, reque
   await expect(page.locator('.export-row')).toBeVisible();
   // Real hrefs, not blob URLs built in JS. That was originally justified here as
   // "so they work in the Tauri webview too" — which turned out to be false, and
-  // is NEWS-157: `<a download>` is a no-op in the WKWebView. The hrefs are still
-  // right (they are what the system browser is handed), but the webview needs the
-  // handler below, not just a well-formed link.
-  await expect(page.locator('.export-row a').first()).toHaveAttribute('href', /export\.md/);
+  // is NEWS-157: `<a download>` is a no-op in the WKWebView. The href is still
+  // right (it is what the system browser is handed), but the webview needs the
+  // click handler too, not just a well-formed link.
+  //
+  // The link moved inside the export dialog in NEWS-158; the row now holds the
+  // button that opens it.
+  await page.locator('[data-action=open-export]').click();
+  await expect(page.locator('.export-dialog a[data-export]')).toHaveAttribute('href', /export\.md/);
+  await page.keyboard.press('Escape');
   await closeSettings(page);
 
   const feed = await request.get('/feed.xml');
@@ -853,16 +858,78 @@ test('the feed and exports are served over HTTP (NEWS-85)', async ({ page, reque
   expect(await md.text()).toContain('# All stories');
 });
 
+/** Open Settings → Data → Export stories. */
+async function openExportDialog(page: Page): Promise<void> {
+  await openSettingsTab(page, 'Data');
+  await page.locator('[data-action=open-export]').click();
+  await expect(page.locator('.dialog.export-dialog')).toBeVisible();
+}
+
 test('an export link actually downloads in a browser (NEWS-157)', async ({ page }) => {
   // The link being well-formed was already asserted; that it *does* something
   // when clicked was not, which is how a dead button went unnoticed.
   await page.goto('/');
-  await openSettingsTab(page, 'Data');
+  await openExportDialog(page);
 
   const download = page.waitForEvent('download');
-  await page.locator('.export-row a').first().click();
+  await page.locator('.export-dialog a[data-export]').click();
   const file = await download;
   expect(file.suggestedFilename()).toMatch(/\.md$/);
+  await closeSettings(page);
+});
+
+test('every scope and format combination can be exported (NEWS-158)', async ({ page }) => {
+  // Three fixed buttons covered three of the four; "Saved only (.json)" simply
+  // had no way to be asked for. The table below is the whole point of the
+  // change, so it is walked rather than sampled.
+  await page.goto('/');
+
+  for (const scope of ['all', 'saved'] as const) {
+    for (const format of ['md', 'json'] as const) {
+      await openExportDialog(page);
+      await page.locator(`[data-export-scope=${scope}]`).check();
+      await page.locator(`[data-export-format=${format}]`).check();
+
+      const link = page.locator('.export-dialog a[data-export]');
+      await expect(link).toHaveAttribute('href', `/api/export.${format}?scope=${scope}`);
+
+      const download = page.waitForEvent('download');
+      await link.click();
+      expect((await download).suggestedFilename()).toMatch(new RegExp(`\\.${format}$`));
+
+      // Exporting closes the dialog. (The close is deferred a tick so the
+      // anchor outlives its own click handler; this asserts that it closes, not
+      // the timing — Chromium tolerates either, see the handler's note.)
+      await expect(page.locator('.dialog.export-dialog')).toHaveCount(0);
+      await closeSettings(page);
+    }
+  }
+});
+
+test('the export dialog opens fresh and Escape leaves Settings standing (NEWS-158)', async ({ page }) => {
+  await page.goto('/');
+  await openExportDialog(page);
+
+  await page.locator('[data-export-scope=saved]').check();
+  await page.locator('[data-export-format=json]').check();
+  await expect(page.locator('.export-dialog a[data-export]')).toHaveAttribute(
+    'href',
+    '/api/export.json?scope=saved',
+  );
+
+  // Escape closes the export dialog alone. Settings is underneath it, and
+  // closing both would drop the user two levels for one keypress.
+  await page.keyboard.press('Escape');
+  await expect(page.locator('.dialog.export-dialog')).toHaveCount(0);
+  await expect(page.locator('#settings-title')).toBeVisible();
+
+  // Reopening starts over. A dialog that remembers the last choice exports
+  // something different from what the last press did, for a reason nothing on
+  // screen explains.
+  await page.locator('[data-action=open-export]').click();
+  await expect(page.locator('.export-dialog a[data-export]')).toHaveAttribute('href', '/api/export.md?scope=all');
+
+  await page.keyboard.press('Escape');
   await closeSettings(page);
 });
 
@@ -883,7 +950,8 @@ test('an export goes to the system browser inside Tauri (NEWS-157)', async ({ pa
 
   await page.goto('/');
   await openSettingsTab(page, 'Data');
-  await page.locator('.export-row a').first().click();
+  await page.locator('[data-action=open-export]').click();
+  await page.locator('.export-dialog a[data-export]').click();
 
   await expect.poll(() => opened.length).toBe(1);
   // Absolute, because `/api/open-external` parses what it is handed with

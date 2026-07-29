@@ -155,6 +155,14 @@ export interface AppState {
   settingsTab: 'schedule' | 'source' | 'data' | 'app';
   /** Whether the privacy dialog is open (NEWS-121). Ephemeral, like every dialog. */
   privacyOpen: boolean;
+  /**
+   * The export dialog (NEWS-158), or null when closed.
+   *
+   * Scope and format are held together because the export is one choice made in
+   * two parts — every combination of the two is valid, which is the point of
+   * replacing the three fixed buttons that offered three of the four.
+   */
+  export: { scope: 'all' | 'saved'; format: 'md' | 'json' } | null;
   /** Topic discovery (NEWS-126), or null when the dialog is closed. */
   discover: DiscoverState | null;
   /** Whether the settings dialog is open. */
@@ -426,6 +434,7 @@ export const appStore = defineStore({
     providers: [],
     settingsTab: 'schedule',
     privacyOpen: false,
+    export: null,
     discover: null,
     settingsOpen: false,
     onboarding: 'auto',
@@ -483,6 +492,20 @@ export const appStore = defineStore({
     },
     setSettingsTab: (settingsTab: AppState['settingsTab']) => {
       set({ ...get(), settingsTab });
+    },
+    openExport: () => {
+      // Always reopens on All + Markdown. A dialog that remembers the last
+      // choice is a dialog that exports something different from what the last
+      // press did, for a reason nothing on screen explains.
+      set({ ...get(), export: { scope: 'all', format: 'md' } });
+    },
+    closeExport: () => {
+      set({ ...get(), export: null });
+    },
+    patchExport: (patch: Partial<NonNullable<AppState['export']>>) => {
+      const current = get();
+      if (current.export === null) return;
+      set({ ...current, export: { ...current.export, ...patch } });
     },
     setPrivacyOpen: (privacyOpen: boolean) => {
       set({ ...get(), privacyOpen });

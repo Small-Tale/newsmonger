@@ -117,6 +117,7 @@ Data dir: `--data-dir` flag → `NEWS_DATA_DIR` → `~/.news`. Also holds `news.
 | Add/change an AI provider | `src/ai/providers/` (+ register in `index.ts`); interface in `src/ai/types.ts` |
 | Change prompts / result parsing | `src/ai/prompt.ts` |
 | Provider selection / auto order | `src/ai/providers/index.ts` (`resolveProvider`, `AUTO_ORDER`) |
+| Export dialog | `exportDialogJsx` + the `open-export`/`close-export`/`data-export-scope`/`data-export-format` delegates in `client/app.tsx`, `export` in `client/stores.ts`, `.export-option` in `styles.scss`. Tauri routing via `data-export` → `/api/open-external`. See `docs/21-export-and-feed.md` FR-21.8/21.9 |
 | API key auto-save | `commitKey` + the `submit`/`change` delegates in `client/app.tsx`, `savingKey` in `client/stores.ts`, `.key-saving` in `styles.scss`. See `docs/7-api-keys.md` FR-7.10a |
 | Undoing a clear | `src/undo.ts` (`ClearUndoBuffer`), `Store.clearItemsForTopic`/`restoreClearedItems`, `POST /api/topics/:id/restore-cleared`, `showUndoToast` + `[data-undo-clear]` in `client/app.tsx`. See `docs/26-undo.md` |
 | Dedup behavior | `src/ai/dedupe.ts` (keys), `src/checks.ts` (application) |

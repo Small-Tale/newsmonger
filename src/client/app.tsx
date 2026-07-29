@@ -1405,6 +1405,96 @@ function diagnosticsJsx(s: AppState): SafeHtml {
  * leaves this machine" under six screens of configuration is the opposite of
  * how a privacy note earns trust. A footer link is where people look for one.
  */
+/**
+ * The export dialog (NEWS-158).
+ *
+ * Replaces three fixed buttons — All (.md), All (.json), Saved (.md) — that
+ * between them covered three of the four scope × format combinations. There was
+ * no reason "Saved only (.json)" was missing beyond nobody having added a fourth
+ * button, and a fourth button is the wrong answer: the choice is two questions,
+ * not one list, and naming the two makes every combination reachable and the
+ * shape of the thing obvious.
+ *
+ * The Export control stays an `<a>` with a real `href` rather than becoming a
+ * button with a click handler, so the NEWS-157 Tauri routing keeps working
+ * unchanged — `data-export` hands it to the system browser there, and a plain
+ * browser uses the `download` attribute.
+ */
+function exportDialogJsx(state: NonNullable<AppState['export']>): SafeHtml {
+  const { scope, format } = state;
+  const href = `/api/export.${format}?scope=${scope}`;
+  return (
+    <div class="dialog-backdrop" data-action="export-backdrop">
+      <div class="dialog export-dialog" role="dialog" aria-modal="true" aria-labelledby="export-title">
+        <div class="dialog-head">
+          <h2 id="export-title">Export stories</h2>
+          <button class="btn icon" type="button" data-action="close-export" aria-label="Close export">
+            {icon('clear', 17)}
+          </button>
+        </div>
+
+        <fieldset class="export-choice">
+          <legend>What</legend>
+          {[
+            { value: 'all', label: 'All stories', hint: 'Everything kept, newest first' },
+            { value: 'saved', label: 'Saved only', hint: 'Just your bookmarks' },
+          ].map((option) => (
+            <label class={`export-option ${scope === option.value ? 'on' : ''}`}>
+              <input
+                type="radio"
+                name="export-scope"
+                value={option.value}
+                checked={scope === option.value ? true : undefined}
+                data-export-scope={option.value}
+              />
+              <span class="export-option-label">{option.label}</span>
+              <span class="export-option-hint">{option.hint}</span>
+            </label>
+          ))}
+        </fieldset>
+
+        <fieldset class="export-choice">
+          <legend>Format</legend>
+          {[
+            { value: 'md', label: 'Markdown', hint: 'Grouped by topic, for pasting into notes' },
+            { value: 'json', label: 'JSON', hint: 'The escape hatch — every field, topic names not ids' },
+          ].map((option) => (
+            <label class={`export-option ${format === option.value ? 'on' : ''}`}>
+              <input
+                type="radio"
+                name="export-format"
+                value={option.value}
+                checked={format === option.value ? true : undefined}
+                data-export-format={option.value}
+              />
+              <span class="export-option-label">{option.label}</span>
+              <span class="export-option-hint">{option.hint}</span>
+            </label>
+          ))}
+        </fieldset>
+
+        <p class="note">Off-topic stories are left out, as they are in the feed. Up to 2000 stories.</p>
+
+        {/* `.confirm-actions` is what every other dialog's footer uses — a new
+            class here would be a second name for the same row. */}
+        <div class="confirm-actions">
+          <button class="btn" type="button" data-action="close-export">
+            Cancel
+          </button>
+          {/* One attribute, one delegate. Adding `close-export` here as well
+              close the dialog synchronously on click, removing this anchor
+              before the browser had processed its default action. The
+              `data-export` handler closes it on the next tick instead — see the
+              note there for how much that is worth. */}
+          <a class="btn primary" href={href} download="" data-export>
+            Export
+          </a>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function privacyDialogJsx(s: AppState): SafeHtml {
   return (
     <div class="dialog-backdrop" data-action="privacy-backdrop">
@@ -1687,21 +1777,14 @@ function settingsPanelJsx(s: AppState): SafeHtml {
           Older stories are dropped so the data file doesn’t grow without bound. Bookmarked stories are always
           kept, and so are ones you flagged off-topic — those still teach each topic what you meant.
         </p>
-        {/* `data-export` routes the click through the system browser inside the
-            Tauri webview (NEWS-157), where the `download` attribute is a no-op —
-            the same class of gap as `window.confirm` (NEWS-39) and
-            `navigator.share` (NEWS-43). In a real browser the attribute works
-            and the handler stands aside. */}
+        {/* One button, one dialog (NEWS-158). Three fixed buttons covered three
+            of the four scope × format combinations — "Saved only (.json)" simply
+            had no way to be asked for — and adding the fourth would have made a
+            row of four buttons naming a two-part choice. */}
         <div class="export-row">
-          <a class="btn" href="/api/export.md?scope=all" download="" data-export>
-            All stories (.md)
-          </a>
-          <a class="btn" href="/api/export.json?scope=all" download="" data-export>
-            All stories (.json)
-          </a>
-          <a class="btn" href="/api/export.md?scope=saved" download="" data-export>
-            Saved only (.md)
-          </a>
+          <button class="btn" type="button" data-action="open-export">
+            {icon('share', 14)} Export stories…
+          </button>
         </div>
         <p class="note">
           Nothing here is trapped in the app. Markdown is for pasting into notes; JSON is the escape hatch.
@@ -2020,6 +2103,7 @@ function appJsx(): SafeHtml {
         {renameTarget === undefined ? '' : renameDialogJsx(renameTarget, s.renameItemCount)}
       </div>
       <div id="privacy-slot">{s.privacyOpen ? privacyDialogJsx(s) : ''}</div>
+      <div id="export-slot">{s.export !== null ? exportDialogJsx(s.export) : ''}</div>
       <div id="discover-slot">{s.discover !== null ? discoverDialogJsx(s.discover) : ''}</div>
       {/* Always present because it is a **live region**: assistive technology
           announces mutations to a region it is already observing, so a slot
@@ -3369,6 +3453,42 @@ function wireEvents(root: HTMLElement): void {
    */
   void delegate(root, 'click', 'a[data-export]', (e, el) => {
     if (el instanceof HTMLAnchorElement && openExternalUrl(el.href)) e.preventDefault();
+    // Deferred by a tick (NEWS-158) so the anchor is not torn out of the DOM
+    // inside its own click handler, before the browser has acted on `download`.
+    //
+    // Honestly: closing synchronously does *not* break the download in headless
+    // Chromium — tried it, the tests still pass — so this is caution, not a fix
+    // for something observed. It is kept because the environment that matters
+    // here is the WKWebView, which is untestable from this side and is the whole
+    // reason NEWS-157 existed, and because the same shape of teardown-mid-action
+    // did bite once already (the backdrop-dismiss bug in docs/7-api-keys.md).
+    if (appStore.state.value.export !== null) {
+      setTimeout(() => {
+        appStore.actions.closeExport();
+      }, 0);
+    }
+  });
+
+  void delegate(root, 'click', '[data-action=open-export]', () => {
+    appStore.actions.openExport();
+  });
+
+  void delegate(root, 'click', '[data-action=close-export]', () => {
+    appStore.actions.closeExport();
+  });
+
+  void delegate(root, 'click', '[data-action=export-backdrop]', (e, el) => {
+    if (e.target === el) appStore.actions.closeExport();
+  });
+
+  void delegate(root, 'change', '[data-export-scope]', (_e, el) => {
+    const scope = el.getAttribute('data-export-scope');
+    if (scope === 'all' || scope === 'saved') appStore.actions.patchExport({ scope });
+  });
+
+  void delegate(root, 'change', '[data-export-format]', (_e, el) => {
+    const format = el.getAttribute('data-export-format');
+    if (format === 'md' || format === 'json') appStore.actions.patchExport({ format });
   });
 }
 
@@ -3406,6 +3526,12 @@ function wireGlobalKeysAndDismiss(): void {
       }
       if (s.privacyOpen) {
         appStore.actions.setPrivacyOpen(false);
+        return;
+      }
+      // Above settings — the export dialog opens over the Data tab (NEWS-158),
+      // so Escape must close it and leave Settings standing.
+      if (s.export !== null) {
+        appStore.actions.closeExport();
         return;
       }
       if (s.settingsOpen) {

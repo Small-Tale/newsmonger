@@ -1622,13 +1622,87 @@ h2.eyebrow {
   flex-wrap: wrap;
   gap: 8px;
   margin: 0 0 10px;
+}
 
-  // The download links are <a>s styled as buttons; without this they inherit
-  // the anchor underline and sit a pixel off the real buttons beside them.
-  .btn {
-    text-decoration: none;
-    line-height: 1.2;
+// An <a> styled as a button, wherever it appears. Scoped to `.export-row` until
+// NEWS-158 moved the export link into a dialog, where it promptly turned up
+// underlined — the rule was never about that row, it was about anchors.
+a.btn {
+  text-decoration: none;
+  line-height: 1.2;
+}
+
+// --------------------------------------------------------- export dialog ---
+
+.dialog.export-dialog {
+  max-width: 460px;
+}
+
+// One question per block, so the two-part choice reads as two parts.
+.export-choice {
+  border: 0;
+  margin: 0 0 6px;
+  padding: 0;
+
+  legend {
+    padding: 0;
+    margin-bottom: 6px;
+    font-family: var(--mono);
+    font-size: 10.5px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--ink-soft);
   }
+}
+
+// A full-width hit target rather than a bare radio and a word beside it: the
+// hint is part of what is being chosen, so it belongs inside the target.
+.export-option {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: baseline;
+  column-gap: 9px;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  cursor: pointer;
+
+  & + .export-option {
+    margin-top: 6px;
+  }
+
+  &:hover {
+    background: var(--panel);
+  }
+
+  &.on {
+    border-color: var(--pine);
+    background: var(--pine-soft);
+
+    // Full ink on the chosen row. `--ink-soft` on `--pine-soft` measures
+    // **4.43:1** — under AA's 4.5, caught by the axe scan rather than by eye.
+    // The label's weight and the hint's size still tell them apart.
+    .export-option-hint {
+      color: var(--ink);
+    }
+  }
+
+  input {
+    accent-color: var(--pine);
+    margin: 0;
+  }
+}
+
+.export-option-label {
+  font-size: 13.5px;
+  font-weight: 600;
+}
+
+.export-option-hint {
+  grid-column: 2;
+  margin-top: 2px;
+  font-size: 11.5px;
+  color: var(--ink-soft);
 }
 
 // ----------------------------------------------------------- diagnostics ---

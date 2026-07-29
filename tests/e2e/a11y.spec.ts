@@ -1,7 +1,7 @@
 import AxeBuilder from '@axe-core/playwright';
 import type { Page } from '@playwright/test';
 
-import { expect, test, topicAction } from './fixtures.js';
+import { expect, openSettingsTab, test, topicAction } from './fixtures.js';
 
 // Accessibility regression net (NEWS-90). Runs axe against the real rendered
 // app in both colour schemes, then checks the keyboard paths axe cannot see —
@@ -17,6 +17,7 @@ async function scan(page: Page) {
     .analyze();
   return results.violations.filter((v) => v.impact === 'serious' || v.impact === 'critical');
 }
+
 
 test('the main view has no serious accessibility violations (light)', async ({ page }) => {
   await page.emulateMedia({ colorScheme: 'light' });
@@ -39,6 +40,62 @@ test('the settings dialog has no serious accessibility violations', async ({ pag
   await page.click('[data-action=open-settings]');
   await expect(page.locator('.dialog')).toBeVisible();
   expect(await scan(page)).toEqual([]);
+  await page.locator('.dialog [data-action=close-settings]').click();
+});
+
+test('the export dialog is labelled, grouped and keyboard-operable (NEWS-158)', async ({ page }) => {
+  // Deliberately **not** an axe scan, and worth saying why: axe cannot read a
+  // dialog opened over another dialog. Both backdrops are `position: fixed;
+  // inset: 0` at the same z-index, so axe's overlap detection composites the
+  // lower one *over* the upper dialog's opaque panel and invents colours —
+  // measured, it reports `#b5b8b6` for a button sitting on `rgb(251,252,251)`,
+  // and fails on contrast that is actually 14:1. The existing scans only ever
+  // open one dialog, which is why this has not come up before.
+  //
+  // (One axe finding here was real and is fixed: `.export-option.on` has its own
+  // opaque background, needing no ancestor walk, and its hint text measured
+  // 4.43:1 against `--pine-soft` — just under AA.)
+  //
+  // So the checks axe would have made are made directly.
+  await page.goto('/');
+  await openSettingsTab(page, 'Data');
+  await page.locator('[data-action=open-export]').click();
+  const dialog = page.locator('.dialog.export-dialog');
+  await expect(dialog).toBeVisible();
+
+  await expect(dialog).toHaveAttribute('role', 'dialog');
+  await expect(dialog).toHaveAttribute('aria-modal', 'true');
+  // The label has to resolve to real text, not just point somewhere.
+  await expect(page.locator(`#${String(await dialog.getAttribute('aria-labelledby'))}`)).toHaveText('Export stories');
+
+  // Every radio sits inside a <label>, so its accessible name comes from the
+  // text beside it rather than from nothing.
+  const radios = dialog.locator('input[type=radio]');
+  await expect(radios).toHaveCount(4);
+  for (let i = 0; i < 4; i += 1) {
+    await expect(radios.nth(i).locator('xpath=ancestor::label')).toHaveCount(1);
+  }
+
+  // Two groups with distinct names. Sharing one name is the classic version of
+  // this bug: choosing a format would silently clear the scope.
+  await expect(dialog.locator('input[name=export-scope]')).toHaveCount(2);
+  await expect(dialog.locator('input[name=export-format]')).toHaveCount(2);
+
+  // …and each group is a fieldset with a legend naming the question.
+  const legends = await dialog.locator('fieldset legend').allTextContents();
+  expect(legends).toEqual(['What', 'Format']);
+
+  // Operable without a mouse, end to end — and each group moves independently,
+  // which is the observable consequence of them having distinct names.
+  await dialog.locator('[data-export-scope=saved]').focus();
+  await page.keyboard.press('Space');
+  await expect(dialog.locator('a[data-export]')).toHaveAttribute('href', '/api/export.md?scope=saved');
+
+  await dialog.locator('[data-export-format=json]').focus();
+  await page.keyboard.press('Space');
+  await expect(dialog.locator('a[data-export]')).toHaveAttribute('href', '/api/export.json?scope=saved');
+
+  await page.keyboard.press('Escape');
   await page.locator('.dialog [data-action=close-settings]').click();
 });
 
