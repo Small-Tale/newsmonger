@@ -252,6 +252,49 @@ export type KeyedProvider = (typeof KEYED_PROVIDERS)[number];
  */
 export const AUTO_ORDER: ConcreteProviderName[] = ['claude-cli', 'codex-cli', 'anthropic', 'openai'];
 
+/**
+ * The model each provider uses for **topic discovery** (NEWS-132).
+ *
+ * Discovery asks a much lighter question than a news check — propose topic
+ * *names* with a one-line reason, rather than research and cite stories — so it
+ * runs on a fast, cheap model. On Anthropic that is roughly a fifth the price of
+ * the check model and noticeably quicker.
+ *
+ * These are **defaults**, not overrides: a model the user has explicitly chosen
+ * in Settings still wins, because an explicit setting is an explicit setting.
+ * Empty means "the provider's own default" (the subscription CLIs, where we
+ * don't pick the model, and `mock`).
+ */
+export const DISCOVERY_MODELS: Record<ConcreteProviderName, string> = {
+  'claude-cli': 'claude-haiku-4-5',
+  'codex-cli': 'gpt-5-mini',
+  anthropic: 'claude-haiku-4-5',
+  openai: 'gpt-5-mini',
+  mock: '',
+};
+
+/**
+ * Models that predate the request shape `checkTopic` sends (NEWS-132).
+ *
+ * Two things arrived with the 4.6 generation and are **rejected** by anything
+ * older: adaptive thinking (`{type: 'adaptive'}` — the older models take a
+ * `budget_tokens` budget instead, and `effort` errors outright), and the
+ * `web_search_20260209` tool, which older models replace with the basic
+ * `web_search_20250305`.
+ *
+ * Listed as the *exceptions* rather than enumerating every current model, so a
+ * model released after this code was written gets the modern shape by default
+ * — the failure mode of guessing wrong on a new model is a 400 the user sees
+ * immediately, where guessing wrong on an old one is the same. The list exists
+ * because our own discovery default is on it.
+ */
+const LEGACY_REQUEST_MODELS = ['claude-haiku-4-5', 'claude-sonnet-4-5', 'claude-opus-4-5'];
+
+/** Whether a model takes the pre-4.6 request shape (no adaptive thinking, basic web search). */
+export function usesLegacyRequestShape(model: string): boolean {
+  return LEGACY_REQUEST_MODELS.some((legacy) => model.startsWith(legacy));
+}
+
 /** Environment variable each provider's key can be supplied through. */
 export const KEY_ENV_VARS: Record<KeyedProvider, string> = {
   anthropic: 'ANTHROPIC_API_KEY',

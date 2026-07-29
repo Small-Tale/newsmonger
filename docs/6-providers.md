@@ -10,6 +10,16 @@ News checks run through a pluggable provider abstraction so you can choose which
 
 - **FR-6.1** `NewsProvider` (`src/ai/types.ts`) extends `NewsService` with `name`, `model`, and `isAvailable()`. Providers are plain factory functions returning object literals (no base class), registered in `src/ai/providers/index.ts`.
 
+- **FR-6.12** *(Shipped, NEWS-132)* **Discovery runs on a fast, cheap model** — `claude-haiku-4-5` on both Claude paths, `gpt-5-mini` on both OpenAI paths (`DISCOVERY_MODELS` in `src/ai/types.ts`). Discovery proposes topic *names* with a one-line reason; a check researches and cites stories. The lighter question gets the lighter model, at roughly a fifth the price and noticeably less latency.
+
+  These are **defaults, not overrides**: a model the user has explicitly chosen in Settings still wins on both paths. Silently ignoring an explicit setting would be the more surprising behaviour, even in the name of speed.
+
+  **The request shape has to vary with the model, not just the model id.** Haiku 4.5 predates two things the check request sends, and rejects both: adaptive thinking (`{type: 'adaptive'}` is 4.6+, and `effort` errors outright on 4.5-generation models) and the `web_search_20260209` tool (older models take the basic `web_search_20250305`). `usesLegacyRequestShape` lists the *exceptions* rather than enumerating current models, so a model released after this code was written gets the modern shape by default. Thinking is **omitted** on those models rather than swapped for a `budget_tokens` budget — discovery needs none, and skipping it is faster.
+
+  Discovery also asks for **3 web searches and 4 000 output tokens** against a check's 8 and 16 000. Each search is money and several seconds; discovery needs only enough live browsing to keep the *ongoing* half of the mix current (FR-24.10).
+
+  The body is built by an exported `messageParams()` rather than inline in the SDK runner, because a wrong answer there is a vendor 400 on every call and it is the one part of the SDK path a test can reach without a real client.
+
 - **FR-6.11** *(Shipped, NEWS-124)* `NewsService` has **two** methods: `checkTopic` (what is new about X) and `suggestTopics` (what might you want to follow at all — see [24 — Topic Discovery](24-topic-discovery.md)). `suggestTopics` is **required rather than optional**: discovery has no "this provider can't do it" state in the design, and making it optional would push a capability check into the UI that FR-24 never describes.
 
   The two subscription CLIs take the JSON Schema as a **parameter** on their runner seam rather than closing over a constant, because they return different shapes through the same binary. Handing the CLI the news schema for a discovery call makes it reject a perfectly good answer, so the wiring is asserted per provider in `tests/unit/suggest-providers.test.ts`.
@@ -26,13 +36,13 @@ News checks run through a pluggable provider abstraction so you can choose which
 |---|---|---|
 | `claude-cli` | Claude Pro/Max subscription via the Claude Code CLI; no key — see [9](9-subscription-providers.md) | **Shipped** |
 | `codex-cli` | ChatGPT subscription via the Codex CLI; no key — see [9](9-subscription-providers.md) | **Shipped** |
-| `anthropic` | key from Settings or `ANTHROPIC_API_KEY`; default model `claude-opus-4-8` | **Shipped** |
-| `openai` | key from Settings or `OPENAI_API_KEY`, plus `OPENAI_BASE_URL`; default model `gpt-5` | **Shipped** (live path needs a key to verify) |
+| `anthropic` | key from Settings or `ANTHROPIC_API_KEY`; default model `claude-opus-4-8` (discovery: `claude-haiku-4-5`) | **Shipped** |
+| `openai` | key from Settings or `OPENAI_API_KEY`, plus `OPENAI_BASE_URL`; default model `gpt-5` (discovery: `gpt-5-mini`) | **Shipped** (live path needs a key to verify) |
 | `mock` | none (`--ai-test` / `--provider mock`) | **Shipped** (tests / offline) |
 
 ### Anthropic
 
-Claude with adaptive thinking and the `web_search_20260209` server tool (max 8 searches per check), streamed to avoid HTTP timeouts.
+Claude with adaptive thinking and the `web_search_20260209` server tool (max 8 searches per check), streamed to avoid HTTP timeouts. **Discovery calls use a different model and a different request shape** — see FR-6.12.
 
 ### OpenAI
 

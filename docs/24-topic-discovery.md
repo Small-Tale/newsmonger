@@ -103,6 +103,8 @@ Four shapes were wireframed before the one above was chosen. Recorded because th
 
   Two properties of the mock matter more than realism, because the whole discovery UI will be tested through it. Tuner names encode the round and direction, so a tuner that re-issues the same round is distinguishable from one that advanced — otherwise that bug is invisible. And **it deliberately suggests a topic the user already follows** whenever exclusions are present, placed *first* in the list. That is the exact case FR-24.11's second layer exists for, and a mock that filtered perfectly would make that layer permanently untestable. The request is recorded separately (`suggestCalls`), so the first layer stays assertable on its own.
 
+- **FR-24.33** *(Shipped, NEWS-132)* Discovery runs on a **fast, cheap model** — Haiku on Claude, `gpt-5-mini` on OpenAI — with a smaller search and output budget than a check. See [6 — AI Providers](6-providers.md) FR-6.12 for the model table and the pre-4.6 request-shape handling Haiku requires.
+
 - **Retries and rate limiting already exist** (`src/ai/retry.ts`) and apply unchanged — discovery is user-initiated and therefore always attended, so the FR-6.5 attendance gate never blocks it.
 
 ## The server (NEWS-125, shipped)

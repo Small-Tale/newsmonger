@@ -11,6 +11,7 @@ import type {
   SuggestResult,
   TopicContext,
 } from '../types.js';
+import { DISCOVERY_MODELS } from '../types.js';
 
 /**
  * Run checks against the user's Claude Pro/Max **subscription** rather than an
@@ -178,6 +179,10 @@ export function createClaudeCliProvider(
 ): NewsProvider {
   const runner = config.runner ?? spawnRunner(config.binary ?? 'claude');
   const model = config.model ?? '';
+  // Discovery runs on a fast, cheap model unless the user chose one (NEWS-132).
+  // The CLI owns its own thinking and web-search configuration, so unlike the
+  // API provider there is no request shape to vary — only `--model` changes.
+  const discoveryModel = model !== '' ? model : DISCOVERY_MODELS['claude-cli'];
 
   return {
     name: 'claude-cli' satisfies ConcreteProviderName,
@@ -204,7 +209,7 @@ export function createClaudeCliProvider(
       const text = await runner.run(
         suggestSystemPrompt(),
         buildSuggestPrompt(request),
-        model !== '' ? model : undefined,
+        discoveryModel !== '' ? discoveryModel : undefined,
         SUGGEST_JSON_SCHEMA,
       );
       return { suggestions: parseSuggestResult(text), usage: null };

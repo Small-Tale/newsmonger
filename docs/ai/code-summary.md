@@ -26,7 +26,7 @@ src/
     sqlite.ts         schema DDL, SCHEMA_VERSION + MIGRATIONS (user_version based), openDb (WAL + sanity probe), backupUnreadableDb, dbPath
     warnings.ts       filters ONLY node:sqlite's ExperimentalWarning; imported before the require in sqlite.ts
   ai/
-    types.ts          AUTO_ORDER (client-safe, NEWS-128); NewsService (checkTopic + suggestTopics) + NewsProvider, TopicContext, CheckResult/TokenUsage, SuggestRequest/SuggestScope/TopicSuggestion (NEWS-124), PROVIDER_NAMES/INFO, FoundNewsItem, KnownItem
+    types.ts          AUTO_ORDER (client-safe, NEWS-128); DISCOVERY_MODELS + usesLegacyRequestShape (NEWS-132); NewsService (checkTopic + suggestTopics) + NewsProvider, TopicContext, CheckResult/TokenUsage, SuggestRequest/SuggestScope/TopicSuggestion (NEWS-124), PROVIDER_NAMES/INFO, FoundNewsItem, KnownItem
     prompt.ts         searchingSystemPrompt, buildUserPrompt, parseNewsResult, NEWS_JSON_SCHEMA
     suggest-prompt.ts topic *discovery* prompting: suggestSystemPrompt, buildSuggestPrompt, parseSuggestResult, SUGGEST_JSON_SCHEMA (NEWS-124)
     retry.ts          two backoffs (in-check DEFAULT_BACKOFF, per-topic FAILURE_COOLDOWN), failure classification, Retry-After parsing (NEWS-109/110)
@@ -37,7 +37,7 @@ src/
     dedupe.ts         normalizeUrl/normalizeTitle/dedupeKeyFor/filterNewItems
     providers/
       index.ts        PROVIDERS/FACTORIES, AUTO_ORDER, resolveProvider, unavailableMessage
-      anthropic.ts    createAnthropicProvider (opus-4-8, adaptive thinking, web_search_20260209, streamed)
+      anthropic.ts    createAnthropicProvider (opus-4-8, adaptive thinking, web_search_20260209, streamed); messageParams() builds the body — shape varies by model for the haiku discovery path (NEWS-132)
       claude-cli.ts   createClaudeCliProvider — Claude subscription via the Claude Code CLI; attended: true
       codex-cli.ts    createCodexCliProvider — ChatGPT subscription via Codex (-s read-only); attended: true
       openai.ts       createOpenAIProvider (Responses API + hosted web_search, output_text); OPENAI_BASE_URL

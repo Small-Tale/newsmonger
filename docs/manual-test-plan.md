@@ -76,7 +76,8 @@ The E2E suite drives discovery end to end, but only against the deterministic mo
 7. **Guidance (FR-24.12)** — open the added topic's guidance and confirm the steer reads like a usable instruction ("race results and team news, not driver gossip"), not a restatement of the name. Then confirm its **first check** is visibly narrowed by it.
 8. **Exclusions (FR-24.11)** — reopen discovery and confirm nothing you already follow is offered. The mock plants a duplicate on purpose so the *filter* is tested automatically; what needs a human is whether the model also avoids **near**-duplicates ("F1" when you follow "Formula 1"), which the filter cannot catch.
 9. **The tuner** — pick ⌄ narrower on a card and run a few rounds. Confirm candidates genuinely narrow rather than restating the anchor, that ≈ similar gives adjacent subjects rather than synonyms, and that skipping steers *away* from a direction across rounds — the property the whole keep/skip design rests on.
-10. **Cost** — copy a diagnostics bundle afterwards and confirm the `## Topic discovery` section reports the calls you made, with cache hits marked free.
+10. **Cost** — copy a diagnostics bundle afterwards and confirm the `## Topic discovery` section reports the calls you made, with cache hits marked free. It also names the model: confirm discovery ran on the fast one (`claude-haiku-4-5` / `gpt-5-mini`) and not the check model (NEWS-132).
+11. **Speed and quality on the fast model** — the reason for the smaller model is latency, so time a discovery call against a check. Then judge whether Haiku's suggestions are actually good enough: this is the one trade-off no test can evaluate, and if the mix, the classifications, or the guidance steers get noticeably worse, the model choice is what to revisit first.
 
 
 ## Tauri desktop shell (needs Rust toolchain)

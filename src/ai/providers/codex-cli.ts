@@ -14,6 +14,7 @@ import type {
   SuggestResult,
   TopicContext,
 } from '../types.js';
+import { DISCOVERY_MODELS } from '../types.js';
 
 /**
  * Run checks against the user's **ChatGPT subscription** rather than an
@@ -161,6 +162,9 @@ export function createCodexCliProvider(
 ): NewsProvider {
   const runner = config.runner ?? spawnRunner(config.binary ?? 'codex');
   const model = config.model ?? '';
+  // Discovery runs on a fast, cheap model unless the user chose one (NEWS-132).
+  // As with `claude-cli`, the CLI owns the request shape; only `-m` changes.
+  const discoveryModel = model !== '' ? model : DISCOVERY_MODELS['codex-cli'];
 
   return {
     name: 'codex-cli' satisfies ConcreteProviderName,
@@ -187,7 +191,7 @@ export function createCodexCliProvider(
       const text = await runner.run(
         suggestSystemPrompt(),
         buildSuggestPrompt(request),
-        model !== '' ? model : undefined,
+        discoveryModel !== '' ? discoveryModel : undefined,
         SUGGEST_JSON_SCHEMA,
       );
       return { suggestions: parseSuggestResult(text), usage: null };

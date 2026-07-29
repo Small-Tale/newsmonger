@@ -12,6 +12,7 @@ import type {
   TokenUsage,
   TopicContext,
 } from '../types.js';
+import { DISCOVERY_MODELS } from '../types.js';
 
 export const DEFAULT_OPENAI_MODEL = 'gpt-5';
 
@@ -84,6 +85,10 @@ export function createOpenAIProvider(config: {
   // resolved per call so a key saved in Settings applies without a restart.
   const getApiKey = config.getApiKey ?? (async () => (await resolveApiKey('openai')).key);
   const runner = config.runner ?? sdkRunner(getApiKey, config.baseURL);
+  // See `anthropic.ts`: the fast discovery model is a default, not an override
+  // — an explicitly chosen model still wins (NEWS-132). The Responses API takes
+  // the same request shape either way, so only the model id changes here.
+  const discoveryModel = config.model === undefined || config.model === '' ? DISCOVERY_MODELS.openai : model;
 
   return {
     name: 'openai',
@@ -105,7 +110,7 @@ export function createOpenAIProvider(config: {
       return { ...parseNewsResult(text), usage };
     },
     async suggestTopics(request: SuggestRequest): Promise<SuggestResult> {
-      const { text, usage } = await runner.run(suggestSystemPrompt(), buildSuggestPrompt(request), model);
+      const { text, usage } = await runner.run(suggestSystemPrompt(), buildSuggestPrompt(request), discoveryModel);
       return { suggestions: parseSuggestResult(text), usage };
     },
   };
