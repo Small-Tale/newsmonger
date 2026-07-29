@@ -63,6 +63,22 @@ Unit tests inject usage; the mapping from a *real* `message.usage` block is manu
 3. Point `OPENAI_BASE_URL` / `--endpoint` at an OpenAI-compatible gateway and confirm it still works.
 
 
+## Real topic discovery (needs a real provider) — NEWS-116/124–128
+
+The E2E suite drives discovery end to end, but only against the deterministic mock: it proves the plumbing, the exclusions, the cache, the tuner's state machine and the round bound. What it cannot judge is whether the model's *answers* are any good, and that is most of the feature's value. See [24 — Topic Discovery](24-topic-discovery.md).
+
+1. `npm run dev` with a real provider configured. Open the compass button beside the add-topic field.
+2. **The describe door** — type something real and mixed ("i cycle and work in biotech"). Expect suggestions that follow from *both* interests rather than blending them, grouped under sections that make sense.
+3. **Surprise me** — submit an empty box. Expect a genuine spread across different areas of life, not several variations on one theme. This is the instruction most likely to be ignored by a model reaching for its defaults.
+4. **The mix (FR-24.10)** — confirm both `Ongoing story` and `Evergreen` badges appear, and that they are *right*: an ongoing label on a standing subject like "Formula 1" is the failure worth catching, since it promises news that will keep coming and then goes quiet.
+5. **The section door** — browse to a subcategory and confirm suggestions are actually of that section, and that "Anything in X" ranges across the whole of it.
+6. **Classification (FR-24.13)** — add a suggestion and confirm the topic lands in the filter-bar section its card previewed, with no second classification call.
+7. **Guidance (FR-24.12)** — open the added topic's guidance and confirm the steer reads like a usable instruction ("race results and team news, not driver gossip"), not a restatement of the name. Then confirm its **first check** is visibly narrowed by it.
+8. **Exclusions (FR-24.11)** — reopen discovery and confirm nothing you already follow is offered. The mock plants a duplicate on purpose so the *filter* is tested automatically; what needs a human is whether the model also avoids **near**-duplicates ("F1" when you follow "Formula 1"), which the filter cannot catch.
+9. **The tuner** — pick ⌄ narrower on a card and run a few rounds. Confirm candidates genuinely narrow rather than restating the anchor, that ≈ similar gives adjacent subjects rather than synonyms, and that skipping steers *away* from a direction across rounds — the property the whole keep/skip design rests on.
+10. **Cost** — copy a diagnostics bundle afterwards and confirm the `## Topic discovery` section reports the calls you made, with cache hits marked free.
+
+
 ## Tauri desktop shell (needs Rust toolchain)
 
 1. `npm run tauri:dev` — window shows the loading spinner, then the app once the server prints its readiness line.
