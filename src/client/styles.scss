@@ -1705,6 +1705,23 @@ a.btn {
   color: var(--ink-soft);
 }
 
+// The topic picker (NEWS-160), inside the option it belongs to. Always in the
+// DOM and empty when another scope is chosen, so picking "one topic" doesn't
+// restructure the option list — see docs/3-ui.md.
+.export-topic-slot {
+  grid-column: 2;
+
+  &:empty {
+    display: none;
+  }
+
+  select {
+    margin-top: 8px;
+    width: 100%;
+    max-width: 100%;
+  }
+}
+
 // ----------------------------------------------------------- diagnostics ---
 
 .diagnostics .runs {

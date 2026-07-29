@@ -67,6 +67,7 @@ src/
     discover.ts       groupSuggestions/resultsHeading/sectionTiles (NEWS-126) + the pure tuner state machine: startTuner/judgeCandidate/nextRound/mergeKept (NEWS-127)
     solo.ts           toggleSolo/isAllSoloed — solo-set arithmetic shared by the context menu and the double-click gesture (NEWS-95)
     dial.ts           dialRemaining — the sidebar ring's countdown fraction (NEWS-144)
+    export-url.ts     exportHref — the export dialog's scope × topic × format URL, null when the choice can't be exported (NEWS-158/160)
     menu-position.ts  placeMenu/menuStyle — clamps a context menu into the viewport so its last item stays reachable (NEWS-149)
     onboarding.ts     onboardingCountText — the Topics step's running count, which names ticked-but-not-created and already-created separately (NEWS-146)
     topic-sort.ts     sortTopics (NEWS-63) + topicRows — the sidebar's rows, with section headings interleaved in the By-section sort (NEWS-140)

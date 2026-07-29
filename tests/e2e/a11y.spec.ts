@@ -82,18 +82,20 @@ test('the export dialog is labelled, grouped and keyboard-operable (NEWS-158)', 
   // The label has to resolve to real text, not just point somewhere.
   await expect(page.locator(`#${String(await dialog.getAttribute('aria-labelledby'))}`)).toHaveText('Export stories');
 
-  // Every radio sits inside a <label>, so its accessible name comes from the
-  // text beside it rather than from nothing.
-  const radios = dialog.locator('input[type=radio]');
-  await expect(radios).toHaveCount(4);
-  for (let i = 0; i < 4; i += 1) {
-    await expect(radios.nth(i).locator('xpath=ancestor::label')).toHaveCount(1);
-  }
-
   // Two groups with distinct names. Sharing one name is the classic version of
   // this bug: choosing a format would silently clear the scope.
-  await expect(dialog.locator('input[name=export-scope]')).toHaveCount(2);
-  await expect(dialog.locator('input[name=export-format]')).toHaveCount(2);
+  await expect(dialog.locator('input[name=export-scope]')).toHaveCount(3); // all / saved / one topic
+  await expect(dialog.locator('input[name=export-format]')).toHaveCount(2); // markdown / json
+
+  // Every radio sits inside a <label>, so its accessible name comes from the
+  // text beside it rather than from nothing. Counted from the two groups above
+  // rather than written as a total, so adding a scope updates one number.
+  const radios = dialog.locator('input[type=radio]');
+  const count = await radios.count();
+  expect(count).toBe(5);
+  for (let i = 0; i < count; i += 1) {
+    await expect(radios.nth(i).locator('xpath=ancestor::label')).toHaveCount(1);
+  }
 
   // …and each group is a fieldset with a legend naming the question.
   const legends = await dialog.locator('fieldset legend').allTextContents();

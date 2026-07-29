@@ -2,6 +2,7 @@ import { defineStore } from 'kerfjs';
 
 import type { ItemsResp, KeysResp, ProviderInfo, StateResp, TopicSuggestion } from '../api/schemas.js';
 import type { TunerState } from './discover.js';
+import type { ExportChoice } from './export-url.js';
 
 type NewsItem = ItemsResp['items'][number];
 
@@ -156,13 +157,13 @@ export interface AppState {
   /** Whether the privacy dialog is open (NEWS-121). Ephemeral, like every dialog. */
   privacyOpen: boolean;
   /**
-   * The export dialog (NEWS-158), or null when closed.
+   * The export dialog (NEWS-158, NEWS-160), or null when closed.
    *
-   * Scope and format are held together because the export is one choice made in
-   * two parts — every combination of the two is valid, which is the point of
-   * replacing the three fixed buttons that offered three of the four.
+   * Scope, topic and format are held together because the export is one choice
+   * made in parts — every combination is valid, which is the point of replacing
+   * the three fixed buttons that offered three of them.
    */
-  export: { scope: 'all' | 'saved'; format: 'md' | 'json' } | null;
+  export: ExportChoice | null;
   /** Topic discovery (NEWS-126), or null when the dialog is closed. */
   discover: DiscoverState | null;
   /** Whether the settings dialog is open. */
@@ -497,15 +498,22 @@ export const appStore = defineStore({
       // Always reopens on All + Markdown. A dialog that remembers the last
       // choice is a dialog that exports something different from what the last
       // press did, for a reason nothing on screen explains.
-      set({ ...get(), export: { scope: 'all', format: 'md' } });
+      set({ ...get(), export: { scope: 'all', topicId: null, format: 'md' } });
     },
     closeExport: () => {
       set({ ...get(), export: null });
     },
-    patchExport: (patch: Partial<NonNullable<AppState['export']>>) => {
+    patchExport: (patch: Partial<ExportChoice>) => {
       const current = get();
       if (current.export === null) return;
-      set({ ...current, export: { ...current.export, ...patch } });
+      const next = { ...current.export, ...patch };
+      // Choosing "one topic" lands on the first one rather than on nothing, so
+      // the option is usable the moment it is picked. Leaving it null would show
+      // a picker with no selection and a disabled Export, which reads as broken
+      // rather than as waiting.
+      if (next.scope === 'topic' && next.topicId === null) next.topicId = current.topics[0]?.id ?? null;
+      if (next.scope !== 'topic') next.topicId = null;
+      set({ ...current, export: next });
     },
     setPrivacyOpen: (privacyOpen: boolean) => {
       set({ ...get(), privacyOpen });

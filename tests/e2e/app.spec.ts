@@ -906,6 +906,62 @@ test('every scope and format combination can be exported (NEWS-158)', async ({ p
   }
 });
 
+test('a single topic can be exported (NEWS-160)', async ({ page }) => {
+  // `scope=topic` has worked on all three endpoints since NEWS-85 and was
+  // covered by unit tests, but nothing in the UI could ask for it.
+  await page.goto('/');
+  await page.fill('.add-topic input', 'Exportable Subject');
+  await page.press('.add-topic input', 'Enter');
+  await expect(page.locator('.topic', { hasText: 'Exportable Subject' })).toBeVisible();
+
+  await openExportDialog(page);
+  await page.locator('[data-export-scope=topic]').check();
+
+  const picker = page.locator('[data-action=export-topic]');
+  await expect(picker).toBeVisible();
+  // Picking the scope lands on a topic rather than on nothing, so the option is
+  // usable the moment it is chosen — asserted **before** touching the picker,
+  // because that is where the two can disagree. A `<select>` with no `selected`
+  // option shows its first one regardless, so the picker looks chosen while the
+  // store still holds null and Export sits disabled beside it.
+  await expect(picker).not.toHaveValue('');
+  await expect(page.locator('.export-dialog a[data-export]')).toBeVisible();
+  await expect(page.locator('.export-dialog button[disabled]')).toHaveCount(0);
+
+  await picker.selectOption({ label: 'Exportable Subject' });
+  const id = await picker.inputValue();
+  await expect(page.locator('.export-dialog a[data-export]')).toHaveAttribute(
+    'href',
+    `/api/export.md?scope=topic&topic=${id}`,
+  );
+
+  // The filename is the server's slug of the topic name, so it doubles as proof
+  // the right topic reached the route rather than a default.
+  const download = page.waitForEvent('download');
+  await page.locator('.export-dialog a[data-export]').click();
+  expect((await download).suggestedFilename()).toBe('news-exportable-subject.md');
+
+  await closeSettings(page);
+  await topicAction(page, page.locator('.topic', { hasText: 'Exportable Subject' }), 'delete');
+});
+
+test('one-topic export is offered only when there are topics (NEWS-160)', async ({ page }) => {
+  // With nothing to narrow to it could only ever produce an empty file, and an
+  // enabled control that yields nothing is worse than a disabled one saying why.
+  await resetTopics(test.info().project.use.baseURL ?? '');
+  await page.goto('/');
+  await expect(page.locator('.topic')).toHaveCount(0);
+
+  await openExportDialog(page);
+  await expect(page.locator('[data-export-scope=topic]')).toBeDisabled();
+  await expect(page.locator('.export-option:has([data-export-scope=topic])')).toContainText('No topics to export');
+  // …and the Export control still works for the scopes that do apply.
+  await expect(page.locator('.export-dialog a[data-export]')).toHaveAttribute('href', '/api/export.md?scope=all');
+
+  await page.keyboard.press('Escape');
+  await closeSettings(page);
+});
+
 test('the export dialog opens fresh and Escape leaves Settings standing (NEWS-158)', async ({ page }) => {
   await page.goto('/');
   await openExportDialog(page);

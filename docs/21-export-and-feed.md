@@ -36,7 +36,13 @@ See also [11 — Story Actions](11-story-actions.md) (bookmarking) and [4 — CL
 
   The Export control stays an **`<a>` with a real `href`**, not a button with a click handler, so the FR-21.8 Tauri routing keeps working unchanged. It closes the dialog on the *next tick* rather than synchronously, so the anchor is not removed inside its own click handler — defensive rather than a fix for something observed (Chromium tolerates either), kept because the WKWebView is the environment that matters here and cannot be tested from this side.
 
-  `scope=topic` remains a server capability with **no UI** (FR-21.1) — see the follow-up ticket.
+- **FR-21.10** *(Shipped, NEWS-160)* The dialog's third scope is **One topic**, revealing a picker of the watched topics in sidebar order. `scope=topic` had worked on all three endpoints since NEWS-85 and was covered by unit tests, but nothing in the UI could ask for it — a documented, tested capability reachable only by hand-assembling a URL.
+
+  Choosing the scope **lands on a topic** rather than on nothing. This is the one place the DOM and the store can disagree: a `<select>` with no `selected` option still displays its first one, so leaving the store's `topicId` null shows a picker that looks chosen beside an Export button that is disabled. The E2E asserts the Export control is live *before* touching the picker, which is the only ordering that catches it.
+
+  With **no topics at all** the option is disabled and says why — it could only ever produce an empty file, and an enabled control that yields nothing is worse than a disabled one that explains itself.
+
+  URL construction is `exportHref` in `src/client/export-url.ts`, a pure function of the choice. It returns **null** for "one topic" with none picked, and the dialog renders a disabled button rather than a link: falling back to `scope=all` there would hand over the whole archive when the user asked for one subject, which is the quietest possible way to get this wrong.
 
 - **FR-21.8** *(Shipped, NEWS-157)* **In the Tauri webview an export is handed to the system browser.** `<a download>` is a no-op in the WKWebView: the click is swallowed, nothing is saved, and there is no error to show for it — the same class of gap as `window.confirm` (NEWS-39) and `navigator.share` (NEWS-43), and it made all three buttons look broken on the desktop app.
 

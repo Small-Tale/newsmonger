@@ -74,6 +74,7 @@ import {
   readDurations,
   recordDuration,
 } from './discover-progress.js';
+import { exportHref } from './export-url.js';
 import { currentFailure } from './failure.js';
 import { icon } from './icons.js';
 import { menuStyle } from './menu-position.js';
@@ -1420,9 +1421,9 @@ function diagnosticsJsx(s: AppState): SafeHtml {
  * unchanged — `data-export` hands it to the system browser there, and a plain
  * browser uses the `download` attribute.
  */
-function exportDialogJsx(state: NonNullable<AppState['export']>): SafeHtml {
-  const { scope, format } = state;
-  const href = `/api/export.${format}?scope=${scope}`;
+function exportDialogJsx(state: NonNullable<AppState['export']>, topics: Topic[]): SafeHtml {
+  const { scope, topicId, format } = state;
+  const href = exportHref(state);
   return (
     <div class="dialog-backdrop" data-action="export-backdrop">
       <div class="dialog export-dialog" role="dialog" aria-modal="true" aria-labelledby="export-title">
@@ -1438,6 +1439,7 @@ function exportDialogJsx(state: NonNullable<AppState['export']>): SafeHtml {
           {[
             { value: 'all', label: 'All stories', hint: 'Everything kept, newest first' },
             { value: 'saved', label: 'Saved only', hint: 'Just your bookmarks' },
+            { value: 'topic', label: 'One topic', hint: 'Everything found for a single subject' },
           ].map((option) => (
             <label class={`export-option ${scope === option.value ? 'on' : ''}`}>
               <input
@@ -1445,10 +1447,31 @@ function exportDialogJsx(state: NonNullable<AppState['export']>): SafeHtml {
                 name="export-scope"
                 value={option.value}
                 checked={scope === option.value ? true : undefined}
+                // Nothing to narrow to, so the option would only ever produce an
+                // empty file (NEWS-160).
+                disabled={option.value === 'topic' && topics.length === 0 ? true : undefined}
                 data-export-scope={option.value}
               />
               <span class="export-option-label">{option.label}</span>
-              <span class="export-option-hint">{option.hint}</span>
+              <span class="export-option-hint">
+                {option.value === 'topic' && topics.length === 0 ? 'No topics to export yet' : option.hint}
+              </span>
+              {/* Inside the label it belongs to, and always present rather than
+                  a conditional sibling of the other options — see docs/3-ui.md.
+                  Empty when this is not the chosen scope. */}
+              <span class="export-topic-slot">
+                {option.value === 'topic' && scope === 'topic' ? (
+                  <select data-action="export-topic" aria-label="Topic to export">
+                    {topics.map((topic) => (
+                      <option value={topic.id} selected={topic.id === topicId ? true : undefined}>
+                        {topic.name}
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  ''
+                )}
+              </span>
             </label>
           ))}
         </fieldset>
@@ -1486,9 +1509,19 @@ function exportDialogJsx(state: NonNullable<AppState['export']>): SafeHtml {
               before the browser had processed its default action. The
               `data-export` handler closes it on the next tick instead — see the
               note there for how much that is worth. */}
-          <a class="btn primary" href={href} download="" data-export>
-            Export
-          </a>
+          {/* `exportHref` returns null when the choice cannot be exported —
+              "one topic" with none picked. A disabled-looking anchor that still
+              navigates is worse than no anchor, so the control becomes a real
+              disabled button in that state rather than a styled link. */}
+          {href === null ? (
+            <button class="btn primary" type="button" disabled>
+              Export
+            </button>
+          ) : (
+            <a class="btn primary" href={href} download="" data-export>
+              Export
+            </a>
+          )}
         </div>
       </div>
     </div>
@@ -2103,7 +2136,7 @@ function appJsx(): SafeHtml {
         {renameTarget === undefined ? '' : renameDialogJsx(renameTarget, s.renameItemCount)}
       </div>
       <div id="privacy-slot">{s.privacyOpen ? privacyDialogJsx(s) : ''}</div>
-      <div id="export-slot">{s.export !== null ? exportDialogJsx(s.export) : ''}</div>
+      <div id="export-slot">{s.export !== null ? exportDialogJsx(s.export, sortTopics(s.topics, s.topicSort)) : ''}</div>
       <div id="discover-slot">{s.discover !== null ? discoverDialogJsx(s.discover) : ''}</div>
       {/* Always present because it is a **live region**: assistive technology
           announces mutations to a region it is already observing, so a slot
@@ -3483,7 +3516,11 @@ function wireEvents(root: HTMLElement): void {
 
   void delegate(root, 'change', '[data-export-scope]', (_e, el) => {
     const scope = el.getAttribute('data-export-scope');
-    if (scope === 'all' || scope === 'saved') appStore.actions.patchExport({ scope });
+    if (scope === 'all' || scope === 'saved' || scope === 'topic') appStore.actions.patchExport({ scope });
+  });
+
+  void delegate(root, 'change', '[data-action=export-topic]', (_e, el) => {
+    if (el instanceof HTMLSelectElement) appStore.actions.patchExport({ topicId: el.value });
   });
 
   void delegate(root, 'change', '[data-export-format]', (_e, el) => {
