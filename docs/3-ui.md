@@ -216,6 +216,16 @@ Source art lives in `assets/`, in two shapes — rounded and full-bleed — and 
 
   The E2E asserts the **decoded** image (`decode()` then `naturalWidth > 0`) rather than just the markup: `alt` is present whether or not the file is, and the asset reaches `dist/client` only via that copy list — precisely the step a later change forgets.
 
+- **FR-3.58a** *(Shipped, NEWS-174)* Each mark's accent **is** its theme's `--pine` — `#17604f` light, `#4da88e` dark — and this is gate-enforced rather than remembered.
+
+  Nothing structurally connects an SVG file to a stylesheet: the mark's green is baked into the asset, the app's green lives in `styles.scss`, and a change to either is invisible to the other. That gap produced the same bug twice. First the dark mark shipped carrying the *light* green (2.39:1 on the dark page); then both files were set to the *dark* green, which moved the failure to light mode (2.60:1) rather than fixing it. Both rounds were caught by eye, which is not a mechanism.
+
+  `tests/unit/brand-assets.test.ts` reads the real files and asserts the relationship: the accent equals the theme's `--pine`, and both halves clear a legibility floor against that theme's `--paper` (3:1 for the accent as a graphic mark, 4.5:1 for the ink). It also pins that the two accents *differ* and that each fails on the other theme's page — so a straight swap of the two files, which is how this went wrong the first time, cannot pass.
+
+  **This is a legibility gate, not an accessibility one.** WCAG explicitly exempts logotypes from contrast minimums (SC 1.4.3 / 1.4.11), so the axe suite neither enforces this nor is affected by it. The reason to hold the line anyway is that the mark sits inches from the "Check all now" button and the section pills: two greens that are merely *similar* read as a mistake, and one that fails 3:1 reads as washed out.
+
+  Fills are read **positionally** (first path = `News`, second = `monger.`) rather than by `id`, because the drawing tool has already renamed one — `monger` became `monger.` when the period was folded into the mark.
+
 - **FR-3.55** *(Shipped, NEWS-153)* The dial's track is drawn in **translucent ink, not a fixed grey**. `--line` is mixed for the *page* background, so the ring was faint everywhere (1.18:1 in light against the page) and on a selected or hovered row — filled with `--pine-soft` — it all but vanished: about **1.01:1** in light and **1.02:1** in dark. Invisible, and precisely when the user had singled that topic out.
 
   `--ink` at `stroke-opacity: 0.24` composites over whatever is behind it, so the ring keeps its contrast against any fill the row ever gains rather than against the one background someone had in mind when they chose the grey. Now 1.61–1.97:1 across light/dark × selected/unselected.
