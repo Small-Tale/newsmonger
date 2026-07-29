@@ -372,7 +372,8 @@ test('add, edit and clear a topic\u2019s guidance (NEWS-80)', async ({ page }) =
   await page.goto('/');
   const target = row(page, 'Bravo Topic');
   await expect(target).toBeVisible();
-  await expect(target.locator('.topic-flags .flag.guided')).toHaveCount(0);
+  // Guidance shows as text under the name since NEWS-143, not as a badge.
+  await expect(target.locator('.topic-guidance')).toHaveCount(0);
 
   // The menu offers "Add guidance" while there is none.
   await target.click({ button: 'right' });
@@ -386,12 +387,11 @@ test('add, edit and clear a topic\u2019s guidance (NEWS-80)', async ({ page }) =
   await dialog.locator('button[type=submit]').click();
   await expect(dialog).toHaveCount(0);
 
-  // The row picks up a badge carrying the text, and it survives a reload.
-  const badge = row(page, 'Bravo Topic').locator('.topic-flags .flag.guided');
-  await expect(badge).toHaveCount(1);
-  await expect(badge).toHaveAttribute('title', /Regulatory news only/);
+  // The row shows the guidance itself, and it survives a reload.
+  const preview = row(page, 'Bravo Topic').locator('.topic-guidance');
+  await expect(preview).toHaveText(/Regulatory news only/);
   await page.reload();
-  await expect(row(page, 'Bravo Topic').locator('.topic-flags .flag.guided')).toHaveCount(1);
+  await expect(row(page, 'Bravo Topic').locator('.topic-guidance')).toHaveText(/Regulatory news only/);
 
   // Reopening shows what was saved, and the menu now offers Edit.
   await row(page, 'Bravo Topic').click({ button: 'right' });
@@ -411,11 +411,11 @@ test('add, edit and clear a topic\u2019s guidance (NEWS-80)', async ({ page }) =
     'Regulatory news only, not stock moves.',
   );
 
-  // Clearing it removes the badge.
+  // Clearing it removes the preview.
   await page.locator('.dialog.guidance textarea').fill('   ');
   await page.locator('.dialog.guidance button[type=submit]').click();
   await expect(page.locator('.dialog.guidance')).toHaveCount(0);
-  await expect(row(page, 'Bravo Topic').locator('.topic-flags .flag.guided')).toHaveCount(0);
+  await expect(row(page, 'Bravo Topic').locator('.topic-guidance')).toHaveCount(0);
 });
 
 test('guidance is offered for one topic at a time (NEWS-80)', async ({ page }) => {
@@ -530,4 +530,61 @@ test('a duplicate name is refused without closing the dialog', async ({ page }) 
   for (const name of ['Cleared Topic', 'Occupied Name']) {
     await topicAction(page, page.locator('.topic', { hasText: name }), 'delete');
   }
+});
+
+test('a long topic name wraps instead of being truncated (NEWS-142)', async ({ page }) => {
+  // A topic name is the question the app asks, so an ellipsis hides the part
+  // that tells two similar topics apart.
+  await page.goto('/');
+  const long = '3D chip stacking and advanced packaging for AI accelerators';
+  await page.fill('.add-topic input', long);
+  await page.press('.add-topic input', 'Enter');
+  const name = page.locator('.topic', { hasText: long }).locator('.topic-name');
+  await expect(name).toBeVisible();
+
+  const box = await name.boundingBox();
+  // Guard against a zero-sized box making the overflow check vacuous (NEWS-111).
+  expect(box?.width ?? 0).toBeGreaterThan(50);
+
+  const metrics = await name.evaluate((el) => ({
+    scrollWidth: el.scrollWidth,
+    clientWidth: el.clientWidth,
+    lines: Math.round(el.getBoundingClientRect().height / Number.parseFloat(getComputedStyle(el).lineHeight)),
+  }));
+  // It actually wrapped…
+  expect(metrics.lines).toBeGreaterThan(1);
+  // …and nothing is spilling sideways out of the rail.
+  expect(metrics.scrollWidth).toBeLessThanOrEqual(metrics.clientWidth + 1);
+
+  await topicAction(page, page.locator('.topic', { hasText: long }), 'delete');
+});
+
+test('guidance shows as text, and expands for a sole selection (NEWS-143)', async ({ page }) => {
+  await page.goto('/');
+  await page.fill('.add-topic input', 'Guided Topic');
+  await page.press('.add-topic input', 'Enter');
+  const row = page.locator('.topic', { hasText: 'Guided Topic' });
+  await expect(row).toBeVisible();
+
+  const guidance = Array.from({ length: 12 }, (_, i) => `Guidance line number ${String(i + 1)} of the steer.`).join(' ');
+  await topicAction(page, row, 'guidance');
+  await page.fill('.dialog.guidance textarea', guidance);
+  await page.click('.dialog.guidance button[type=submit]');
+  await expect(page.locator('.dialog.guidance')).toHaveCount(0);
+
+  // The text itself, not an icon standing for it.
+  const preview = row.locator('.topic-guidance');
+  await expect(preview).toBeVisible();
+  await expect(preview).toContainText('Guidance line number 1');
+  await expect(row.locator('.flag.guided')).toHaveCount(0);
+
+  const clamped = await preview.evaluate((el) => el.clientHeight);
+  await row.click();
+  await expect(row).toHaveClass(/selected/);
+  const expanded = await preview.evaluate((el) => el.clientHeight);
+  // A sole selection is the one moment the user is asking about this topic.
+  expect(expanded).toBeGreaterThan(clamped);
+
+  await page.keyboard.press('Escape');
+  await topicAction(page, row, 'delete');
 });

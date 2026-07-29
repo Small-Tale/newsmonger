@@ -80,7 +80,6 @@ export function registerApi(app: Hono<AppEnv>): void {
       topics: store.listTopics(),
       latestItemIds: store.latestItemIds(50),
       flaggedByTopic: store.flaggedCountsByTopic(),
-      itemCountsByTopic: store.itemCountsByTopic(),
       settings,
       runs: store.listRuns(20),
       checking: runner.checking(),

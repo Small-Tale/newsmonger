@@ -65,6 +65,7 @@ src/
     discover-progress.ts estimateTargetMs/recordDuration — the discovery progress-bar estimate, median of the last 10 durations in localStorage (NEWS-137)
     discover.ts       groupSuggestions/resultsHeading/sectionTiles (NEWS-126) + the pure tuner state machine: startTuner/judgeCandidate/nextRound/mergeKept (NEWS-127)
     solo.ts           toggleSolo/isAllSoloed — solo-set arithmetic shared by the context menu and the double-click gesture (NEWS-95)
+    dial.ts           dialRemaining — the sidebar ring's countdown fraction (NEWS-144)
     topic-sort.ts     sortTopics (NEWS-63) + topicRows — the sidebar's rows, with section headings interleaved in the By-section sort (NEWS-140)
     styles.scss       styling (light/dark via prefers-color-scheme)
 src-tauri/            Tauri v2 shell; one spawn path, dev runs tsx + release runs the sidecar
@@ -152,7 +153,7 @@ Data dir: `--data-dir` flag → `NEWS_DATA_DIR` → `~/.news`. Also holds `news.
 | Privacy dialog | `privacyDialogJsx` + `#privacy-slot` + the footer `[data-action=open-privacy]`. See FR-3.47 |
 | Icons, favicon, web app manifest | `assets/*.svg` sources; `manifest()` + the `/manifest.webmanifest` route in `src/routes/pages.tsx`; `<link>`s in `src/components/layout.tsx`. See `docs/3-ui.md` FR-3.43–3.44 |
 | Which filter pills are shown | `visibleCategories`/`visibleSubcategories`/`hasUncategorized` in `src/categories.ts` (pure, over the topic list). See `docs/22-topic-categories.md` FR-22.13–22.15 |
-| Renaming a topic / clearing its stories | `Store.renameTopic` / `clearItemsForTopic` / `itemCountsByTopic`; `PATCH /api/topics/:id { name, clearItems }`; `renameDialogJsx` + `saveRename` in `client/app.tsx`. See `docs/25-topic-editing.md` |
+| Renaming a topic / clearing its stories | `Store.renameTopic` / `clearItemsForTopic`; the story count comes from `GET /api/items?topics=<id>&limit=1` when the dialog opens (**not** `/api/state`, which is polled every 4 s); `PATCH /api/topics/:id { name, clearItems }`; `renameDialogJsx` + `saveRename` in `client/app.tsx`. See `docs/25-topic-editing.md` |
 | Sidebar sort order / section headings | `src/client/topic-sort.ts` (`sortTopics`, `topicRows`); `TOPIC_SORTS`/`TOPIC_SORT_LABELS` in `client/stores.ts`; `.topic-section` in `styles.scss`. See `docs/3-ui.md` FR-3.2a |
 | Section filter bar / sidebar pills | `filterBarJsx` + `[data-filter-category]`/`[data-filter-subcategory]` delegates in `client/app.tsx`; `.filter-bar` in `styles.scss`; server filter in `Store.queryItems`. See `docs/22-topic-categories.md` FR-22.9–22.12 |
 | Automatic topic classification | `needsClassifying`/`classifierOptions`/`applyClassification` in `checks.ts`; prompt + parsing in `ai/prompt.ts`. See `docs/22-topic-categories.md` FR-22.8 |

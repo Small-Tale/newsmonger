@@ -224,14 +224,6 @@ export const StateRespSchema = z.object({
   latestItemIds: z.array(z.string()).default([]),
   /** Off-topic story count per topic, for the "Review Flagged (N)" badge (NEWS-76). */
   flaggedByTopic: z.record(z.string(), z.number().int()).default({}),
-  /**
-   * Total story count per topic (NEWS-139).
-   *
-   * The rename dialog only offers to clear results when there are results to
-   * clear, and asking the server per-dialog would put a round trip in the way of
-   * opening it. Counts are cheap; the stories themselves stay on `/api/items`.
-   */
-  itemCountsByTopic: z.record(z.string(), z.number().int()).default({}),
   settings: SettingsSchema,
   runs: z.array(CheckRunSchema),
   checking: z.array(z.string()),

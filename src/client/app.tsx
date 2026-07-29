@@ -28,6 +28,7 @@ import {
   refreshFeed,
   refreshKeys,
   refreshProviders,
+  countItemsForTopic,
   refreshState,
   renameTopic,
   reportForeground,
@@ -49,6 +50,7 @@ import {
 } from './api.js';
 import { outletFor, publishedLabel } from './attribution.js';
 import { buildDiagnostics, formatDuration, runRows } from './diagnostics.js';
+import { dialRemaining } from './dial.js';
 import type { TunerState } from './discover.js';
 import {
   currentCandidate,
@@ -121,11 +123,18 @@ const SEARCH_DEBOUNCE_MS = 250;
 let searchDebounce: ReturnType<typeof setTimeout> | undefined;
 
 /** Show a transient bottom-of-screen notice, replacing any current one. */
+/**
+ * Show a message that dismisses itself.
+ *
+ * The **only** sanctioned way to raise a toast: the store's `setToastRaw` has
+ * no timer, so anything calling it directly leaves the message on screen for
+ * good — which is exactly what shipped in NEWS-141.
+ */
 function showToast(message: string): void {
-  appStore.actions.setToast(message);
+  appStore.actions.setToastRaw(message);
   clearTimeout(toastTimer);
   toastTimer = setTimeout(() => {
-    appStore.actions.setToast(null);
+    appStore.actions.setToastRaw(null);
   }, TOAST_MS);
 }
 
@@ -159,11 +168,12 @@ const DIAL_C = 2 * Math.PI * DIAL_R;
  * Spins while checking; dashed while paused; empty when never checked.
  */
 function dialJsx(topic: Topic, checking: boolean, intervalMs: number): SafeHtml {
-  let fraction = 0;
-  if (topic.lastCheckedAt !== null && !topic.paused) {
-    fraction = Math.min(1, Math.max(0, (Date.now() - Date.parse(topic.lastCheckedAt)) / intervalMs));
-  }
-  const filled = (fraction * DIAL_C).toFixed(1);
+  // Counts **down** (NEWS-144): full just after a check, empty as the next one
+  // comes due. A ring that fills up reads as progress toward something the user
+  // is waiting for, which is backwards — what is draining here is the time left
+  // before the app acts on its own.
+  const remaining = dialRemaining(topic, intervalMs);
+  const filled = (remaining * DIAL_C).toFixed(1);
   const state = checking ? 'checking' : topic.paused ? 'paused' : 'watching';
   const title = checking
     ? 'Checking now'
@@ -171,7 +181,7 @@ function dialJsx(topic: Topic, checking: boolean, intervalMs: number): SafeHtml 
       ? 'Paused'
       : topic.lastCheckedAt === null
         ? 'Waiting for first check'
-        : `${Math.round(fraction * 100)}% of the way to the next check`;
+        : `${Math.round(remaining * 100)}% of the interval left before the next check`;
   return (
     <span class={`dial ${state}`} title={title} aria-hidden="true">
       <svg viewBox="0 0 20 20" width="20" height="20">
@@ -200,6 +210,8 @@ function topicRowJsx(
   selected: boolean,
   soloed: boolean,
   dimmed: boolean,
+  /** This row is the *only* one selected — see the guidance clamp (NEWS-143). */
+  soleSelection: boolean,
 ): SafeHtml {
   const classes = [
     'topic',
@@ -247,16 +259,21 @@ function topicRowJsx(
             {categoryLabel(BUILTIN_CATEGORIES, topic.category, topic.subcategory)}
           </span>
         )}
+        {/* The guidance itself rather than an icon standing for it (NEWS-143):
+            an icon says only *that* a topic is steered, which is the least
+            useful half of the fact. Clamped to two lines, and to ten when this
+            is the only row selected — a sole selection is the one moment the
+            user is asking about this topic in particular. */}
+        <div class="topic-guidance-slot">
+          {topic.guidance === '' ? (
+            ''
+          ) : (
+            <p class={`topic-guidance${soleSelection ? ' expanded' : ''}`}>{topic.guidance}</p>
+          )}
+        </div>
       </div>
       {/* Always-present slot so the badge appearing can't restructure the row. */}
       <span class="topic-flags">
-        {topic.guidance !== '' ? (
-          <span class="flag guided" title={`Guidance: ${topic.guidance}`}>
-            {icon('guidance', 13)}
-          </span>
-        ) : (
-          ''
-        )}
         {topic.highPriority ? (
           <span class="flag high-priority" title="High priority: checked on the shorter interval">
             {icon('star', 13)}
@@ -700,7 +717,7 @@ function guidanceDialogJsx(topic: Topic): SafeHtml {
  * wording — and discarding a topic's history should never be something that
  * happens because a checkbox was already ticked.
  */
-function renameDialogJsx(topic: Topic, itemCount: number): SafeHtml {
+function renameDialogJsx(topic: Topic, itemCount: number | null): SafeHtml {
   return (
     <div class="dialog-backdrop" data-action="rename-backdrop">
       <div class="dialog rename" role="dialog" aria-modal="true" aria-label={`Rename ${topic.name}`}>
@@ -722,7 +739,9 @@ function renameDialogJsx(topic: Topic, itemCount: number): SafeHtml {
           {/* Always-present container so the checkbox appearing can't restructure
               the form around it (docs/3-ui.md). */}
           <div class="rename-clear">
-            {itemCount > 0 ? (
+            {/* `null` means the count hasn't arrived yet — showing the option
+                before then would mean rendering "clear the 0 stories". */}
+            {itemCount !== null && itemCount > 0 ? (
               <label class="checkbox">
                 <input type="checkbox" name="clear-items" />
                 <span>
@@ -1983,7 +2002,7 @@ function appJsx(): SafeHtml {
       <div id="confirm-slot">{s.confirm !== null ? confirmDialogJsx(s.confirm) : ''}</div>
       <div id="guidance-slot">{guidanceTarget !== undefined ? guidanceDialogJsx(guidanceTarget) : ''}</div>
       <div id="rename-slot">
-        {renameTarget === undefined ? '' : renameDialogJsx(renameTarget, s.itemCountsByTopic[renameTarget.id] ?? 0)}
+        {renameTarget === undefined ? '' : renameDialogJsx(renameTarget, s.renameItemCount)}
       </div>
       <div id="privacy-slot">{s.privacyOpen ? privacyDialogJsx(s) : ''}</div>
       <div id="discover-slot">{s.discover !== null ? discoverDialogJsx(s.discover) : ''}</div>
@@ -2137,6 +2156,7 @@ function appJsx(): SafeHtml {
                   selected.has(row.id),
                   solo.has(row.id),
                   solo.size > 0 && !solo.has(row.id),
+                  selected.size === 1 && selected.has(row.id),
                 )
               ),
             {
@@ -2153,9 +2173,9 @@ function appJsx(): SafeHtml {
               cacheKey: (row: TopicRow) =>
                 isHeading(row)
                   ? row.label
-                  : `${String(row.category)}|${String(row.subcategory)}|${String(selected.has(row.id))}|${String(solo.has(row.id))}|${String(solo.size)}|${String(
+                  : `${String(row.category)}|${String(row.subcategory)}|${String(selected.has(row.id))}|${String(selected.size)}|${String(solo.has(row.id))}|${String(solo.size)}|${String(
                       s.checking.includes(row.id),
-                    )}|${String(row.highPriority)}`,
+                    )}|${String(row.highPriority)}|${row.guidance}`,
               // A stable list identity (kerf 3.x). Unkeyed lists are identified by
               // their position among a render's `each()` calls, so a conditional
               // list appearing above this one would rebuild it and cost the rows
@@ -2398,7 +2418,16 @@ function runTopicAction(action: string, ids: string[]): void {
     case 'rename': {
       // Single-target only, for the same reason guidance is: there is one name.
       const only = targets.length === 1 ? targets[0] : undefined;
-      if (only !== undefined) appStore.actions.openRename(only.id);
+      if (only !== undefined) {
+        appStore.actions.openRename(only.id);
+        // The count is what decides whether clearing is even offered, and it is
+        // fetched per dialog rather than polled for every topic (NEWS-139).
+        void countItemsForTopic(only.id).then((count) => {
+          if (appStore.state.value.renameTopicId === only.id) {
+            appStore.actions.setRenameItemCount(count);
+          }
+        });
+      }
       break;
     }
     case 'review-flagged':
@@ -2601,7 +2630,9 @@ async function addSuggestion(name: string): Promise<void> {
     await addSuggestedTopic(suggestion);
     if (appStore.state.value.discover === null) return;
     appStore.actions.patchDiscover({ added: [...appStore.state.value.discover.added, name] });
-    appStore.actions.setToast(`Added “${name}” — checking now`);
+    // `showToast`, never `setToast` directly — the store action has no timer,
+    // so a direct call leaves the toast on screen forever (NEWS-141).
+    showToast(`Added “${name}” — checking now`);
   } catch (err) {
     if (appStore.state.value.discover === null) return;
     appStore.actions.patchDiscover({ error: err instanceof Error ? err.message : String(err) });

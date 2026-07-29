@@ -737,12 +737,15 @@ h2.eyebrow {
   flex: 1;
 }
 
+// Wraps rather than truncating (NEWS-142). A topic name is the question the app
+// asks, so an ellipsis hides the part that distinguishes two similar topics —
+// "3D chip stacking and advanced…" and "3D chip stacking in memory…" read as the
+// same row. `overflow-wrap` handles the pathological case of one long unbroken
+// token, which wrapping alone would still push out of the rail.
 .topic-name {
   font-weight: 600;
   font-size: 14px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
 }
 
 .topic-meta {
@@ -768,10 +771,6 @@ h2.eyebrow {
 
   // Guidance is a quieter signal than priority — it says "this topic is
   // narrowed", not "this topic is urgent", so it stays unfilled and muted.
-  .flag.guided {
-    color: var(--muted);
-  }
-
   // The high-priority star is filled to read as a "starred" state at a glance.
   .flag.high-priority {
     color: var(--amber, #c8891b);
@@ -2475,5 +2474,26 @@ button.off-topic-pill {
   input {
     margin-top: 2px;
     flex: 0 0 auto;
+  }
+}
+
+/* The guidance itself under the topic name (NEWS-143), replacing the icon that
+   only told you steering existed. Two lines by default; ten when this is the
+   only row selected, which is the one moment the user is asking about this
+   topic in particular. */
+.topic-guidance {
+  margin: 3px 0 0;
+  font-family: var(--sans);
+  font-size: 11.5px;
+  line-height: 1.45;
+  color: var(--ink-soft);
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+
+  &.expanded {
+    -webkit-line-clamp: 10;
   }
 }

@@ -672,16 +672,6 @@ export class Store {
    * "Review Flagged (N)" badge once the feed page no longer carries the full
    * item list. Topics with none are omitted.
    */
-  /** Total stories per topic (NEWS-139) — what a rename would be discarding. */
-  itemCountsByTopic(): Record<string, number> {
-    const rows = this.db
-      .prepare('SELECT topic_id AS t, count(*) AS c FROM items GROUP BY topic_id')
-      .all() as { t: string; c: unknown }[];
-    const counts: Record<string, number> = {};
-    for (const row of rows) counts[row.t] = asCount(row.c);
-    return counts;
-  }
-
   flaggedCountsByTopic(): Record<string, number> {
     const rows = this.db
       .prepare('SELECT topic_id AS t, count(*) AS c FROM items WHERE off_topic = 1 GROUP BY topic_id')

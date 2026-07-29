@@ -149,17 +149,21 @@ describe('clearing previous results', () => {
   });
 });
 
-describe('itemCountsByTopic', () => {
-  it('reports per-topic totals so the dialog knows whether to offer clearing', async () => {
+describe('the story count behind the clear option', () => {
+  it('comes from the feed endpoint per topic, not from a per-poll aggregate', async () => {
+    // Deliberately not on `/api/state`: that is polled every four seconds by
+    // every client, and a `GROUP BY` over every story measurably slowed the
+    // settings round trip when it lived there.
     const { app, store } = makeApp();
     const apple = seed(store, 'Apple', 3);
     const empty = store.addTopic('Nothing yet');
 
-    const state = (await (await app.request('/api/state')).json()) as {
-      itemCountsByTopic: Record<string, number>;
+    const count = async (id: string): Promise<number> => {
+      const body = (await (await app.request(`/api/items?topics=${id}&limit=1`)).json()) as { total: number };
+      return body.total;
     };
 
-    expect(state.itemCountsByTopic[apple.id]).toBe(3);
-    expect(state.itemCountsByTopic[empty.id]).toBeUndefined();
+    expect(await count(apple.id)).toBe(3);
+    expect(await count(empty.id)).toBe(0);
   });
 });

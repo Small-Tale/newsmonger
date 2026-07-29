@@ -128,8 +128,6 @@ export interface AppState {
   feedTotal: number;
   /** Off-topic count per topic, for the "Review Flagged (N)" badge (NEWS-76). */
   flaggedByTopic: Record<string, number>;
-  /** Total stories per topic (NEWS-139) — what a rename would discard. */
-  itemCountsByTopic: Record<string, number>;
   settings: StateResp['settings'];
   runs: StateResp['runs'];
   checking: string[];
@@ -254,6 +252,16 @@ export interface AppState {
   guidanceTopicId: string | null;
   /** Id of the topic being renamed (NEWS-139), or null. Ephemeral, like every dialog. */
   renameTopicId: string | null;
+  /**
+   * How many stories the topic being renamed has, or null while it is unknown.
+   *
+   * Fetched when the dialog opens rather than carried on `/api/state`: it is a
+   * `GROUP BY` over every story, and `/api/state` is polled every four seconds
+   * by every open client. NEWS-75/76 slimmed that payload deliberately, and
+   * putting a growing aggregate back on it measurably slowed the settings round
+   * trip under a full test suite. The dialog needs one number, once.
+   */
+  renameItemCount: number | null;
   /** True when the user tried to enable notifications but permission was refused. */
   notifyPermissionDenied: boolean;
   /**
@@ -377,7 +385,6 @@ export const appStore = defineStore({
     feedItems: [],
     feedTotal: 0,
     flaggedByTopic: {},
-    itemCountsByTopic: {},
     settings: {
       checkIntervalMs: 24 * 60 * 60 * 1000,
       highPriorityIntervalMs: 24 * 60 * 60 * 1000,
@@ -424,6 +431,7 @@ export const appStore = defineStore({
     confirm: null,
     guidanceTopicId: null,
     renameTopicId: null,
+    renameItemCount: null,
     notifyPermissionDenied: false,
     dismissedRunId: readDismissedRunId(),
     dismissedBehind: false,
@@ -552,10 +560,13 @@ export const appStore = defineStore({
       set({ ...get(), confirm: null });
     },
     openRename: (renameTopicId: string) => {
-      set({ ...get(), renameTopicId });
+      set({ ...get(), renameTopicId, renameItemCount: null });
+    },
+    setRenameItemCount: (renameItemCount: number) => {
+      set({ ...get(), renameItemCount });
     },
     closeRename: () => {
-      set({ ...get(), renameTopicId: null });
+      set({ ...get(), renameTopicId: null, renameItemCount: null });
     },
     openGuidance: (guidanceTopicId: string) => {
       set({ ...get(), guidanceTopicId });
@@ -576,7 +587,14 @@ export const appStore = defineStore({
     bumpBehindGrace: () => {
       set({ ...get(), behindGraceUntil: Date.now() + BEHIND_GRACE_MS });
     },
-    setToast: (toast: string | null) => {
+    /**
+     * Set the toast text with **no dismiss timer** (NEWS-141).
+     *
+     * Named `raw` because calling it directly is almost always a bug: the timer
+     * lives in `showToast` in `app.tsx`, so a direct call puts a message on
+     * screen and leaves it there. Use `showToast` unless you are it.
+     */
+    setToastRaw: (toast: string | null) => {
       set({ ...get(), toast });
     },
     setSidebarCollapsed: (sidebarCollapsed: boolean) => {

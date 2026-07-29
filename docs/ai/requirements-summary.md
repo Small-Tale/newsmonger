@@ -108,6 +108,8 @@ Default Anthropic provider (`claude-opus-4-8` + web search), prompt-level exclus
 
 ## [3 — Web UI](../3-ui.md) — Shipped
 
+- FR-3.2c (NEWS-142/143/144): topic names **wrap** rather than truncate; guidance shows as **text** below the name (2 lines, 10 when solely selected) replacing the icon; the dial **counts down** — full after a check, empty as the next comes due, and full while paused.
+- NEWS-141: the toast raised when adding a discovered topic never cleared — it called the store action directly instead of `showToast`, which owns the timer. The action is now `setToastRaw` so a direct call reads as wrong.
 - FR-3.2a sidebar sort gained **By section** (NEWS-140): taxonomy order rather than alphabetical, unclassified last, with a `role="presentation"` heading opening each group. Headings are entries in the same flat keyed list as the topics — a nested list would be an `each()` inside an `each()` row, which kerf never reconciles.
 
 - Collapsible topics sidebar (localStorage-persisted, panel stays mounted): **Shipped**

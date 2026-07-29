@@ -200,6 +200,19 @@ export function deleteTopic(id: string): Promise<void> {
 }
 
 /**
+ * How many stories a topic has (NEWS-139).
+ *
+ * Reuses the feed endpoint's `total` rather than adding one of its own — asking
+ * for a single item gives the count without the rows. Deliberately not on
+ * `/api/state`: that is polled every four seconds by every client, and this is a
+ * `GROUP BY` over every story needed once, when a dialog opens.
+ */
+export async function countItemsForTopic(id: string): Promise<number> {
+  const body = await request(`/api/items?topics=${encodeURIComponent(id)}&limit=1`);
+  return ItemsRespSchema.parse(body).total;
+}
+
+/**
  * Rename a topic, optionally discarding its existing stories (NEWS-139).
  *
  * Errors are thrown rather than folded into the global banner: a duplicate name

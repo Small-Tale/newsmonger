@@ -45,7 +45,6 @@ function stateBody(checkIntervalMs: number, topicNames: string[] = []): unknown 
     })),
     latestItemIds: [],
     flaggedByTopic: {},
-    itemCountsByTopic: {},
     settings: { ...BASE_SETTINGS, checkIntervalMs },
     runs: [],
     checking: [],

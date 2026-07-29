@@ -20,6 +20,8 @@ Guidance (FR-18) has been editable since it shipped; this doc covers the **name*
 
 ### Clearing previous results
 
+- **FR-25.5a** *(Shipped)* The story count that decides whether clearing is offered is fetched **when the dialog opens**, from the feed endpoint's `total` (`GET /api/items?topics=<id>&limit=1`). It was briefly carried on `/api/state` instead, which is polled every four seconds by every client — a `GROUP BY` over every story on that path measurably slowed the settings round trip under the full test suite. NEWS-75/76 slimmed that payload deliberately; one dialog needing one number is not a reason to grow it again.
+
 - **FR-25.5** *(Shipped)* When a renamed topic already has stories, the dialog offers to clear them — **only when there are stories to clear**, and **unticked by default**. Renaming is usually a correction, and discarding a topic's history should never happen because a box was already checked.
 
 - **FR-25.6** *(Shipped)* Clearing removes that topic's stories **and resets `coveredThroughAt`**. Clearing the stories alone would leave the topic *looking* fresh while still behaving as though it had been covered up to now, so the next check would report nothing; resetting the window makes it behave like a first check and span a sensible period.
