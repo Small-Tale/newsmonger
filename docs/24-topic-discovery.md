@@ -62,6 +62,8 @@ That last part is the decision worth stating plainly, because it is what the bra
 
   **This was originally written as "counted against the spend cap", which is not possible: [NEWS-119](ai/requirements-summary.md) removed spend estimation, the monthly budget and the price table outright.** There is no cap to count against, so the recording is for *visibility* and the actual protection against runaway cost is structural — the round ceiling (FR-24.9), the cache (FR-24.15), and user-initiated-only (FR-24.16). Those three are load-bearing precisely because no budget backstops them.
 
+  It is surfaced in the redacted diagnostics bundle (NEWS-130, [7 — API Keys](7-api-keys.md) FR-7.13): a bug report about unexpected cost needs exactly "how many calls, and how many were free". The log holds the scope **kind** only, never the free-text query — that query is what a user said about their own interests, and a bundle is usually pasted somewhere public. Safe by construction rather than by filtering, and a test pins it that way.
+
   The log is **in memory, not in the database**. Persisting it would mean either a schema migration or reusing the `runs` table, and `runs` is topic-shaped throughout — it drives the per-topic failure banner, the falling-behind detector and the diagnostics table, all of which would need a filter that someone will eventually forget to add. A discovery call has no topic.
 
 - **FR-24.15** *(Shipped, NEWS-125)* Results are **cached in memory per request** (scope, exclusions, limit) with a 10-minute TTL, so the click-in / click-out / click-back pattern does not re-bill. Losing the cache on restart is fine and keeps it out of the schema.

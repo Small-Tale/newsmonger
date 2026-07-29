@@ -1,4 +1,4 @@
-import type { StateResp } from '../api/schemas.js';
+import type { DiscoverUsageResp, StateResp } from '../api/schemas.js';
 
 /** One row of the diagnostics table, already resolved for display. */
 export interface RunRow {
@@ -45,6 +45,20 @@ export function formatDuration(ms: number | null): string {
 
 export interface DiagnosticsOptions {
   /**
+   * Discovery's call log (NEWS-130), or null when it couldn't be read.
+   *
+   * Included because discovery is the one surface that can issue **unbounded**
+   * AI calls, so "how many did this app make, and how many were free" is exactly
+   * what a bug report about unexpected cost needs.
+   *
+   * Note what the log does *not* hold: the free-text query. It records the scope
+   * **kind** only (`describe` / `section` / `tune`), so a user's description of
+   * their interests — user content in the same sense a topic name is (FR-7.13) —
+   * cannot reach a bundle that is usually pasted somewhere public. That is a
+   * property of the recorder, not a filter here; keep it that way.
+   */
+  discovery: DiscoverUsageResp | null;
+  /**
    * Include topic names. Off by default: a topic name is user content — the
    * privacy note treats it as such (see `docs/7-api-keys.md` FR-7.13) — and a
    * bug report is usually pasted somewhere public.
@@ -90,6 +104,28 @@ export function buildDiagnostics(state: StateResp, opts: DiagnosticsOptions): st
     // is why the redaction note below is unconditional.
     if (row.error !== null) lines.push(`    error: ${row.error}`);
   }
+  lines.push('');
+  lines.push('## Topic discovery');
+  if (opts.discovery === null) {
+    lines.push('(unavailable)');
+  } else if (opts.discovery.calls === 0) {
+    lines.push('(no discovery calls this session)');
+  } else {
+    const cached = opts.discovery.recent.filter((c) => c.cached).length;
+    const failed = opts.discovery.recent.filter((c) => c.status === 'failed').length;
+    lines.push(
+      `${String(opts.discovery.calls)} calls this session ` +
+        `(${String(cached)} of the last ${String(opts.discovery.recent.length)} served from cache, ${String(failed)} failed)`,
+    );
+    for (const call of opts.discovery.recent) {
+      const via = call.cached ? 'cache' : `${call.provider ?? 'no provider'}/${call.model ?? '?'}`;
+      lines.push(
+        `- ${call.at} ${call.status} ${call.scope} · ${via} · ${String(call.returned)} returned` +
+          (call.error === null ? '' : `\n    error: ${call.error}`),
+      );
+    }
+  }
+
   lines.push('');
   lines.push(
     opts.includeTopicNames

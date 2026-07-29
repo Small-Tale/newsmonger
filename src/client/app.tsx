@@ -24,6 +24,7 @@ import {
   deleteKey,
   deleteTopic,
   discoverTopics,
+  fetchDiscoveryUsage,
   refreshFeed,
   refreshKeys,
   refreshProviders,
@@ -2665,23 +2666,28 @@ function wireEvents(root: HTMLElement): void {
   });
 
   void delegate(root, 'click', '[data-action=copy-diagnostics]', () => {
-    const s = appStore.state.value;
-    const text = buildDiagnostics(
-      { ...s, latestItemIds: [] },
-      {
-        includeTopicNames: s.diagIncludeTopics,
-        userAgent: navigator.userAgent,
-        appVersion: s.appVersion === '' ? 'unknown' : s.appVersion,
-      },
-    );
-    void navigator.clipboard
-      .writeText(text)
-      .then(() => {
+    void (async () => {
+      const s = appStore.state.value;
+      // Fetched rather than read from state: the log grows with use and has no
+      // business on the 4-second poll (NEWS-130). A bundle without it is still
+      // worth having, so a failure here degrades to "(unavailable)".
+      const discovery = await fetchDiscoveryUsage().catch(() => null);
+      const text = buildDiagnostics(
+        { ...s, latestItemIds: [] },
+        {
+          includeTopicNames: s.diagIncludeTopics,
+          userAgent: navigator.userAgent,
+          appVersion: s.appVersion === '' ? 'unknown' : s.appVersion,
+          discovery,
+        },
+      );
+      try {
+        await navigator.clipboard.writeText(text);
         showToast('Diagnostics copied');
-      })
-      .catch(() => {
+      } catch {
         showToast('Could not copy — clipboard unavailable');
-      });
+      }
+    })();
   });
 
   // --- first-run flow (NEWS-78) ---------------------------------------------

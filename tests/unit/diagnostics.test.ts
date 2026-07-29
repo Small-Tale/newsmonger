@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import type { StateResp } from '../../src/api/schemas.js';
+import type { DiscoverUsageResp, StateResp } from '../../src/api/schemas.js';
 import { buildDiagnostics, formatDuration, runRows } from '../../src/client/diagnostics.js';
 
 function state(over: Partial<StateResp> = {}): StateResp {
@@ -63,7 +63,7 @@ function state(over: Partial<StateResp> = {}): StateResp {
   };
 }
 
-const OPTS = { includeTopicNames: false, userAgent: 'TestAgent/1.0', appVersion: '0.1.0' };
+const OPTS = { includeTopicNames: false, userAgent: 'TestAgent/1.0', appVersion: '0.1.0', discovery: null };
 
 describe('runRows (NEWS-88)', () => {
   it('resolves the topic name and derives a duration and cost', () => {
@@ -157,5 +157,70 @@ describe('buildDiagnostics (NEWS-88)', () => {
     expect(text).not.toContain('cost');
     expect(text).not.toContain('$');
     expect(text).not.toContain('budget');
+  });
+});
+
+
+describe('the discovery section (NEWS-130)', () => {
+  const call = (over: Partial<DiscoverUsageResp['recent'][number]> = {}): DiscoverUsageResp['recent'][number] => ({
+    at: '2026-07-29T10:00:00.000Z',
+    scope: 'describe',
+    provider: 'anthropic',
+    model: 'claude-opus-4-8',
+    status: 'succeeded',
+    returned: 6,
+    cached: false,
+    error: null,
+    ...over,
+  });
+
+  it('says so when the log could not be read, rather than omitting the section', () => {
+    // A bundle that silently lacks a section reads as "no calls were made".
+    expect(buildDiagnostics(state(), OPTS)).toContain('(unavailable)');
+  });
+
+  it('distinguishes no calls from an unreadable log', () => {
+    const text = buildDiagnostics(state(), { ...OPTS, discovery: { calls: 0, recent: [] } });
+    expect(text).toContain('(no discovery calls this session)');
+  });
+
+  it('summarises the cost picture: total, cached and failed', () => {
+    const text = buildDiagnostics(state(), {
+      ...OPTS,
+      discovery: { calls: 9, recent: [call(), call({ cached: true }), call({ status: 'failed' })] },
+    });
+    expect(text).toContain('9 calls this session');
+    expect(text).toContain('1 of the last 3 served from cache');
+    expect(text).toContain('1 failed');
+  });
+
+  it('records the provider for a billed call and “cache” for a free one', () => {
+    const text = buildDiagnostics(state(), {
+      ...OPTS,
+      discovery: { calls: 2, recent: [call(), call({ cached: true, provider: null, model: null })] },
+    });
+    expect(text).toContain('anthropic/claude-opus-4-8');
+    expect(text).toContain('· cache ·');
+  });
+
+  it('carries the error text of a failed call', () => {
+    const text = buildDiagnostics(state(), {
+      ...OPTS,
+      discovery: { calls: 1, recent: [call({ status: 'failed', error: 'rate limited' })] },
+    });
+    expect(text).toContain('error: rate limited');
+  });
+
+  it('never carries the free-text query — only the scope kind', () => {
+    // The query is what a user said about their own interests: user content in
+    // the same sense a topic name is (FR-7.13), and a bundle is usually pasted
+    // somewhere public. The recorder stores only the kind, so this is safe by
+    // construction — this test is what keeps it that way.
+    const text = buildDiagnostics(state(), {
+      ...OPTS,
+      discovery: { calls: 1, recent: [call({ scope: 'describe' })] },
+    });
+    expect(text).toContain('describe');
+    expect(JSON.stringify(Object.keys(call()))).not.toContain('query');
   });
 });
