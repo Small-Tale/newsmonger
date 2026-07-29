@@ -865,6 +865,50 @@ async function openExportDialog(page: Page): Promise<void> {
   await expect(page.locator('.dialog.export-dialog')).toBeVisible();
 }
 
+test('the export button is filled, and its icon says download (NEWS-161)', async ({ page }) => {
+  await page.goto('/');
+  await openSettingsTab(page, 'Data');
+  const button = page.locator('.export-row .btn');
+  await expect(button).toBeVisible();
+
+  const m = await button.evaluate((el) => {
+    const svg = el.querySelector('svg');
+    const label = [...el.childNodes].find((n) => n.nodeType === Node.TEXT_NODE && n.textContent?.trim() !== '');
+    if (!svg || !label) return null;
+    const range = document.createRange();
+    range.selectNode(label);
+    const text = range.getBoundingClientRect();
+    const glyph = svg.getBoundingClientRect();
+    const style = getComputedStyle(el);
+    return {
+      offset: Math.abs(glyph.top + glyph.height / 2 - (text.top + text.height / 2)),
+      background: style.backgroundColor,
+      // `download` is an arrow into a tray; `share-2` is three linked circles.
+      // Asking what the glyph is *made of* survives a resize or a recolour, and
+      // names the actual complaint: it was drawing the wrong action.
+      circles: svg.querySelectorAll('circle').length,
+      polylines: svg.querySelectorAll('polyline').length,
+    };
+  });
+  expect(m).not.toBeNull();
+
+  // The icon sits on the label's centre line, not on its baseline.
+  expect(m?.offset ?? 99, 'icon vs label centre').toBeLessThan(1.5);
+
+  // A download action, not a share action.
+  expect(m?.circles, 'share-2 draws three circles; download draws none').toBe(0);
+  expect(m?.polylines, 'the arrowhead').toBeGreaterThan(0);
+
+  // Filled, not outlined — it is the only action on this tab and was reading as
+  // an afterthought. Asserted as "not the plain button's panel fill" rather than
+  // as a hex, so it holds in both themes.
+  await expect(button).toHaveClass(/primary/);
+  const panel = await page.evaluate(() => getComputedStyle(document.body).getPropertyValue('--panel').trim());
+  expect(m?.background).not.toBe(panel);
+
+  await closeSettings(page);
+});
+
 test('an export link actually downloads in a browser (NEWS-157)', async ({ page }) => {
   // The link being well-formed was already asserted; that it *does* something
   // when clicked was not, which is how a dead button went unnoticed.

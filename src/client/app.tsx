@@ -1815,8 +1815,12 @@ function settingsPanelJsx(s: AppState): SafeHtml {
             had no way to be asked for — and adding the fourth would have made a
             row of four buttons naming a two-part choice. */}
         <div class="export-row">
-          <button class="btn" type="button" data-action="open-export">
-            {icon('share', 14)} Export stories…
+          {/* `download`, not `share` (NEWS-161): this writes a file to disk, it
+              does not hand anything to another person or app — the share graph
+              named the wrong action. `primary` because it is the only action in
+              the Data tab and was reading as an afterthought. */}
+          <button class="btn primary" type="button" data-action="open-export">
+            {icon('download', 15)} Export stories…
           </button>
         </div>
         <p class="note">

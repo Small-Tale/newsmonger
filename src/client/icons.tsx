@@ -30,6 +30,7 @@ export type IconName =
   | 'ok'
   | 'warn'
   | 'arrow'
+  | 'download'
   | 'bookmark'
   | 'share'
   | 'star'
@@ -223,6 +224,14 @@ function paths(name: IconName): SafeHtml {
       return (
         <g>
           <path d="M17 3a2 2 0 0 1 2 2v15a1 1 0 0 1-1.496.868l-4.512-2.578a2 2 0 0 0-1.984 0l-4.512 2.578A1 1 0 0 1 5 20V5a2 2 0 0 1 2-2z" />
+        </g>
+      );
+    case 'download': // lucide `download` — an arrow into a tray, not a share graph
+      return (
+        <g>
+          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+          <polyline points="7 10 12 15 17 10" />
+          <line x1="12" x2="12" y1="15" y2="3" />
         </g>
       );
     case 'share': // share-2

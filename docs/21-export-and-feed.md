@@ -36,6 +36,10 @@ See also [11 — Story Actions](11-story-actions.md) (bookmarking) and [4 — CL
 
   The Export control stays an **`<a>` with a real `href`**, not a button with a click handler, so the FR-21.8 Tauri routing keeps working unchanged. It closes the dialog on the *next tick* rather than synchronously, so the anchor is not removed inside its own click handler — defensive rather than a fix for something observed (Chromium tolerates either), kept because the WKWebView is the environment that matters here and cannot be tested from this side.
 
+- **FR-21.11** *(Shipped, NEWS-161)* The button is **filled, and carries a `download` icon**. It shipped outlined with `share-2` — three linked circles, which name handing something to another person or app. This writes a file to disk. It is also the only action on the Data tab, and an outlined button there read as an afterthought.
+
+  Its icon sits on the label's **centre line**: the row's `.btn` is a flex row, without which a 15px glyph is an inline box on the 13px text's baseline and rides visibly high. All three are measured in `tests/e2e/app.spec.ts` — centre offset under 1.5px, the glyph asserted by *what it is made of* (a `polyline` arrowhead and no `circle`s, which survives a resize or recolour), and the fill compared against `--panel` rather than a hex so it holds in both themes.
+
 - **FR-21.10** *(Shipped, NEWS-160)* The dialog's third scope is **One topic**, revealing a picker of the watched topics in sidebar order. `scope=topic` had worked on all three endpoints since NEWS-85 and was covered by unit tests, but nothing in the UI could ask for it — a documented, tested capability reachable only by hand-assembling a URL.
 
   Choosing the scope **lands on a topic** rather than on nothing. This is the one place the DOM and the store can disagree: a `<select>` with no `selected` option still displays its first one, so leaving the store's `topicId` null shows a picker that looks chosen beside an Export button that is disabled. The E2E asserts the Export control is live *before* touching the picker, which is the only ordering that catches it.

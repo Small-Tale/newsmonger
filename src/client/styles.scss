@@ -1622,6 +1622,15 @@ h2.eyebrow {
   flex-wrap: wrap;
   gap: 8px;
   margin: 0 0 10px;
+
+  // The button is a flex row so its icon sits on the label's centre line
+  // (NEWS-161). Without it the glyph is an inline box on the text baseline, and
+  // a 15px icon beside 13px text rides visibly high.
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+  }
 }
 
 // An <a> styled as a button, wherever it appears. Scoped to `.export-row` until
