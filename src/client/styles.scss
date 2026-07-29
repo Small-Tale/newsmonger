@@ -378,15 +378,19 @@ body {
   border-bottom: 1px solid var(--line);
 }
 
+// The masthead is the wordmark asset itself (NEWS-175). Height drives the size
+// and width follows from the SVG's own 480:100 ratio, so the intrinsic
+// width/height on the <img> still reserve the right box before it decodes and
+// the header never shifts. `display: block` drops the inline baseline gap that
+// would otherwise push the mark off-centre from the sidebar toggle beside it.
 .wordmark {
   margin: 0;
-  font-family: var(--serif);
-  font-size: 34px;
-  font-weight: 600;
-  letter-spacing: -0.015em;
+  line-height: 0;
 
-  .mark-dot {
-    color: var(--pine);
+  img {
+    display: block;
+    height: 30px;
+    width: auto;
   }
 }
 

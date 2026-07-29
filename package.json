@@ -15,7 +15,7 @@
     "dev": "npm run build:client:dev && tsx src/cli.ts",
     "dev:server": "npm run build:client:dev && tsx src/cli.ts --no-open --strict-port",
     "build": "tsup",
-    "build:client": "node -e \"require('fs').mkdirSync('dist/client',{recursive:true})\" && node -e \"for (const f of ['favicon.svg','logo-full-bleed.svg']) require('fs').copyFileSync('assets/'+f,'dist/client/'+f)\" && npx esbuild src/client/app.tsx --bundle --format=iife --outfile=dist/client/app.global.js --target=es2020 --sourcemap --jsx=automatic --jsx-import-source=kerfjs --define:__KERF_DEV__=false && npx sass src/client/styles.scss dist/client/styles.css --style compressed --no-source-map",
+    "build:client": "node -e \"require('fs').mkdirSync('dist/client',{recursive:true})\" && node -e \"for (const f of ['favicon.svg','logo-full-bleed.svg','wordmark-light.svg','wordmark-dark.svg']) require('fs').copyFileSync('assets/'+f,'dist/client/'+f)\" && npx esbuild src/client/app.tsx --bundle --format=iife --outfile=dist/client/app.global.js --target=es2020 --sourcemap --jsx=automatic --jsx-import-source=kerfjs --define:__KERF_DEV__=false && npx sass src/client/styles.scss dist/client/styles.css --style compressed --no-source-map",
     "tauri": "tauri",
     "tauri:dev": "npm run build:client && tauri dev",
     "tauri:build": "tauri build",
@@ -27,7 +27,7 @@
     "lint": "eslint src/ tests/",
     "typecheck": "tsc --noEmit",
     "clean": "rm -rf dist node_modules/.cache",
-    "build:client:dev": "node -e \"require('fs').mkdirSync('dist/client',{recursive:true})\" && node -e \"for (const f of ['favicon.svg','logo-full-bleed.svg']) require('fs').copyFileSync('assets/'+f,'dist/client/'+f)\" && npx esbuild src/client/app.tsx --bundle --format=iife --outfile=dist/client/app.global.js --target=es2020 --sourcemap --jsx=automatic --jsx-import-source=kerfjs --define:__KERF_DEV__=true && npx sass src/client/styles.scss dist/client/styles.css --style compressed --no-source-map"
+    "build:client:dev": "node -e \"require('fs').mkdirSync('dist/client',{recursive:true})\" && node -e \"for (const f of ['favicon.svg','logo-full-bleed.svg','wordmark-light.svg','wordmark-dark.svg']) require('fs').copyFileSync('assets/'+f,'dist/client/'+f)\" && npx esbuild src/client/app.tsx --bundle --format=iife --outfile=dist/client/app.global.js --target=es2020 --sourcemap --jsx=automatic --jsx-import-source=kerfjs --define:__KERF_DEV__=true && npx sass src/client/styles.scss dist/client/styles.css --style compressed --no-source-map"
   },
   "files": [
     "dist",

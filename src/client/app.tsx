@@ -2100,8 +2100,15 @@ function appJsx(): SafeHtml {
           >
             {icon('panel', 17)}
           </button>
+          {/* The wordmark is the brand asset, not styled text (NEWS-175). The
+              <picture> swaps it on `prefers-color-scheme` with no JS — the app
+              has no manual theme toggle — so it can never flash the wrong one.
+              The <h1> and the `alt` keep the outline and accessible name. */}
           <h1 class="wordmark">
-            Newsmonger<span class="mark-dot">.</span>
+            <picture>
+              <source srcSet="/static/wordmark-dark.svg" media="(prefers-color-scheme: dark)" />
+              <img src="/static/wordmark-light.svg" alt="Newsmonger" width="480" height="100" />
+            </picture>
           </h1>
         </div>
         <div class="header-controls">

@@ -29,8 +29,27 @@ async function closeSettings(page: Page): Promise<void> {
 
 test('loads the app shell', async ({ page }) => {
   await page.goto('/');
-  await expect(page.locator('h1')).toHaveText('Newsmonger.');
+  // The masthead is the wordmark asset (NEWS-175), so the accessible name comes
+  // from its `alt` rather than from text content.
+  await expect(page.locator('h1 img')).toHaveAttribute('alt', 'Newsmonger');
   await expect(page.locator('.add-topic input')).toBeVisible();
+});
+
+test('the masthead wordmark actually loads', async ({ page }) => {
+  await page.goto('/');
+  // `alt` alone would still pass with a 404 behind it, and the asset reaches
+  // dist/client only via the build's copy list — exactly the step a future
+  // change forgets. Assert the decoded image, not just the markup.
+  const decoded = await page
+    .locator('h1 img')
+    .evaluate((el) => (el as HTMLImageElement).decode().then(() => (el as HTMLImageElement).naturalWidth));
+  expect(decoded).toBeGreaterThan(0);
+
+  for (const file of ['wordmark-light.svg', 'wordmark-dark.svg']) {
+    const res = await page.request.get(`/static/${file}`);
+    expect(res.status()).toBe(200);
+    expect(res.headers()['content-type']).toContain('image/svg+xml');
+  }
 });
 
 test('adds a topic and shows it in the list', async ({ page }) => {
