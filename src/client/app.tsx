@@ -29,6 +29,7 @@ import {
   refreshKeys,
   refreshProviders,
   refreshState,
+  renameTopic,
   reportForeground,
   saveKey,
   setItemOffTopic,
@@ -48,13 +49,6 @@ import {
 } from './api.js';
 import { outletFor, publishedLabel } from './attribution.js';
 import { buildDiagnostics, formatDuration, runRows } from './diagnostics.js';
-import {
-  animationDurationMs,
-  DEFAULT_TARGET_MS,
-  estimateTargetMs,
-  readDurations,
-  recordDuration,
-} from './discover-progress.js';
 import type { TunerState } from './discover.js';
 import {
   currentCandidate,
@@ -70,6 +64,13 @@ import {
   startTuner,
   tunerRationale,
 } from './discover.js';
+import {
+  animationDurationMs,
+  DEFAULT_TARGET_MS,
+  estimateTargetMs,
+  readDurations,
+  recordDuration,
+} from './discover-progress.js';
 import { currentFailure } from './failure.js';
 import { icon } from './icons.js';
 import { ensureNotificationPermission, syncTauriNotificationPermission } from './notifications.js';
@@ -690,6 +691,62 @@ function guidanceDialogJsx(topic: Topic): SafeHtml {
   );
 }
 
+
+/**
+ * Rename a topic (NEWS-139).
+ *
+ * The clear-results choice is offered **only when there are results to clear**,
+ * and it is off by default: renaming is usually a correction — a typo, a better
+ * wording — and discarding a topic's history should never be something that
+ * happens because a checkbox was already ticked.
+ */
+function renameDialogJsx(topic: Topic, itemCount: number): SafeHtml {
+  return (
+    <div class="dialog-backdrop" data-action="rename-backdrop">
+      <div class="dialog rename" role="dialog" aria-modal="true" aria-label={`Rename ${topic.name}`}>
+        <form data-save-rename={topic.id}>
+          <h2>Rename “{topic.name}”</h2>
+          <p class="dialog-hint">
+            The name is what the model is asked about, so changing it changes what gets found from the next
+            check onwards.
+          </p>
+          <input
+            type="text"
+            name="topic-name"
+            class="rename-input"
+            maxLength={200}
+            autocomplete="off"
+            value={topic.name}
+            data-morph-skip-children
+          />
+          {/* Always-present container so the checkbox appearing can't restructure
+              the form around it (docs/3-ui.md). */}
+          <div class="rename-clear">
+            {itemCount > 0 ? (
+              <label class="checkbox">
+                <input type="checkbox" name="clear-items" />
+                <span>
+                  Also clear the {String(itemCount)} {itemCount === 1 ? 'story' : 'stories'} already found for
+                  this topic
+                </span>
+              </label>
+            ) : (
+              ''
+            )}
+          </div>
+          <div class="confirm-actions">
+            <button class="btn" type="button" data-action="close-rename">
+              Cancel
+            </button>
+            <button class="btn primary" type="submit">
+              Rename
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
 
 /**
  * Discovery inside onboarding's Topics step (NEWS-128, FR-24.18).
@@ -1738,6 +1795,16 @@ function contextMenuJsx(menu: NonNullable<AppState['contextMenu']>, topics: Topi
           class="menu-item"
           role="menuitem"
           type="button"
+          data-menu-action="rename"
+          disabled={only === undefined ? true : undefined}
+        >
+          {icon('pencil')}
+          <span>Rename…</span>
+        </button>
+        <button
+          class="menu-item"
+          role="menuitem"
+          type="button"
           data-menu-action="guidance"
           disabled={only === undefined ? true : undefined}
         >
@@ -1839,6 +1906,7 @@ function appJsx(): SafeHtml {
   // Resolved from server state, so a topic deleted while its dialog is open
   // simply closes it rather than rendering a stale name.
   const guidanceTarget = s.topics.find((t) => t.id === s.guidanceTopicId);
+  const renameTarget = s.topics.find((t) => t.id === s.renameTopicId);
   const anyChecking = s.checking.length > 0;
   // Only warn about a topic whose *latest* run failed — not a stale failure from
   // one that has since recovered (NEWS-41).
@@ -1914,6 +1982,9 @@ function appJsx(): SafeHtml {
       <div id="item-menu-slot">{s.itemMenu !== null ? itemMenuJsx(s.itemMenu, feedAndFlagged()) : ''}</div>
       <div id="confirm-slot">{s.confirm !== null ? confirmDialogJsx(s.confirm) : ''}</div>
       <div id="guidance-slot">{guidanceTarget !== undefined ? guidanceDialogJsx(guidanceTarget) : ''}</div>
+      <div id="rename-slot">
+        {renameTarget === undefined ? '' : renameDialogJsx(renameTarget, s.itemCountsByTopic[renameTarget.id] ?? 0)}
+      </div>
       <div id="privacy-slot">{s.privacyOpen ? privacyDialogJsx(s) : ''}</div>
       <div id="discover-slot">{s.discover !== null ? discoverDialogJsx(s.discover) : ''}</div>
       {/* Always present because it is a **live region**: assistive technology
@@ -2324,6 +2395,12 @@ function runTopicAction(action: string, ids: string[]): void {
       if (only !== undefined) appStore.actions.openGuidance(only.id);
       break;
     }
+    case 'rename': {
+      // Single-target only, for the same reason guidance is: there is one name.
+      const only = targets.length === 1 ? targets[0] : undefined;
+      if (only !== undefined) appStore.actions.openRename(only.id);
+      break;
+    }
     case 'review-flagged':
       // Enter review mode for the targeted topics (the menu item is disabled
       // when none of them have flagged stories).
@@ -2490,6 +2567,27 @@ async function loadMoreSuggestions(): Promise<void> {
       loadingMore: false,
       error: err instanceof Error ? err.message : String(err),
     });
+  }
+}
+
+/**
+ * Rename a topic, and say plainly what happened (NEWS-139).
+ *
+ * The dialog stays open on failure — a duplicate name is something to correct
+ * in the field the user is already looking at, not a banner behind a closed
+ * dialog. It closes only once the rename has actually landed.
+ */
+async function saveRename(id: string, name: string, clearItems: boolean): Promise<void> {
+  try {
+    await renameTopic(id, name, clearItems);
+    appStore.actions.closeRename();
+    showToast(
+      clearItems
+        ? `Renamed to “${name}” — previous stories cleared, next check starts fresh`
+        : `Renamed to “${name}” — applies from the next check`,
+    );
+  } catch (err) {
+    appStore.actions.setError(err instanceof Error ? err.message : String(err));
   }
 }
 
@@ -2884,6 +2982,25 @@ function wireEvents(root: HTMLElement): void {
   });
 
   // --- topic guidance (NEWS-80) --------------------------------------------
+
+  void delegate(root, 'submit', '[data-save-rename]', (e, form) => {
+    e.preventDefault();
+    const id = form.getAttribute('data-save-rename');
+    const field = form.querySelector<HTMLInputElement>('input[name=topic-name]');
+    const clearBox = form.querySelector<HTMLInputElement>('input[name=clear-items]');
+    if (id === null || !field) return;
+    const name = field.value.trim();
+    if (name === '') return;
+    void saveRename(id, name, clearBox?.checked === true);
+  });
+
+  void delegate(root, 'click', '[data-action=close-rename]', () => {
+    appStore.actions.closeRename();
+  });
+
+  void delegate(root, 'click', '[data-action=rename-backdrop]', (e, el) => {
+    if (e.target === el) appStore.actions.closeRename();
+  });
 
   void delegate(root, 'submit', '[data-save-guidance]', (e, form) => {
     e.preventDefault();

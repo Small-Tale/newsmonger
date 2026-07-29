@@ -78,7 +78,7 @@ tests/
   helpers/            tmp.ts (tmp data dirs), provider.ts (asResolver/fakeProvider)
   unit/               vitest: dedupe, store, checks, scheduler, config, parse-result, providers, openai, api, api-keys, api-keys-routes, attendance, catch-up, sanitize, origin-guard, guidance, key-verify, diagnostics, retention, export, daily-schedule, verify-links, attribution, concurrency, suggest-prompt, suggest-providers, discovery, discover-client, discover-progress
   e2e/                playwright, serial, mock AI (--ai-test), port 4189: app.spec.ts, keys.spec.ts, topics.spec.ts, a11y.spec.ts (axe-core, both themes), categories.spec.ts (NEWS-97), discover.spec.ts (NEWS-126), layout.spec.ts (full-window layout + column count at several viewports, NEWS-96). `resetTopics` in a beforeAll gives every attempt — first run or serial retry — an empty server (NEWS-101)
-docs/                 numbered requirements (1–21), ai/ summaries, manual-test-plan.md
+docs/                 numbered requirements (1–25), ai/ summaries, manual-test-plan.md
 ```
 
 ## Data schema (`<data-dir>/news.db`, SQLite — NEWS-94)
@@ -152,6 +152,7 @@ Data dir: `--data-dir` flag → `NEWS_DATA_DIR` → `~/.news`. Also holds `news.
 | Privacy dialog | `privacyDialogJsx` + `#privacy-slot` + the footer `[data-action=open-privacy]`. See FR-3.47 |
 | Icons, favicon, web app manifest | `assets/*.svg` sources; `manifest()` + the `/manifest.webmanifest` route in `src/routes/pages.tsx`; `<link>`s in `src/components/layout.tsx`. See `docs/3-ui.md` FR-3.43–3.44 |
 | Which filter pills are shown | `visibleCategories`/`visibleSubcategories`/`hasUncategorized` in `src/categories.ts` (pure, over the topic list). See `docs/22-topic-categories.md` FR-22.13–22.15 |
+| Renaming a topic / clearing its stories | `Store.renameTopic` / `clearItemsForTopic` / `itemCountsByTopic`; `PATCH /api/topics/:id { name, clearItems }`; `renameDialogJsx` + `saveRename` in `client/app.tsx`. See `docs/25-topic-editing.md` |
 | Sidebar sort order / section headings | `src/client/topic-sort.ts` (`sortTopics`, `topicRows`); `TOPIC_SORTS`/`TOPIC_SORT_LABELS` in `client/stores.ts`; `.topic-section` in `styles.scss`. See `docs/3-ui.md` FR-3.2a |
 | Section filter bar / sidebar pills | `filterBarJsx` + `[data-filter-category]`/`[data-filter-subcategory]` delegates in `client/app.tsx`; `.filter-bar` in `styles.scss`; server filter in `Store.queryItems`. See `docs/22-topic-categories.md` FR-22.9–22.12 |
 | Automatic topic classification | `needsClassifying`/`classifierOptions`/`applyClassification` in `checks.ts`; prompt + parsing in `ai/prompt.ts`. See `docs/22-topic-categories.md` FR-22.8 |

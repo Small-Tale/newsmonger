@@ -466,10 +466,8 @@ test('clean up the topics this spec created', async ({ page }) => {
 /** Perceived lightness of an element's own background, 0 (black) – 1 (white). */
 async function backgroundLightness(page: Page, selector: string): Promise<number> {
   return page.locator(selector).first().evaluate((el) => {
-    const [r, g, b] = window
-      .getComputedStyle(el)
-      .backgroundColor.match(/[\d.]+/g)!
-      .map(Number);
+    const parts = window.getComputedStyle(el).backgroundColor.match(/[\d.]+/g) ?? ['0', '0', '0'];
+    const [r, g, b] = parts.map(Number);
     // Rec. 601 luma — good enough to tell "dark panel" from "white box".
     return (0.299 * r + 0.587 * g + 0.114 * b) / 255;
   });
@@ -581,7 +579,7 @@ test('the privacy link sits at the foot of the sidebar, in reach (NEWS-138)', as
   // The rail is sticky, so the link stays within the viewport.
   const box = await link.boundingBox();
   const viewport = page.viewportSize();
-  expect(box!.y).toBeLessThan(viewport!.height);
+  expect(box?.y ?? Number.POSITIVE_INFINITY).toBeLessThan(viewport?.height ?? 0);
 
   // And the page footer no longer carries a second copy.
   await expect(page.locator('.app-footer [data-action=open-privacy]')).toHaveCount(0);

@@ -376,6 +376,55 @@ export class Store {
     return topic;
   }
 
+  /**
+   * Rename a topic (NEWS-139).
+   *
+   * The uniqueness check is the same one `addTopic` makes, and for the same
+   * reason: the message should name the topic rather than quote a constraint.
+   * Renaming to the name it already has is allowed — it is a no-op, not a
+   * collision with itself.
+   */
+  renameTopic(id: string, name: string): Topic {
+    const trimmed = name.trim();
+    if (trimmed === '') throw new Error('topic name must not be empty');
+    const existing = this.db
+      .prepare('SELECT id FROM topics WHERE name = ? COLLATE NOCASE AND id != ?')
+      .get(trimmed, id) as { id: string } | undefined;
+    if (existing !== undefined) throw new Error(`topic "${trimmed}" already exists`);
+    return this.updateTopic(id, 'name', trimmed);
+  }
+
+  /** How many stories a topic currently has — what a rename may be about to discard. */
+  countItemsForTopic(id: string): number {
+    const row = this.db.prepare('SELECT count(*) AS c FROM items WHERE topic_id = ?').get(id) as { c: unknown };
+    return asCount(row.c);
+  }
+
+  /**
+   * Drop a topic's stories and reset its check window (NEWS-139).
+   *
+   * Offered after a rename, where the user is saying the topic now means
+   * something else. Clearing the stories alone would leave the topic *looking*
+   * fresh while still behaving as though it had been covered up to now, so
+   * `coveredThroughAt` goes with them — the next check treats it as a first
+   * check and spans a sensible window rather than reporting nothing.
+   *
+   * The run history is deliberately **kept**: it records what the app did, not
+   * what the topic is about, and diagnostics would be poorer for losing it.
+   */
+  clearItemsForTopic(id: string): number {
+    this.db.exec('BEGIN');
+    try {
+      const info = this.db.prepare('DELETE FROM items WHERE topic_id = ?').run(id);
+      this.db.prepare('UPDATE topics SET covered_through_at = NULL WHERE id = ?').run(id);
+      this.db.exec('COMMIT');
+      return asCount(info.changes);
+    } catch (err) {
+      this.db.exec('ROLLBACK');
+      throw err;
+    }
+  }
+
   setTopicPaused(id: string, paused: boolean): Topic {
     return this.updateTopic(id, 'paused', bit(paused));
   }
@@ -623,6 +672,16 @@ export class Store {
    * "Review Flagged (N)" badge once the feed page no longer carries the full
    * item list. Topics with none are omitted.
    */
+  /** Total stories per topic (NEWS-139) — what a rename would be discarding. */
+  itemCountsByTopic(): Record<string, number> {
+    const rows = this.db
+      .prepare('SELECT topic_id AS t, count(*) AS c FROM items GROUP BY topic_id')
+      .all() as { t: string; c: unknown }[];
+    const counts: Record<string, number> = {};
+    for (const row of rows) counts[row.t] = asCount(row.c);
+    return counts;
+  }
+
   flaggedCountsByTopic(): Record<string, number> {
     const rows = this.db
       .prepare('SELECT topic_id AS t, count(*) AS c FROM items WHERE off_topic = 1 GROUP BY topic_id')

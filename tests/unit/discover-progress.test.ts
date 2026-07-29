@@ -24,7 +24,7 @@ function installStorage(initial: Record<string, string> = {}): Map<string, strin
     get length() {
       return store.size;
     },
-  } as Storage;
+  };
   return store;
 }
 

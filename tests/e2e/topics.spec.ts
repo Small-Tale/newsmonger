@@ -101,10 +101,10 @@ test('right-click opens a menu with icons and separators', async ({ page }) => {
   await row(page, 'Alpha Topic').click({ button: 'right' });
   await expect(page.locator('.menu')).toBeVisible();
 
-  // Check, Pause, High priority, Guidance, Solo, Review Flagged, Delete
-  // (NEWS-61 added Review Flagged; NEWS-80 added Guidance).
-  await expect(page.locator('.menu-item')).toHaveCount(7);
-  await expect(page.locator('.menu .icon')).toHaveCount(7);
+  // Check, Pause, High priority, Rename, Guidance, Solo, Review Flagged, Delete
+  // (NEWS-61 added Review Flagged; NEWS-80 Guidance; NEWS-139 Rename).
+  await expect(page.locator('.menu-item')).toHaveCount(8);
+  await expect(page.locator('.menu .icon')).toHaveCount(8);
   await expect(page.locator('.menu-sep')).toHaveCount(2);
   await expect(page.locator('.menu-item span').first()).toHaveText('Check now');
 
@@ -465,4 +465,69 @@ test('sorting by section groups the rail under headings (NEWS-140)', async ({ pa
   // Restore the default for the rest of the serial suite.
   await page.selectOption('[data-action=topic-sort]', 'alpha');
   await expect(page.locator('.topic-section')).toHaveCount(0);
+});
+
+test('renaming a topic keeps its stories by default (NEWS-139)', async ({ page }) => {
+  await page.goto('/');
+  await page.fill('.add-topic input', 'Renameable');
+  await page.press('.add-topic input', 'Enter');
+  const row = page.locator('.topic', { hasText: 'Renameable' });
+  await expect(row).toBeVisible();
+  // Wait for the first check so there are stories to keep.
+  await expect(page.locator('.item', { hasText: 'Renameable' }).first()).toBeVisible({ timeout: 15_000 });
+  const before = await page.locator('.item').count();
+
+  await topicAction(page, row, 'rename');
+  await expect(page.locator('.dialog.rename')).toBeVisible();
+  // The clear option is offered because there is something to clear, and it is
+  // unticked: renaming is usually a correction, not a reset.
+  const clear = page.locator('.dialog.rename input[name=clear-items]');
+  await expect(clear).toBeVisible();
+  await expect(clear).not.toBeChecked();
+
+  await page.fill('.dialog.rename input[name=topic-name]', 'Renamed Topic');
+  await page.click('.dialog.rename button[type=submit]');
+
+  await expect(page.locator('.dialog.rename')).toHaveCount(0);
+  await expect(page.locator('.topic', { hasText: 'Renamed Topic' })).toBeVisible();
+  await expect(page.locator('.item')).toHaveCount(before);
+});
+
+test('renaming can clear that topic’s stories, and only that topic’s', async ({ page }) => {
+  await page.goto('/');
+  const otherBefore = await page.locator('.item').count();
+  const target = page.locator('.topic', { hasText: 'Renamed Topic' });
+  const targetStories = await page.locator('.item', { hasText: 'Renamed Topic' }).count();
+  expect(targetStories).toBeGreaterThan(0);
+
+  await topicAction(page, target, 'rename');
+  await page.fill('.dialog.rename input[name=topic-name]', 'Cleared Topic');
+  await page.check('.dialog.rename input[name=clear-items]');
+  await page.click('.dialog.rename button[type=submit]');
+
+  await expect(page.locator('.dialog.rename')).toHaveCount(0);
+  await expect(page.locator('.topic', { hasText: 'Cleared Topic' })).toBeVisible();
+  // Its stories are gone; every other topic's are untouched.
+  await expect(page.locator('.item', { hasText: 'Cleared Topic' })).toHaveCount(0);
+  await expect(page.locator('.item')).toHaveCount(otherBefore - targetStories);
+});
+
+test('a duplicate name is refused without closing the dialog', async ({ page }) => {
+  await page.goto('/');
+  await page.fill('.add-topic input', 'Occupied Name');
+  await page.press('.add-topic input', 'Enter');
+  await expect(page.locator('.topic', { hasText: 'Occupied Name' })).toBeVisible();
+
+  await topicAction(page, page.locator('.topic', { hasText: 'Cleared Topic' }), 'rename');
+  await page.fill('.dialog.rename input[name=topic-name]', 'Occupied Name');
+  await page.click('.dialog.rename button[type=submit]');
+
+  // Stays open so the name can be corrected where the user is already looking.
+  await expect(page.locator('.dialog.rename')).toBeVisible();
+  await expect(page.locator('#banners')).toContainText('already exists');
+  await page.click('[data-action=close-rename]');
+
+  for (const name of ['Cleared Topic', 'Occupied Name']) {
+    await topicAction(page, page.locator('.topic', { hasText: name }), 'delete');
+  }
 });

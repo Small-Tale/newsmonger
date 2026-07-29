@@ -20,6 +20,12 @@ Status markers: **Shipped** · **Partial** · **Design only** · **Deferred**. S
 - FR-24.18 **Shipped** (NEWS-128): onboarding's Topics step offers suggestions as more of the same chips (one attribute, one handler), created with their guidance/classification. Starter chips kept as the documented fallback when no provider would resolve; the gate mirrors `resolveProvider`, and `AUTO_ORDER` moved to `src/ai/types.ts` so the client shares one definition.
 - Cost is the governing constraint: every call recorded and capped like a check (FR-24.14), in-memory cache per request (FR-24.15), nothing on a timer (FR-24.16).
 
+## [25 — Topic Editing](../25-topic-editing.md) — **Shipped** (NEWS-139)
+
+- FR-25.1–25.4 rename from the topic menu; unique case-insensitively (renaming to the same name is a no-op, not a self-collision); a duplicate is a **409, not a 404**, and the dialog stays open so the name can be corrected in place.
+- FR-25.5–25.9 optional clearing of that topic's stories, offered only when there are any and unticked by default. Clearing also resets `coveredThroughAt` — stories alone would leave the topic looking fresh while still behaving as covered, so the next check would report nothing. Run history is kept (it is about the app, not the topic). `clearItems` requires `name`, and the rename is applied **first** so a 409 can never land after the stories are gone.
+- Deliberately unchanged by a rename: the **category** (re-classifying would move topics in the filter bar as a side effect of fixing a typo; FR-22.7 says a manual choice survives) and **guidance**.
+
 ## [1 — Topics and Scheduling](../1-topics-and-scheduling.md) — Shipped
 
 - FR-1.14 **two schedule modes** — `interval` (default) or `daily` at fixed local times — NEWS-84: **Shipped**. A missed slot stays outstanding rather than skipping to tomorrow; before the first slot the obligation is yesterday's last; high-priority topics stay on their interval.

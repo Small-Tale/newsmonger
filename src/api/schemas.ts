@@ -36,6 +36,15 @@ export const UpdateTopicReqSchema = z
   .object({
     paused: z.boolean(),
     highPriority: z.boolean(),
+    /** Rename (NEWS-139). Same bounds as creation — it is the same field. */
+    name: z.string().min(1).max(200),
+    /**
+     * Drop the topic's existing stories (NEWS-139).
+     *
+     * Only meaningful alongside `name`: it exists so a rename that changes what
+     * a topic *means* can discard results that were about the old meaning.
+     */
+    clearItems: z.boolean(),
     guidance: z.string().max(MAX_GUIDANCE_LENGTH),
     /**
      * Category slug (NEWS-97). A plain nullable string, not an enum — the
@@ -51,6 +60,12 @@ export const UpdateTopicReqSchema = z
   // bare category anyway, and storing it would look like a classification.
   .refine((v) => !(v.subcategory !== undefined && v.category === undefined), {
     message: 'subcategory requires category',
+  })
+  // Clearing stories is a consequence of renaming, not an action of its own —
+  // there is a delete for that. Accepting it alone would make `PATCH` a way to
+  // wipe a topic's history with no rename to justify it.
+  .refine((v) => !(v.clearItems === true && v.name === undefined), {
+    message: 'clearItems requires name',
   });
 export type UpdateTopicReq = z.infer<typeof UpdateTopicReqSchema>;
 
@@ -209,6 +224,14 @@ export const StateRespSchema = z.object({
   latestItemIds: z.array(z.string()).default([]),
   /** Off-topic story count per topic, for the "Review Flagged (N)" badge (NEWS-76). */
   flaggedByTopic: z.record(z.string(), z.number().int()).default({}),
+  /**
+   * Total story count per topic (NEWS-139).
+   *
+   * The rename dialog only offers to clear results when there are results to
+   * clear, and asking the server per-dialog would put a round trip in the way of
+   * opening it. Counts are cheap; the stories themselves stay on `/api/items`.
+   */
+  itemCountsByTopic: z.record(z.string(), z.number().int()).default({}),
   settings: SettingsSchema,
   runs: z.array(CheckRunSchema),
   checking: z.array(z.string()),

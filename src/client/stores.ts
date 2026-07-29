@@ -128,6 +128,8 @@ export interface AppState {
   feedTotal: number;
   /** Off-topic count per topic, for the "Review Flagged (N)" badge (NEWS-76). */
   flaggedByTopic: Record<string, number>;
+  /** Total stories per topic (NEWS-139) — what a rename would discard. */
+  itemCountsByTopic: Record<string, number>;
   settings: StateResp['settings'];
   runs: StateResp['runs'];
   checking: string[];
@@ -250,6 +252,8 @@ export interface AppState {
    * dialog can't drift from what was saved.
    */
   guidanceTopicId: string | null;
+  /** Id of the topic being renamed (NEWS-139), or null. Ephemeral, like every dialog. */
+  renameTopicId: string | null;
   /** True when the user tried to enable notifications but permission was refused. */
   notifyPermissionDenied: boolean;
   /**
@@ -373,6 +377,7 @@ export const appStore = defineStore({
     feedItems: [],
     feedTotal: 0,
     flaggedByTopic: {},
+    itemCountsByTopic: {},
     settings: {
       checkIntervalMs: 24 * 60 * 60 * 1000,
       highPriorityIntervalMs: 24 * 60 * 60 * 1000,
@@ -418,6 +423,7 @@ export const appStore = defineStore({
     reviewTopicIds: [],
     confirm: null,
     guidanceTopicId: null,
+    renameTopicId: null,
     notifyPermissionDenied: false,
     dismissedRunId: readDismissedRunId(),
     dismissedBehind: false,
@@ -544,6 +550,12 @@ export const appStore = defineStore({
     },
     closeConfirm: () => {
       set({ ...get(), confirm: null });
+    },
+    openRename: (renameTopicId: string) => {
+      set({ ...get(), renameTopicId });
+    },
+    closeRename: () => {
+      set({ ...get(), renameTopicId: null });
     },
     openGuidance: (guidanceTopicId: string) => {
       set({ ...get(), guidanceTopicId });

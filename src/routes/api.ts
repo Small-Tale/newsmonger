@@ -80,6 +80,7 @@ export function registerApi(app: Hono<AppEnv>): void {
       topics: store.listTopics(),
       latestItemIds: store.latestItemIds(50),
       flaggedByTopic: store.flaggedCountsByTopic(),
+      itemCountsByTopic: store.itemCountsByTopic(),
       settings,
       runs: store.listRuns(20),
       checking: runner.checking(),
@@ -160,7 +161,7 @@ export function registerApi(app: Hono<AppEnv>): void {
     const body = await parseBody(c, UpdateTopicReqSchema);
     if (!body) {
       return c.json(
-        { error: 'invalid request: expected { paused?, highPriority?, guidance?, category?, subcategory? }' },
+        { error: 'invalid request: expected { name?, clearItems?, paused?, highPriority?, guidance?, category?, subcategory? }' },
         400,
       );
     }
@@ -168,6 +169,13 @@ export function registerApi(app: Hono<AppEnv>): void {
     const id = c.req.param('id');
     try {
       let topic;
+      // Rename first, so a name collision rejects before anything else is
+      // written — a 409 that had already cleared the stories would be the worst
+      // possible outcome of this route (NEWS-139).
+      if (body.name !== undefined) {
+        topic = store.renameTopic(id, body.name);
+        if (body.clearItems === true) store.clearItemsForTopic(id);
+      }
       if (body.paused !== undefined) topic = store.setTopicPaused(id, body.paused);
       if (body.highPriority !== undefined) topic = store.setTopicHighPriority(id, body.highPriority);
       if (body.guidance !== undefined) topic = store.setTopicGuidance(id, body.guidance);
@@ -184,7 +192,13 @@ export function registerApi(app: Hono<AppEnv>): void {
         );
       }
       return c.json(topic);
-    } catch {
+    } catch (err) {
+      // A duplicate name is a conflict the user can act on, not a missing
+      // topic — surfacing it as 404 would send them looking for the wrong thing.
+      const message = err instanceof Error ? err.message : '';
+      if (message.includes('already exists') || message.includes('must not be empty')) {
+        return c.json({ error: message }, 409);
+      }
       return c.json({ error: 'no such topic' }, 404);
     }
   });

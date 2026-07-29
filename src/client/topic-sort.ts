@@ -73,7 +73,8 @@ export type TopicRow = Topic | TopicHeading;
 
 /** Whether a row is a section heading rather than a topic. */
 export function isHeading(row: TopicRow): row is TopicHeading {
-  return 'kind' in row && row.kind === 'heading';
+  // A `Topic` has no `kind` field, so the presence of one is the discriminator.
+  return 'kind' in row;
 }
 
 /**

@@ -72,7 +72,7 @@ export async function cancelConfirm(page: Page): Promise<void> {
 export async function topicAction(
   page: Page,
   row: Locator,
-  action: 'check' | 'pause' | 'solo' | 'guidance' | 'delete',
+  action: 'check' | 'pause' | 'solo' | 'guidance' | 'rename' | 'delete',
 ): Promise<void> {
   await row.click({ button: 'right' });
   await expect(page.locator('.menu')).toBeVisible();

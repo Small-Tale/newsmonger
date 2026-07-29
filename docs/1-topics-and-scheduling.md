@@ -1,5 +1,7 @@
 # 1 — Topics and Scheduling
 
+> Renaming a topic, and optionally clearing the stories found under its old name, is covered by [25 — Topic Editing](25-topic-editing.md).
+
 The core of the app: a list of topics the user follows, checked for news on a schedule.
 
 ## Topics

@@ -2444,3 +2444,36 @@ button.off-topic-pill {
     padding-top: 2px;
   }
 }
+
+/* Rename dialog (NEWS-139). */
+.dialog.rename {
+  max-width: 440px;
+}
+
+.rename-input {
+  @extend %text-field;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+/* The clear-results choice, offered only when there is something to clear.
+   Unticked by default: renaming is usually a correction, and discarding a
+   topic's history should never happen because a box was already checked. */
+.rename-clear {
+  margin-top: 12px;
+
+  .checkbox {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    font-family: var(--sans);
+    font-size: 0.85rem;
+    color: var(--ink-soft);
+    cursor: pointer;
+  }
+
+  input {
+    margin-top: 2px;
+    flex: 0 0 auto;
+  }
+}

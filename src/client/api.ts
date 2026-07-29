@@ -199,6 +199,21 @@ export function deleteTopic(id: string): Promise<void> {
   return withRefresh(() => request(`/api/topics/${encodeURIComponent(id)}`, { method: 'DELETE' }));
 }
 
+/**
+ * Rename a topic, optionally discarding its existing stories (NEWS-139).
+ *
+ * Errors are thrown rather than folded into the global banner: a duplicate name
+ * is something the user fixes in the dialog they are already looking at.
+ */
+export async function renameTopic(id: string, name: string, clearItems: boolean): Promise<void> {
+  await request(`/api/topics/${encodeURIComponent(id)}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ name, ...(clearItems ? { clearItems: true } : {}) }),
+  });
+  await refreshState();
+  await refreshFeed();
+}
+
 export function setTopicPaused(id: string, paused: boolean): Promise<void> {
   return withRefresh(() =>
     request(`/api/topics/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify({ paused }) }),
