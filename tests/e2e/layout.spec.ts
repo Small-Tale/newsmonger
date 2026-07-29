@@ -279,8 +279,11 @@ test('the dial sits on the first line, with badges stacked under it (NEWS-163)',
     const range = document.createRange();
     range.selectNodeContents(name);
     const lines = [...range.getClientRects()];
+    // Length, not a falsy check on `lines[0]`: the element type is non-nullable
+    // here, so `!first` is dead code to the linter while still being a real
+    // runtime possibility for an empty range.
+    if (lines.length === 0) return null;
     const first = lines[0];
-    if (!first) return null;
     const d = dial.getBoundingClientRect();
     const f = flags.getBoundingClientRect();
     const box = el.getBoundingClientRect();
