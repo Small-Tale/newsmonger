@@ -211,3 +211,43 @@ test('sidebar rows are separated by whitespace, not rules (NEWS-151)', async ({ 
     await topicAction(page, page.locator('.topic', { hasText: name }), 'delete');
   }
 });
+
+test('the flag slot leaves the layout when it is empty (NEWS-152)', async ({ page }) => {
+  // `min-width: 13px` plus the row's 10px flex gap reserved 23px of every row's
+  // 320 for a star most topics don't have — 7% of the rail, taken from the topic
+  // name, which is the one thing in the row that needs the width.
+  await page.goto('/');
+  await page.fill('.add-topic input', 'Width Reclaimed');
+  await page.press('.add-topic input', 'Enter');
+  const row = page.locator('.topic', { hasText: 'Width Reclaimed' });
+  await expect(row).toBeVisible();
+
+  const measure = async (): Promise<{ main: number; row: number; flags: string } | null> =>
+    row.evaluate((el) => {
+      const main = el.querySelector('.topic-main');
+      const flags = el.querySelector('.topic-flags');
+      if (!main || !flags) return null;
+      return {
+        main: main.getBoundingClientRect().width,
+        row: el.getBoundingClientRect().width,
+        flags: getComputedStyle(flags).display,
+      };
+    });
+
+  const plain = await measure();
+  expect(plain).not.toBeNull();
+  expect(plain?.flags).toBe('none');
+  // The name column should be within a dial's width of the whole row, not a
+  // dial's width *plus* a slot standing empty.
+  expect((plain?.main ?? 0) / (plain?.row ?? 1)).toBeGreaterThan(0.85);
+
+  // …and the slot has to come back when there is something to put in it, or this
+  // "fix" would simply have hidden the high-priority star.
+  await topicAction(page, row, 'priority');
+  await expect(row.locator('.flag.high-priority')).toBeVisible();
+  const starred = await measure();
+  expect(starred?.flags).not.toBe('none');
+  expect(starred?.main ?? 0).toBeLessThan(plain?.main ?? 0);
+
+  await topicAction(page, row, 'delete');
+});

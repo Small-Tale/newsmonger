@@ -192,6 +192,10 @@ Source art lives in `assets/`, in two shapes — rounded and full-bleed — and 
 
 - **FR-3.42** *(Shipped, NEWS-113)* A source link's arrow aligns with the **first line** of the link text, not the vertical middle. Once a headline wrapped, a centred arrow pointed at the gap between two lines; it is a bullet for the first line, so it belongs beside the first line. `align-items: flex-start` plus a 2px nudge, so a 13px glyph sits on the first line's optical centre rather than riding its very top.
 
+- **FR-3.56** *(Shipped, NEWS-152)* The flag slot **leaves the layout when it is empty**. `min-width: 13px` plus the row's 10px flex gap reserved **23px of every row's 320** for a high-priority star most topics don't have — 7% of the rail, taken from the topic name, which is the one thing in the row that needs the width. Measured: the name column goes from 255px to 278px.
+
+  The slot stays *in the DOM* and is dropped with `:empty { display: none }`, not rendered conditionally — it is the always-present container the badge appears inside, and removing it conditionally is the structural hazard described above. The E2E also toggles high priority and asserts the slot returns and the name column narrows, since hiding the star outright would satisfy a one-sided test.
+
 - **FR-3.55** *(Shipped, NEWS-153)* The dial's track is drawn in **translucent ink, not a fixed grey**. `--line` is mixed for the *page* background, so the ring was faint everywhere (1.18:1 in light against the page) and on a selected or hovered row — filled with `--pine-soft` — it all but vanished: about **1.01:1** in light and **1.02:1** in dark. Invisible, and precisely when the user had singled that topic out.
 
   `--ink` at `stroke-opacity: 0.24` composites over whatever is behind it, so the ring keeps its contrast against any fill the row ever gains rather than against the one background someone had in mind when they chose the grey. Now 1.61–1.97:1 across light/dark × selected/unselected.

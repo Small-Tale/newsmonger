@@ -769,6 +769,16 @@ h2.eyebrow {
   color: var(--pine);
   min-width: 13px;
 
+  // Out of the layout when there is nothing to show (NEWS-152). The slot stays
+  // in the DOM — it is the always-present container the badge appears inside,
+  // and removing it conditionally is the structural hazard in docs/3-ui.md — but
+  // `min-width` plus the row's 10px flex gap was reserving **23px of every
+  // row's 320** for a star most topics don't have. That is 7% of the rail, taken
+  // from the topic name, which is the one thing in the row that needs it.
+  &:empty {
+    display: none;
+  }
+
   .flag {
     display: inline-flex;
   }
