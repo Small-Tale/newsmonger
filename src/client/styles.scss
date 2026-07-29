@@ -808,31 +808,40 @@ h2.eyebrow {
   }
 }
 
+/* The app has no global `input` rule — every text field is styled by its own
+   container, which meant a new one silently rendered as browser-default white
+   and looked broken in dark mode (NEWS-134). This placeholder is that style,
+   extracted from the add-topic field so there is one thing to `@extend`.
+   **Any new text input should extend it.** */
+%text-field {
+  background: var(--panel);
+  color: var(--ink);
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  padding: 8px 12px;
+  font-family: var(--sans);
+  font-size: 13.5px;
+
+  &::placeholder {
+    color: var(--ink-soft);
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--pine);
+    outline-offset: -1px;
+    border-color: transparent;
+  }
+}
+
 .add-topic {
   display: flex;
   gap: 8px;
   margin-top: 14px;
 
   input {
+    @extend %text-field;
     flex: 1;
     min-width: 0;
-    background: var(--panel);
-    color: var(--ink);
-    border: 1px solid var(--line);
-    border-radius: 7px;
-    padding: 8px 12px;
-    font-family: var(--sans);
-    font-size: 13.5px;
-
-    &::placeholder {
-      color: var(--ink-soft);
-    }
-
-    &:focus-visible {
-      outline: 2px solid var(--pine);
-      outline-offset: -1px;
-      border-color: transparent;
-    }
   }
 }
 
@@ -1942,6 +1951,7 @@ button.off-topic-pill {
   margin: 16px 0 4px;
 
   input {
+    @extend %text-field;
     flex: 1;
     min-width: 0;
   }
@@ -2219,6 +2229,10 @@ button.off-topic-pill {
   margin-top: 20px;
 
   .btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
     min-width: 110px;
   }
 }
@@ -2239,6 +2253,9 @@ button.off-topic-pill {
 /* The per-card and per-set depth entries. Understated on purpose: they are the
    answer to "not quite this", not a primary action competing with Add. */
 .link-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
   background: none;
   border: none;
   padding: 0;
@@ -2283,6 +2300,7 @@ button.off-topic-pill {
   gap: 8px;
 
   input {
+    @extend %text-field;
     flex: 1;
     min-width: 0;
   }
@@ -2307,4 +2325,20 @@ button.off-topic-pill {
   &.error-note {
     color: var(--marigold);
   }
+}
+
+/* "More suggestions" (NEWS-136). Centred under the list, understated — it is a
+   continuation of browsing, not a primary action competing with Add. */
+.discover-more {
+  display: flex;
+  justify-content: center;
+  padding: 18px 0 4px;
+}
+
+.discover-more-note {
+  margin: 0;
+  font-family: var(--sans);
+  font-size: 0.85rem;
+  color: var(--ink-soft);
+  text-align: center;
 }

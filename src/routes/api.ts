@@ -258,7 +258,7 @@ export function registerApi(app: Hono<AppEnv>): void {
     const discovery = c.get('discovery');
     if (!discovery) return c.json({ error: 'topic discovery is not available' }, 503);
     try {
-      const result = await discovery.suggest(body.scope, body.limit);
+      const result = await discovery.suggest(body.scope, body.limit, body.seen);
       return c.json(result);
     } catch (err) {
       // The provider failing is an ordinary outcome here (no key, offline, rate

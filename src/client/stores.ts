@@ -57,6 +57,21 @@ export interface DiscoverState {
   /** Current contents of the free-text box. */
   query: string;
   loading: boolean;
+  /**
+   * A "More" request is in flight (NEWS-136).
+   *
+   * Separate from `loading` because the two replace different things: `loading`
+   * swaps the whole pane for a status line, while asking for more must leave the
+   * list the user is reading exactly where it is.
+   */
+  loadingMore: boolean;
+  /**
+   * The last "More" returned nothing new, so stop offering it.
+   *
+   * Every press is a billable call, so an exhausted seam has to be visible
+   * rather than something the user discovers by pressing repeatedly.
+   */
+  exhausted: boolean;
   error: string | null;
   suggestions: TopicSuggestion[];
   /** What produced the current results, for the heading and for retrying. */
@@ -90,6 +105,8 @@ export function emptyDiscover(): DiscoverState {
     section: null,
     query: '',
     loading: false,
+    loadingMore: false,
+    exhausted: false,
     error: null,
     suggestions: [],
     source: null,

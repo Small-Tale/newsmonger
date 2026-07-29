@@ -766,7 +766,7 @@ function discoverDialogJsx(d: DiscoverState): SafeHtml {
       <div class="dialog discover" role="dialog" aria-modal="true" aria-label="Discover topics">
         <div class="discover-head">
           <h2>Discover topics</h2>
-          <button class="icon-btn" type="button" data-action="close-discover" aria-label="Close">
+          <button class="btn icon" type="button" data-action="close-discover" aria-label="Close">
             {icon('clear')}
           </button>
         </div>
@@ -880,10 +880,10 @@ function discoverResultsJsx(d: DiscoverState): SafeHtml {
         ) : (
           <span class="results-depth">
             <button class="link-btn" type="button" data-tune={`narrower:${resultsHeading(d.source)}`}>
-              ⌄ narrower
+              {icon('funnel', 13)} narrower
             </button>
             <button class="link-btn" type="button" data-tune={`similar:${resultsHeading(d.source)}`}>
-              ≈ similar
+              {icon('blend', 13)} similar
             </button>
           </span>
         )}
@@ -910,6 +910,10 @@ function discoverResultsJsx(d: DiscoverState): SafeHtml {
             ),
             { key: 'suggestion-groups' },
           )}
+          {/* Always-present container: the button and the exhausted note swap
+              in and out, and a conditional sibling must not restructure the
+              keyed list above it (docs/3-ui.md). */}
+          <div class="discover-more">{discoverMoreJsx(d)}</div>
         </div>
       )}
     </div>
@@ -982,13 +986,31 @@ function tunerCardJsx(t: TunerState, candidate: TopicSuggestion | undefined): Sa
       <p class="tuner-why">{tunerRationale(t)}</p>
       <div class="tuner-actions">
         <button class="btn" type="button" data-tuner="skip">
-          ✕ Skip
+          {icon('clear', 14)} Skip
         </button>
         <button class="btn primary" type="button" data-tuner="keep">
-          ♥ Keep
+          {icon('bookmark', 14)} Keep
         </button>
       </div>
     </div>
+  );
+}
+
+/**
+ * "More like these" for the whole result list (NEWS-136).
+ *
+ * Every press is a billable call, so when a round comes back with nothing new
+ * the button is replaced by a plain statement rather than left there to be
+ * pressed again — an exhausted seam should be visible, not discovered.
+ */
+function discoverMoreJsx(d: DiscoverState): SafeHtml {
+  if (d.exhausted) {
+    return <p class="discover-more-note">That’s everything for this search — try another wording or section.</p>;
+  }
+  return (
+    <button class="btn" type="button" data-action="discover-more" disabled={d.loadingMore ? true : undefined}>
+      {d.loadingMore ? 'Finding more…' : 'More suggestions'}
+    </button>
   );
 }
 
@@ -1012,10 +1034,10 @@ function suggestionCardJsx(suggestion: TopicSuggestion, added: boolean): SafeHtm
           delegate/morph rule in docs/3-ui.md. */}
       <span class="suggestion-depth">
         <button class="link-btn" type="button" data-tune={`narrower:${suggestion.name}`} title="More specific than this">
-          ⌄ narrower
+          {icon('funnel', 13)} narrower
         </button>
         <button class="link-btn" type="button" data-tune={`similar:${suggestion.name}`} title="Adjacent to this">
-          ≈ similar
+          {icon('blend', 13)} similar
         </button>
       </span>
     </div>
@@ -2040,7 +2062,7 @@ function appJsx(): SafeHtml {
             Add
           </button>
           <button
-            class="icon-btn discover-open"
+            class="btn icon discover-open"
             type="button"
             data-action="open-discover"
             aria-label="Discover topics"
@@ -2256,7 +2278,15 @@ function runTopicAction(action: string, ids: string[]): void {
  * only shows up on a slow provider.
  */
 async function runDiscovery(source: DiscoverSource): Promise<void> {
-  appStore.actions.patchDiscover({ loading: true, error: null, view: 'results', source });
+  appStore.actions.patchDiscover({
+    loading: true,
+    error: null,
+    view: 'results',
+    source,
+    // A new search is a fresh seam — clear whatever the previous one ended on.
+    exhausted: false,
+    loadingMore: false,
+  });
   try {
     const { suggestions, cached } = await discoverTopics(source);
     if (appStore.state.value.discover === null) return;
@@ -2355,6 +2385,41 @@ function finishTuner(): void {
   });
 }
 
+/**
+ * Append another batch of suggestions to the list (NEWS-136).
+ *
+ * The names already on screen go up as `seen`, so the model is asked for ideas
+ * it hasn't given yet rather than being left to repeat itself — and because the
+ * cache key includes the exclusions, "More" is genuinely a new call rather than
+ * a replay of the one that filled the list.
+ */
+async function loadMoreSuggestions(): Promise<void> {
+  const current = appStore.state.value.discover;
+  if (current?.source == null || current.loadingMore || current.exhausted) return;
+  const seen = current.suggestions.map((s) => s.name);
+  appStore.actions.patchDiscover({ loadingMore: true, error: null });
+  try {
+    const { suggestions } = await discoverTopics(current.source, undefined, seen);
+    const latest = appStore.state.value.discover;
+    // The user can close the dialog or start a different search mid-flight;
+    // appending then would splice this batch onto a list it doesn't belong to.
+    if (latest === null || latest.source !== current.source) return;
+    const merged = mergeKept(latest.suggestions, suggestions);
+    appStore.actions.patchDiscover({
+      loadingMore: false,
+      suggestions: merged,
+      // Nothing new survived the merge, so there is no point offering again.
+      exhausted: merged.length === latest.suggestions.length,
+    });
+  } catch (err) {
+    if (appStore.state.value.discover === null) return;
+    appStore.actions.patchDiscover({
+      loadingMore: false,
+      error: err instanceof Error ? err.message : String(err),
+    });
+  }
+}
+
 /** Create a topic from a suggestion, keeping its card in place (FR-24.12/24.13). */
 async function addSuggestion(name: string): Promise<void> {
   const current = appStore.state.value.discover;
@@ -2443,6 +2508,10 @@ function wireEvents(root: HTMLElement): void {
       return;
     }
     appStore.actions.patchDiscover({ view: 'browse', section: null, error: null });
+  });
+
+  void delegate(root, 'click', '[data-action=discover-more]', () => {
+    void loadMoreSuggestions();
   });
 
   void delegate(root, 'click', '[data-action=discover-retry]', () => {

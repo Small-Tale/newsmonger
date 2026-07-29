@@ -125,6 +125,10 @@ Four shapes were wireframed before the one above was chosen. Recorded because th
 
 - **FR-24.27** *(Shipped)* An added card **stays in place** and marks itself "Added" rather than disappearing. A row vanishing under the cursor is how the *next* row gets clicked by accident.
 
+- **FR-24.34** *(Shipped, NEWS-136)* **More suggestions** appends another batch to the bottom of the list rather than replacing it — the list the user is reading stays where it is. The names already on screen go up as `seen`, which the server *adds* to the topic exclusions rather than replacing them, so asking for more can never weaken FR-24.11's first layer.
+
+  When a batch comes back with nothing the list doesn't already have, the button is **replaced by a plain statement** rather than left to be pressed again. Every press is a billable call, so an exhausted seam has to be visible rather than discovered.
+
 - **FR-24.28** *(Shipped)* A provider failure renders **inside the dialog** with a retry, not in the global banner: the user is mid-task, and the message is about that one request.
 
 ## The tuner (NEWS-127, shipped)

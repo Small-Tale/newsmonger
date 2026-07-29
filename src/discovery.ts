@@ -125,11 +125,13 @@ export class DiscoveryService {
    * client cannot forget it — which is the entire point of the first exclusion
    * layer (FR-24.11).
    */
-  async suggest(scope: SuggestScope, limit?: number): Promise<DiscoveryResult> {
+  async suggest(scope: SuggestScope, limit?: number, seen: string[] = []): Promise<DiscoveryResult> {
     const topics = this.store.listTopics();
     const request: SuggestRequest = {
       scope,
-      exclude: topics.map((t) => t.name),
+      // Topic names first and always; `seen` only *adds* to them (NEWS-136), so
+      // asking for more ideas can never weaken the FR-24.11 guarantee.
+      exclude: [...topics.map((t) => t.name), ...seen],
       categoryOptions: this.categoryOptions(),
       ...(limit === undefined ? {} : { limit: Math.min(limit, MAX_SUGGESTIONS) }),
     };
@@ -171,7 +173,7 @@ export class DiscoveryService {
 
     try {
       const result = await provider.suggestTopics(request);
-      const suggestions = this.clean(result.suggestions, topics.map((t) => t.name));
+      const suggestions = this.clean(result.suggestions, [...topics.map((t) => t.name), ...seen]);
       this.cache.set(key, { at: this.now(), suggestions });
       this.record({
         at: new Date(this.now()).toISOString(),

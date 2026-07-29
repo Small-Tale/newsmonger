@@ -177,10 +177,20 @@ export async function fetchDiscoveryUsage(): Promise<DiscoverUsageResp> {
 }
 
 /** Ask for topic suggestions (FR-24.1). */
-export async function discoverTopics(scope: DiscoverReq['scope'], limit?: number): Promise<DiscoverResp> {
+export async function discoverTopics(
+  scope: DiscoverReq['scope'],
+  limit?: number,
+  seen?: string[],
+): Promise<DiscoverResp> {
   const body = await request('/api/discover', {
     method: 'POST',
-    body: JSON.stringify({ scope, ...(limit === undefined ? {} : { limit }) }),
+    body: JSON.stringify({
+      scope,
+      ...(limit === undefined ? {} : { limit }),
+      // Only sent for "More" (NEWS-136) — an empty list would needlessly change
+      // the cache key and turn a free repeat request into a billed one.
+      ...(seen === undefined || seen.length === 0 ? {} : { seen }),
+    }),
   });
   return DiscoverRespSchema.parse(body);
 }

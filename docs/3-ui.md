@@ -48,6 +48,16 @@ A rare E2E failure raised the question of whether a poll-driven re-render can de
 
 That also rules the morph out as an explanation for settings flakiness, alongside the `refreshState` sequence guard (NEWS-104) and the `<select>` attribute-vs-property trap. What remains is ordinary round-trip latency under a loaded serial suite, which is a timeout question rather than a product one.
 
+### New controls must reuse the established classes (NEWS-133/134/135)
+
+Three visual bugs shipped in the discovery dialog at once, and all three were the same mistake: inventing markup instead of reusing what the rest of the app already has.
+
+- The close button used a class (`icon-btn`) that **does not exist in the stylesheet**, so it fell back to browser-default button chrome — a white chip on the dark panel. Every other dialog's close button is `btn icon`, which is transparent and borderless.
+- The search field was never styled. There is **no global `input` rule** in this app — every text field is styled by its own container — so a new one renders browser-default white and looks broken in dark mode. That style is now a `%text-field` placeholder extracted from the add-topic field; **any new text input should `@extend` it.**
+- The depth controls used `⌄` and `≈` as icons. Icons come from `icons.tsx`, with Lucide path data inlined verbatim.
+
+Regression-tested two ways. `discover.spec.ts` compares the **computed background lightness** of each control against the dialog's own panel in emulated dark mode, so any control that renders near-white fails whatever the cause — verified by removing the input's style and watching it report a lightness of 1. And the depth controls are asserted to contain an `<svg>`, not a glyph.
+
 ### Two delegates must never match nodes the morph can turn into each other (NEWS-126)
 
 The discovery dialog's section grid and its subcategory chips are both `<button>`s in the same position of the same container. When the pane switches, the morph does what it is supposed to do — **reuses the node** and rewrites its attributes — so the tile *becomes* the chip.

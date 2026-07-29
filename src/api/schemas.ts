@@ -130,6 +130,15 @@ export const DiscoverReqSchema = z.object({
     }),
   ]),
   limit: z.number().int().min(1).max(50).optional(),
+  /**
+   * Suggestions the user has already been shown, for "More" (NEWS-136).
+   *
+   * Deliberately **additive** rather than a way to supply `exclude` wholesale:
+   * the server still always adds the topic list itself, so a client that omits
+   * this can fail to get fresh ideas but can never be suggested a topic the
+   * user already follows. That is FR-24.11's first layer, preserved.
+   */
+  seen: z.array(z.string()).max(200).optional(),
 });
 export type DiscoverReq = z.infer<typeof DiscoverReqSchema>;
 

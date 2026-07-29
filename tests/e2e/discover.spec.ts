@@ -451,3 +451,93 @@ test('clean up the topics this spec created', async ({ page }) => {
   }
   await expect(page.locator('.topic')).toHaveCount(0);
 });
+
+// --- Dark mode and icons (NEWS-133/134/135) --------------------------------
+//
+// All three shipped as the same underlying mistake: the discovery dialog used
+// classes and markup that don't exist elsewhere in the app instead of the
+// established ones. `icon-btn` was never a class (every other dialog's close
+// button is `btn icon`), the search field was never given the text-field style
+// every other input has, and the depth controls used "⌄" and "≈" as icons.
+//
+// The dark-mode assertions below are the general guard: any control in this
+// dialog that renders near-white on the dark panel fails, whatever caused it.
+
+/** Perceived lightness of an element's own background, 0 (black) – 1 (white). */
+async function backgroundLightness(page: Page, selector: string): Promise<number> {
+  return page.locator(selector).first().evaluate((el) => {
+    const [r, g, b] = window
+      .getComputedStyle(el)
+      .backgroundColor.match(/[\d.]+/g)!
+      .map(Number);
+    // Rec. 601 luma — good enough to tell "dark panel" from "white box".
+    return (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+  });
+}
+
+test('no control in the dialog renders light-on-dark in dark mode', async ({ page }) => {
+  await page.emulateMedia({ colorScheme: 'dark' });
+  await page.goto('/');
+  await page.click('[data-action=open-discover]');
+
+  // The dialog itself establishes what "dark" means here, so the controls are
+  // compared against it rather than against an absolute threshold.
+  const panel = await backgroundLightness(page, '.dialog.discover');
+  expect(panel).toBeLessThan(0.5);
+
+  // The search field: browser-default white was the NEWS-134 bug.
+  expect(await backgroundLightness(page, '.discover-search input')).toBeLessThan(0.5);
+  // The close button: a white chip floating on the panel was NEWS-133.
+  expect(await backgroundLightness(page, '[data-action=close-discover]')).toBeLessThan(0.5);
+
+  await page.emulateMedia({ colorScheme: 'light' });
+});
+
+test('the depth controls use real icons, not text glyphs (NEWS-135)', async ({ page }) => {
+  await page.goto('/');
+  await page.click('[data-action=open-discover]');
+  await page.click('.section-tile:has-text("Sports")');
+  await page.click('.section-chips .chip:has-text("Motorsport")');
+  await expect(page.locator('.suggestion').first()).toBeVisible();
+
+  const narrower = page.locator('.suggestion .link-btn', { hasText: 'narrower' }).first();
+  await expect(narrower.locator('svg')).toHaveCount(1);
+  await expect(page.locator('.suggestion .link-btn', { hasText: 'similar' }).first().locator('svg')).toHaveCount(1);
+  // And the glyphs they replaced are gone from the label.
+  expect(await narrower.textContent()).not.toContain('⌄');
+});
+
+// --- More suggestions (NEWS-136) -------------------------------------------
+
+test('More appends to the list rather than replacing it', async ({ page }) => {
+  await page.goto('/');
+  await page.click('[data-action=open-discover]');
+  await page.fill('.discover-search input', 'cycling');
+  await page.press('.discover-search input', 'Enter');
+  await expect(page.locator('.suggestion').first()).toBeVisible();
+
+  const before = await page.locator('.suggestion').count();
+  const firstName = await page.locator('.suggestion-name').first().textContent();
+
+  await page.click('[data-action=discover-more]');
+
+  // The list the user was reading stays put and grows underneath.
+  await expect(page.locator('.suggestion')).not.toHaveCount(before);
+  expect(await page.locator('.suggestion-name').first().textContent()).toBe(firstName);
+});
+
+test('More stops offering itself once nothing new comes back', async ({ page }) => {
+  // "repeat" makes the mock keep answering with the same batch (NEWS-136) —
+  // a model that has run out of ideas. Every press is a billable call, so an
+  // exhausted seam must be visible rather than discovered by pressing again.
+  await page.goto('/');
+  await page.click('[data-action=open-discover]');
+  await page.fill('.discover-search input', 'repeat');
+  await page.press('.discover-search input', 'Enter');
+  await expect(page.locator('.suggestion').first()).toBeVisible();
+
+  await page.click('[data-action=discover-more]');
+
+  await expect(page.locator('.discover-more-note')).toContainText('everything for this search');
+  await expect(page.locator('[data-action=discover-more]')).toHaveCount(0);
+});

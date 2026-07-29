@@ -60,7 +60,19 @@ function mockSuggestions(request: SuggestRequest): TopicSuggestion[] {
   // The planted duplicate goes first, where a filter that only checks the tail
   // of the list would miss it.
   if (request.exclude.length > 0) names.push(request.exclude[0]);
-  for (let i = names.length; i < count; i++) names.push(`${seed}${suffix} topic ${String(i + 1)}`);
+  // Numbering continues past the exclusions (NEWS-136). A real model asked to
+  // avoid a list of names answers with different ones; a mock that ignored the
+  // list would return the same batch forever, making "More" — and any other
+  // ask-again path — impossible to test end to end.
+  //
+  // A seed containing "repeat" opts out and keeps answering with the same batch,
+  // which is the *other* case worth being able to reach: a model that has run
+  // out of ideas. Without it the exhausted path is unreachable, the same way
+  // "empty" exists so a no-results list can be tested.
+  const offset = seed.toLowerCase().includes('repeat') ? 0 : request.exclude.length;
+  for (let i = names.length; i < count; i++) {
+    names.push(`${seed}${suffix} topic ${String(offset + i + 1)}`);
+  }
 
   return names.map((name, i) => ({
     name,
@@ -82,7 +94,9 @@ function mockSuggestions(request: SuggestRequest): TopicSuggestion[] {
  * stories; topics containing "fail" throw. It never touches the network.
  *
  * `suggestTopics` (NEWS-124) follows the same convention keyed off the request
- * seed — see `requestSeed` and `mockSuggestions`.
+ * seed — see `requestSeed` and `mockSuggestions`. It adds one keyword of its
+ * own: "repeat" keeps answering with the same batch, so the out-of-ideas path
+ * is reachable (NEWS-136).
  *
  * `attended` is settable so the foreground gate (`src/attendance.ts`) can be
  * tested end to end without a real subscription-backed CLI. It defaults to
