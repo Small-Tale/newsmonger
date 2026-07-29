@@ -4,7 +4,7 @@ import { delegate, each, mount } from 'kerfjs';
 import type { ProviderName } from '../ai/types.js';
 import { PROVIDER_INFO, PROVIDER_MODELS, PROVIDER_NAMES } from '../ai/types.js';
 import type { TopicSuggestion } from '../api/schemas.js';
-import { MAX_DISCOVER_QUERY_LENGTH } from '../api/schemas.js';
+import { MAX_DISCOVER_QUERY_LENGTH, MAX_TUNE_ROUNDS } from '../api/schemas.js';
 import {
   BUILTIN_CATEGORIES,
   categoryLabel,
@@ -47,7 +47,20 @@ import {
 } from './api.js';
 import { outletFor, publishedLabel } from './attribution.js';
 import { buildDiagnostics, formatDuration, runRows } from './diagnostics.js';
-import { groupSuggestions, kindLabel, resultsHeading, sectionFor, sectionTiles } from './discover.js';
+import type { TunerState } from './discover.js';
+import {
+  currentCandidate,
+  groupSuggestions,
+  judgeCandidate,
+  kindLabel,
+  mergeKept,
+  nextRound,
+  resultsHeading,
+  sectionFor,
+  sectionTiles,
+  startTuner,
+  tunerRationale,
+} from './discover.js';
 import { currentFailure } from './failure.js';
 import { icon } from './icons.js';
 import { ensureNotificationPermission, syncTauriNotificationPermission } from './notifications.js';
@@ -715,6 +728,7 @@ function discoverDialogJsx(d: DiscoverState): SafeHtml {
  * never restructures the dialog's siblings (see `docs/3-ui.md`).
  */
 function discoverBodyJsx(d: DiscoverState): SafeHtml {
+  if (d.tuner !== null) return tunerJsx(d.tuner);
   if (d.loading) return <p class="discover-status">Asking…</p>;
   if (d.error !== null) {
     return (
@@ -791,6 +805,18 @@ function discoverResultsJsx(d: DiscoverState): SafeHtml {
           ‹ Back
         </button>
         <h3>{d.source === null ? 'Suggestions' : resultsHeading(d.source)}</h3>
+        {d.suggestions.length === 0 || d.source === null ? (
+          ''
+        ) : (
+          <span class="results-depth">
+            <button class="link-btn" type="button" data-tune={`narrower:${resultsHeading(d.source)}`}>
+              ⌄ narrower
+            </button>
+            <button class="link-btn" type="button" data-tune={`similar:${resultsHeading(d.source)}`}>
+              ≈ similar
+            </button>
+          </span>
+        )}
       </div>
       {groups.length === 0 ? (
         <p class="discover-status">
@@ -820,6 +846,82 @@ function discoverResultsJsx(d: DiscoverState): SafeHtml {
   );
 }
 
+/**
+ * The keep/skip tuner (NEWS-127, FR-24.5–24.9).
+ *
+ * A **depth control**, never an entry point — that distinction is the whole
+ * reason this shape was chosen over a tuner-first design. It costs nothing until
+ * someone asks to go deeper, and it answers the two questions a static list
+ * cannot: *narrower than this* and *more like this*.
+ */
+function tunerJsx(t: TunerState): SafeHtml {
+  const candidate = currentCandidate(t);
+  return (
+    <div class="discover-pane tuner">
+      <div class="tuner-head">
+        <span class="tuner-round">
+          Round {String(t.round)} of {String(MAX_TUNE_ROUNDS)}
+        </span>
+        {/* Endable at any point (FR-24.9) — and the only way out, so it is
+            never hidden behind a state the user has to reach first. */}
+        <button class="btn subtle" type="button" data-tuner="done">
+          Done
+        </button>
+      </div>
+
+      <div class="tuner-body">{tunerCardJsx(t, candidate)}</div>
+
+      <div class="tuner-kept">
+        {t.kept.length === 0 ? (
+          <span class="tuner-kept-empty">Nothing kept yet.</span>
+        ) : (
+          <span>
+            Kept: {t.kept.map((s) => s.name).join(' · ')}
+          </span>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function tunerCardJsx(t: TunerState, candidate: TopicSuggestion | undefined): SafeHtml {
+  if (t.error !== null) {
+    return (
+      <div class="discover-status error">
+        <p>{t.error}</p>
+        <button class="btn" type="button" data-tuner="done">
+          Back to the list
+        </button>
+      </div>
+    );
+  }
+  if (t.loading) return <p class="discover-status">Thinking…</p>;
+  if (candidate === undefined) {
+    return <p class="discover-status">That’s everything — anything you kept is waiting in the list.</p>;
+  }
+  return (
+    <div class="tuner-card">
+      <div class="suggestion-main">
+        <span class="suggestion-name">{candidate.name}</span>
+        <span class={`suggestion-kind ${candidate.kind}`}>{kindLabel(candidate.kind)}</span>
+      </div>
+      <p class="suggestion-reason">{candidate.reason}</p>
+      {/* Why this is being offered (FR-24.8). Without it the loop is a slot
+          machine; with it, a user who can see the model has misread them can
+          skip out rather than abandon the feature. */}
+      <p class="tuner-why">{tunerRationale(t)}</p>
+      <div class="tuner-actions">
+        <button class="btn" type="button" data-tuner="skip">
+          ✕ Skip
+        </button>
+        <button class="btn primary" type="button" data-tuner="keep">
+          ♥ Keep
+        </button>
+      </div>
+    </div>
+  );
+}
+
 /** One suggestion. Stays put once added — see `DiscoverState.added`. */
 function suggestionCardJsx(suggestion: TopicSuggestion, added: boolean): SafeHtml {
   return (
@@ -836,6 +938,16 @@ function suggestionCardJsx(suggestion: TopicSuggestion, added: boolean): SafeHtm
           + Add
         </button>
       )}
+      {/* The depth controls (FR-24.5). One attribute, one delegate — see the
+          delegate/morph rule in docs/3-ui.md. */}
+      <span class="suggestion-depth">
+        <button class="link-btn" type="button" data-tune={`narrower:${suggestion.name}`} title="More specific than this">
+          ⌄ narrower
+        </button>
+        <button class="link-btn" type="button" data-tune={`similar:${suggestion.name}`} title="Adjacent to this">
+          ≈ similar
+        </button>
+      </span>
     </div>
   );
 }
@@ -2087,6 +2199,69 @@ async function runDiscovery(source: DiscoverSource): Promise<void> {
   }
 }
 
+/**
+ * Fetch one tuner round and install it (NEWS-127).
+ *
+ * Every round is a billable call, so the server-side bound (FR-24.9) is the
+ * backstop; this stops asking on its own once `judgeCandidate` says exhausted.
+ */
+async function fetchTunerRound(tuner: TunerState, advance: boolean): Promise<void> {
+  appStore.actions.patchDiscover({ tuner: { ...tuner, loading: true, error: null } });
+  try {
+    const { suggestions } = await discoverTopics({
+      kind: 'tune',
+      anchor: tuner.anchor,
+      direction: tuner.direction,
+      kept: tuner.kept.map((s) => s.name),
+      skipped: tuner.skipped,
+      round: advance ? tuner.round + 1 : tuner.round,
+    });
+    // The user can close the dialog or end the session while a round is in
+    // flight; installing it then would resurrect a tuner they walked away from.
+    if (appStore.state.value.discover?.tuner === null) return;
+    appStore.actions.patchDiscover({
+      tuner: advance ? nextRound(tuner, suggestions) : { ...tuner, queue: suggestions, index: 0, loading: false },
+    });
+  } catch (err) {
+    if (appStore.state.value.discover?.tuner === null) return;
+    appStore.actions.patchDiscover({
+      tuner: { ...tuner, loading: false, error: err instanceof Error ? err.message : String(err) },
+    });
+  }
+}
+
+/** Enter the tuner, scoped to a card or to the whole result set (FR-24.5). */
+async function enterTuner(anchor: string, direction: 'narrower' | 'similar'): Promise<void> {
+  const tuner = startTuner(anchor, direction);
+  appStore.actions.patchDiscover({ tuner });
+  await fetchTunerRound(tuner, false);
+}
+
+/** Record a verdict and do whatever the state machine says comes next. */
+async function judgeTunerCandidate(verdict: 'keep' | 'skip'): Promise<void> {
+  const tuner = appStore.state.value.discover?.tuner;
+  if (tuner === undefined || tuner === null || tuner.loading) return;
+  const { tuner: updated, next } = judgeCandidate(tuner, verdict);
+  appStore.actions.patchDiscover({ tuner: updated });
+  if (next === 'fetch-round') await fetchTunerRound(updated, true);
+}
+
+/**
+ * End the session and return to the list (FR-24.7).
+ *
+ * Kept suggestions are merged into the list, **not** created — nothing in
+ * discovery creates a topic without an explicit Add, inside the tuner or out.
+ */
+function finishTuner(): void {
+  const current = appStore.state.value.discover;
+  if (current?.tuner == null) return;
+  appStore.actions.patchDiscover({
+    tuner: null,
+    view: 'results',
+    suggestions: mergeKept(current.suggestions, current.tuner.kept),
+  });
+}
+
 /** Create a topic from a suggestion, keeping its card in place (FR-24.12/24.13). */
 async function addSuggestion(name: string): Promise<void> {
   const current = appStore.state.value.discover;
@@ -2181,6 +2356,31 @@ function wireEvents(root: HTMLElement): void {
     const source = appStore.state.value.discover?.source;
     if (source) void runDiscovery(source);
     else appStore.actions.patchDiscover({ error: null, view: 'browse', section: null });
+  });
+
+  /**
+   * Enter the tuner from a card or from the whole set (FR-24.5).
+   *
+   * One attribute, one delegate — see the delegate/morph rule in `docs/3-ui.md`.
+   */
+  void delegate(root, 'click', '[data-tune]', (_e, el) => {
+    const value = el.getAttribute('data-tune');
+    if (value === null) return;
+    const separator = value.indexOf(':');
+    const direction = value.slice(0, separator);
+    const anchor = value.slice(separator + 1);
+    if (direction !== 'narrower' && direction !== 'similar') return;
+    void enterTuner(anchor, direction);
+  });
+
+  /** Keep / skip / done, all on one attribute for the same reason. */
+  void delegate(root, 'click', '[data-tuner]', (_e, el) => {
+    const action = el.getAttribute('data-tuner');
+    if (action === 'done') {
+      finishTuner();
+      return;
+    }
+    if (action === 'keep' || action === 'skip') void judgeTunerCandidate(action);
   });
 
   void delegate(root, 'click', '[data-add-suggestion]', (_e, el) => {

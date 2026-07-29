@@ -2148,3 +2148,127 @@ button.off-topic-pill {
     background: var(--paper);
   }
 }
+
+/* --- The keep/skip tuner (NEWS-127) ---------------------------------------
+   A depth control reached from the result list, never an entry point — so it
+   lives in the same body the list does and returns there when it ends. */
+.tuner {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-height: 260px;
+}
+
+.tuner-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+/* The round count is a cost signal, not decoration: every round is a billable
+   call, so the user can see how far this will go before it ends itself. */
+.tuner-round {
+  font-family: var(--sans);
+  font-size: 0.75rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+}
+
+.tuner-body {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.tuner-card {
+  width: 100%;
+  max-width: 420px;
+  text-align: center;
+  padding: 26px 20px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--paper);
+
+  .suggestion-main {
+    justify-content: center;
+  }
+
+  .suggestion-name {
+    font-size: 1.25rem;
+  }
+
+  .suggestion-reason {
+    margin: 10px 0 0;
+  }
+}
+
+.tuner-why {
+  margin: 14px 0 0;
+  font-family: var(--sans);
+  font-size: 0.8rem;
+  font-style: italic;
+  color: var(--ink-soft);
+}
+
+.tuner-actions {
+  display: flex;
+  gap: 12px;
+  justify-content: center;
+  margin-top: 20px;
+
+  .btn {
+    min-width: 110px;
+  }
+}
+
+.tuner-kept {
+  font-family: var(--sans);
+  font-size: 0.82rem;
+  color: var(--ink-soft);
+  text-align: center;
+  border-top: 1px solid var(--line);
+  padding-top: 10px;
+}
+
+.tuner-kept-empty {
+  opacity: 0.7;
+}
+
+/* The per-card and per-set depth entries. Understated on purpose: they are the
+   answer to "not quite this", not a primary action competing with Add. */
+.link-btn {
+  background: none;
+  border: none;
+  padding: 0;
+  font-family: var(--sans);
+  font-size: 0.78rem;
+  color: var(--ink-soft);
+  cursor: pointer;
+  text-decoration: underline;
+  text-decoration-style: dotted;
+  text-underline-offset: 3px;
+
+  &:hover {
+    color: var(--pine);
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--pine);
+    outline-offset: 2px;
+  }
+}
+
+.suggestion-depth {
+  grid-column: 1;
+  display: flex;
+  gap: 14px;
+  margin-top: 6px;
+}
+
+.results-depth {
+  margin-left: auto;
+  display: flex;
+  gap: 14px;
+}

@@ -1,4 +1,5 @@
 import type { TopicSuggestion } from '../api/schemas.js';
+import { MAX_TUNE_ROUNDS } from '../api/schemas.js';
 import type { Category } from '../categories.js';
 import { activeCategories, BUILTIN_CATEGORIES, NO_SUBCATEGORY_LABEL, UNCATEGORIZED_LABEL } from '../categories.js';
 
@@ -106,4 +107,114 @@ export function resultsHeading(from: { kind: 'describe'; query: string } | { kin
 /** Label for the ongoing/evergreen badge (FR-24.10). */
 export function kindLabel(kind: TopicSuggestion['kind']): string {
   return kind === 'ongoing' ? 'Ongoing story' : 'Evergreen';
+}
+
+/**
+ * The keep/skip tuner's state machine (NEWS-127, FR-24.5–24.9).
+ *
+ * Pure and separate from the dialog because it is the one genuinely *stateful*
+ * part of discovery: a round advances, a queue drains, a bound is reached, and
+ * the interesting failures are all sequences rather than single operations.
+ */
+
+/** One tuner session. Null on `DiscoverState` when the user isn't tuning. */
+export interface TunerState {
+  /** What the tuning is relative to — one suggestion, or the whole result set. */
+  anchor: string;
+  direction: 'narrower' | 'similar';
+  /** 1-based, and never past `MAX_TUNE_ROUNDS` (FR-24.9). */
+  round: number;
+  /** Candidates for this round, in order. */
+  queue: TopicSuggestion[];
+  /** How far into `queue` the user has judged. */
+  index: number;
+  /** Kept suggestions, in full — they are merged back into the list on exit. */
+  kept: TopicSuggestion[];
+  /** Skipped names. As much signal as the keeps (FR-24.6), so they are kept too. */
+  skipped: string[];
+  loading: boolean;
+  error: string | null;
+}
+
+export function startTuner(anchor: string, direction: 'narrower' | 'similar'): TunerState {
+  return { anchor, direction, round: 1, queue: [], index: 0, kept: [], skipped: [], loading: true, error: null };
+}
+
+/** The candidate awaiting a verdict, or undefined when the round is drained. */
+export function currentCandidate(tuner: TunerState): TopicSuggestion | undefined {
+  return tuner.queue[tuner.index];
+}
+
+/** What the caller must do after a verdict. */
+export type TunerNext =
+  /** More candidates in this round — just render the next one. */
+  | 'continue'
+  /** Round drained and the bound allows another — fetch it. */
+  | 'fetch-round'
+  /** Round drained and the bound is reached — the session is over (FR-24.9). */
+  | 'exhausted';
+
+export interface TunerAdvance {
+  tuner: TunerState;
+  next: TunerNext;
+}
+
+/**
+ * Record a verdict on the current candidate.
+ *
+ * Returns the new state rather than mutating, so an in-flight round arriving
+ * late can be discarded by comparing against the state the caller still holds.
+ * A verdict on a drained queue is a no-op — that is what a double-click on the
+ * last card is, and it must not skip a round or push a phantom entry.
+ */
+export function judgeCandidate(tuner: TunerState, verdict: 'keep' | 'skip'): TunerAdvance {
+  const candidate = currentCandidate(tuner);
+  if (candidate === undefined) {
+    return { tuner, next: tuner.round < MAX_TUNE_ROUNDS ? 'fetch-round' : 'exhausted' };
+  }
+  const next: TunerState = {
+    ...tuner,
+    index: tuner.index + 1,
+    kept: verdict === 'keep' ? [...tuner.kept, candidate] : tuner.kept,
+    skipped: verdict === 'skip' ? [...tuner.skipped, candidate.name] : tuner.skipped,
+  };
+  if (next.index < next.queue.length) return { tuner: next, next: 'continue' };
+  return { tuner: next, next: next.round < MAX_TUNE_ROUNDS ? 'fetch-round' : 'exhausted' };
+}
+
+/** Move to the next round with a fresh queue. */
+export function nextRound(tuner: TunerState, queue: TopicSuggestion[]): TunerState {
+  return { ...tuner, round: tuner.round + 1, queue, index: 0, loading: false, error: null };
+}
+
+/**
+ * Why the current candidate is being offered (FR-24.8).
+ *
+ * Without this the loop is a slot machine; with it, a user who can see the model
+ * has misread them can skip out rather than abandon the feature. Falls back to
+ * the anchor in round one, when there is nothing kept to cite yet.
+ */
+export function tunerRationale(tuner: TunerState): string {
+  const recent = tuner.kept.slice(-3).map((s) => s.name);
+  if (recent.length > 0) return `because you kept: ${recent.join(', ')}`;
+  return tuner.direction === 'narrower' ? `narrower than “${tuner.anchor}”` : `similar to “${tuner.anchor}”`;
+}
+
+/**
+ * Fold the kept suggestions back into the result list on exit (FR-24.7).
+ *
+ * Kept means "show me this in the list", never "create it" — nothing is created
+ * without an explicit Add. Existing entries win so a card the user already added
+ * doesn't revert to an un-added duplicate, and order is preserved so the list
+ * doesn't reshuffle under them.
+ */
+export function mergeKept(suggestions: TopicSuggestion[], kept: TopicSuggestion[]): TopicSuggestion[] {
+  const seen = new Set(suggestions.map((s) => s.name));
+  const additions: TopicSuggestion[] = [];
+  for (const suggestion of kept) {
+    if (seen.has(suggestion.name)) continue;
+    seen.add(suggestion.name);
+    additions.push(suggestion);
+  }
+  return [...suggestions, ...additions];
 }

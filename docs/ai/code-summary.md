@@ -62,7 +62,7 @@ src/
     search.ts         itemMatchesQuery/filterItemsByQuery — live feed search filter (NEWS-60)
     attribution.ts    outletFor/publishedLabel — source outlet + publication date display (NEWS-82)
     diagnostics.ts    runRows/formatDuration/buildDiagnostics — redacted bug-report bundle (NEWS-88)
-    discover.ts       groupSuggestions/resultsHeading/sectionTiles — pure helpers for the discovery dialog (NEWS-126)
+    discover.ts       groupSuggestions/resultsHeading/sectionTiles (NEWS-126) + the pure tuner state machine: startTuner/judgeCandidate/nextRound/mergeKept (NEWS-127)
     solo.ts           toggleSolo/isAllSoloed — solo-set arithmetic shared by the context menu and the double-click gesture (NEWS-95)
     styles.scss       styling (light/dark via prefers-color-scheme)
 src-tauri/            Tauri v2 shell; one spawn path, dev runs tsx + release runs the sidecar
@@ -143,7 +143,7 @@ Data dir: `--data-dir` flag → `NEWS_DATA_DIR` → `~/.news`. Also holds `news.
 | Diagnostics / "why did a check fail" | `src/client/diagnostics.ts` (pure, unit-tested) + the Settings Diagnostics section; `appVersion` on `/api/state`. Topic names redacted unless opted in. See `docs/3-ui.md` FR-3.25–3.28 |
 | Solo filter (set arithmetic, menu + double-click) | `src/client/solo.ts` (`toggleSolo`, `isAllSoloed`), used by `runTopicAction` and the `dblclick` delegate in `app.tsx`. See `docs/3-ui.md` FR-3.40 |
 | Topic categories / taxonomy | `src/categories.ts` (`BUILTIN_CATEGORIES`, `categoryLabel`, `activeCategories`). See `docs/22-topic-categories.md` |
-| Topic discovery / suggestions | `NewsService.suggestTopics` + `SuggestRequest`/`SuggestScope`/`TopicSuggestion` in `src/ai/types.ts`; prompting + parsing in `src/ai/suggest-prompt.ts`; all 5 providers (NEWS-124). Server: `src/discovery.ts` (`DiscoveryService` — exclusions, request cache, classification validation, call log) + `POST /api/discover` / `GET /api/discover/usage` (NEWS-125). Client: `src/client/discover.ts` (grouping/headings) + the dialog in `app.tsx` (NEWS-126). **Tuner + onboarding still unbuilt** — NEWS-127/128. See `docs/24-topic-discovery.md` |
+| Topic discovery / suggestions | `NewsService.suggestTopics` + `SuggestRequest`/`SuggestScope`/`TopicSuggestion` in `src/ai/types.ts`; prompting + parsing in `src/ai/suggest-prompt.ts`; all 5 providers (NEWS-124). Server: `src/discovery.ts` (`DiscoveryService` — exclusions, request cache, classification validation, call log) + `POST /api/discover` / `GET /api/discover/usage` (NEWS-125). Client: `src/client/discover.ts` (grouping/headings) + the dialog in `app.tsx` (NEWS-126). Tuner shipped (NEWS-127). **Onboarding still unbuilt** — NEWS-128. See `docs/24-topic-discovery.md` |
 | Provider retries / rate limiting | `src/ai/retry.ts` (`backoffDelayMs`, `classifyFailure`, `retryAfterMs`, `DEFAULT_BACKOFF` vs `FAILURE_COOLDOWN`); `checkWithRetry` + `rateLimitedUntil` in `checks.ts`. See `docs/23-retries-and-rate-limits.md` |
 | A topic held back after failures | `consecutiveFailures`/`retryAfter` columns; `recordCheckFailure`/`clearCheckFailures` in `db/store.ts`; the cooldown check at the top of `isDueUnderSchedule`. See FR-23.7 |
 | Settings tabs / panels | `SETTINGS_TABS`, `settingsTabsJsx`, `settingsPanelJsx` in `client/app.tsx`; `settingsTab` in `stores.ts`; `.settings-tabs` in `styles.scss`. See `docs/3-ui.md` FR-3.45 |

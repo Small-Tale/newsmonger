@@ -4,7 +4,7 @@ Naming a topic requires already knowing you want it. That is fine for the two or
 
 See also [1 — Topics and Scheduling](1-topics-and-scheduling.md), [20 — First-Run Onboarding](20-onboarding.md), [22 — Topic Categories](22-topic-categories.md), [18 — Topic Guidance](18-topic-guidance.md), [6 — AI Providers](6-providers.md).
 
-## Status: partial — both doors shipped (NEWS-124/125/126); tuner and onboarding still to come (NEWS-127/128)
+## Status: partial — doors and tuner shipped (NEWS-124–127); onboarding still to come (NEWS-128)
 
 Four variations were wireframed and reviewed (recorded under "Variations considered" below). The approved shape is **two entry doors into one result list, with a keep/skip tuner as the depth control** — not as a third door.
 
@@ -119,6 +119,18 @@ Four shapes were wireframed before the one above was chosen. Recorded because th
 
 - **FR-24.28** *(Shipped)* A provider failure renders **inside the dialog** with a retry, not in the global banner: the user is mid-task, and the message is about that one request.
 
+## The tuner (NEWS-127, shipped)
+
+The depth control, and **still not an entry point** — the distinction the whole shape was chosen for. It costs nothing until someone asks to go deeper.
+
+- **FR-24.29** *(Shipped)* The state machine is a pure module (`src/client/discover.ts`: `startTuner` / `judgeCandidate` / `nextRound` / `mergeKept` / `tunerRationale`), separate from the dialog because it is the one genuinely stateful part of discovery and every interesting failure in it is a *sequence*.
+
+- **FR-24.30** *(Shipped)* A verdict on a drained queue is a **no-op**. That is what a double-click on the last card is, and it must not push a phantom entry or advance a round on its own.
+
+- **FR-24.31** *(Shipped)* The tuner is nested **inside** the discovery state, not beside it, so closing the dialog ends the session. A sibling field would allow a tuner that outlived the list it came from — which is precisely the tuner-first shape that was rejected.
+
+- **FR-24.32** *(Shipped)* Ending merges the keeps into the result list via `mergeKept`, which dedupes: the user can keep something they already added, and reverting that card to an un-added duplicate is the bug this prevents.
+
 ### Two lessons from building it
 
 Both were caught by the E2E suite and neither would have been caught by typecheck, lint or unit tests.
@@ -128,6 +140,8 @@ Both were caught by the E2E suite and neither would have been caught by typechec
 
 ### Testing
 
+- **E2E (tuner)** — 10 more in `discover.spec.ts`, written as sequences per the transition-matrix rule: entering from a card and then from the set without a reload, a drained round advancing, skipping everything, exiting mid-round and re-entering (must not resume the old round or carry its keeps), Done returning the keeps to the list *uncreated*, and closing the dialog mid-tune ending the session.
+- **Unit (tuner)** — 15 more in `discover-client.test.ts`: the whole run to the round bound without drift, a verdict on a drained queue, skip-everything, the rationale's fallback in round one, and `mergeKept`'s three duplicate cases.
 - **E2E** — `tests/e2e/discover.spec.ts` (14): both doors through to a created topic, the empty-box "surprise me" path, drilling and stepping back, grouping and the ongoing/evergreen badges, the added card staying put, an already-followed topic never being suggested (the mock plants one on purpose), a provider failure showing a retry, backdrop-vs-inside click handling, and the topics list surviving the dialog opening and closing.
 - **Unit** — `tests/unit/discover-client.test.ts` (15): grouping, taxonomy ordering at both levels, "Other" vs unclassified, and the headings.
 - **Unit** — `tests/unit/discovery.test.ts` (27): all three entry shapes and their malformed variants, the round bound (including that a rejected round never reaches the provider), both exclusion layers, normalized and within-batch duplicates, classification validation (bad category dropped, bad subcategory degrading to category-only), cache hit / miss / expiry / invalidation-by-new-topic, the recording of succeeded, failed and unresolvable-provider calls, and the 503 when discovery isn't wired up. Verified non-vacuous by removing the layer-2 filter — three tests fail.

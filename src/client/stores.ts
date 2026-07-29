@@ -1,6 +1,7 @@
 import { defineStore } from 'kerfjs';
 
 import type { ItemsResp, KeysResp, ProviderInfo, StateResp, TopicSuggestion } from '../api/schemas.js';
+import type { TunerState } from './discover.js';
 
 type NewsItem = ItemsResp['items'][number];
 
@@ -63,6 +64,16 @@ export interface DiscoverState {
   /** True when the last answer came free from the cache (FR-24.15). */
   cached: boolean;
   /**
+   * The keep/skip tuner (NEWS-127), or null when not tuning.
+   *
+   * Nested inside the discovery state rather than beside it: the tuner is a
+   * *depth control* reached from a result list, never an entry point, and
+   * closing the dialog must end it. A sibling field would allow a tuner that
+   * outlives the list it came from, which is the shape variation B was rejected
+   * for in the first place.
+   */
+  tuner: TunerState | null;
+  /**
    * Names added during this dialog session.
    *
    * The card shows "Added" rather than vanishing: a row disappearing under the
@@ -83,6 +94,7 @@ export function emptyDiscover(): DiscoverState {
     suggestions: [],
     source: null,
     cached: false,
+    tuner: null,
     added: [],
   };
 }

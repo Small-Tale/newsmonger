@@ -191,6 +191,157 @@ test('the topics list survives the dialog opening and closing', async ({ page })
   await expect(page.locator('.topic')).toHaveCount(before);
 });
 
+
+// --- The keep/skip tuner (NEWS-127, FR-24.5–24.9) --------------------------
+//
+// Sequences, not single operations: the interesting failures here are all
+// orderings. The mock's tuner names encode the round and direction, so a round
+// that failed to advance is visible rather than silent (NEWS-124).
+
+async function openMotorsportResults(page: import('@playwright/test').Page): Promise<void> {
+  await page.goto('/');
+  await page.click('[data-action=open-discover]');
+  await page.click('.section-tile:has-text("Sports")');
+  await page.click('.section-chips .chip:has-text("Motorsport")');
+  await expect(page.locator('.suggestion').first()).toBeVisible();
+}
+
+test('a card offers both depth directions, and so does the whole set (FR-24.5)', async ({ page }) => {
+  await openMotorsportResults(page);
+  await expect(page.locator('.suggestion .link-btn', { hasText: 'narrower' }).first()).toBeVisible();
+  await expect(page.locator('.suggestion .link-btn', { hasText: 'similar' }).first()).toBeVisible();
+  await expect(page.locator('.results-depth .link-btn', { hasText: 'narrower' })).toBeVisible();
+});
+
+test('entering the tuner shows one candidate, the round count and a way out', async ({ page }) => {
+  await openMotorsportResults(page);
+  await page.locator('.suggestion .link-btn', { hasText: 'narrower' }).first().click();
+
+  await expect(page.locator('.tuner-card')).toBeVisible();
+  // Exactly one at a time (FR-24.6) — not a list with extra steps.
+  await expect(page.locator('.tuner-card')).toHaveCount(1);
+  await expect(page.locator('.tuner-round')).toContainText('Round 1 of');
+  // Endable at any point (FR-24.9), never hidden behind another state.
+  await expect(page.locator('[data-tuner=done]')).toBeVisible();
+  // Round one has nothing kept to cite, so it names the anchor instead.
+  await expect(page.locator('.tuner-why')).toContainText('narrower than');
+});
+
+test('keeping cites the keeps on the next candidate (FR-24.8)', async ({ page }) => {
+  await openMotorsportResults(page);
+  await page.locator('.suggestion .link-btn', { hasText: 'narrower' }).first().click();
+  await expect(page.locator('.tuner-card')).toBeVisible();
+
+  const first = (await page.locator('.tuner-card .suggestion-name').textContent()) ?? '';
+  await page.click('[data-tuner=keep]');
+
+  await expect(page.locator('.tuner-why')).toContainText('because you kept');
+  await expect(page.locator('.tuner-why')).toContainText(first);
+  await expect(page.locator('.tuner-kept')).toContainText(first);
+});
+
+test('a drained round advances to the next one rather than stalling', async ({ page }) => {
+  await openMotorsportResults(page);
+  await page.locator('.suggestion .link-btn', { hasText: 'similar' }).first().click();
+  await expect(page.locator('.tuner-card')).toBeVisible();
+  await expect(page.locator('.tuner-round')).toContainText('Round 1 of');
+
+  // The mock returns a fixed-size round, so judging that many drains it.
+  for (let i = 0; i < 4; i++) await page.click('[data-tuner=skip]');
+
+  await expect(page.locator('.tuner-round')).toContainText('Round 2 of');
+  await expect(page.locator('.tuner-card')).toBeVisible();
+});
+
+test('skipping everything still advances and keeps nothing', async ({ page }) => {
+  await openMotorsportResults(page);
+  await page.locator('.suggestion .link-btn', { hasText: 'narrower' }).first().click();
+  await expect(page.locator('.tuner-card')).toBeVisible();
+
+  for (let i = 0; i < 4; i++) await page.click('[data-tuner=skip]');
+  await expect(page.locator('.tuner-kept')).toContainText('Nothing kept yet');
+});
+
+test('Done returns to the list with the keeps waiting there, uncreated (FR-24.7)', async ({ page }) => {
+  await openMotorsportResults(page);
+  const before = await page.locator('.suggestion').count();
+
+  await page.locator('.suggestion .link-btn', { hasText: 'narrower' }).first().click();
+  await expect(page.locator('.tuner-card')).toBeVisible();
+  const kept = (await page.locator('.tuner-card .suggestion-name').textContent()) ?? '';
+  await page.click('[data-tuner=keep]');
+  await page.click('[data-tuner=done]');
+
+  // Back on the list, with the kept candidate now in it…
+  await expect(page.locator('.tuner-card')).toHaveCount(0);
+  await expect(page.locator('.suggestion')).toHaveCount(before + 1);
+  await expect(page.locator('.suggestion-name', { hasText: kept })).toBeVisible();
+  // …and offering an Add, because keeping is not creating.
+  await expect(page.locator('.suggestion', { hasText: kept }).locator('[data-add-suggestion]')).toBeVisible();
+});
+
+test('finishing the tuner does not create a topic behind the user’s back', async ({ page }) => {
+  // FR-24.7 end to end: keeping is not creating, and the click that ends the
+  // session must not create anything either. Checked against the *topic list*
+  // rather than the dialog, because that is where a phantom creation would show.
+  //
+  // Not a guard against the delegate/morph collision that bit NEWS-126 — that is
+  // prevented structurally, by each delegate family owning one attribute
+  // (`data-tuner`, `data-tune`, `data-discover-nav`). Verified by re-registering
+  // the delegates in the dangerous order: this test still passed, so it is not
+  // what would catch a regression there.
+  await page.goto('/');
+  const topicsBefore = await page.locator('.topic').count();
+
+  await openMotorsportResults(page);
+  await page.locator('.suggestion .link-btn', { hasText: 'narrower' }).first().click();
+  await expect(page.locator('.tuner-card')).toBeVisible();
+  await page.click('[data-tuner=keep]');
+  await page.click('[data-tuner=done]');
+  await expect(page.locator('.suggestion').first()).toBeVisible();
+
+  await page.click('[data-action=close-discover]');
+  await expect(page.locator('.topic')).toHaveCount(topicsBefore);
+});
+
+test('exiting mid-round and re-entering starts a fresh session', async ({ page }) => {
+  await openMotorsportResults(page);
+  await page.locator('.suggestion .link-btn', { hasText: 'narrower' }).first().click();
+  await expect(page.locator('.tuner-card')).toBeVisible();
+  await page.click('[data-tuner=keep]');
+  await page.click('[data-tuner=done]');
+
+  // Re-entering must not resume the old round or carry its keeps forward.
+  await page.locator('.suggestion .link-btn', { hasText: 'similar' }).first().click();
+  await expect(page.locator('.tuner-round')).toContainText('Round 1 of');
+  await expect(page.locator('.tuner-kept')).toContainText('Nothing kept yet');
+});
+
+test('entering from a card and then from the set works without a reload', async ({ page }) => {
+  await openMotorsportResults(page);
+  await page.locator('.suggestion .link-btn', { hasText: 'narrower' }).first().click();
+  await expect(page.locator('.tuner-card')).toBeVisible();
+  await page.click('[data-tuner=done]');
+
+  await page.locator('.results-depth .link-btn', { hasText: 'similar' }).click();
+  await expect(page.locator('.tuner-card')).toBeVisible();
+  await expect(page.locator('.tuner-why')).toContainText('similar to');
+});
+
+test('closing the dialog mid-tune ends the session', async ({ page }) => {
+  await openMotorsportResults(page);
+  await page.locator('.suggestion .link-btn', { hasText: 'narrower' }).first().click();
+  await expect(page.locator('.tuner-card')).toBeVisible();
+
+  await page.click('[data-action=close-discover]');
+  await expect(page.locator('.dialog.discover')).toHaveCount(0);
+
+  await page.click('[data-action=open-discover]');
+  // A tuner that outlived the list it came from would reopen here.
+  await expect(page.locator('.tuner-card')).toHaveCount(0);
+  await expect(page.locator('.section-tile')).toHaveCount(11);
+});
+
 test('clean up the topics this spec created', async ({ page }) => {
   await page.goto('/');
   const names = await page.locator('.topic .topic-name').allTextContents();
