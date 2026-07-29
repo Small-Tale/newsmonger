@@ -4,7 +4,7 @@ Naming a topic requires already knowing you want it. That is fine for the two or
 
 See also [1 — Topics and Scheduling](1-topics-and-scheduling.md), [20 — First-Run Onboarding](20-onboarding.md), [22 — Topic Categories](22-topic-categories.md), [18 — Topic Guidance](18-topic-guidance.md), [6 — AI Providers](6-providers.md).
 
-## Status: partial — doors and tuner shipped (NEWS-124–127); onboarding still to come (NEWS-128)
+## Status: shipped (NEWS-116, 124–128). Variation D deferred — see NEWS-129
 
 Four variations were wireframed and reviewed (recorded under "Variations considered" below). The approved shape is **two entry doors into one result list, with a keep/skip tuner as the depth control** — not as a third door.
 
@@ -74,7 +74,11 @@ That last part is the decision worth stating plainly, because it is what the bra
 
 - **FR-24.17** A **Discover** entry point sits beside the add-topic field, for the ongoing case.
 
-- **FR-24.18** Onboarding's **Topics** step (FR-20.6) offers the same surface in place of its six hard-coded chips. Setup is where the need is sharpest, and a new user has no existing topics, which makes it the one place suggestions are guaranteed unfiltered.
+- **FR-24.18** *(Shipped, NEWS-128)* Onboarding's **Topics** step (FR-20.6) offers suggestions alongside its starter chips. Setup is where the need is sharpest, and a new user has no existing topics, which makes it the one place suggestions are guaranteed unfiltered.
+
+  Suggestions render as **more of the same chips**, with the same attribute and the same handler — picking one is the same act as ticking a starter, and one attribute means one delegate (the NEWS-126 lesson applied rather than re-learned). A picked suggestion is created with its guidance and classification, not as a bare name.
+
+  The starter chips stay as a **documented fallback**: onboarding runs before a provider is necessarily configured, and the gate mirrors `resolveProvider` — an explicitly-chosen provider must itself be available, since asking merely whether *any* provider is available offers a button that cannot work to someone who picked OpenAI without a key. `AUTO_ORDER` moved to `src/ai/types.ts` so the client can share the one definition instead of keeping a copy that drifts.
 
 ## Variations considered
 

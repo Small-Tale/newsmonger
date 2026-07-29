@@ -136,8 +136,24 @@ export interface AppState {
    * probe has answered.
    */
   onboarding: 'auto' | OnboardingStep | null;
-  /** Starter topics ticked in the onboarding flow, before they're created. */
+  /**
+   * Topics ticked in the onboarding flow, before they're created.
+   *
+   * Holds both the static starter names and anything picked from the suggestions
+   * below them (NEWS-128) — one list, so the running count and the "picking none
+   * is fine" wording keep working unchanged, and one toggle handler serves both.
+   */
   onboardingTopics: string[];
+  /**
+   * Suggestions offered in the onboarding Topics step (NEWS-128).
+   *
+   * Kept alongside the picked *names* rather than folded into them, so a picked
+   * suggestion can still be created with its guidance and classification
+   * (FR-24.12/24.13) instead of degrading to a bare name.
+   */
+  onboardingSuggestions: TopicSuggestion[];
+  onboardingLoading: boolean;
+  onboardingError: string | null;
   /**
    * Per-provider key status. Never holds a key value — the server doesn't
    * return one (see `KeyStatusSchema`), so there is nothing here to leak into
@@ -362,6 +378,9 @@ export const appStore = defineStore({
     settingsOpen: false,
     onboarding: 'auto',
     onboardingTopics: [],
+    onboardingSuggestions: [],
+    onboardingLoading: false,
+    onboardingError: null,
     keys: [],
     keysLoaded: false,
     keychainAvailable: false,
@@ -470,6 +489,17 @@ export const appStore = defineStore({
     },
     setReviewTopicIds: (reviewTopicIds: string[]) => {
       set({ ...get(), reviewTopicIds, feedLimit: FEED_PAGE });
+    },
+    setOnboardingSuggestions: (
+      patch: { suggestions?: TopicSuggestion[]; loading?: boolean; error?: string | null },
+    ) => {
+      const current = get();
+      set({
+        ...current,
+        onboardingSuggestions: patch.suggestions ?? current.onboardingSuggestions,
+        onboardingLoading: patch.loading ?? current.onboardingLoading,
+        onboardingError: patch.error === undefined ? current.onboardingError : patch.error,
+      });
     },
     openDiscover: () => {
       set({ ...get(), discover: emptyDiscover() });

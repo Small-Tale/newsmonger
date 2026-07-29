@@ -2,7 +2,7 @@
 
 Status markers: **Shipped** · **Partial** · **Design only** · **Deferred**. Source docs win on conflict.
 
-## [24 — Topic Discovery](../24-topic-discovery.md) — **Partial** (doors + tuner shipped; onboarding unbuilt)
+## [24 — Topic Discovery](../24-topic-discovery.md) — **Shipped** (variation D deferred, NEWS-129)
 
 - FR-24.1–24.18, NEWS-116. Approved shape: **two doors into one result list** — a free-text box (FR-24.3) and a grid of the 11 NEWS-97 sections (FR-24.2) — with a **keep/skip tuner as the depth control**, not a third door (FR-24.5–24.9). Reached from beside the add-topic field and from onboarding's Topics step, replacing its six hard-coded chips.
 - Variation **D** (persistent newsstand view) deferred: it is the only shape that spends on a schedule rather than on a click, and it reuses everything this builds.
@@ -11,7 +11,7 @@ Status markers: **Shipped** · **Partial** · **Design only** · **Deferred**. S
 - **FR-24.14 corrected**: it said discovery calls are "counted against the spend cap", but NEWS-119 removed the cap, the budget and the price table. There is nothing to count against — calls are *recorded* for visibility, and the real cost protection is structural (round ceiling + cache + user-initiated-only). The log is in memory: persisting would mean reusing the topic-shaped `runs` table, which drives the failure banner and falling-behind detector.
 - FR-24.1–24.4, 24.12, 24.17, 24.25–24.28 **Shipped** (NEWS-126): the dialog with both doors, grouped result cards with ongoing/evergreen badges, and Add creating the topic with its guidance + classification in **one** request (a follow-up PATCH would land after the immediate first check had already run unsteered).
 - FR-24.5–24.9, 24.29–24.32 **Shipped** (NEWS-127): the keep/skip tuner as a *depth control* reached from a card or the whole set, bounded rounds with a visible count, skips fed back as steer, and Done merging keeps into the list **uncreated**. State machine is pure and tested as sequences.
-- FR-24.18 (onboarding) unbuilt — NEWS-128.
+- FR-24.18 **Shipped** (NEWS-128): onboarding's Topics step offers suggestions as more of the same chips (one attribute, one handler), created with their guidance/classification. Starter chips kept as the documented fallback when no provider would resolve; the gate mirrors `resolveProvider`, and `AUTO_ORDER` moved to `src/ai/types.ts` so the client shares one definition.
 - Cost is the governing constraint: every call recorded and capped like a check (FR-24.14), in-memory cache per request (FR-24.15), nothing on a timer (FR-24.16).
 
 ## [1 — Topics and Scheduling](../1-topics-and-scheduling.md) — Shipped

@@ -1,3 +1,4 @@
+import { AUTO_ORDER } from '../ai/types.js';
 import type { TopicSuggestion } from '../api/schemas.js';
 import { MAX_TUNE_ROUNDS } from '../api/schemas.js';
 import type { Category } from '../categories.js';
@@ -217,4 +218,23 @@ export function mergeKept(suggestions: TopicSuggestion[], kept: TopicSuggestion[
     additions.push(suggestion);
   }
   return [...suggestions, ...additions];
+}
+
+/**
+ * Whether a discovery request would find a provider to serve it (NEWS-128).
+ *
+ * Mirrors `resolveProvider` rather than asking "is anything available": an
+ * explicitly-chosen provider must itself be usable, and only `auto` falls back
+ * to the automatic order. `mock` is excluded from the automatic order for the
+ * same reason the auto-open decision excludes it — it always reports available,
+ * so counting it would make the app look configured when it is not.
+ */
+export function providerLikelyUsable(state: {
+  providers: { name: string; available: boolean | null }[];
+  settings: { provider: string };
+}): boolean {
+  const available = (name: string): boolean =>
+    state.providers.some((p) => p.name === name && p.available === true);
+  if (state.settings.provider === 'auto') return AUTO_ORDER.some(available);
+  return available(state.settings.provider);
 }

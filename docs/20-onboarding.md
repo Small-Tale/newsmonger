@@ -22,6 +22,10 @@ See also [6 — AI Providers](6-providers.md), [7 — API Keys and Settings Dial
 
 - **FR-20.6** *(Shipped)* **Topics** — six broad starter topics as toggle chips, chosen so any of them returns something on the first check rather than leaving the new user staring at an empty feed. Picking none is fine and says so. The running count notes that each topic is checked on its own, so more topics means more checks — the cost consequence stated where the choice is made.
 
+  **Since NEWS-128 the step also offers real suggestions** (see [24 — Topic Discovery](24-topic-discovery.md) FR-24.18): a describe-what-you're-into box whose results render as *more of the same chips*, carrying the same attribute and toggled by the same handler. Picking a suggestion is the same act as ticking a starter — nothing is created until Finish — so the running count, the "none is fine" wording and the create-on-finish semantics are all unchanged. A picked suggestion is created **with** its guidance and classification rather than as a bare name, so its first check is already narrowed.
+
+  The starters are **not** dead code: onboarding runs before a provider is necessarily configured (Source comes first but is skippable), so when no provider would resolve, the step falls back to them and says why. That check mirrors `resolveProvider` rather than asking "is anything available" — an explicitly-chosen provider must itself be usable, or someone who picked OpenAI without a key would be offered a button that cannot work because an unrelated signed-in CLI happens to be present.
+
 - **FR-20.7** *(Shipped)* **Schedule** — the interval, framed by what it costs rather than as a bare dropdown, and pointing at the spending cap in Settings.
 
 - **FR-20.8** *(Shipped)* Every step is skippable, and the backdrop deliberately does **not** dismiss on click — this is the one dialog whose whole job is to be read, and a stray click behind it shouldn't silently end setup. Finishing creates the chosen topics one at a time (each `POST /api/topics` fires its own first check — FR-1.12).

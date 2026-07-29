@@ -239,6 +239,19 @@ export const PROVIDER_INFO: Record<ProviderName, { label: string; endpointConfig
 export const KEYED_PROVIDERS = ['anthropic', 'openai'] as const;
 export type KeyedProvider = (typeof KEYED_PROVIDERS)[number];
 
+/**
+ * The order `auto` tries providers in.
+ *
+ * Subscription-backed CLIs first: someone already paying for Claude or ChatGPT
+ * should not need an API key. `mock` is deliberately absent — it always reports
+ * itself available, so including it would make an unconfigured app look ready.
+ *
+ * Declared here rather than in `providers/index.ts` because the **client** needs
+ * it too (to predict whether a request would resolve a provider, NEWS-128), and
+ * that module pulls in `node:child_process` via the CLI providers.
+ */
+export const AUTO_ORDER: ConcreteProviderName[] = ['claude-cli', 'codex-cli', 'anthropic', 'openai'];
+
 /** Environment variable each provider's key can be supplied through. */
 export const KEY_ENV_VARS: Record<KeyedProvider, string> = {
   anthropic: 'ANTHROPIC_API_KEY',

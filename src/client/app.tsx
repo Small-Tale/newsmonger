@@ -55,6 +55,7 @@ import {
   kindLabel,
   mergeKept,
   nextRound,
+  providerLikelyUsable,
   resultsHeading,
   sectionFor,
   sectionTiles,
@@ -682,6 +683,74 @@ function guidanceDialogJsx(topic: Topic): SafeHtml {
 
 
 /**
+ * Discovery inside onboarding's Topics step (NEWS-128, FR-24.18).
+ *
+ * Setup is where the need is sharpest, and a brand-new user has no topics yet —
+ * which makes this the one place suggestions are guaranteed unfiltered by the
+ * FR-24.11 exclusions.
+ *
+ * Suggestions render as the **same chips** the static starters do, and carry the
+ * same `data-starter-topic` attribute. That is deliberate on two counts: picking
+ * one is the same act as ticking a starter (nothing is created until Finish), and
+ * one attribute means one delegate — two handlers over chips the morph can turn
+ * into each other is the bug from NEWS-126 (see `docs/3-ui.md`).
+ */
+function onboardingSuggestJsx(s: AppState): SafeHtml {
+  // Onboarding runs before a provider is necessarily configured — Source comes
+  // first but is skippable — so this degrades to the static starters above
+  // rather than offering a button that can only fail.
+  //
+  // The question is precisely "would a request resolve a provider", so this
+  // mirrors `resolveProvider`: an explicitly-chosen provider must itself be
+  // available, and `auto` falls back to the same order that does. Asking merely
+  // whether *any* provider is available gets the explicit case wrong — someone
+  // who picked OpenAI and hasn't added a key would be offered a button that
+  // cannot work, because an unrelated signed-in CLI happens to be present.
+  const usable = providerLikelyUsable(s);
+  if (!usable) {
+    return (
+      <p class="suggest-note">
+        Set up a source above and News can suggest topics for you — or just pick from the list.
+      </p>
+    );
+  }
+  return (
+    <div>
+      <form class="onboarding-suggest-form" data-action="onboarding-suggest">
+        <input
+          type="text"
+          name="onboarding-query"
+          placeholder="Or describe what you’re into — “i cycle and work in biotech”"
+          maxLength={MAX_DISCOVER_QUERY_LENGTH}
+          autocomplete="off"
+          data-morph-skip-children
+        />
+        <button class="btn" type="submit" disabled={s.onboardingLoading ? true : undefined}>
+          Suggest
+        </button>
+      </form>
+      <div class="onboarding-suggest-results">
+        {s.onboardingLoading ? <p class="suggest-note">Asking…</p> : ''}
+        {s.onboardingError !== null ? <p class="suggest-note error-note">{s.onboardingError}</p> : ''}
+        <div class="starter-topics">
+          {s.onboardingSuggestions.map((suggestion) => (
+            <button
+              class={`chip starter ${s.onboardingTopics.includes(suggestion.name) ? 'on' : ''}`}
+              type="button"
+              data-starter-topic={suggestion.name}
+              title={suggestion.reason}
+              aria-pressed={s.onboardingTopics.includes(suggestion.name) ? 'true' : 'false'}
+            >
+              {suggestion.name}
+            </button>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/**
  * Topic discovery (NEWS-126, `docs/24-topic-discovery.md`).
  *
  * Two doors into one result list, and deliberately neither is primary: the box
@@ -1028,6 +1097,9 @@ function onboardingStepJsx(step: OnboardingStep, s: AppState): SafeHtml {
             </button>
           ))}
         </div>
+        {/* Always-present container: the suggestions block appearing must not
+            restructure its siblings (see docs/3-ui.md). */}
+        <div class="onboarding-suggest">{onboardingSuggestJsx(s)}</div>
         <p class="note">
           {s.onboardingTopics.length === 0
             ? 'None chosen — that’s fine, you can add topics from the sidebar.'
@@ -2230,6 +2302,26 @@ async function fetchTunerRound(tuner: TunerState, advance: boolean): Promise<voi
   }
 }
 
+/**
+ * Fetch suggestions for the onboarding Topics step (NEWS-128).
+ *
+ * Errors render as a note beside the chips rather than in the global banner:
+ * the static starters above are still perfectly usable, so a failure here should
+ * read as "that didn't work" and not as "setup is broken".
+ */
+async function suggestOnboardingTopics(query: string): Promise<void> {
+  appStore.actions.setOnboardingSuggestions({ loading: true, error: null });
+  try {
+    const { suggestions } = await discoverTopics({ kind: 'describe', query }, 8);
+    appStore.actions.setOnboardingSuggestions({ suggestions, loading: false });
+  } catch (err) {
+    appStore.actions.setOnboardingSuggestions({
+      loading: false,
+      error: err instanceof Error ? err.message : String(err),
+    });
+  }
+}
+
 /** Enter the tuner, scoped to a card or to the whole result set (FR-24.5). */
 async function enterTuner(anchor: string, direction: 'narrower' | 'similar'): Promise<void> {
   const tuner = startTuner(anchor, direction);
@@ -2599,6 +2691,12 @@ function wireEvents(root: HTMLElement): void {
     if (name !== null) appStore.actions.toggleOnboardingTopic(name);
   });
 
+  void delegate(root, 'submit', '[data-action=onboarding-suggest]', (e, form) => {
+    e.preventDefault();
+    const input = form.querySelector<HTMLInputElement>('input[name=onboarding-query]');
+    void suggestOnboardingTopics(input?.value.trim() ?? '');
+  });
+
   void delegate(root, 'click', '[data-action=onboarding-skip]', () => {
     closeOnboarding();
   });
@@ -2612,10 +2710,18 @@ function wireEvents(root: HTMLElement): void {
     if (at >= ONBOARDING_STEPS.length) {
       // Last step: create whatever was chosen, then get out of the way. Topics
       // are added one at a time because each POST fires its own first check.
-      const chosen = appStore.state.value.onboardingTopics;
+      const { onboardingTopics: chosen, onboardingSuggestions } = appStore.state.value;
       closeOnboarding();
       void (async () => {
-        for (const name of chosen) await addTopic(name);
+        for (const name of chosen) {
+          // A pick that came from a suggestion is created *with* its guidance and
+          // classification (FR-24.12/24.13) — creating it by name alone would
+          // throw away the steer that makes its first check narrowed, which is
+          // the whole reason the suggestion carries one.
+          const suggestion = onboardingSuggestions.find((item) => item.name === name);
+          if (suggestion === undefined) await addTopic(name);
+          else await addSuggestedTopic(suggestion);
+        }
       })();
       return;
     }

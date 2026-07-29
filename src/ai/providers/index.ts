@@ -1,5 +1,5 @@
 import type { ConcreteProviderName, NewsProvider, ProviderName } from '../types.js';
-import { PROVIDER_INFO } from '../types.js';
+import { AUTO_ORDER, PROVIDER_INFO } from '../types.js';
 import { createAnthropicProvider } from './anthropic.js';
 import { createClaudeCliProvider } from './claude-cli.js';
 import { createCodexCliProvider } from './codex-cli.js';
@@ -43,7 +43,9 @@ export const FACTORIES: Record<ConcreteProviderName, ProviderFactory> = {
  * subscription, spending its quota is what they'd expect over billing an API
  * key they also happen to hold.
  */
-export const AUTO_ORDER: ConcreteProviderName[] = ['claude-cli', 'codex-cli', 'anthropic', 'openai'];
+// Lives in `../types.js` so the browser client can import it too (NEWS-128);
+// this module pulls in `node:child_process` via the CLI providers.
+export { AUTO_ORDER };
 
 /** Message shown when an explicitly-requested provider isn't usable. */
 export function unavailableMessage(provider: NewsProvider): string {

@@ -1,4 +1,6 @@
-import { expect, resetTopics, test, topicAction } from './fixtures.js';
+import type { Page } from '@playwright/test';
+
+import { acceptConfirm, expect, openSettingsTab, resetTopics, test, topicAction } from './fixtures.js';
 
 // Topic discovery — both doors and the result list (NEWS-126, FR-24.1–24.4, 24.17).
 //
@@ -198,7 +200,7 @@ test('the topics list survives the dialog opening and closing', async ({ page })
 // orderings. The mock's tuner names encode the round and direction, so a round
 // that failed to advance is visible rather than silent (NEWS-124).
 
-async function openMotorsportResults(page: import('@playwright/test').Page): Promise<void> {
+async function openMotorsportResults(page: Page): Promise<void> {
   await page.goto('/');
   await page.click('[data-action=open-discover]');
   await page.click('.section-tile:has-text("Sports")');
@@ -340,6 +342,104 @@ test('closing the dialog mid-tune ends the session', async ({ page }) => {
   // A tuner that outlived the list it came from would reopen here.
   await expect(page.locator('.tuner-card')).toHaveCount(0);
   await expect(page.locator('.section-tile')).toHaveCount(11);
+});
+
+// --- Discovery inside onboarding (NEWS-128, FR-24.18) ----------------------
+//
+// The suggestion block is gated on a *real* provider being available — mock is
+// excluded, exactly as the auto-open decision excludes it, or the app would
+// always look configured. So these tests configure one through the UI, which
+// means the gate itself is exercised rather than stepped around. Under
+// `--ai-test` the request is still served by the mock, so the answer is
+// deterministic.
+
+async function openSetupGuide(page: Page): Promise<void> {
+  await openSettingsTab(page, 'App');
+  await page.locator('[data-action=rerun-onboarding]').click();
+  await expect(page.locator('.dialog.onboarding')).toBeVisible();
+}
+
+async function stepToTopics(page: Page): Promise<void> {
+  const wizard = page.locator('.dialog.onboarding');
+  await wizard.locator('[data-action=onboarding-next]').click();
+  await wizard.locator('[data-action=onboarding-next]').click();
+  await expect(wizard.locator('h2')).toHaveText('What should News watch?');
+}
+
+test('with no usable provider, the Topics step falls back to the starter chips', async ({ page }) => {
+  // Selecting OpenAI with no key is the deterministic way to make the gate say
+  // "no": `auto` would otherwise pick up whatever CLI happens to be signed in on
+  // the machine running the suite, which is exactly the environment dependence
+  // the rule was rewritten to avoid (it mirrors `resolveProvider`).
+  await page.goto('/');
+  await openSettingsTab(page, 'Source');
+  await page.selectOption('[data-action=provider]', 'openai');
+  await page.locator('.dialog [data-action=close-settings]').click();
+
+  await openSetupGuide(page);
+  await stepToTopics(page);
+
+  // The static starters are still there and still usable — a skipped Source
+  // must not leave this step empty.
+  await expect(page.locator('.chip.starter').first()).toBeVisible();
+  await expect(page.locator('.suggest-note')).toContainText('Set up a source');
+  await expect(page.locator('[data-action=onboarding-suggest]')).toHaveCount(0);
+  await page.locator('[data-action=onboarding-skip]').click();
+
+  await openSettingsTab(page, 'Source');
+  await page.selectOption('[data-action=provider]', 'auto');
+  await page.locator('.dialog [data-action=close-settings]').click();
+});
+
+test('with a provider configured, the Topics step offers suggestions', async ({ page }) => {
+  await page.goto('/');
+  await openSettingsTab(page, 'Source');
+  await page.fill('.key-row:has-text("Anthropic") .key-input', 'sk-ant-e2e-onboarding');
+  await page.click('.key-row:has-text("Anthropic") button[type=submit]');
+  await expect(page.locator('.key-row:has-text("Anthropic") .key-state')).toContainText('stored in');
+  await page.selectOption('[data-action=provider]', 'anthropic');
+  await page.locator('.dialog [data-action=close-settings]').click();
+
+  await openSetupGuide(page);
+  await stepToTopics(page);
+
+  const wizard = page.locator('.dialog.onboarding');
+  await expect(wizard.locator('[data-action=onboarding-suggest]')).toBeVisible();
+  const starters = await wizard.locator('.chip.starter').count();
+
+  await wizard.locator('input[name=onboarding-query]').fill('cycling');
+  await wizard.locator('[data-action=onboarding-suggest] button[type=submit]').click();
+
+  // Suggestions arrive as more of the same chips — picking one is the same act
+  // as ticking a starter, and nothing is created until Finish.
+  await expect(wizard.locator('.onboarding-suggest-results .chip.starter').first()).toBeVisible();
+  expect(await wizard.locator('.chip.starter').count()).toBeGreaterThan(starters);
+
+  // Picking a suggestion feeds the same running count as the starters (FR-20.6).
+  const picked = wizard.locator('.onboarding-suggest-results .chip.starter').first();
+  const pickedName = (await picked.textContent()) ?? '';
+  await picked.click();
+  await expect(picked).toHaveAttribute('aria-pressed', 'true');
+  await expect(wizard.locator('.note')).toContainText('1 chosen');
+
+  // Finishing creates it, and it arrives with the suggestion's guidance
+  // (FR-24.12) rather than as a bare name.
+  await wizard.locator('[data-action=onboarding-next]').click();
+  await wizard.locator('[data-action=onboarding-next]').click();
+  await expect(wizard).toHaveCount(0);
+
+  const row = page.locator('.topic', { hasText: pickedName.trim() });
+  await expect(row).toBeVisible();
+  await topicAction(page, row, 'guidance');
+  await expect(page.locator('.dialog.guidance textarea')).not.toBeEmpty();
+  await page.click('[data-action=close-guidance]');
+
+  // Leave the app as the rest of the suite expects it: auto, no key configured.
+  await openSettingsTab(page, 'Source');
+  await page.click('.key-row:has-text("Anthropic") [data-remove-key]');
+  await acceptConfirm(page);
+  await page.selectOption('[data-action=provider]', 'auto');
+  await page.locator('.dialog [data-action=close-settings]').click();
 });
 
 test('clean up the topics this spec created', async ({ page }) => {

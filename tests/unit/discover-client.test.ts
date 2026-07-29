@@ -10,6 +10,7 @@ import {
   kindLabel,
   mergeKept,
   nextRound,
+  providerLikelyUsable,
   resultsHeading,
   sectionFor,
   sectionTiles,
@@ -269,5 +270,39 @@ describe('mergeKept (FR-24.7)', () => {
   it('preserves list order so nothing reshuffles under the user', () => {
     const merged = mergeKept([candidate('a'), candidate('b')], [candidate('c')]);
     expect(merged.map((s) => s.name)).toEqual(['a', 'b', 'c']);
+  });
+});
+
+describe('providerLikelyUsable (NEWS-128)', () => {
+  const state = (provider: string, available: Record<string, boolean>) => ({
+    settings: { provider },
+    providers: Object.entries(available).map(([name, ok]) => ({ name, available: ok })),
+  });
+
+  it('auto is usable when any provider in the automatic order is', () => {
+    expect(providerLikelyUsable(state('auto', { 'claude-cli': true }))).toBe(true);
+    expect(providerLikelyUsable(state('auto', { openai: true }))).toBe(true);
+  });
+
+  it('auto is not usable when nothing in that order is available', () => {
+    expect(providerLikelyUsable(state('auto', { 'claude-cli': false, openai: false }))).toBe(false);
+  });
+
+  it('mock never counts, because it always reports itself available', () => {
+    // Counting it would make an unconfigured app look ready — the same reason
+    // the onboarding auto-open decision excludes it.
+    expect(providerLikelyUsable(state('auto', { mock: true }))).toBe(false);
+  });
+
+  it('an explicitly chosen provider must itself be available', () => {
+    // The case a bare "is anything available?" gets wrong: someone who picked
+    // OpenAI and has no key would be offered a button that cannot work, because
+    // an unrelated signed-in CLI happens to be present.
+    expect(providerLikelyUsable(state('openai', { 'claude-cli': true, openai: false }))).toBe(false);
+    expect(providerLikelyUsable(state('openai', { openai: true }))).toBe(true);
+  });
+
+  it('is false when the probe has not answered yet', () => {
+    expect(providerLikelyUsable({ settings: { provider: 'auto' }, providers: [] })).toBe(false);
   });
 });

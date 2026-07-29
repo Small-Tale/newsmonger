@@ -2272,3 +2272,39 @@ button.off-topic-pill {
   display: flex;
   gap: 14px;
 }
+
+/* --- Suggestions inside onboarding's Topics step (NEWS-128) ---------------- */
+.onboarding-suggest {
+  margin-top: 16px;
+}
+
+.onboarding-suggest-form {
+  display: flex;
+  gap: 8px;
+
+  input {
+    flex: 1;
+    min-width: 0;
+  }
+}
+
+.onboarding-suggest-results {
+  margin-top: 10px;
+
+  .starter-topics {
+    margin-top: 0;
+  }
+}
+
+/* Its own class rather than `.note`, which the onboarding step already uses for
+   the running count — two `.note`s in one step makes that assertion ambiguous. */
+.suggest-note {
+  font-family: var(--sans);
+  font-size: 0.85rem;
+  color: var(--ink-soft);
+  margin: 8px 0 0;
+
+  &.error-note {
+    color: var(--marigold);
+  }
+}
