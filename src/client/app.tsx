@@ -261,7 +261,24 @@ function topicRowJsx(
       tabindex="0"
       aria-selected={selected ? 'true' : 'false'}
     >
-      {dialJsx(topic, checking, intervalMs)}
+      {/* Dial and badges share the left gutter, stacked (NEWS-163). The badges
+          were pinned to the row's right edge, so on a two-line title they sat a
+          long way from anything they described; under the dial they read as one
+          column of status about this topic. */}
+      <span class="topic-aside">
+        {dialJsx(topic, checking, intervalMs)}
+        {/* Always-present slot so the badge appearing can't restructure the row. */}
+        <span class="topic-flags">
+          {topic.highPriority ? (
+            <span class="flag high-priority" title="High priority: checked on the shorter interval">
+              {icon('star', 13)}
+            </span>
+          ) : (
+            ''
+          )}
+          {soloed ? <span class="flag">{icon('solo', 13)}</span> : ''}
+        </span>
+      </span>
       <div class="topic-main">
         <span class="topic-name">{topic.name}</span>
         <span class="topic-meta">
@@ -298,17 +315,6 @@ function topicRowJsx(
           )}
         </div>
       </div>
-      {/* Always-present slot so the badge appearing can't restructure the row. */}
-      <span class="topic-flags">
-        {topic.highPriority ? (
-          <span class="flag high-priority" title="High priority: checked on the shorter interval">
-            {icon('star', 13)}
-          </span>
-        ) : (
-          ''
-        )}
-        {soloed ? <span class="flag">{icon('solo', 13)}</span> : ''}
-      </span>
     </li>
   );
 }

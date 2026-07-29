@@ -37,6 +37,11 @@
   }
 }
 
+// The topic name's line-height. Named because the sidebar's left gutter is
+// sized from it (NEWS-163): the dial has to centre on the first line of the
+// title, and a second hand-written copy of this number would drift.
+$topic-line: 1.4;
+
 * {
   box-sizing: border-box;
 }
@@ -698,7 +703,11 @@ h2.eyebrow {
 
 .topic {
   display: flex;
-  align-items: center;
+  // Top-aligned, so the dial sits on the *first* line of the title (NEWS-163).
+  // Centred, it drifted to wherever the row's middle happened to be — beside the
+  // second line of a two-line name, which is where it stopped looking like a
+  // marker for that topic and started looking like a stray dot.
+  align-items: flex-start;
   gap: 10px;
   // Separated by whitespace, not rules (NEWS-151). A row is already a block of
   // its own — name, timestamp, section pill, guidance — so a hairline between
@@ -749,6 +758,10 @@ h2.eyebrow {
 .topic-name {
   font-weight: 600;
   font-size: 14px;
+  // Declared rather than inherited, because the dial's gutter is sized from it
+  // (NEWS-163) — the two must derive from the same number or they drift apart
+  // the first time the body's line-height changes.
+  line-height: $topic-line;
   overflow-wrap: anywhere;
 }
 
@@ -761,20 +774,38 @@ h2.eyebrow {
   letter-spacing: 0.02em;
 }
 
+.topic-aside {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+
+  // One title line tall, with the dial centred inside it — so the dial lines up
+  // with the first line's text rather than with the top of its box. Both this
+  // and `.topic-name`'s line-height come from `$topic-line`, so they cannot
+  // disagree.
+  .dial {
+    display: flex;
+    align-items: center;
+    min-height: 14px * $topic-line;
+  }
+}
+
 .topic-flags {
   flex: 0 0 auto;
-  display: inline-flex;
+  display: flex;
+  flex-direction: column;
   align-items: center;
   gap: 3px;
   color: var(--pine);
-  min-width: 13px;
 
   // Out of the layout when there is nothing to show (NEWS-152). The slot stays
   // in the DOM — it is the always-present container the badge appears inside,
   // and removing it conditionally is the structural hazard in docs/3-ui.md — but
-  // `min-width` plus the row's 10px flex gap was reserving **23px of every
-  // row's 320** for a star most topics don't have. That is 7% of the rail, taken
-  // from the topic name, which is the one thing in the row that needs it.
+  // it was reserving width on every row for a star most topics don't have. Now
+  // that it sits under the dial (NEWS-163) it costs vertical space instead, and
+  // an empty column gap is just as wrong as an empty column was.
   &:empty {
     display: none;
   }

@@ -247,7 +247,65 @@ test('the flag slot leaves the layout when it is empty (NEWS-152)', async ({ pag
   await expect(row.locator('.flag.high-priority')).toBeVisible();
   const starred = await measure();
   expect(starred?.flags).not.toBe('none');
-  expect(starred?.main ?? 0).toBeLessThan(plain?.main ?? 0);
+  // The name column keeps its full width **even with a badge showing**. This
+  // originally asserted the opposite — that a badge narrows the name — because
+  // the slot was a horizontal sibling and reappearing cost 23px. Since NEWS-163
+  // it stacks under the dial, so a badge costs no width at all, which is this
+  // ticket's intent carried further rather than a regression from it.
+  expect(starred?.main).toBe(plain?.main);
+
+  await topicAction(page, row, 'delete');
+});
+
+test('the dial sits on the first line, with badges stacked under it (NEWS-163)', async ({ page }) => {
+  // Deliberately a name that **wraps**. On a single-line row the first line's
+  // centre and the row's centre are the same point, so the old centred layout
+  // and the new one agree — a one-line topic proves nothing here.
+  const LONG = 'Apple (the company and their products) and adjacent supply chains';
+  await page.goto('/');
+  await page.fill('.add-topic input', LONG);
+  await page.press('.add-topic input', 'Enter');
+  const row = page.locator('.topic', { hasText: 'Apple (the company' });
+  await expect(row).toBeVisible();
+
+  await topicAction(page, row, 'priority');
+  await expect(row.locator('.flag.high-priority')).toBeVisible();
+
+  const m = await row.evaluate((el) => {
+    const dial = el.querySelector('.dial svg');
+    const name = el.querySelector('.topic-name');
+    const flags = el.querySelector('.topic-flags');
+    if (!dial || !name || !flags) return null;
+    const range = document.createRange();
+    range.selectNodeContents(name);
+    const lines = [...range.getClientRects()];
+    const first = lines[0];
+    if (!first) return null;
+    const d = dial.getBoundingClientRect();
+    const f = flags.getBoundingClientRect();
+    const box = el.getBoundingClientRect();
+    return {
+      lines: lines.length,
+      fromFirstLine: Math.abs(d.top + d.height / 2 - (first.top + first.height / 2)),
+      aboveRowCentre: box.top + box.height / 2 - (d.top + d.height / 2),
+      flagsBelow: f.top >= d.bottom,
+      sameColumn: Math.abs(f.left + f.width / 2 - (d.left + d.width / 2)),
+    };
+  });
+  expect(m).not.toBeNull();
+  expect(m?.lines, 'the name must wrap, or this test asserts nothing').toBeGreaterThan(1);
+
+  // On the first line's text, not on the top of its box.
+  expect(m?.fromFirstLine ?? 99, 'dial vs first line').toBeLessThan(1.5);
+  // …and demonstrably *not* where centring would put it. Without this the
+  // assertion above would still pass on a one-line row and quietly stop testing
+  // the thing that was wrong.
+  expect(m?.aboveRowCentre ?? 0, 'dial should sit well above the row centre').toBeGreaterThan(10);
+
+  // Badges stack under the dial rather than sitting at the far right edge,
+  // where on a two-line title they were a long way from anything they described.
+  expect(m?.flagsBelow).toBe(true);
+  expect(m?.sameColumn ?? 99, 'badges share the dial column').toBeLessThan(1);
 
   await topicAction(page, row, 'delete');
 });

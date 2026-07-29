@@ -192,9 +192,19 @@ Source art lives in `assets/`, in two shapes — rounded and full-bleed — and 
 
 - **FR-3.42** *(Shipped, NEWS-113)* A source link's arrow aligns with the **first line** of the link text, not the vertical middle. Once a headline wrapped, a centred arrow pointed at the gap between two lines; it is a bullet for the first line, so it belongs beside the first line. `align-items: flex-start` plus a 2px nudge, so a 13px glyph sits on the first line's optical centre rather than riding its very top.
 
+- **FR-3.57** *(Shipped, NEWS-163)* The dial sits on the **first line of the topic name**, and the badges stack **beneath it** in the same gutter.
+
+  The row was `align-items: center`, so on a two-line name the dial drifted to the row's middle — beside the *second* line, where it stopped reading as a marker for that topic and started reading as a stray dot. The badges were pinned to the row's right edge, a long way from anything they described once the name wrapped; under the dial they read as one column of status.
+
+  `.topic-name`'s line-height is **declared** (`$topic-line`) rather than inherited, and the dial's box is sized from the same variable — the two must derive from one number or they drift apart the first time the body's line-height changes. This is FR-3.49's lesson applied before the bug rather than after.
+
+  The E2E deliberately uses a name that **wraps**: on a single-line row the first line's centre and the row's centre are the same point, so the old layout and the new one agree and the test would assert nothing. It checks both that the dial is on the first line *and* that it is well above the row centre, so the second condition can't quietly lapse.
+
 - **FR-3.56** *(Shipped, NEWS-152)* The flag slot **leaves the layout when it is empty**. `min-width: 13px` plus the row's 10px flex gap reserved **23px of every row's 320** for a high-priority star most topics don't have — 7% of the rail, taken from the topic name, which is the one thing in the row that needs the width. Measured: the name column goes from 255px to 278px.
 
-  The slot stays *in the DOM* and is dropped with `:empty { display: none }`, not rendered conditionally — it is the always-present container the badge appears inside, and removing it conditionally is the structural hazard described above. The E2E also toggles high priority and asserts the slot returns and the name column narrows, since hiding the star outright would satisfy a one-sided test.
+  The slot stays *in the DOM* and is dropped with `:empty { display: none }`, not rendered conditionally — it is the always-present container the badge appears inside, and removing it conditionally is the structural hazard described above. The E2E also toggles high priority and asserts the slot returns, since hiding the star outright would satisfy a one-sided test.
+
+  **Superseded in part by FR-3.57**: the slot now stacks under the dial rather than sitting beside the name, so a badge costs the name *no* width instead of 23px. The E2E asserts the column is unchanged with a badge showing — it originally asserted the opposite, which was right for the horizontal layout and wrong for this one.
 
 - **FR-3.55** *(Shipped, NEWS-153)* The dial's track is drawn in **translucent ink, not a fixed grey**. `--line` is mixed for the *page* background, so the ring was faint everywhere (1.18:1 in light against the page) and on a selected or hovered row — filled with `--pine-soft` — it all but vanished: about **1.01:1** in light and **1.02:1** in dark. Invisible, and precisely when the user had singled that topic out.
 
