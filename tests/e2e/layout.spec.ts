@@ -1,6 +1,6 @@
 import type { Page } from '@playwright/test';
 
-import { expect, resetTopics, test } from './fixtures.js';
+import { expect, resetTopics, test, topicAction } from './fixtures.js';
 
 // Wide-window layout (NEWS-96). The shell used to be capped at 1060px and
 // centred, which left the feed at a fixed ~650px no matter how much room the
@@ -173,4 +173,41 @@ test('clean up the card-layout topic', async ({ page }) => {
   await resetTopics(test.info().project.use.baseURL ?? '');
   await page.goto('/');
   await expect(page.locator('.topic', { hasText: LONG_TOPIC })).toHaveCount(0);
+});
+
+// --- Sidebar chrome (NEWS-151) ---------------------------------------------
+
+test('sidebar rows are separated by whitespace, not rules (NEWS-151)', async ({ page }) => {
+  await page.goto('/');
+  await page.fill('.add-topic input', 'Rule Free One');
+  await page.press('.add-topic input', 'Enter');
+  await page.fill('.add-topic input', 'Rule Free Two');
+  await page.press('.add-topic input', 'Enter');
+  await expect(page.locator('.topic', { hasText: 'Rule Free Two' })).toBeVisible();
+
+  const rows = await page.locator('.topic').evaluateAll((els) =>
+    els.map((el) => {
+      const s = getComputedStyle(el);
+      return {
+        bottom: Number.parseFloat(s.borderBottomWidth),
+        top: Number.parseFloat(s.borderTopWidth),
+        gap: Number.parseFloat(s.marginBottom),
+      };
+    }),
+  );
+
+  expect(rows.length).toBeGreaterThan(1);
+  for (const row of rows) {
+    // A row is already a block of its own — name, timestamp, section pill — so a
+    // hairline between every pair drew a ladder down the rail and competed with
+    // the pill borders inside each row.
+    expect(row.bottom).toBe(0);
+    expect(row.top).toBe(0);
+    // …but the rows still have to be told apart, and now only space does that.
+    expect(row.gap).toBeGreaterThan(0);
+  }
+
+  for (const name of ['Rule Free One', 'Rule Free Two']) {
+    await topicAction(page, page.locator('.topic', { hasText: name }), 'delete');
+  }
 });

@@ -190,6 +190,8 @@ Source art lives in `assets/`, in two shapes — rounded and full-bleed — and 
 
 - **FR-3.42** *(Shipped, NEWS-113)* A source link's arrow aligns with the **first line** of the link text, not the vertical middle. Once a headline wrapped, a centred arrow pointed at the gap between two lines; it is a bullet for the first line, so it belongs beside the first line. `align-items: flex-start` plus a 2px nudge, so a 13px glyph sits on the first line's optical centre rather than riding its very top.
 
+- **FR-3.52** *(Shipped, NEWS-151)* Sidebar rows are separated by **whitespace, not rules**. A row is already a visual block of its own — name, timestamp, section pill, guidance preview — so a hairline between every pair drew a ladder down the rail and competed with the pill borders *inside* each row. The hover and selected fills mark a row's extent at the moment that matters; the rest of the time nothing needs to.
+
 Both are measured in `tests/e2e/layout.spec.ts` rather than eyeballed, and both measurements guard against a vacuous pass — see the note there.
 
 ## The settings dialog

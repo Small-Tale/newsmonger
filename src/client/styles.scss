@@ -697,12 +697,13 @@ h2.eyebrow {
   display: flex;
   align-items: center;
   gap: 10px;
+  // Separated by whitespace, not rules (NEWS-151). A row is already a block of
+  // its own — name, timestamp, section pill, guidance — so a hairline between
+  // every pair drew a ladder down the rail and competed with the pill borders
+  // inside each row. The hover and selected fills are what mark a row's extent
+  // when it matters; the rest of the time nothing needs to.
   padding: 9px 2px;
-  border-bottom: 1px solid var(--line);
-
-  &:first-child {
-    border-top: 1px solid var(--line);
-  }
+  margin-bottom: 4px;
 
   &.paused .topic-name {
     color: var(--ink-soft);
