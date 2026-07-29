@@ -62,3 +62,27 @@ Everything below is a **decision, not a default**. A shared card takes a publish
 - **FR-27.15** *(Design only)* Rendering is a **background job with progress**, never a synchronous request handler. A 5-scene reel measured 10.7 s and a real digest is longer; video export runs at roughly 2.4× realtime on top of that. The check runner and `src/client/discover-progress.ts` already establish the pattern.
 
 - **FR-27.16** *(Design only)* Video export additionally needs **ffmpeg**, an external binary the user installs. Unlike domotion it cannot be bundled with the sidecar, so its absence must be detected and reported actionably rather than surfacing as a failed render.
+
+## 27.6 — The card design
+
+Authored in `src/briefing/cards/` (see its README) as plain HTML/CSS, because that is what domotion captures. **The design lives in the stylesheet, not in the generator** — whatever eventually builds a reel emits markup against `cards.css` rather than carrying layout of its own.
+
+- **FR-27.17** *(Shipped as design, NEWS-166)* Cards draw from **the app's own tokens** (`src/client/styles.scss`), not a second palette invented for cards: `--paper`, `--ink`, `--ink-soft`, `--pine`, `--line`, and the same serif/sans/mono trio. A shared card that doesn't look like the app it came from is doing half its job.
+
+  **Dark is the default.** The reel is "the overnight briefing"; photographs sit better on a dark surface than a light one; and every format we care about first is viewed on a phone. Light cards are not ruled out, but nothing needs them yet and a second theme is a second thing to keep honest.
+
+- **FR-27.18** *(Shipped as design, NEWS-166)* Five scenes: **title**, **story (photo)**, **story (no photo)**, and **closing**, with the long-headline case handled by a modifier rather than a separate template.
+
+- **FR-27.19** *(Shipped as design, NEWS-166)* **The attribution rail is pinned to the bottom of every card** — a `margin-top: auto` on the block, so it lands in the same place whatever the headline and deck do. A rail that moved card to card would flicker as the reel plays, which is the kind of fault that is invisible in stills and obvious in motion.
+
+  The copy above it is balanced by a *second* auto margin leading the group, so the card's free space splits evenly above and below the copy. The first pass pinned copy to the top and the rail to the bottom and left a dead band of several hundred pixels between the deck and the rule — the single worst thing about it. Two auto margins is also self-balancing: a three-line story and a seven-line one both look composed rather than one looking starved.
+
+- **FR-27.20** *(Shipped as design, NEWS-166)* The outlet (FR-27.5) is set in **bold sans at a size no smaller than the kicker**, with the source count and date beside it in the app's mono "clockwork". It reads as *who reported this*, not as trailing metadata — which is the whole point of the requirement.
+
+- **FR-27.21** *(Shipped as design, NEWS-166)* **A long headline steps down a size rather than being clamped.** Losing the end of a headline is worse than setting it smaller: it is the one line that says what the story is. The deck is clamped instead, at four lines on a photo card — beyond that it competes with the headline for a card that is on screen for a few seconds.
+
+- **FR-27.22** *(Shipped as design, NEWS-166)* The **no-photo card is a designed card, not a photo card with a hole** (FR-27.10). Type takes the space the picture would have: the headline goes up a step, the deck's clamp relaxes, and a short pine rule opens the card where the photo would have. Its copy sits optically centred rather than in the lower third — bottom-anchoring a card with nothing above the text would leave the top two-thirds empty.
+
+- **FR-27.23** *(Shipped as design, NEWS-166)* The photo card's copy **overlaps the image's bottom scrim** rather than sitting below it. That overlap is what makes the two halves read as one card instead of a picture with a caption under it. Two gradients are used, not one: the bottom scrim carries the photo into the page colour so the image ends without a seam, and a much lighter top scrim stops the photo reading as a floating rectangle. Verified against a **bright, busy** photograph — a dark image flatters the scrim and hides whether the headline is legible over the picture.
+
+- **FR-27.24** *(Design only)* **Formats ship vertical-first.** `reel` 1080×1920 is designed and reviewed. `square` 1080×1080 and `landscape` 1920×1080 are wanted but not designed: a tall story card does not become a wide one by rescaling, and the photo/copy split in particular has to be rethought rather than adapted. Tracked separately.

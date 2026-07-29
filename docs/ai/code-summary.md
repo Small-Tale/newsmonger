@@ -26,6 +26,8 @@ src/
     store.ts          Store: SQLite (node:sqlite), per-row writes, zod-validated rows, corrupt-db backup+reset, one-time data.json import (NEWS-94)
     sqlite.ts         schema DDL, SCHEMA_VERSION + MIGRATIONS (user_version based), openDb (WAL + sanity probe), backupUnreadableDb, dbPath
     warnings.ts       filters ONLY node:sqlite's ExperimentalWarning; imported before the require in sqlite.ts
+  briefing/
+    cards/            briefing-reel card design: cards.css + 5 scene templates + README. Design only, no generator (NEWS-166)
   ai/
     types.ts          AUTO_ORDER (client-safe, NEWS-128); DISCOVERY_MODELS + usesLegacyRequestShape (NEWS-132); NewsService (checkTopic + suggestTopics) + NewsProvider, TopicContext, CheckResult/TokenUsage, SuggestRequest/SuggestScope/TopicSuggestion (NEWS-124), PROVIDER_NAMES/INFO, FoundNewsItem, KnownItem
     prompt.ts         searchingSystemPrompt, buildUserPrompt, parseNewsResult, NEWS_JSON_SCHEMA
@@ -121,7 +123,8 @@ Data dir: `--data-dir` flag → `NEWSMONGER_DATA_DIR` → `~/.newsmonger`. Also 
 | Export dialog | `exportDialogJsx` + the `open-export`/`close-export`/`data-export-scope`/`data-export-format` delegates in `client/app.tsx`, `export` in `client/stores.ts`, `.export-option` in `styles.scss`. Tauri routing via `data-export` → `/api/open-external`. See `docs/21-export-and-feed.md` FR-21.8/21.9 |
 | API key auto-save | `commitKey` + the `submit`/`change` delegates in `client/app.tsx`, `savingKey` in `client/stores.ts`, `.key-saving` in `styles.scss`. See `docs/7-api-keys.md` FR-7.10a |
 | Undoing a clear | `src/undo.ts` (`ClearUndoBuffer`), `Store.clearItemsForTopic`/`restoreClearedItems`, `POST /api/topics/:id/restore-cleared`, `showUndoToast` + `[data-undo-clear]` in `client/app.tsx`. See `docs/26-undo.md` |
-| Briefing reel / shareable cards | **Nothing built yet** — spec only, in `docs/27-briefing-reel.md`. Attribution posture decided (FR-27.4–27.7); everything else Design only. Renders via `domotion-svg`. Open tickets: NEWS-166 (card design), 167 (offline CLI), 168 (image downscaling), 169 (favicons), 170 (endpoint), 171 (video), 173 (in-app playback) |
+| Briefing card design (HTML/CSS) | `src/briefing/cards/` — `cards.css` holds the whole design; five scene templates beside it; `README.md` explains the two deliberately-unresolved references (`photo.png`, `wordmark-dark.svg`) and how to preview. **Design only, no generator.** See `docs/27-briefing-reel.md` §27.6 |
+| Briefing reel / shareable cards | **No pipeline yet** — spec in `docs/27-briefing-reel.md`. Attribution posture decided (FR-27.4–27.7); everything else Design only. Renders via `domotion-svg`. Open tickets: NEWS-166 (card design), 167 (offline CLI), 168 (image downscaling), 169 (favicons), 170 (endpoint), 171 (video), 173 (in-app playback) |
 | Dedup behavior | `src/ai/dedupe.ts` (keys), `src/checks.ts` (application) |
 | Dead / hallucinated source links | `src/ai/verify-links.ts`, called from `CheckRunner.verifyLinks` **before** dedup. Reuses `images/safety.ts` SSRF vetting; null probe under `--ai-test`. See `docs/2-news-checks-and-dedup.md` FR-2.6–2.10 |
 | Scheduling rules | `src/checks.ts` (`isDueUnderSchedule` picks interval vs daily — NEWS-84; `isDue`, `effectiveInterval`, `byCheckOrder`), `src/scheduler.ts` (tick + overrun drain). **Adding a topic checks it immediately** — `POST /api/topics` fires `checkTopic({manual:true})` in the background (NEWS-54, FR-1.12) |
