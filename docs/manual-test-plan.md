@@ -85,7 +85,8 @@ The E2E suite drives discovery end to end, but only against the deterministic mo
 1. `npm run tauri:dev` — window shows the loading spinner, then the app once the server prints its readiness line.
 2. Click a source link — it should open in the system browser, not inside the webview.
 3. Quit the app — the spawned `node` server process must exit too (`pgrep -f cli.ts`).
-4. **Delete a topic (NEWS-39)**: select it and press Delete, or right-click → Delete. The **in-app** confirmation must appear (not a native OS dialog), and confirming must actually remove the topic. This is the case that failed with `window.confirm`, which no-ops in the WKWebView — and which no headless test can catch, since Playwright auto-accepts native dialogs. Also verify **Remove** on a stored API key confirms and removes.
+4. **Export a file (NEWS-157)**: Settings → Data → click each export link. Each must save a file via the system browser (`<a download>` is a no-op in the WKWebView — this is why the click is routed through `/api/open-external`). Automated in a browser and with a simulated `window.__TAURI__`, but the real webview's download behaviour is what this confirms.
+5. **Delete a topic (NEWS-39)**: select it and press Delete, or right-click → Delete. The **in-app** confirmation must appear (not a native OS dialog), and confirming must actually remove the topic. This is the case that failed with `window.confirm`, which no-ops in the WKWebView — and which no headless test can catch, since Playwright auto-accepts native dialogs. Also verify **Remove** on a stored API key confirms and removes.
 
 ## Tauri release bundle (needs Rust toolchain) — ✅ macOS verified 2026-07-24
 

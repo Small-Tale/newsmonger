@@ -1687,14 +1687,19 @@ function settingsPanelJsx(s: AppState): SafeHtml {
           Older stories are dropped so the data file doesn’t grow without bound. Bookmarked stories are always
           kept, and so are ones you flagged off-topic — those still teach each topic what you meant.
         </p>
+        {/* `data-export` routes the click through the system browser inside the
+            Tauri webview (NEWS-157), where the `download` attribute is a no-op —
+            the same class of gap as `window.confirm` (NEWS-39) and
+            `navigator.share` (NEWS-43). In a real browser the attribute works
+            and the handler stands aside. */}
         <div class="export-row">
-          <a class="btn" href="/api/export.md?scope=all" download="">
+          <a class="btn" href="/api/export.md?scope=all" download="" data-export>
             All stories (.md)
           </a>
-          <a class="btn" href="/api/export.json?scope=all" download="">
+          <a class="btn" href="/api/export.json?scope=all" download="" data-export>
             All stories (.json)
           </a>
-          <a class="btn" href="/api/export.md?scope=saved" download="">
+          <a class="btn" href="/api/export.md?scope=saved" download="" data-export>
             Saved only (.md)
           </a>
         </div>
@@ -3344,6 +3349,26 @@ function wireEvents(root: HTMLElement): void {
   void delegate(root, 'click', 'a[data-external]', (e, el) => {
     const url = el.getAttribute('href');
     if (url !== null && openExternalUrl(url)) e.preventDefault();
+  });
+
+  /*
+   * Exports, inside the Tauri webview (NEWS-157).
+   *
+   * `<a download>` is a no-op in the WKWebView: the click is swallowed and
+   * nothing is saved, with no error to show for it — the same shape as
+   * `window.confirm` (NEWS-39) and `navigator.share` (NEWS-43). Handing the URL
+   * to the system browser works because every export already answers with
+   * `Content-Disposition: attachment`, so the browser saves it rather than
+   * rendering it, and the server is on localhost so the browser can reach it.
+   *
+   * `el.href`, **not** `getAttribute('href')`: the attribute is the relative
+   * string authored above, and `/api/open-external` parses what it is given with
+   * `new URL()` and rejects anything that isn't absolute http(s). The property
+   * is the resolved absolute URL. Outside Tauri `openExternalUrl` returns false
+   * and the browser's own download handling runs untouched.
+   */
+  void delegate(root, 'click', 'a[data-export]', (e, el) => {
+    if (el instanceof HTMLAnchorElement && openExternalUrl(el.href)) e.preventDefault();
   });
 }
 

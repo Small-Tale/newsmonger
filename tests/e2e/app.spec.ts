@@ -833,8 +833,11 @@ test('the feed and exports are served over HTTP (NEWS-85)', async ({ page, reque
   await page.goto('/');
   await openSettingsTab(page, 'Data');
   await expect(page.locator('.export-row')).toBeVisible();
-  // The download links are real hrefs, not JS handlers — so they work in the
-  // Tauri webview too, where a blob download would have nowhere to go.
+  // Real hrefs, not blob URLs built in JS. That was originally justified here as
+  // "so they work in the Tauri webview too" — which turned out to be false, and
+  // is NEWS-157: `<a download>` is a no-op in the WKWebView. The hrefs are still
+  // right (they are what the system browser is handed), but the webview needs the
+  // handler below, not just a well-formed link.
   await expect(page.locator('.export-row a').first()).toHaveAttribute('href', /export\.md/);
   await closeSettings(page);
 
@@ -848,6 +851,47 @@ test('the feed and exports are served over HTTP (NEWS-85)', async ({ page, reque
   const md = await request.get('/api/export.md?scope=all');
   expect(md.headers()['content-disposition']).toContain('attachment');
   expect(await md.text()).toContain('# All stories');
+});
+
+test('an export link actually downloads in a browser (NEWS-157)', async ({ page }) => {
+  // The link being well-formed was already asserted; that it *does* something
+  // when clicked was not, which is how a dead button went unnoticed.
+  await page.goto('/');
+  await openSettingsTab(page, 'Data');
+
+  const download = page.waitForEvent('download');
+  await page.locator('.export-row a').first().click();
+  const file = await download;
+  expect(file.suggestedFilename()).toMatch(/\.md$/);
+  await closeSettings(page);
+});
+
+test('an export goes to the system browser inside Tauri (NEWS-157)', async ({ page }) => {
+  // `openExternalUrl` keys off `window.__TAURI__`, so defining it is enough to
+  // drive the desktop path in a normal browser — the same trick that makes the
+  // WKWebView's no-op download testable at all, given no Tauri window here.
+  await page.addInitScript(() => {
+    (window as unknown as Record<string, unknown>)['__TAURI__'] = {};
+  });
+
+  const opened: string[] = [];
+  await page.route('**/api/open-external', async (route) => {
+    const body = route.request().postDataJSON() as { url?: string };
+    if (typeof body.url === 'string') opened.push(body.url);
+    await route.fulfill({ status: 200, contentType: 'application/json', body: '{"ok":true}' });
+  });
+
+  await page.goto('/');
+  await openSettingsTab(page, 'Data');
+  await page.locator('.export-row a').first().click();
+
+  await expect.poll(() => opened.length).toBe(1);
+  // Absolute, because `/api/open-external` parses what it is handed with
+  // `new URL()` and rejects anything relative — reading `getAttribute('href')`
+  // instead of the property would send "/api/export.md?scope=all" and 400.
+  expect(opened[0]).toMatch(/^http:\/\/[^/]+\/api\/export\.md\?scope=all$/);
+
+  await closeSettings(page);
 });
 
 test('the schedule can be switched to set times of day (NEWS-84)', async ({ page, request }) => {
