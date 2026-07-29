@@ -462,6 +462,27 @@ test('sorting by section groups the rail under headings (NEWS-140)', async ({ pa
   await expect(headings.first()).toHaveAttribute('role', 'presentation');
   await expect(page.locator('.topic-section', { hasText: 'Sports' })).toHaveCount(1);
 
+  // A heading reads as structure, not as a fenced-off block (NEWS-154). Sized
+  // against the "Watching" eyebrow rather than a magic number, because that
+  // comparison *is* the complaint: the headings dividing the list were a hair
+  // smaller than the label for the list itself, which is backwards.
+  const type = await page.evaluate(() => {
+    const heading = document.querySelector('.topic-section');
+    const eyebrow = document.querySelector('.topics-panel .eyebrow');
+    if (!heading || !eyebrow) return null;
+    const h = getComputedStyle(heading);
+    return {
+      size: Number.parseFloat(h.fontSize),
+      eyebrowSize: Number.parseFloat(getComputedStyle(eyebrow).fontSize),
+      border: Number.parseFloat(h.borderBottomWidth),
+    };
+  });
+  expect(type).not.toBeNull();
+  expect(type?.size ?? 0).toBeGreaterThan(type?.eyebrowSize ?? 0);
+  // The rule went with the row rules (NEWS-151) — an underlined heading in a
+  // list with no other rules is the one thing fenced in.
+  expect(type?.border).toBe(0);
+
   // Restore the default for the rest of the serial suite.
   await page.selectOption('[data-action=topic-sort]', 'alpha');
   await expect(page.locator('.topic-section')).toHaveCount(0);

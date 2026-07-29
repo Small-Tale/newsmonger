@@ -2478,12 +2478,18 @@ button.off-topic-pill {
 .topic-section {
   list-style: none;
   font-family: var(--mono);
-  font-size: 0.68rem;
+  // Larger than the "Watching" eyebrow above it, and no rule (NEWS-154). At
+  // 0.68rem it was a hair *under* the eyebrow's 11px, so the headings that
+  // divide the list read as smaller than the label for the list itself —
+  // backwards, since they are the structure the eye scans to find a topic. The
+  // rule went with the row rules (NEWS-151): whitespace does the separating, and
+  // an underlined heading in a list with no other rules is the one thing fenced.
+  font-size: 0.8rem;
+  font-weight: 500;
   letter-spacing: 0.1em;
   text-transform: uppercase;
   color: var(--ink-soft);
-  padding: 14px 2px 5px;
-  border-bottom: 1px solid var(--line);
+  padding: 18px 2px 6px;
 
   &:first-child {
     padding-top: 2px;
