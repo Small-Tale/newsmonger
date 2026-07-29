@@ -131,6 +131,12 @@ Four shapes were wireframed before the one above was chosen. Recorded because th
 
 - **FR-24.28** *(Shipped)* A provider failure renders **inside the dialog** with a retry, not in the global banner: the user is mid-task, and the message is about that one request.
 
+- **FR-24.35** *(Shipped, NEWS-137)* A discovery call takes many seconds and there is **no progress signal to read** — only a request that eventually returns. So the wait shows an *estimated* bar, paced against the **median** of the last ten real call durations on this device (30 s before there is any history, and clamped to 2–90 s so one freak call can't poison the next bar). Cache hits are excluded: they return instantly and would drag the estimate to nothing.
+
+  The curve reaches ~85% at the point the estimate predicts and then creeps toward a ceiling it **never reaches**. That is what makes an estimate safe to be wrong about in both directions: finishing early leaves the bar mid-travel, which the results simply replace, and running long leaves it inching rather than sitting at 100% while nothing happens.
+
+  Paced entirely by CSS from a `--discover-duration` custom property — no timer, no per-frame re-render, because a 10 Hz re-render of the whole mount would fight the morph for something decorative by construction. The bar is `aria-hidden` with the status line beside it doing the announcing: a progress value that is an estimate has nothing truthful to report, and "37%" would be a claim the app cannot stand behind.
+
 ## The tuner (NEWS-127, shipped)
 
 The depth control, and **still not an entry point** — the distinction the whole shape was chosen for. It costs nothing until someone asks to go deeper.

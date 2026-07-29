@@ -48,6 +48,13 @@ import {
 } from './api.js';
 import { outletFor, publishedLabel } from './attribution.js';
 import { buildDiagnostics, formatDuration, runRows } from './diagnostics.js';
+import {
+  animationDurationMs,
+  DEFAULT_TARGET_MS,
+  estimateTargetMs,
+  readDurations,
+  recordDuration,
+} from './discover-progress.js';
 import type { TunerState } from './discover.js';
 import {
   currentCandidate,
@@ -799,7 +806,7 @@ function discoverDialogJsx(d: DiscoverState): SafeHtml {
  */
 function discoverBodyJsx(d: DiscoverState): SafeHtml {
   if (d.tuner !== null) return tunerJsx(d.tuner);
-  if (d.loading) return <p class="discover-status">Asking…</p>;
+  if (d.loading) return discoverWaitingJsx();
   if (d.error !== null) {
     return (
       <div class="discover-status error">
@@ -812,6 +819,39 @@ function discoverBodyJsx(d: DiscoverState): SafeHtml {
   }
   if (d.view === 'results') return discoverResultsJsx(d);
   return d.section === null ? sectionGridJsx() : subsectionsJsx(d.section);
+}
+
+/**
+ * What a discovery call looks like while it runs (NEWS-137).
+ *
+ * The bar is paced entirely by CSS: the estimated duration is handed over as a
+ * custom property and a keyframe animation does the rest. No timer, no
+ * per-frame re-render — which matters because a 10 Hz re-render of the whole
+ * mount would fight the morph for a bar that is decorative by construction.
+ *
+ * It is `aria-hidden` with the status line beside it doing the announcing: a
+ * progress bar whose value is an estimate has nothing truthful to report to a
+ * screen reader, and "37%" would be a claim the app cannot stand behind.
+ */
+function discoverWaitingJsx(): SafeHtml {
+  const target = estimateTargetMs(readDurations());
+  return (
+    <div class="discover-waiting">
+      <p class="discover-status">Asking…</p>
+      <div
+        class="discover-bar"
+        aria-hidden="true"
+        style={`--discover-duration: ${String(Math.round(animationDurationMs(target)))}ms`}
+      >
+        <span class="discover-bar-fill" />
+      </div>
+      <p class="discover-bar-note">
+        {target === DEFAULT_TARGET_MS
+          ? 'This usually takes half a minute.'
+          : `Recent searches took about ${String(Math.round(target / 1000))}s.`}
+      </p>
+    </div>
+  );
 }
 
 /**
@@ -2071,6 +2111,15 @@ function appJsx(): SafeHtml {
             {icon('compass')}
           </button>
         </form>
+        {/* Privacy sits at the foot of the rail rather than the foot of the page
+            (NEWS-138). The rail is sticky, so it stays in reach; the page footer
+            meant scrolling past the entire feed to find it. */}
+        <div class="rail-foot">
+          <button class="btn link" type="button" data-action="open-privacy">
+            {icon('shield', 13)}
+            <span>Privacy</span>
+          </button>
+        </div>
       </section>
 
       <section id="feed" class="feed">
@@ -2102,13 +2151,20 @@ function appJsx(): SafeHtml {
         </div>
       </section>
 
-      {/* Site footer (NEWS-121). Where a privacy note belongs: findable without
-          hunting, and not filed under "settings" — nothing on it is settable. */}
+      {/* Privacy normally lives at the foot of the sidebar (NEWS-138). The
+          sidebar is `display: none` when collapsed, so the page footer remains
+          as the fallback for that one state — always present as a container so
+          it can't restructure its siblings, but only filled when it is the only
+          way to reach the dialog. */}
       <footer class="app-footer">
-        <button class="btn link" type="button" data-action="open-privacy">
-          {icon('shield', 13)}
-          <span>Privacy</span>
-        </button>
+        {s.sidebarCollapsed ? (
+          <button class="btn link" type="button" data-action="open-privacy">
+            {icon('shield', 13)}
+            <span>Privacy</span>
+          </button>
+        ) : (
+          ''
+        )}
       </footer>
     </div>
   );
@@ -2287,8 +2343,12 @@ async function runDiscovery(source: DiscoverSource): Promise<void> {
     exhausted: false,
     loadingMore: false,
   });
+  const startedAt = Date.now();
   try {
     const { suggestions, cached } = await discoverTopics(source);
+    // Only a real call informs the estimate — a cache hit returns instantly and
+    // would drag the next bar's target down to nothing (NEWS-137).
+    if (!cached) recordDuration(Date.now() - startedAt);
     if (appStore.state.value.discover === null) return;
     appStore.actions.patchDiscover({ loading: false, suggestions, cached, view: 'results' });
   } catch (err) {

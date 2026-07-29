@@ -48,6 +48,14 @@ A rare E2E failure raised the question of whether a poll-driven re-render can de
 
 That also rules the morph out as an explanation for settings flakiness, alongside the `refreshState` sequence guard (NEWS-104) and the `<select>` attribute-vs-property trap. What remains is ordinary round-trip latency under a loaded serial suite, which is a timeout question rather than a product one.
 
+### Privacy lives at the foot of the sidebar (NEWS-138)
+
+The privacy link was in the page footer, below both columns — so reaching it meant scrolling past the entire feed. It now sits at the foot of the **Watching** rail, which is `position: sticky` and therefore stays in view.
+
+The rail is also bounded to the viewport (`max-height: calc(100vh - 48px)`, a flex column with the topic list scrolling internally), because a long topic list would otherwise run off the bottom and put the link back out of reach — the exact thing being fixed.
+
+The page footer remains, but is **only filled when the sidebar is collapsed** (`display: none` hides the rail entirely in that state). One entry point on screen at a time, never zero; `.app-footer:not(:empty)` carries the rule and padding so an empty footer leaves no stray line across the page.
+
 ### New controls must reuse the established classes (NEWS-133/134/135)
 
 Three visual bugs shipped in the discovery dialog at once, and all three were the same mistake: inventing markup instead of reusing what the rest of the app already has.

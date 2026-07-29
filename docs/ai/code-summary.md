@@ -62,6 +62,7 @@ src/
     search.ts         itemMatchesQuery/filterItemsByQuery — live feed search filter (NEWS-60)
     attribution.ts    outletFor/publishedLabel — source outlet + publication date display (NEWS-82)
     diagnostics.ts    runRows/formatDuration/buildDiagnostics — redacted bug-report bundle (NEWS-88) + the discovery call log (NEWS-130)
+    discover-progress.ts estimateTargetMs/recordDuration — the discovery progress-bar estimate, median of the last 10 durations in localStorage (NEWS-137)
     discover.ts       groupSuggestions/resultsHeading/sectionTiles (NEWS-126) + the pure tuner state machine: startTuner/judgeCandidate/nextRound/mergeKept (NEWS-127)
     solo.ts           toggleSolo/isAllSoloed — solo-set arithmetic shared by the context menu and the double-click gesture (NEWS-95)
     styles.scss       styling (light/dark via prefers-color-scheme)
@@ -74,7 +75,7 @@ scripts/
 .github/              CI: gate job (test:all) + rust job (fmt + clippy, BOTH profiles); dependabot
 tests/
   helpers/            tmp.ts (tmp data dirs), provider.ts (asResolver/fakeProvider)
-  unit/               vitest: dedupe, store, checks, scheduler, config, parse-result, providers, openai, api, api-keys, api-keys-routes, attendance, catch-up, sanitize, origin-guard, guidance, key-verify, diagnostics, retention, export, daily-schedule, verify-links, attribution, concurrency, suggest-prompt, suggest-providers, discovery, discover-client
+  unit/               vitest: dedupe, store, checks, scheduler, config, parse-result, providers, openai, api, api-keys, api-keys-routes, attendance, catch-up, sanitize, origin-guard, guidance, key-verify, diagnostics, retention, export, daily-schedule, verify-links, attribution, concurrency, suggest-prompt, suggest-providers, discovery, discover-client, discover-progress
   e2e/                playwright, serial, mock AI (--ai-test), port 4189: app.spec.ts, keys.spec.ts, topics.spec.ts, a11y.spec.ts (axe-core, both themes), categories.spec.ts (NEWS-97), discover.spec.ts (NEWS-126), layout.spec.ts (full-window layout + column count at several viewports, NEWS-96). `resetTopics` in a beforeAll gives every attempt — first run or serial retry — an empty server (NEWS-101)
 docs/                 numbered requirements (1–21), ai/ summaries, manual-test-plan.md
 ```

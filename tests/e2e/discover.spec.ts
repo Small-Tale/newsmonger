@@ -541,3 +541,64 @@ test('More stops offering itself once nothing new comes back', async ({ page }) 
   await expect(page.locator('.discover-more-note')).toContainText('everything for this search');
   await expect(page.locator('[data-action=discover-more]')).toHaveCount(0);
 });
+
+// --- Progress bar (NEWS-137) and the privacy link (NEWS-138) ---------------
+
+test('a discovery call shows a paced progress bar, not just “Asking…”', async ({ page }) => {
+  await page.goto('/');
+  await page.click('[data-action=open-discover]');
+
+  // Hold the request open so the waiting state is observable — the mock is
+  // otherwise fast enough that this is a race.
+  await page.route('**/api/discover', async (route) => {
+    await new Promise((r) => setTimeout(r, 1500));
+    await route.continue();
+  });
+  await page.fill('.discover-search input', 'cycling');
+  await page.press('.discover-search input', 'Enter');
+
+  const bar = page.locator('.discover-bar');
+  await expect(bar).toBeVisible();
+  // Paced by CSS from an estimated duration, so there is no timer to test —
+  // what matters is that a duration was actually handed over.
+  const duration = await bar.evaluate((el) => getComputedStyle(el).getPropertyValue('--discover-duration').trim());
+  expect(duration).toMatch(/^\d+ms$/);
+  expect(Number.parseInt(duration, 10)).toBeGreaterThan(0);
+  // And that it is telling the user something about the wait.
+  await expect(page.locator('.discover-bar-note')).toContainText(/takes|took/);
+
+  await page.unroute('**/api/discover');
+  await expect(page.locator('.suggestion').first()).toBeVisible();
+  await expect(bar).toHaveCount(0);
+});
+
+test('the privacy link sits at the foot of the sidebar, in reach (NEWS-138)', async ({ page }) => {
+  await page.goto('/');
+
+  const link = page.locator('.rail-foot [data-action=open-privacy]');
+  await expect(link).toBeVisible();
+  // The point of the move: reachable without scrolling past the whole feed.
+  // The rail is sticky, so the link stays within the viewport.
+  const box = await link.boundingBox();
+  const viewport = page.viewportSize();
+  expect(box!.y).toBeLessThan(viewport!.height);
+
+  // And the page footer no longer carries a second copy.
+  await expect(page.locator('.app-footer [data-action=open-privacy]')).toHaveCount(0);
+
+  await link.click();
+  await expect(page.locator('.dialog.privacy-dialog')).toBeVisible();
+  await page.click('[data-action=close-privacy]');
+});
+
+test('collapsing the sidebar keeps privacy reachable via the footer', async ({ page }) => {
+  // The rail is `display: none` when collapsed, so the footer is the fallback —
+  // one entry point on screen at a time, never zero.
+  await page.goto('/');
+  await page.click('[data-action=toggle-sidebar]');
+
+  await expect(page.locator('.rail-foot [data-action=open-privacy]')).toBeHidden();
+  await expect(page.locator('.app-footer [data-action=open-privacy]')).toBeVisible();
+
+  await page.click('[data-action=toggle-sidebar]');
+});

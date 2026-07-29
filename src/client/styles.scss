@@ -278,14 +278,19 @@ body {
 
 // A quiet line under everything, for the things that are neither content nor
 // configuration (NEWS-121).
+// Only filled when the sidebar is collapsed (NEWS-138) — an empty footer must
+// not leave a stray rule and 26px of padding across the page.
 .app-footer {
   grid-area: footer;
   display: flex;
   justify-content: center;
   gap: 14px;
-  padding: 26px 0 4px;
-  margin-top: 12px;
-  border-top: 1px solid var(--line);
+
+  &:not(:empty) {
+    padding: 26px 0 4px;
+    margin-top: 12px;
+    border-top: 1px solid var(--line);
+  }
 }
 
 // A button that reads as a link — it opens a dialog, so it must be a button for
@@ -580,6 +585,21 @@ h2.eyebrow {
   position: sticky;
   top: 24px;
   padding-top: 10px;
+  // Bounded to the viewport so the foot of the rail — the privacy link — is
+  // reachable however many topics are being watched (NEWS-138). Without this a
+  // long list simply runs off the bottom and the link goes back to needing a
+  // scroll, which is the thing being fixed.
+  display: flex;
+  flex-direction: column;
+  max-height: calc(100vh - 48px);
+}
+
+.rail-foot {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+  display: flex;
+  justify-content: center;
 }
 
 // "Watching" heading + the sort dropdown on one line (NEWS-63).
@@ -667,6 +687,10 @@ h2.eyebrow {
   list-style: none;
   margin: 0;
   padding: 0;
+  // The list is what gives when the rail runs out of room (NEWS-138) — the
+  // add-topic form and the privacy link stay put at the bottom of the rail.
+  min-height: 0;
+  overflow-y: auto;
 }
 
 .topic {
@@ -2341,4 +2365,64 @@ button.off-topic-pill {
   font-size: 0.85rem;
   color: var(--ink-soft);
   text-align: center;
+}
+
+/* --- Discovery progress (NEWS-137) ----------------------------------------
+   Paced by CSS from an estimated duration handed over as `--discover-duration`,
+   so there is no timer and no per-frame re-render. The curve reaches ~85% at a
+   third of the animation — the point the estimate actually predicts — and then
+   creeps toward a ceiling it never touches. An estimate that can be wrong in
+   both directions must never claim to be finished. */
+.discover-waiting {
+  padding: 40px 0 24px;
+  text-align: center;
+}
+
+.discover-bar {
+  width: min(320px, 70%);
+  height: 4px;
+  margin: 16px auto 0;
+  border-radius: 999px;
+  background: var(--line);
+  overflow: hidden;
+}
+
+.discover-bar-fill {
+  display: block;
+  height: 100%;
+  width: 0;
+  border-radius: inherit;
+  background: var(--pine);
+  animation: discover-progress var(--discover-duration, 90s) linear forwards;
+}
+
+@keyframes discover-progress {
+  0% {
+    width: 2%;
+  }
+
+  /* One third of the animation is the estimated finish. */
+  33% {
+    width: 85%;
+  }
+
+  100% {
+    width: 97%;
+  }
+}
+
+.discover-bar-note {
+  margin: 10px 0 0;
+  font-family: var(--sans);
+  font-size: 0.78rem;
+  color: var(--ink-soft);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  /* An indeterminate wait with no animation: hold a modest fill rather than
+     pretending to know how far along it is. */
+  .discover-bar-fill {
+    animation: none;
+    width: 40%;
+  }
 }
