@@ -2,7 +2,7 @@
 
 Stories carry the article's own lead image, fetched server-side and served from the local cache. The browser never contacts a publisher.
 
-See also: [2 — News Checks and Deduplication](2-news-checks-and-dedup.md), [3 — UI](3-ui.md), [4 — CLI, Server, and Storage](4-cli-server-storage.md), [27 — The Briefing Reel](27-briefing-reel.md) (which embeds these images and depends on FR-8.4 holding).
+See also: [2 — News Checks and Deduplication](2-news-checks-and-dedup.md), [3 — UI](3-ui.md), [4 — CLI, Server, and Storage](4-cli-server-storage.md).
 
 ## Status: shipped, verified against live sites
 
