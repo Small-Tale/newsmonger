@@ -263,31 +263,26 @@ For when it is time, Tauri v2 offers two routes. `bundle.windows.certificateThum
 ### Doing a signed local build
 
 ```sh
-npm run tauri:build:local                     # sign + notarize + staple, then verify
-npm run tauri:build:local -- --no-notarize    # sign only — much faster while iterating
-npm run tauri:build:local -- --check          # resolve the identity and exit
+npm run tauri:build:local                       # updater passphrase + build (UNSIGNED)
+npm run tauri:build:local -- --sign             # ...and sign, then verify
+npm run tauri:build:local -- --release          # ...and notarize + staple app AND dmg
+npm run tauri:build:local -- --check            # resolve the identity and exit
+npm run tauri:build:local -- --save-credentials # remember notarization creds
 ```
 
-`scripts/tauri-build-local.sh` (NEWS-198) supplies the credentials `npm run tauri:build` lacks, without any of them touching a command line. It **resolves `APPLE_SIGNING_IDENTITY` from the login keychain by organization** and derives `APPLE_TEAM_ID` from the identity's own parenthesised suffix, so the two cannot disagree. That is not convenience: this machine carries **five** Developer ID certificates, four of them personal, and signing a Small Tale release with a personal one succeeds locally and is wrong. It refuses to guess if more than one org identity matches.
+**The default matches glassbox's script of the same name**: prompt for the updater key's passphrase, export it, run `tauri build`. That yields update-signed artifacts and an **unsigned** app — fast, and correct for testing, because CI signs what ships. Be clear about the consequence: a default-built `.app` opens on this Mac and nowhere else. `--release` is the distributable one.
 
-The app-specific password is read with `read -rs`, so it never reaches argv, the shell history, or another user's `ps`. `--check` exists because the alternative to verifying your setup in one second is finding out fifteen minutes into a build.
+The updater passphrase is the only credential the default needs, and that asymmetry is not a style choice — Tauri **requires** it once `bundle.createUpdaterArtifacts` is on, while Apple signing and notarization are skipped *silently* when their variables are absent. That is the entire reason glassbox's script asks for exactly one thing.
 
-**Notarization credentials resolve environment → login keychain → prompt.** Run it once with `--save-credentials` and later runs prompt for nothing:
+`--sign` and `--release` resolve `APPLE_SIGNING_IDENTITY` from the login keychain **by organization** and derive `APPLE_TEAM_ID` from the identity's own parenthesised suffix, so the two cannot disagree. That matters concretely: this machine carries five Developer ID certificates, four of them personal, and signing a Small Tale release with a personal one succeeds locally and is wrong. It refuses to guess if several org identities match. `--check` exists because the alternative to confirming setup in one second is finding out fifteen minutes into a build.
 
-```sh
-npm run tauri:build:local -- --save-credentials   # once
-npm run tauri:build:local                          # thereafter, no prompts
-```
+**Notarization credentials resolve environment → login keychain → prompt.** Run `--save-credentials` once and later `--release` runs prompt for nothing. The keychain rather than a `.env` file for a specific reason: Tauri accepts **only** environment variables for notarization — it has no `--keychain-profile` equivalent, so `xcrun notarytool store-credentials` would cover our own dmg submission and *not* Tauri's of the app. Keeping the secret in the keychain and exporting it into just this process gets a dotfile's convenience without leaving an app-specific password in plaintext. Remove with `security delete-generic-password -s newsmonger-notarization`.
 
-The keychain rather than a `.env` file, for a specific reason: **Tauri accepts only environment variables for notarization** — `APPLE_ID`/`APPLE_PASSWORD`/`APPLE_TEAM_ID` or the App Store Connect trio. It has no `--keychain-profile` equivalent, so `xcrun notarytool store-credentials` would cover our own dmg submission and *not* Tauri's notarization of the app. Keeping the secret in the keychain and exporting it into just this process gets the convenience without leaving an app-specific password in plaintext on disk. Remove it with `security delete-generic-password -s newsmonger-notarization`.
+`verify-signing.sh` runs automatically after `--sign`/`--release`, and only then: on an unsigned build every check fails by design, and a wall of red on the expected outcome trains people to ignore it.
 
-> For contrast, glassbox's `tauri:build:local` caches nothing and asks only for its updater passphrase — because its local build **never notarizes**. Its `APPLE_*` values exist only as CI secrets. The nearest equivalent here is plain `npm run tauri:build`.
+**None of this substitutes for the release workflow.** Locally, signing comes from the login keychain; in CI a `.p12` is imported into a throwaway keychain. That path exists only there, so a green local build says nothing about it — this repo has already had two "passes on a dev machine, fails on a runner" bugs (NEWS-191, NEWS-193). Nor does it replace opening a *downloaded* `.dmg`: a locally produced file is never quarantined.
 
-`scripts/verify-signing.sh` runs automatically afterwards — a production build nobody verified is exactly what FR-5.7 exists to prevent.
-
-**It does not replace the release workflow.** Locally, signing comes from the login keychain; in CI a `.p12` is imported into a throwaway keychain (`APPLE_CERTIFICATE` + `APPLE_CERTIFICATE_PASSWORD` + `KEYCHAIN_PASSWORD`). That path exists only there, so a green local build says nothing about it — and this repo has already had two "passes on a dev machine, fails on a runner" bugs (NEWS-191, NEWS-193). Nor does it replace opening a *downloaded* `.dmg`: a file this machine produced is never quarantined.
-
-> **macOS ships bash 3.2**, and `/usr/bin/env bash` resolves to it. The first version of this script used `mapfile` and died instantly on `command not found`; `bash -n` passed, because a missing builtin is a runtime failure rather than a syntax error. `tests/unit/release-scripts.test.ts` now greps the scripts for bash-4-only builtins for that reason.
+> **macOS ships bash 3.2**, and `/usr/bin/env bash` resolves to it. The first version of this script used `mapfile` and died on `command not found`; `bash -n` passed, because a missing builtin is a runtime failure rather than a syntax error. `tests/unit/release-scripts.test.ts` greps the scripts for bash-4-only builtins for that reason.
 
 ### Doing it by hand
 

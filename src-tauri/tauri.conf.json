@@ -43,6 +43,18 @@
     ],
     "macOS": {
       "entitlements": "entitlements.plist"
+    },
+    "createUpdaterArtifacts": true
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDY1MTNCMUFBQUZBRTc0ODQKUldTRWRLNnZxckVUWmF1ZW95eDQvUTE5OVB1bVBUQk9VaHhTc2wxQTVhU0NVdUNaOWxwcjMxdnQK",
+      "endpoints": [
+        "https://github.com/Small-Tale/newsmonger/releases/latest/download/latest.json"
+      ],
+      "windows": {
+        "installMode": "passive"
+      }
     }
   }
 }

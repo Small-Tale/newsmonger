@@ -32,6 +32,18 @@ pub fn run() {
         // WKWebView, so the client routes notifications through this plugin,
         // whose requestPermission() shows the system dialog.
         .plugin(tauri_plugin_notification::init())
+        // Auto-update (NEWS-199), matching the glassbox setup. Registering the
+        // plugin is what makes `bundle.createUpdaterArtifacts` meaningful: the
+        // bundler emits signed update artifacts and a `latest.json` manifest that
+        // tauri-action publishes alongside the release.
+        //
+        // Nothing calls `updater().check()` yet, so a running app does not look
+        // for updates — that is the in-app surface, tracked separately. Releases
+        // built from here are update-*capable*, which has to come first: an
+        // installed build can only ever be updated by a manifest whose public key
+        // it already carries, so shipping the plugin late would leave early
+        // installs permanently un-updatable.
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .manage(ServerPid(Mutex::new(None)))
         .setup(|app| {
             let window = app
