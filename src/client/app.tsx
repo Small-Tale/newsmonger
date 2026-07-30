@@ -1812,7 +1812,7 @@ function settingsPanelJsx(s: AppState): SafeHtml {
           )}
         </div>
         <p class="note">
-          Keys are stored in your {s.keychainLabel} — never in ~/.newsmongermonger/newsmonger.db, and never sent anywhere but the
+          Keys are stored in your {s.keychainLabel} — never in ~/.newsmonger/newsmonger.db, and never sent anywhere but the
           provider you chose.
         </p>
         </div>

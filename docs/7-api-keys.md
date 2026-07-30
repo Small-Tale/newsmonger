@@ -17,7 +17,7 @@ See also: [6 — AI Providers](6-providers.md), [3 — UI](3-ui.md), [4 — CLI,
 
   The environment wins so `ANTHROPIC_API_KEY=… npm run dev` overrides a stored key without the user clearing it first, and so CI and the E2E suite never depend on a developer's keychain. An exported-but-empty variable counts as unset and falls through to the keychain.
 
-- **FR-7.2** *(Shipped)* **There is no third source.** A key is never written to `~/.newsmongermonger/newsmonger.db`, so the data file stays safe to copy, sync, or attach to a bug report. Where the keychain is unavailable, the environment is the only way to supply a key and the dialog says so — the app does not quietly fall back to disk.
+- **FR-7.2** *(Shipped)* **There is no third source.** A key is never written to `~/.newsmonger/newsmonger.db`, so the data file stays safe to copy, sync, or attach to a bug report. Where the keychain is unavailable, the environment is the only way to supply a key and the dialog says so — the app does not quietly fall back to disk.
 
 - **FR-7.3** *(Shipped)* Keys are resolved **per request**, not at construction. A key saved in Settings takes effect on the next check with no restart. Each provider caches its SDK client but keys that cache on the credential it was built with, so replacing a key can't keep authenticating as the old one.
 
