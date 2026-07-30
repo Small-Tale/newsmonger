@@ -259,17 +259,23 @@ It runs with `--data-dir` into a `mktemp` directory, never `~/.newsmonger`, for 
 
 ### Production vs beta releases
 
-**The Apple credentials are identical for both.** There is no such thing as a beta Developer ID certificate, and notarization does not distinguish channels. Anyone setting up a second set of Apple secrets for beta has misread the model. What actually differs is release *metadata*, and — once an updater exists — which manifest a build points at:
+**The Apple credentials are identical for both.** There is no such thing as a beta Developer ID certificate, and notarization does not distinguish channels. Anyone setting up a second set of Apple secrets for beta has misread the model. What actually differs is release *metadata*:
 
 | | Production | Beta |
 |---|---|---|
 | Tag | `v1.2.0` | `v1.2.0-beta.1` |
 | GitHub Release | normal | `prerelease: true` |
 | Apple secrets | same set | **same set** |
-| Updater endpoint | `.../latest.json` | `.../beta.json` (or `?channel=beta`) |
+| Updater endpoint | `.../latest.json` | **the same `.../latest.json`** — see below |
 | Updater keypair | shared | **shared — see below** |
 
-**Use one updater keypair across both channels.** The tempting alternative — a separate keypair per channel, for blast-radius isolation — has a trap: the public key is compiled into the binary, so a beta build could never accept a production update. Every beta tester would be stranded on the beta channel until they reinstalled by hand. One keypair with two manifests lets a tester move back to stable as a normal update. Do not split the keypair unless you are willing to own that migration.
+**FR-5.18** *(Decided, NEWS-205)* **One updater endpoint, not one per channel.** Every build — beta or stable — points at `releases/latest/download/latest.json`. Copied from glassbox, which ships exactly this and nothing else: no `beta.json`, no `?channel=` parameter, no channel handling anywhere.
+
+The consequence is worth stating plainly rather than discovering: GitHub's `releases/latest` **skips prereleases**, so a beta install sees the next *stable* release as its update and takes it. **A beta is a one-way trip — testers rejoin stable automatically and silently.**
+
+That is the intended behaviour, not a limitation being tolerated. A beta exists to get a build in front of people before it is blessed; once the blessed version exists, there is no reason to keep anyone behind on the unblessed one. The alternative — a second manifest — buys a "stay on beta" mode nobody asked for, and costs a channel-switching problem, because **the endpoint is compiled into the binary**: moving between channels would stop being an update and start being a reinstall.
+
+**Use one updater keypair across both channels** for the same class of reason. A separate keypair per channel, for blast-radius isolation, has a trap: the public key is also compiled into the binary, so a beta build could never accept a production update, and every beta tester would be stranded until they reinstalled by hand. Do not split the keypair unless you are willing to own that migration.
 
 ## Auto-update (NEWS-89)
 

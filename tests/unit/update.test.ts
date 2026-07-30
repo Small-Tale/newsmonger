@@ -9,6 +9,10 @@
  * Philosophy → transition-matrix testing".
  */
 
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+
 import { beforeEach, describe, expect, it } from 'vitest';
 
 import { appStore } from '../../src/client/stores.js';
@@ -20,6 +24,8 @@ beforeEach(() => {
   appStore.actions.setUpdateInstall('idle');
   appStore.actions.setUpdateCheckMessage(null);
 });
+
+const root = path.join(path.dirname(fileURLToPath(import.meta.url)), '../..');
 
 const s = () => appStore.state.value;
 
@@ -198,5 +204,35 @@ describe('the Tauri command bridge', () => {
       expect(isTauri()).toBe(true);
       expect(getTauriInvoke()).toBeUndefined();
     });
+  });
+});
+
+describe('the updater endpoint is single-channel by decision (NEWS-205)', () => {
+  const conf = (): { plugins?: { updater?: { endpoints?: string[]; pubkey?: string } } } =>
+    JSON.parse(fs.readFileSync(path.join(root, 'src-tauri/tauri.conf.json'), 'utf8'));
+
+  it('points every build at exactly one manifest', () => {
+    // Copied from glassbox, which ships one endpoint and no channel handling.
+    // The consequence is deliberate: `releases/latest` skips prereleases, so a
+    // beta install takes the next *stable* release and rejoins the stable
+    // channel. A beta is a one-way trip (FR-5.18, docs/5-desktop-app.md).
+    const endpoints = conf().plugins?.updater?.endpoints ?? [];
+    expect(endpoints).toHaveLength(1);
+    expect(endpoints[0]).toBe(
+      'https://github.com/Small-Tale/newsmonger/releases/latest/download/latest.json',
+    );
+  });
+
+  it('has no per-channel manifest', () => {
+    // A second endpoint would buy a "stay on beta" mode nobody asked for and cost
+    // a channel-switching problem — the endpoint is compiled into the binary, so
+    // moving channels stops being an update and becomes a reinstall.
+    const raw = fs.readFileSync(path.join(root, 'src-tauri/tauri.conf.json'), 'utf8');
+    expect(raw).not.toContain('beta.json');
+    expect(raw).not.toContain('channel=');
+  });
+
+  it('carries a pubkey, without which the endpoint is meaningless', () => {
+    expect(conf().plugins?.updater?.pubkey ?? '').not.toBe('');
   });
 });
