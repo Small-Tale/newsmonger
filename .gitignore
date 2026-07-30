@@ -21,3 +21,6 @@ src-tauri/server
 
 /.glassbox/*
 !/.glassbox/settings.json
+
+# Release flow: interactive resumable state (scripts/release.sh)
+.release-state.json

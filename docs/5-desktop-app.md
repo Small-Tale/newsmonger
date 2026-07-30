@@ -207,7 +207,17 @@ A convenient consequence of the app-specific-password route: **every secret maps
 
 **Do a dry run first.** Actions → Release → **Run workflow**. A manual run exercises the entire signing and notarization path and publishes nothing, so a wrong secret costs a red run instead of a half-published tag. The workflow takes no inputs on purpose: a manual run is *always* a dry run, because on a branch `GITHUB_REF` is `refs/heads/<branch>` and a release created from it would be named after the branch.
 
-Once that's green:
+Once that's green, cut the release through the scripts rather than by hand (NEWS-194):
+
+```sh
+npm run release             # stable:  bump, changelog, commit, tag v{ver}
+npm run release:beta        # beta:    same, tagged v{ver}-beta.N
+npm run release:beta:auto   # beta, non-interactive (--dry-run to rehearse)
+```
+
+`release` and `release:beta` are the same interactive flow (`scripts/release.sh`): preflight, gitgist-drafted release notes in `$EDITOR`, a version menu, a review screen, then gates → version files → CHANGELOG → commit → tag → push. It is **resumable** — progress lives in `.release-state.json`, so an abort part-way picks up where it stopped instead of re-asking. `release:beta:auto` answers every prompt itself for automation; `--dry-run` does everything except commit, tag and push.
+
+Doing it by hand still works, and is what the scripts do:
 
 ```sh
 git tag v0.1.0-beta.1     # hyphen => prerelease
@@ -215,6 +225,8 @@ git push origin v0.1.0-beta.1
 ```
 
 The prerelease flag is **derived from the tag** — a hyphen anywhere in it means prerelease — so a beta needs no second workflow and no second set of secrets to drift out of sync.
+
+**The version lives in five files**, and `scripts/set-version.mjs` writes the three that `npm version` doesn't: `tauri.conf.json`, `Cargo.toml`, and `Cargo.lock`. That last one matters more than it looks — it records the workspace package's own version, so skipping it means `cargo build` silently rewrites the lockfile, every release carries an unexplained lockfile diff, and a future `--locked` build hard-fails. The workflow's guard only compares the tag against `package.json` and `tauri.conf.json`, so a missed `Cargo.toml` would pass the guard and ship a crate version that disagrees with its own bundle. `tests/unit/release-scripts.test.ts` pins all of it, including that exactly one line changes per file — `Cargo.lock` has ~400 other `[[package]]` blocks and more than one shares this crate's version.
 
 **A tag whose base version disagrees with `tauri.conf.json` fails the run before the build.** Nothing otherwise links the two: the tag is the only statement of the release version, the bundle takes its version from the config, and tagging `v0.2.0` against a `0.1.0` config would publish a release whose assets are all named `0.1.0` with nothing complaining. Only the *base* version has to match — the prerelease suffix stays on the tag, because macOS bundle version fields do not accept semver prerelease suffixes.
 

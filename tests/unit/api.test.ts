@@ -32,8 +32,8 @@ async function json(res: Response): Promise<unknown> {
  * purpose, so the client build is a genuine precondition rather than an
  * incidental one. But `dist/` is gitignored, and a dev machine always has one
  * lying around from an earlier build — so the only place this ever bites is a
- * clean checkout, i.e. CI, where the symptom was a bare `expected 404 to be
- * 200` that reads like a broken route.
+ * clean checkout, i.e. CI, where the symptom was a bare "expected 404 to be 200"
+ * that reads like a broken route.
  *
  * `npm run test:all` now builds the client first. This is for the bare
  * `npx vitest` case, where nothing has.
