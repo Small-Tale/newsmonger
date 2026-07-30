@@ -24,6 +24,7 @@ describe('parseArgs', () => {
       open: true,
       strictPort: false,
       aiTest: false,
+      demo: false,
       provider: null,
       model: null,
       endpoint: null,
@@ -68,5 +69,22 @@ describe('parseArgs', () => {
   it('rejects missing --data-dir value and unknown flags', () => {
     expect(() => parseArgs(['--data-dir'], {})).toThrow(/--data-dir/);
     expect(() => parseArgs(['--bogus'], {})).toThrow(/unknown argument/);
+  });
+});
+
+describe('--demo (NEWS-212)', () => {
+  it('implies --ai-test', () => {
+    // Both mean "make no real AI call", and every `aiTest` guard downstream
+    // (image fetching, link probing, key verification) should apply to a demo
+    // capture too. Implying it here beats pairing a second condition with each.
+    const opts = parseArgs(['--demo'], {});
+    expect(opts.demo).toBe(true);
+    expect(opts.aiTest).toBe(true);
+  });
+
+  it('is off unless asked for, and --ai-test alone does not enable it', () => {
+    expect(parseArgs([], {}).demo).toBe(false);
+    expect(parseArgs(['--ai-test'], {}).demo).toBe(false);
+    expect(parseArgs(['--ai-test'], {}).aiTest).toBe(true);
   });
 });

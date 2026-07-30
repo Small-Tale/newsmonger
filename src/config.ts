@@ -10,6 +10,8 @@ export interface CliOptions {
   open: boolean;
   strictPort: boolean;
   aiTest: boolean;
+  /** Seed fixture topics and serve curated stories, for capturing the docs (NEWS-212). */
+  demo: boolean;
   /** Provider to seed into settings at startup; null = leave settings as-is. */
   provider: ProviderName | null;
   /** Model to seed into settings at startup; null = leave as-is. */
@@ -42,6 +44,7 @@ export function parseArgs(argv: string[], env: NodeJS.ProcessEnv = process.env):
     open: true,
     strictPort: false,
     aiTest: false,
+    demo: false,
     provider: envProvider !== undefined && envProvider !== '' ? parseProvider(envProvider) : null,
     model: envModel !== undefined && envModel !== '' ? envModel : null,
     endpoint: envEndpoint !== undefined && envEndpoint !== '' ? envEndpoint : null,
@@ -87,6 +90,14 @@ export function parseArgs(argv: string[], env: NodeJS.ProcessEnv = process.env):
         options.strictPort = true;
         break;
       case '--ai-test':
+        options.aiTest = true;
+        break;
+      case '--demo':
+        // Implies --ai-test: both mean "don't make a real AI call", and the demo
+        // provider is a fixture provider. Keeping them separate booleans would
+        // mean every `options.aiTest` guard (image fetching, link probing, key
+        // verification) needed a second condition beside it.
+        options.demo = true;
         options.aiTest = true;
         break;
       default:

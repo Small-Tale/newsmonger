@@ -8,9 +8,10 @@ Built with [kerfjs](https://github.com/brianwestphal/kerf) + Hono + Tauri (hybri
 
 ```sh
 npm install
-export ANTHROPIC_API_KEY=sk-ant-...   # or run with --ai-test for a mock service
-npm run dev                            # http://127.0.0.1:4187
+npm run dev     # http://127.0.0.1:4187
 ```
+
+**No API key needed.** If you're signed in to [Claude Code](https://claude.com/claude-code) or the [Codex CLI](https://developers.openai.com/codex/cli), Newsmonger uses that subscription — it drives the CLI you already have, so checks come out of your existing plan rather than a metered key. That's the default and the recommended way to run it. Add `--ai-test` for an offline mock, or set an API key in Settings if you'd rather pay per call.
 
 Data lives in `~/.newsmonger/newsmonger.db`, a SQLite database (override the directory with `--data-dir` or `NEWSMONGER_DATA_DIR`). A `data.json` left by an older build is imported automatically on first start and renamed.
 
@@ -20,10 +21,14 @@ Pick which AI finds and summarizes news, from the Source block in the UI or with
 
 | Provider | Config |
 |---|---|
-| `auto` (default) | picks the first available provider |
+| `auto` (default) | first available, in the order below — **subscriptions before API keys** |
+| `claude-cli` | none — your **Claude subscription**, via the signed-in `claude` CLI |
+| `codex-cli` | none — your **ChatGPT subscription**, via the signed-in `codex` CLI |
 | `anthropic` | `ANTHROPIC_API_KEY` (Claude + web search) |
 | `openai` | `OPENAI_API_KEY`, `OPENAI_BASE_URL` (Responses API + web search) |
 | `mock` | offline deterministic (`--ai-test`) |
+
+The two subscription providers are tried first on purpose: if you hold a subscription, you expect its quota spent before a key you also happen to have configured. They're **attended** — scheduled checks run only while Newsmonger is open, so it never becomes an unattended background agent on your account. Manual checks always run. See [docs/9-subscription-providers.md](docs/9-subscription-providers.md).
 
 Seed at startup with `--provider <name> --model <id> --endpoint <url>` (or `NEWSMONGER_PROVIDER`/`NEWSMONGER_MODEL`/`NEWSMONGER_ENDPOINT`); change any time in the UI. See [docs/6-providers.md](docs/6-providers.md).
 

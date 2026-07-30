@@ -1,5 +1,6 @@
 import v8 from 'node:v8';
 
+import { createDemoProvider } from './ai/providers/demo.js';
 import { createMockProvider, resolveProvider } from './ai/providers/index.js';
 import { PROVIDER_NAMES } from './ai/types.js';
 import { probeLink } from './ai/verify-links.js';
@@ -29,7 +30,7 @@ async function main(): Promise<void> {
     // NEWS-164 rename.
     console.error(
       `usage: newsmonger [--port N] [--data-dir PATH] [--provider ${PROVIDER_NAMES.join('|')}] ` +
-        '[--model ID] [--endpoint URL] [--no-open] [--strict-port] [--ai-test]',
+        '[--model ID] [--endpoint URL] [--no-open] [--strict-port] [--ai-test] [--demo]',
     );
     process.exit(1);
   }
@@ -45,7 +46,10 @@ async function main(): Promise<void> {
   if (Object.keys(patch).length > 0) store.updateSettings(patch);
 
   let resolve: ProviderResolver;
-  if (options.aiTest) {
+  if (options.demo) {
+    const demo = createDemoProvider();
+    resolve = () => Promise.resolve(demo);
+  } else if (options.aiTest) {
     const mock = createMockProvider();
     resolve = () => Promise.resolve(mock);
   } else {
