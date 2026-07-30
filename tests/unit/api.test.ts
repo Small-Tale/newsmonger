@@ -1,3 +1,7 @@
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+
 import { describe, expect, it } from 'vitest';
 
 import { createMockProvider } from '../../src/ai/providers/index.js';
@@ -19,6 +23,31 @@ function makeApp() {
 
 async function json(res: Response): Promise<unknown> {
   return (await res.json()) as unknown;
+}
+
+/**
+ * Fail with the actual fix when `dist/client/` hasn't been built (NEWS-191).
+ *
+ * A handful of tests below fetch static assets through the real route on
+ * purpose, so the client build is a genuine precondition rather than an
+ * incidental one. But `dist/` is gitignored, and a dev machine always has one
+ * lying around from an earlier build — so the only place this ever bites is a
+ * clean checkout, i.e. CI, where the symptom was a bare `expected 404 to be
+ * 200` that reads like a broken route.
+ *
+ * `npm run test:all` now builds the client first. This is for the bare
+ * `npx vitest` case, where nothing has.
+ */
+function requireBuiltClient(): void {
+  const root = path.join(path.dirname(fileURLToPath(import.meta.url)), '../..');
+  const built = path.join(root, 'dist/client/favicon.svg');
+  if (!fs.existsSync(built)) {
+    throw new Error(
+      'dist/client/ is not built, so /static/* cannot be served.\n' +
+        "  Run 'npm run build:client' (or 'npm run test:all', which does it) first.\n" +
+        `  Expected: ${built}`,
+    );
+  }
 }
 
 /** Poll state until no checks are in flight (checks run async after POST /api/check). */
@@ -341,6 +370,7 @@ describe('API', () => {
   });
 
   it('serves a manifest whose icons all resolve (NEWS-115)', async () => {
+    requireBuiltClient();
     // The manifest names icons by path, and those files come from the client
     // build. Nothing links the two but a string, so the assertion worth making
     // is that every path it advertises is actually served — a maskable icon
@@ -377,6 +407,13 @@ describe('API', () => {
     // A favicon that 404s is invisible until someone looks at the tab, and the
     // link and the file are produced by different things — the page template and
     // the client build. This asserts they agree.
+    //
+    // That makes the client build a real precondition, checked explicitly here
+    // (NEWS-191). Without this the failure is a bare `expected 404 to be 200`,
+    // which reads as a broken route rather than a missing build — and it cost CI
+    // a red run to work that out, because a dev machine always has a stale
+    // `dist/client/` lying around and never sees it.
+    requireBuiltClient();
     const { app } = makeApp();
     const html = await (await app.request('/')).text();
     const href = /<link[^>]+rel="icon"[^>]+href="([^"]+)"/.exec(html)?.[1];

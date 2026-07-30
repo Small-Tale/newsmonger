@@ -75,6 +75,28 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y libwebkit2gtk-4.1-dev librsvg2-dev patchelf
 
+      # tauri-build validates `bundle.externalBin` and `bundle.resources` inside
+      # its build script, so a plain `cargo clippy` fails before compiling
+      # anything: "resource path `binaries/newsmonger-node-x86_64-unknown-linux-gnu`
+      # doesn't exist". Both paths are gitignored and are produced by
+      # scripts/build-sidecar.sh, which only runs as Tauri's beforeBuildCommand —
+      # never under cargo. That is why this job had never passed (NEWS-191).
+      #
+      # Stubs rather than the real thing, deliberately: this job compile-checks
+      # Rust and never produces a bundle, and tauri-build only checks that the
+      # paths *exist*. Building the real sidecar would mean setup-node plus a
+      # Node download, an `npm ci`, a server bundle and a nested `npm install` —
+      # minutes of work to satisfy an existence check. The release workflow
+      # builds them for real, which is where it matters.
+      - name: Stub the sidecar paths tauri-build checks for
+        run: |
+          triple="$(rustc --print host-tuple)"
+          mkdir -p src-tauri/binaries src-tauri/server
+          : > "src-tauri/binaries/newsmonger-node-${triple}"
+          chmod +x "src-tauri/binaries/newsmonger-node-${triple}"
+          echo "stub for cargo checks — see .github/workflows/ci.yml" > src-tauri/server/README
+          ls -l src-tauri/binaries src-tauri/server
+
       - name: Format
         working-directory: src-tauri
         run: cargo fmt --check
