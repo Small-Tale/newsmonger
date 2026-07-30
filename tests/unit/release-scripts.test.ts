@@ -122,7 +122,15 @@ describe('add-changelog-entry.mjs (NEWS-194)', () => {
       path.join(root, 'scripts/add-changelog-entry.mjs'),
       path.join(sandbox, 'scripts/add-changelog-entry.mjs'),
     );
-    fs.copyFileSync(path.join(root, 'CHANGELOG.md'), path.join(sandbox, 'CHANGELOG.md'));
+    // A fixture header, NOT a copy of the real CHANGELOG.md.
+    //
+    // Seeding from the real file is what these tests did first, and the very
+    // next release broke them: the newest-first assertion compares the full list
+    // of headings, so a real `## [0.1.0]` entry made it `['0.2.0','0.1.0','0.1.0']`.
+    // The behaviour under test is the script's *insertion*, which has nothing to
+    // do with the repo's release history — coupling to it means every release can
+    // fail the suite. The real file's shape is asserted separately, above.
+    fs.writeFileSync(path.join(sandbox, 'CHANGELOG.md'), '# Changelog\n\nPreamble prose.\n');
   });
 
   afterEach(() => {

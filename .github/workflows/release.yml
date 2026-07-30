@@ -66,10 +66,18 @@ jobs:
       # Fast gates before spending ~20 minutes on a bundle. ci.yml covers E2E on
       # the same commit; this is here so a release can't publish something that
       # doesn't even compile.
+      #
+      # `build:client` first, and not optionally: two unit tests fetch
+      # `/static/favicon.svg` through the real route, and `dist/` is gitignored.
+      # This step originally called vitest directly and hit exactly the failure
+      # NEWS-191 had just fixed in `test-all.sh` — the first ever run of this
+      # workflow died here. `requireBuiltClient()` named the fix in the log,
+      # which is what that guard is for.
       - name: Gates (typecheck, lint, unit)
         run: |
           npm run typecheck
           npm run lint
+          npm run build:client
           npx vitest run --coverage=false
 
       # The tag is the only place the release version is stated, and the bundle
