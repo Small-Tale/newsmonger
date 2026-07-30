@@ -44,7 +44,16 @@ jobs:
 
       # typecheck + lint + vitest + Playwright (E2E runs the mock provider via
       # --ai-test, so CI needs no API key), then merges coverage.
+      #
+      # `RUST_GATES=skip` because the `rust` job below already runs them, with the
+      # webkit/glib dev headers the Tauri crate links against installed. This
+      # runner has none of them, so compiling here fails with "The system library
+      # `glib-2.0` ... was not found" — which is what red-lit main when the Rust
+      # gates were first folded into `test:all`. Installing the headers a second
+      # time to run the same four checks a second time is the wrong fix.
       - run: npm run test:all
+        env:
+          RUST_GATES: skip
 
       - uses: actions/upload-artifact@v4
         if: always()

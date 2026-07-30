@@ -689,3 +689,40 @@ describe('the local gates cover what CI checks', () => {
     expect(src).toContain('RUST_GATES');
   });
 });
+
+describe('the Rust gates skip only where a sibling job covers them', () => {
+  const read = (rel: string): string => fs.readFileSync(path.join(root, rel), 'utf8');
+
+  it("ci.yml's gate job opts out, because its rust job does the work", () => {
+    // Folding the Rust gates into `test:all` red-lit main: the gate runner has no
+    // webkit/glib dev headers, so `cargo` failed with "The system library
+    // `glib-2.0` ... was not found". The fix is to skip there, not to install the
+    // headers twice and run the same four checks twice.
+    const ci = read('.github/workflows/ci.yml');
+    expect(ci).toMatch(/npm run test:all\s*\n\s*env:\s*\n\s*RUST_GATES: skip/);
+  });
+
+  it('still runs them in the dedicated rust job', () => {
+    // The skip above is only safe while this remains true. If the rust job ever
+    // loses a check, the gate job's opt-out silently stops being covered.
+    const ci = read('.github/workflows/ci.yml');
+    for (const cmd of [/cargo fmt[^\n]*--check/, /cargo clippy(?![^\n]*--release)[^\n]*-D warnings/, /cargo clippy[^\n]*--release[^\n]*-D warnings/, /cargo test/]) {
+      expect(ci).toMatch(cmd);
+    }
+  });
+
+  it('honours skip, and is not skipped by default', () => {
+    const sh = read('scripts/gates-rust.sh');
+    expect(sh).toContain('"${RUST_GATES:-}" = "skip"');
+    // No default value that would turn the local gate into a no-op.
+    expect(sh).not.toMatch(/RUST_GATES:-skip/);
+  });
+
+  it('release-candidate.yml does not route Rust through test:all', () => {
+    // Its unit job runs `npm test` directly and it has its own rust job, so the
+    // glib problem cannot arise there — asserting it so a future "simplification"
+    // to `npm run test:all` doesn't reintroduce it.
+    const rc = read('.github/workflows/release-candidate.yml');
+    expect(rc).not.toContain('npm run test:all');
+  });
+});

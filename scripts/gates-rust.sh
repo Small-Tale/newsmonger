@@ -25,6 +25,20 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
+# Explicit opt-out, for a CI job that has a *sibling* job doing this properly.
+#
+# `ci.yml` runs the Rust gates in a dedicated job that installs the webkit/glib
+# dev headers the Tauri crate links against. The gate job (typecheck/lint/unit/
+# E2E) has none of them, so compiling there fails with "The system library
+# `glib-2.0` ... was not found" — which is exactly what happened when the Rust
+# gates were first folded into `test:all` (NEWS-213 follow-on). Installing the
+# headers twice to run the same checks twice is the wrong fix.
+if [ "${RUST_GATES:-}" = "skip" ]; then
+  echo "== rust gates SKIPPED (RUST_GATES=skip) =="
+  echo "   Set by a caller that runs them elsewhere — ci.yml's dedicated rust job."
+  exit 0
+fi
+
 if ! command -v cargo >/dev/null 2>&1; then
   if [ "${RUST_GATES:-}" = "required" ]; then
     echo "!! cargo not found and RUST_GATES=required — failing." >&2
