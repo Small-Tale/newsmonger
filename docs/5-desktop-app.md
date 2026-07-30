@@ -42,6 +42,16 @@ The check is skipped when cross-compiling, since the downloaded Node binary won'
 
   The sidecar (`binaries/newsmonger-node`) is a **separate** name and stays lowercase — `externalBin` resolves `<name>-<target-triple>` on disk, so it is unrelated to the app binary. `tests/unit/tauri-naming.test.ts` asserts they cannot collide.
 
+- **FR-5.10** *(Shipped, NEWS-185)* The window **title is set but not drawn** on macOS: `hiddenTitle: true` beside `title: "Newsmonger"`.
+
+  The two were redundant — the titlebar spelled out the app's name directly above the wordmark in the app's own header. `hiddenTitle` maps to AppKit's `NSWindow.titleVisibility = .hidden`, and the distinction is the whole point: it hides the titlebar **text** while leaving the window's `title` property **set**, so the **Window menu** and the **Dock icon's context menu** still list the window by name. The titlebar itself stays, so traffic lights, dragging and double-click-to-zoom are untouched.
+
+  **`title: ""` would have been the wrong fix** and is the obvious one to reach for: it hides the text *and* empties both listings, which is exactly what this requirement exists to preserve. `tests/unit/tauri-naming.test.ts` asserts the title stays non-empty for that reason.
+
+  **Windows and Linux deliberately keep their titles.** There is no `hiddenTitle` equivalent — the option is macOS-only — and on those platforms the same string feeds the titlebar *and* the taskbar/window list, so one cannot be dropped without the other. The only way to hide it would be `decorations: false` plus a hand-built titlebar, taking on the drag region, the window controls, snap-layout support and the accessibility affordances that come free today.
+
+  That divergence is **correct rather than a compromise**: on Windows and Linux the titlebar text is the only place the window names itself in the chrome, since the wordmark lives inside the content area. Hiding it there would be a loss. (Neither platform has ever been bundle-verified anyway — FR-5.3, NEWS-20.)
+
 - **FR-5.4** *(Shipped, verified)* The spawned server exits itself when its parent dies without cleanup: the shell sets `NEWSMONGER_WATCH_PARENT=1`, and the server polls `process.ppid` every 2 s, shutting down when re-parented to init. This covers hard kills (SIGTERM/SIGKILL of the shell, where `RunEvent::Exit` never fires) and `tauri dev` rebuild restarts — each of which would otherwise orphan a server and push later instances down the port-fallback chain. Dev mode deliberately omits `--strict-port` for the same reason (glassbox precedent).
 
 ### Debug aids

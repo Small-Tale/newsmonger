@@ -83,3 +83,38 @@ describe('the executable is named after the product (NEWS-184)', () => {
     }
   });
 });
+
+describe('the window title is set but hidden on macOS (NEWS-185)', () => {
+  const windowConfig = () => {
+    const raw: unknown = JSON.parse(fs.readFileSync(path.join(tauriDir, 'tauri.conf.json'), 'utf8'));
+    return z
+      .object({
+        app: z.object({
+          windows: z
+            .array(z.object({ title: z.string(), hiddenTitle: z.boolean().optional() }))
+            .nonempty(),
+        }),
+      })
+      .parse(raw).app.windows[0];
+  };
+
+  it('still declares a title', () => {
+    // This is the assertion that matters. `hiddenTitle` hides the titlebar
+    // *text*; the Window menu and the Dock icon's context menu read the window's
+    // `title`. Clearing it — the obvious way to "remove the title" — would hide
+    // the text and silently break both listings, which is the outcome the
+    // ticket explicitly asked to avoid.
+    expect(windowConfig().title.length).toBeGreaterThan(0);
+  });
+
+  it('names the window after the product', () => {
+    expect(windowConfig().title).toBe(productName());
+  });
+
+  it('hides the titlebar text', () => {
+    // Redundant with the wordmark in the app's own header, which is the whole
+    // complaint. macOS-only by design — see FR-5.10 for why Windows and Linux
+    // deliberately keep theirs.
+    expect(windowConfig().hiddenTitle).toBe(true);
+  });
+});

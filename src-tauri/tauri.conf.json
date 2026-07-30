@@ -13,6 +13,7 @@
     "windows": [
       {
         "title": "Newsmonger",
+        "hiddenTitle": true,
         "width": 960,
         "height": 760,
         "minWidth": 640,
