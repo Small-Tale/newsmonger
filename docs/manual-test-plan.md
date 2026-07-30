@@ -110,6 +110,17 @@ Still manual, and **unverified on every other platform**:
 3. Install from the `.dmg` (not just the build tree) and launch — confirms resources resolve from a real install location.
 4. On macOS, signing config is in place (NEWS-21) but no build has been signed yet — the bundle is still unsigned, so Gatekeeper will block it on another machine. After a signed build, `bash scripts/verify-signing.sh` checks it mechanically; the one thing it cannot check is the launch itself, so **open the .dmg on a Mac that has never seen the app** and confirm the window loads. That is the only test that exercises the sidecar's entitlements under a real quarantine.
 
+## App icon in the built bundle — NEWS-182
+
+`tests/unit/tauri-icons.test.ts` asserts the *declaration* and that the files exist. It cannot assert what the bundler produced, which is where this bug actually lived.
+
+1. `npm run tauri:build`, then inspect the bundle directly — this is faster and more certain than looking at pictures:
+   - `/usr/libexec/PlistBuddy -c "Print :CFBundleIconFile" <App>.app/Contents/Info.plist` should print a name, not `Does Not Exist`.
+   - `find <App>.app -name '*.icns'` should find one under `Contents/Resources`.
+2. Launch it and check all three places macOS shows an icon, because they read different things and can disagree: the **Dock**, **Finder** (the bundle in `/Applications` or wherever it was copied), and **About Newsmonger** in the app menu.
+3. If Finder still shows the old or generic icon after a correct build, that is the **icon cache**, not the bundle — `touch` the app or relaunch Finder before concluding anything.
+4. In `tauri dev` the Dock icon comes from whatever `generate_context!` embedded at the last Rust build, so a stale dev icon is expected and is not this bug (see FR-5.3's gotcha).
+
 ## System browser opening
 
 1. `npm run dev` (without `--no-open`) — the default browser should open to the app.

@@ -174,6 +174,8 @@ Subscription-backed providers (`attended: true`) run *scheduled* checks only whi
 
 ## [5 — Desktop App (Tauri)](../5-desktop-app.md) — Shipped (macOS verified; other platforms unbuilt)
 
+- FR-5.8 **Shipped (NEWS-182)**: `bundle.icon` is declared. Its schema default is **`[]`** — omitting it shipped a bundle with no `CFBundleIconFile` and no `.icns`, so macOS showed a generic icon in the Dock, Finder and About panel while every asset sat unreferenced in `src-tauri/icons/`. FR-5.3's "verified end to end" had verified *function*, not identity. `tests/unit/tauri-icons.test.ts` gates the declaration + files; the bundled result is manual (needs a Rust build).
+
 - FR-5.1 dev-mode shell: **Shipped, verified on macOS** (compile + spawn + navigate + page load confirmed via request log)
 - FR-5.2 Tauri detection + external links: **Shipped**
 - FR-5.3 release sidecar bundling: **Shipped, verified on macOS** (`npm run tauri:build` → `Newsmonger.app`/`.dmg`; built app starts its sidecar, serves the real UI, exits cleanly. Other target triples wired but unbuilt)
