@@ -14,6 +14,30 @@ fields reject semver prerelease suffixes.
 
 <!-- Nothing released yet. The first `npm run release` inserts its entry below. -->
 
+## [0.2.0-beta.1] - 2026-07-30
+
+## Features
+
+- Desktop builds can now update themselves: a banner announces a newer version, an Install button applies it in place, and Settings → App gains a "Check for updates" button with up-to-date / error feedback. Dismissing a banner sticks for that version but a newer one re-announces.
+- Newsmonger is now publishable to npm — `npm install -g newsmonger` ships working code, with a build step enforced before publish and sourcemaps excluded at every depth.
+
+## UX
+
+- The topic dial tooltip now counts down in real time — "Next check in 42m" instead of "3% of the interval left before the next check". Durations round down to match the adjacent "checked 23h ago" label, and under a minute reads "in under a minute". Paused and never-checked topics keep their own wording.
+
+## Bug Fixes
+
+- The masthead wordmark no longer renders as a broken image in packaged desktop builds — the app bundle now ships every built client asset instead of a hardcoded list of four, and its startup check verifies each one is actually served.
+- The CLI usage line names the right binary (`newsmonger`, not `news`) and lists the real providers — it previously advertised `ollama`, which doesn't exist, and omitted `claude-cli` and `codex-cli`.
+- Cutting a second beta of the same version no longer collides with the first in the changelog: entries are headed `0.1.0-beta.2` and re-running a release refuses to duplicate an existing entry unless `--replace` is passed.
+
+## Release Process
+
+- Releases now run through a two-track pipeline: `-rc.N` / `-beta.N` tags publish to npm under `@beta`, smoke-test the *published* package (fresh install and upgrade from `@latest`), and only then promote to `@latest` and trigger the signed desktop build. `npm run release` tags an rc; CI produces the stable tag.
+- GitHub Releases are held as drafts until every platform bundle is uploaded, so the `latest` pointer — which the updater reads — never serves a half-published version.
+- Release notes now carry a "## Download" section whose links are generated from the same module that renames the shipped `.dmg` files, so a link can't point at a filename that was never published.
+- New `npm run tauri:build:local` produces a local production build, with optional `--sign` and `--release` (notarize + staple) modes; notarization credentials are cached in the login keychain rather than a dotfile.
+
 ## [0.1.0] - 2026-07-30
 
 First beta of Newsmonger — a topic-based news tracker. You list the topics you care about, and on a schedule you choose the app asks an AI with live web search whether anything is genuinely new on each one, then summarizes what it found with links to the sources.
