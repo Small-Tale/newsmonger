@@ -14,6 +14,22 @@ fields reject semver prerelease suffixes.
 
 <!-- Nothing released yet. The first `npm run release` inserts its entry below. -->
 
+## [0.2.0-beta.4] - 2026-07-31
+
+## Features
+
+- Added `--demo` mode, which serves curated fixture stories so screenshots and docs can be captured from the real running app; it implies `--ai-test` and makes no network calls. A second check on the same topic returns a different set of stories, so deduplication is visible in a capture.
+
+## Bug Fixes
+
+- Fixed the version-bump script failing on Windows checkouts with CRLF line endings, which aborted the signed Windows release build with a spurious `NO MATCH` on `src-tauri/Cargo.lock`. Files with CRLF now keep their line endings after a bump.
+- Normalized shell, Node, TOML, lockfile, JSON, and YAML files to LF on checkout so Windows runners stop hitting line-ending failures.
+
+## Documentation
+
+- The README quick start no longer tells you to export an API key: signing in to Claude Code or the Codex CLI is now the documented default path, with `--ai-test` and API keys as alternatives.
+- The provider table now lists `claude-cli` and `codex-cli`, explains that subscriptions are tried before API keys, and notes that subscription-backed scheduled checks only run while the app is open.
+
 ## [0.2.0-beta.3] - 2026-07-30
 
 ## Bug Fixes
