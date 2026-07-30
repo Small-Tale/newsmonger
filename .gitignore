@@ -24,3 +24,4 @@ src-tauri/server
 
 # Release flow: interactive resumable state (scripts/release.sh)
 .release-state.json
+scripts/demo/.debug/

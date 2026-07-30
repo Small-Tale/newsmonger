@@ -24,6 +24,7 @@
     "dev:server": "npm run build:client:dev && tsx src/cli.ts --no-open --strict-port",
     "build": "tsup",
     "build:client": "node -e \"require('fs').mkdirSync('dist/client',{recursive:true})\" && node -e \"for (const f of ['favicon.svg','logo-full-bleed.svg','wordmark-light.svg','wordmark-dark.svg']) require('fs').copyFileSync('assets/'+f,'dist/client/'+f)\" && npx esbuild src/client/app.tsx --bundle --format=iife --outfile=dist/client/app.global.js --target=es2020 --sourcemap --jsx=automatic --jsx-import-source=kerfjs --define:__KERF_DEV__=false && npx sass src/client/styles.scss dist/client/styles.css --style compressed --no-source-map",
+    "demo:capture": "npm run build:client && tsx scripts/demo/capture-demo.ts",
     "prepublishOnly": "npm run build && npm run build:client",
     "tauri": "tauri",
     "tauri:dev": "npm run build:client && tauri dev",

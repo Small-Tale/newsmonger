@@ -1,5 +1,7 @@
 # Newsmonger
 
+<img src="assets/demo.svg" alt="Newsmonger walkthrough: topics being watched, summarized stories with source links, topic discovery, and a later check reporting only what's new" width="100%">
+
 Follow topics, not feeds. Enter a list of topics and, on a schedule you pick (e.g. once a day), the app asks an AI — with live web search — whether there's anything genuinely new on each one. New stories are summarized in a feed with links to the sources; anything already reported on a previous check is deduplicated away.
 
 Built with [kerfjs](https://github.com/brianwestphal/kerf) + Hono + Tauri (hybrid web / desktop, same architecture as glassbox).
@@ -54,6 +56,7 @@ The same note is in the app, under Settings → Privacy.
 | `npm run test:all` | Typecheck + lint + unit + E2E |
 | `npm run tauri:dev` | Desktop app in dev mode (needs Rust) |
 | `npm run build` | Bundle the server CLI to `dist/` |
+| `npm run demo:capture` | Regenerate the README hero (`assets/demo.svg`) from the live app |
 
 ## Docs
 
