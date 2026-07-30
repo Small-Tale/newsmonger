@@ -70,7 +70,7 @@ See also: [4 — CLI, Server, and Storage](4-cli-server-storage.md), glassbox's 
 
 An unsigned bundle opens on the machine that built it and nowhere else. Gatekeeper blocks it everywhere a stranger might run it, which is the only place it matters — and the build machine cannot reproduce that, because it trusts its own certificate and never quarantines a file it made itself.
 
-- **FR-5.5** *(Partial — config shipped, credentials outstanding)* Release bundles are signed with a **Developer ID Application** certificate and notarized. Nothing identity-specific is committed: Tauri reads `APPLE_SIGNING_IDENTITY` (or `APPLE_CERTIFICATE` + `APPLE_CERTIFICATE_PASSWORD` in CI) and, for notarization, either `APPLE_ID` + `APPLE_PASSWORD` + `APPLE_TEAM_ID` or the App Store Connect key trio `APPLE_API_ISSUER` + `APPLE_API_KEY` + `APPLE_API_KEY_PATH`.
+- **FR-5.5** *(Partial — config shipped, credentials outstanding)* Release bundles are signed with a **Developer ID Application** certificate and notarized. Nothing identity-specific is committed: Tauri reads `APPLE_SIGNING_IDENTITY` (or `APPLE_CERTIFICATE` + `APPLE_CERTIFICATE_PASSWORD` in CI) and, for notarization, **`APPLE_ID` + `APPLE_PASSWORD` + `APPLE_TEAM_ID`** — an **app-specific password**, which is the route this project uses. The App Store Connect key trio (`APPLE_API_ISSUER` + `APPLE_API_KEY` + `APPLE_API_KEY_PATH`) is the documented migration target for when the credential should stop being tied to one person's Apple ID.
 
 - **FR-5.6** *(Shipped)* `src-tauri/entitlements.plist` grants the hardened runtime exceptions **the Node sidecar cannot run without**, and no others.
 
@@ -117,19 +117,25 @@ This is the signing identity. It is *not* the "Apple Development" or "Mac App Di
 
 [developer.apple.com/account](https://developer.apple.com/account) → Membership details. Ten characters. Also visible inside the identity string above. This is `APPLE_TEAM_ID`.
 
-#### 3. Notarization credential — pick **one** of two
+#### 3. Notarization credential — **app-specific password** (what this project uses)
 
-**App Store Connect API key (recommended, and required for CI).** Not tied to one person's Apple ID, revocable independently, and survives that person leaving.
+[appleid.apple.com](https://appleid.apple.com) → Sign-In and Security → **App-Specific Passwords** → generate one, labelled something like `newsmonger-notarization`.
 
-[appstoreconnect.apple.com](https://appstoreconnect.apple.com) → Users and Access → **Integrations** → App Store Connect API → **+**. Give it the **Developer** role. Then:
+| Value | Env var |
+|---|---|
+| The generated password, `xxxx-xxxx-xxxx-xxxx` | `APPLE_PASSWORD` |
+| The Apple account's email address | `APPLE_ID` |
+| Team ID from step 2 | `APPLE_TEAM_ID` |
 
-- The **Issuer ID** shown above the keys table → `APPLE_API_ISSUER`
-- The **Key ID** column → `APPLE_API_KEY`
-- The downloaded **`AuthKey_<KeyID>.p8`** → its *file path* is `APPLE_API_KEY_PATH`
+> ⚠️ **`APPLE_PASSWORD` is the app-specific password, not the Apple ID password.** Paste it **with its hyphens** — `notarytool` expects the generated form verbatim. Using the account password instead fails authentication even though the credentials "look" right, and the error does not say which of the two you got wrong.
 
-> ⚠️ **`APPLE_API_KEY` is the Key ID, not the key file.** It is a ~10-character string. Putting the `.p8` contents there fails with an unhelpful authentication error. The `.p8` goes at `APPLE_API_KEY_PATH`, and **Apple lets you download it exactly once** — lose it and you issue a new key.
+Three properties of this route that will eventually bite, listed so the eventual failure is recognisable rather than mysterious:
 
-**App-specific password (simpler, local only).** [appleid.apple.com](https://appleid.apple.com) → Sign-In and Security → App-Specific Passwords → generate. This is `APPLE_PASSWORD`; your Apple account email is `APPLE_ID`. It is **not** your Apple ID password. Fine for signing from your own laptop; a poor fit for CI because it binds every release to one human's account.
+- **Changing the Apple ID's password revokes every app-specific password on the account.** Releases start failing to notarize with an auth error, with nothing in the repo having changed. Regenerate and update the secret.
+- **It is bound to one human's Apple ID.** There is no role scoping — the credential carries whatever that account can do — and if that person's access ends, so does releasing. This is the main reason to migrate later.
+- Apple caps active app-specific passwords (~25) and the plaintext is shown **once** at generation. Store it straight into the secret manager; regenerating is cheap if you lose it.
+
+**The alternative, for when the above becomes a problem:** an App Store Connect API key ([appstoreconnect.apple.com](https://appstoreconnect.apple.com) → Users and Access → **Integrations** → App Store Connect API, **Developer** role) sets `APPLE_API_ISSUER` (Issuer ID), `APPLE_API_KEY` (**Key ID**, ~10 chars — *not* the key file), and `APPLE_API_KEY_PATH` (path to the downloaded `AuthKey_<KeyID>.p8`, which Apple lets you download exactly once). It is not tied to a person and is revocable on its own. Switching is a swap of three env vars and needs no rebuild, so there is no cost to starting with the password — but note the `APPLE_API_KEY_PATH` wrinkle under GitHub Actions below before assuming it is a drop-in for CI.
 
 #### 4. Export the `.p12` — only for CI
 
@@ -170,16 +176,17 @@ Repository → Settings → Secrets and variables → Actions. Names on the left
 | `APPLE_CERTIFICATE_PASSWORD` | ✅ exact | the `.p12` export password | signing |
 | `KEYCHAIN_PASSWORD` | ✅ exact | any random string — CI creates a throwaway keychain and unlocks it with this | signing |
 | `APPLE_SIGNING_IDENTITY` | ✅ exact | `Developer ID Application: Small Tale Inc. (TEAMID)` | signing |
-| `APPLE_API_ISSUER` | ✅ exact | Issuer ID (UUID) | notarization |
-| `APPLE_API_KEY` | ✅ exact | Key **ID**, ~10 chars | notarization |
-| `APPLE_API_KEY_P8_BASE64` | ❌ ours | base64 of `AuthKey_<KeyID>.p8` | notarization |
+| `APPLE_ID` | ✅ exact | Apple account email | notarization |
+| `APPLE_PASSWORD` | ✅ exact | app-specific password, `xxxx-xxxx-xxxx-xxxx` | notarization |
 | `APPLE_TEAM_ID` | ✅ exact | 10-char Team ID | notarization |
 | `TAURI_SIGNING_PRIVATE_KEY` | ✅ exact | contents of `~/.tauri/newsmonger.key` | updater only |
 | `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` | ✅ exact | that key's passphrase | updater only |
 
-`GITHUB_TOKEN` is injected automatically — do not create one.
+**Seven secrets, all of them plain strings.** `GITHUB_TOKEN` is injected automatically — do not create one.
 
-> ⚠️ **`APPLE_API_KEY_PATH` is a filesystem path, and a secret cannot be a path.** This is the one place the mapping is not one-to-one. Store the key's *contents* as `APPLE_API_KEY_P8_BASE64` and materialize the file in the job, before the build step:
+A convenient consequence of the app-specific-password route: **every secret maps 1:1 onto an env var Tauri already reads**, so the release job needs no credential-preparation step at all — just `env:` entries on the build step. Nothing to decode, no files to write, nothing to clean up.
+
+> **If you later switch to an App Store Connect API key, this stops being true.** `APPLE_API_KEY_PATH` is a *filesystem path*, and a secret cannot hold a path — so that route needs the key's contents stored under a name of our own (say `APPLE_API_KEY_P8_BASE64`) and materialized in the job before the build:
 >
 > ```yaml
 > - name: Materialize App Store Connect key
@@ -189,6 +196,8 @@ Repository → Settings → Secrets and variables → Actions. Names on the left
 >       > ~/.appstoreconnect/private_keys/AuthKey_${{ secrets.APPLE_API_KEY }}.p8
 >     echo "APPLE_API_KEY_PATH=$HOME/.appstoreconnect/private_keys/AuthKey_${{ secrets.APPLE_API_KEY }}.p8" >> "$GITHUB_ENV"
 > ```
+>
+> Worth knowing before the switch reads as "obviously better for CI": it is better on custody, and it costs a step that can fail.
 >
 > The runner must be **macOS** — `codesign`, `notarytool` and `stapler` are Apple tools and exist nowhere else. `ubuntu-latest`, which both current CI jobs use, cannot sign a `.app`.
 
@@ -215,16 +224,17 @@ For when it is time, Tauri v2 offers two routes. `bundle.windows.certificateThum
 ### Doing a signed local build
 
 ```sh
-# Signing + notarization via App Store Connect key
+# Signing from the login keychain + notarization via app-specific password
 APPLE_SIGNING_IDENTITY="Developer ID Application: Small Tale Inc. (TEAMID)" \
-APPLE_API_ISSUER=… APPLE_API_KEY=… APPLE_API_KEY_PATH=~/.appstoreconnect/private_keys/AuthKey_….p8 \
-APPLE_TEAM_ID=… \
+APPLE_ID="you@example.com" \
+APPLE_PASSWORD="xxxx-xxxx-xxxx-xxxx" \
+APPLE_TEAM_ID="TEAMID" \
 npm run tauri:build
 
 bash scripts/verify-signing.sh
 ```
 
-Substitute `APPLE_ID` + `APPLE_PASSWORD` + `APPLE_TEAM_ID` for the three `APPLE_API_*` vars to use the app-specific-password route instead.
+To use an App Store Connect key instead, swap the `APPLE_ID` + `APPLE_PASSWORD` pair for `APPLE_API_ISSUER` + `APPLE_API_KEY` + `APPLE_API_KEY_PATH`. `APPLE_TEAM_ID` and `APPLE_SIGNING_IDENTITY` are needed either way.
 
 **Do not paste any of these values into a shell history, a chat, or a commit.** Prefer a `.envrc` that direnv loads, or read them from the keychain — and remember `verify-signing.sh` exists precisely because the build machine cannot test what Gatekeeper checks (FR-5.7).
 
