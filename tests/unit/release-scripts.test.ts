@@ -51,7 +51,12 @@ describe('the release scripts are wired up (NEWS-194)', () => {
     expect(pkg().scripts[name]).toBe(command);
   });
 
-  it.each(['scripts/release.sh', 'scripts/release-beta-auto.sh', 'scripts/set-version.mjs'])(
+  it.each([
+    'scripts/release.sh',
+    'scripts/release-beta-auto.sh',
+    'scripts/set-version.mjs',
+    'scripts/add-changelog-entry.mjs',
+  ])(
     '%s exists and is executable',
     (rel) => {
       const full = path.join(root, rel);
@@ -81,6 +86,88 @@ describe('the release scripts are wired up (NEWS-194)', () => {
     // (they create one), but the seeded header is what makes the first release
     // read like the others.
     expect(fs.readFileSync(path.join(root, 'CHANGELOG.md'), 'utf8')).toMatch(/^# Changelog/);
+  });
+});
+
+describe('add-changelog-entry.mjs (NEWS-194)', () => {
+  let sandbox: string;
+
+  /**
+   * Run the real script in a temp repo with a seeded CHANGELOG.
+   *
+   * The script resolves CHANGELOG.md relative to its **own** location, so the
+   * copy has to sit in a `scripts/` dir inside the sandbox — running the
+   * repo's copy with a different cwd would edit the real changelog. It did,
+   * once, when a sandboxed `mktemp` failed and the fallback was the repo root.
+   */
+  function addEntry(version: string, notes: string): { status: number; output: string } {
+    try {
+      const stdout = execFileSync('node', [path.join(sandbox, 'scripts/add-changelog-entry.mjs'), version], {
+        input: notes,
+        encoding: 'utf8',
+      });
+      return { status: 0, output: stdout };
+    } catch (err) {
+      const e = err as { status?: number; stdout?: string; stderr?: string };
+      return { status: e.status ?? 1, output: `${e.stdout ?? ''}${e.stderr ?? ''}` };
+    }
+  }
+
+  const changelog = (): string => fs.readFileSync(path.join(sandbox, 'CHANGELOG.md'), 'utf8');
+
+  beforeEach(() => {
+    sandbox = fs.mkdtempSync(path.join(os.tmpdir(), 'newsmonger-changelog-'));
+    fs.mkdirSync(path.join(sandbox, 'scripts'), { recursive: true });
+    fs.copyFileSync(
+      path.join(root, 'scripts/add-changelog-entry.mjs'),
+      path.join(sandbox, 'scripts/add-changelog-entry.mjs'),
+    );
+    fs.copyFileSync(path.join(root, 'CHANGELOG.md'), path.join(sandbox, 'CHANGELOG.md'));
+  });
+
+  afterEach(() => {
+    fs.rmSync(sandbox, { recursive: true, force: true });
+  });
+
+  it('keeps entries newest-first across successive releases', () => {
+    // The trap worth a test: appending instead of inserting silently inverts the
+    // order, and nobody notices until someone reads the changelog from the top
+    // and finds the oldest release.
+    expect(addEntry('0.1.0', '- older\n').status).toBe(0);
+    expect(addEntry('0.2.0', '- newer\n').status).toBe(0);
+    const headings = [...changelog().matchAll(/^## \[([^\]]+)]/gm)].map((m) => m[1]);
+    expect(headings).toEqual(['0.2.0', '0.1.0']);
+  });
+
+  it('preserves markdown that a shell argument would mangle', () => {
+    // Why notes arrive on stdin rather than argv.
+    const nasty = '- `backticks`, "quotes", $dollars and \\backslashes\n';
+    addEntry('0.3.0', nasty);
+    expect(changelog()).toContain('- `backticks`, "quotes", $dollars and \\backslashes');
+  });
+
+  it('keeps the file header above the newest entry', () => {
+    addEntry('0.4.0', '- a change\n');
+    const text = changelog();
+    expect(text.indexOf('# Changelog')).toBeLessThan(text.indexOf('## [0.4.0]'));
+  });
+
+  it('creates the file when it is missing', () => {
+    fs.rmSync(path.join(sandbox, 'CHANGELOG.md'));
+    expect(addEntry('0.5.0', '- from scratch\n').status).toBe(0);
+    expect(changelog()).toMatch(/^# Changelog\n\n## \[0\.5\.0]/);
+  });
+
+  it('refuses empty notes rather than writing a bare heading', () => {
+    const result = addEntry('0.6.0', '');
+    expect(result.status).not.toBe(0);
+    expect(result.output).toContain('Refusing to write an empty changelog entry');
+    expect(changelog()).not.toContain('0.6.0');
+  });
+
+  it.each(['', '1.2', 'v1.2.3', '1.2.3-beta.1'])('rejects %o as a version', (bad) => {
+    expect(addEntry(bad, '- x\n').status).not.toBe(0);
+    expect(changelog()).not.toContain(`[${bad}]`);
   });
 });
 

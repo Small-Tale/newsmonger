@@ -208,19 +208,9 @@ apply_version() {
   node scripts/set-version.mjs "$VERSION"
 
   info "Updating CHANGELOG.md..."
-  node -e "
-    const fs = require('fs');
-    const f = 'CHANGELOG.md';
-    const entry = process.argv[1];
-    if (!fs.existsSync(f)) { fs.writeFileSync(f, '# Changelog\n\n' + entry + '\n'); return; }
-    const cur = fs.readFileSync(f, 'utf8');
-    const at = cur.indexOf('\n## [');
-    fs.writeFileSync(f, at === -1
-      ? cur.replace(/\n+$/, '') + '\n\n' + entry + '\n'
-      : cur.slice(0, at) + '\n' + entry + '\n' + cur.slice(at));
-  " "## [${VERSION}] - $(date +%Y-%m-%d)
-
-${NOTES}"
+  # Notes go via stdin — they are multi-line markdown with quotes and backticks,
+  # and passing that as a shell argument is how a changelog gets mangled.
+  printf '%s\n' "$NOTES" | node scripts/add-changelog-entry.mjs "$VERSION"
 }
 
 commit_tag_push() {

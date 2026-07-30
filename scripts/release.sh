@@ -242,27 +242,12 @@ step_update_version() {
 }
 
 step_update_changelog() {
-  local version notes date
-  version=$(get_state "version"); notes=$(get_state "release_notes"); date=$(date +%Y-%m-%d)
+  local version notes
+  version=$(get_state "version"); notes=$(get_state "release_notes")
   info "Updating CHANGELOG.md..."
-  node -e "
-    const fs = require('fs');
-    const f = 'CHANGELOG.md';
-    const entry = process.argv[1];
-    if (!fs.existsSync(f)) {
-      fs.writeFileSync(f, '# Changelog\n\n' + entry + '\n');
-      return;
-    }
-    const cur = fs.readFileSync(f, 'utf8');
-    const at = cur.indexOf('\n## [');
-    // Insert above the newest existing entry, or after the header when there
-    // are none yet — never append at the end, which would invert the order.
-    fs.writeFileSync(f, at === -1
-      ? cur.replace(/\n+$/, '') + '\n\n' + entry + '\n'
-      : cur.slice(0, at) + '\n' + entry + '\n' + cur.slice(at));
-  " "## [${version}] - ${date}
-
-${notes}"
+  # Notes go via stdin — they are multi-line markdown with quotes and backticks,
+  # and passing that as a shell argument is how a changelog gets mangled.
+  printf '%s\n' "$notes" | node scripts/add-changelog-entry.mjs "$version"
   success "CHANGELOG.md updated"
 }
 
