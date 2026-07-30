@@ -22,6 +22,69 @@ use tauri::{AppHandle, Manager};
 /// Holds the server PID so it can be killed on app exit.
 struct ServerPid(Mutex<Option<u32>>);
 
+/// Version string of an update found at startup, if any (NEWS-89).
+///
+/// The startup check runs on a spawned task so it never delays the window, and it
+/// parks its result here rather than pushing to the webview — the client may not
+/// have loaded yet. The client polls `get_pending_update` instead, which is the
+/// same shape glassbox uses.
+struct PendingUpdate(Mutex<Option<String>>);
+
+/// The version of a pending update, or `None`. Read by the client to decide
+/// whether to show the update banner.
+#[tauri::command]
+fn get_pending_update(app: AppHandle) -> Option<String> {
+    app.state::<PendingUpdate>().0.lock().unwrap().clone()
+}
+
+/// Ask the update endpoint whether a newer version exists (NEWS-89).
+///
+/// Behind `#[cfg(not(debug_assertions))]` so a dev build never tries to update
+/// itself — `tauri dev` runs an unsigned binary whose version is whatever is in
+/// `tauri.conf.json`, so a check there is meaningless at best.
+#[tauri::command]
+async fn check_for_update(app: AppHandle) -> Result<Option<String>, String> {
+    #[cfg(not(debug_assertions))]
+    {
+        use tauri_plugin_updater::UpdaterExt;
+        let updater = app.updater().map_err(|e| format!("{e}"))?;
+        let update = updater.check().await.map_err(|e| format!("{e}"))?;
+        if let Some(update) = update {
+            *app.state::<PendingUpdate>().0.lock().unwrap() = Some(update.version.clone());
+            return Ok(Some(update.version));
+        }
+        return Ok(None);
+    }
+    #[allow(unreachable_code)]
+    {
+        let _ = &app;
+        Ok(None)
+    }
+}
+
+/// Download and install the pending update. The caller restarts the app.
+///
+/// Clears the stored version first: if the install fails the banner should not
+/// keep offering an update the user has already tried, and a fresh check is cheap.
+#[tauri::command]
+async fn install_update(app: AppHandle) -> Result<(), String> {
+    #[cfg(not(debug_assertions))]
+    {
+        use tauri_plugin_updater::UpdaterExt;
+        *app.state::<PendingUpdate>().0.lock().unwrap() = None;
+        let updater = app.updater().map_err(|e| format!("{e}"))?;
+        let update = updater.check().await.map_err(|e| format!("{e}"))?;
+        if let Some(update) = update {
+            update
+                .download_and_install(|_, _| {}, || {})
+                .await
+                .map_err(|e| format!("{e}"))?;
+        }
+    }
+    let _ = &app;
+    Ok(())
+}
+
 /// Substring of the readiness line printed by `src/cli.ts`. KEEP IN SYNC.
 const READY_MARKER: &str = "running at ";
 
@@ -32,19 +95,25 @@ pub fn run() {
         // WKWebView, so the client routes notifications through this plugin,
         // whose requestPermission() shows the system dialog.
         .plugin(tauri_plugin_notification::init())
-        // Auto-update (NEWS-199), matching the glassbox setup. Registering the
+        // Auto-update (NEWS-89), matching the glassbox setup. Registering the
         // plugin is what makes `bundle.createUpdaterArtifacts` meaningful: the
         // bundler emits signed update artifacts and a `latest.json` manifest that
         // tauri-action publishes alongside the release.
         //
-        // Nothing calls `updater().check()` yet, so a running app does not look
-        // for updates — that is the in-app surface, tracked separately. Releases
-        // built from here are update-*capable*, which has to come first: an
-        // installed build can only ever be updated by a manifest whose public key
-        // it already carries, so shipping the plugin late would leave early
-        // installs permanently un-updatable.
+        // Update-*capability* had to land before the in-app surface: an installed
+        // build can only ever be updated by a manifest whose public key it already
+        // carries, so shipping the plugin late would leave early installs
+        // permanently un-updatable.
         .plugin(tauri_plugin_updater::Builder::new().build())
+        // Needed by the client's post-install restart.
+        .plugin(tauri_plugin_process::init())
         .manage(ServerPid(Mutex::new(None)))
+        .manage(PendingUpdate(Mutex::new(None)))
+        .invoke_handler(tauri::generate_handler![
+            get_pending_update,
+            check_for_update,
+            install_update
+        ])
         .setup(|app| {
             let window = app
                 .get_webview_window("main")
@@ -57,6 +126,26 @@ pub fn run() {
                     show_error(&window, &message);
                 }
             }
+
+            // Check for an update once at startup, on a spawned task so a slow or
+            // unreachable endpoint never delays the window. Failures are silent by
+            // design: an update check that can't reach GitHub is not something to
+            // interrupt someone's news feed over. The result is parked in
+            // `PendingUpdate` for the client to poll — pushing to the webview here
+            // would race the client's own load.
+            let handle = app.handle().clone();
+            tauri::async_runtime::spawn(async move {
+                #[cfg(not(debug_assertions))]
+                {
+                    use tauri_plugin_updater::UpdaterExt;
+                    let Ok(updater) = handle.updater() else { return };
+                    let Ok(Some(update)) = updater.check().await else {
+                        return;
+                    };
+                    *handle.state::<PendingUpdate>().0.lock().unwrap() = Some(update.version);
+                }
+                let _ = &handle;
+            });
 
             Ok(())
         })

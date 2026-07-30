@@ -18,6 +18,17 @@ interface TauriGlobal {
   notification?: TauriNotification;
 }
 
+/**
+ * The Tauri command bridge, or undefined outside the desktop shell (NEWS-89).
+ *
+ * Every caller must handle `undefined` rather than assuming the shell: the same
+ * client bundle is served to an ordinary browser on localhost, where there is no
+ * `__TAURI__` global and no app binary to update.
+ */
+export function getTauriInvoke(): ((cmd: string) => Promise<unknown>) | undefined {
+  return getTauriGlobal()?.core?.invoke;
+}
+
 /** The Tauri notification plugin API, or undefined outside the desktop shell. */
 export function tauriNotification(): TauriNotification | undefined {
   return getTauriGlobal()?.notification;

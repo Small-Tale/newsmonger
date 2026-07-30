@@ -2131,6 +2131,42 @@ button.off-topic-pill {
   }
 }
 
+// Update-available banner (NEWS-89). Pine like Saved rather than amber like the
+// warnings: a new version is good news, and the warn palette is reserved for
+// things that need the user to act.
+.banner.update {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  background: var(--pine-soft);
+  color: var(--ink);
+
+  .icon {
+    color: var(--pine);
+    fill: currentColor;
+  }
+
+  .banner-text {
+    flex: 1;
+  }
+
+  // Always-present slot for the Install button, so it can leave without being a
+  // conditional sibling (see app.tsx).
+  .update-actions {
+    display: flex;
+    flex: 0 0 auto;
+  }
+}
+
+// Settings → App: the manual check and the line it writes.
+.update-check {
+  margin-top: 10px;
+
+  .update-check-note p {
+    margin: 6px 0 0;
+  }
+}
+
 .banner.saved {
   display: flex;
   align-items: center;

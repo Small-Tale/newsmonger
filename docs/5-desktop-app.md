@@ -93,7 +93,7 @@ An unsigned bundle opens on the machine that built it and nowhere else. Gatekeep
 
 ### What still needs a human — the full credential recipe (NEWS-21)
 
-Everything below requires the Apple Developer account, is done **once**, and must never be committed. Nothing here is wired up yet: `security find-identity -v -p codesigning` on the current dev machine reports **0 valid identities found**, and there is no release workflow — `.github/workflows/ci.yml` is gates only.
+Everything below requires the Apple Developer account, is done **once**, and must never be committed. The release workflow that consumes these now exists (`.github/workflows/release-desktop.yml`, NEWS-190), and the updater keypair in step 5 is in use (FR-5.12) — but the Apple half is still outstanding: `security find-identity -v -p codesigning` on the current dev machine reports **0 valid identities found**.
 
 Env var names below are Tauri v2's and were taken from its own signing and updater docs, not from memory. Tauri reads them; we do not define them, so they cannot be renamed to taste.
 
@@ -154,9 +154,9 @@ base64 -i DeveloperID.p12 | tr -d '\n' | pbcopy
 
 On Linux use `base64 -w0`. **A secret with embedded newlines fails to decode**, and that is a confusing failure to debug from a CI log.
 
-#### 5. Updater signing keypair — only when an auto-updater ships
+#### 5. Updater signing keypair — **in use** (NEWS-89)
 
-Separate from Apple entirely, and easy to miss for that reason: Tauri signs its *update manifests* with its own keypair so a client can verify an update came from us. There is no updater configured today (`bundle.createUpdaterArtifacts` is absent from `tauri.conf.json` and there is no `plugins.updater` block), so this is forward-looking.
+Separate from Apple entirely, and easy to miss for that reason: Tauri signs its *update manifests* with its own keypair so a client can verify an update came from us. This **is** wired up now (FR-5.12) — `bundle.createUpdaterArtifacts` is on and `tauri.conf.json` carries a `plugins.updater` block — and the keypair lives at `~/.tauri/newsmonger.key`. Regenerate only if it is lost, and read the warning below first.
 
 ```sh
 npm run tauri signer generate -- -w ~/.tauri/newsmonger.key
@@ -253,6 +253,26 @@ Notes on the job's shape, each of which is load-bearing:
 | Updater keypair | shared | **shared — see below** |
 
 **Use one updater keypair across both channels.** The tempting alternative — a separate keypair per channel, for blast-radius isolation — has a trap: the public key is compiled into the binary, so a beta build could never accept a production update. Every beta tester would be stranded on the beta channel until they reinstalled by hand. One keypair with two manifests lets a tester move back to stable as a normal update. Do not split the keypair unless you are willing to own that migration.
+
+## Auto-update (NEWS-89)
+
+Ported from [glassbox](https://github.com/Small-Tale/glassbox), which has run this exact shape in production for months. Deviating from it was considered and rejected: the value of a pattern with real-world mileage is that its failure modes are already known.
+
+- **FR-5.12** *(Shipped, NEWS-89)* The app updates itself via the **Tauri v2 updater plugin** against a **signed static manifest** — `latest.json`, published to the GitHub Release by `tauri-action` and served from `https://github.com/Small-Tale/newsmonger/releases/latest/download/latest.json` (`plugins.updater.endpoints`). Manifests are verified against `plugins.updater.pubkey`, the committed half of the keypair in step 5 below. No update server to run, and nothing unsigned is ever installable.
+
+- **FR-5.13** *(Shipped, NEWS-89)* **The user is told, never interrupted.** A check runs once at startup on a spawned task, and its result is *parked*, not applied: `PendingUpdate(Mutex<Option<String>>)` in `src-tauri/src/lib.rs` holds the version, and the client polls `get_pending_update` to raise a banner offering **Install**. Nothing downloads until that button is pressed. Being spawned rather than awaited matters — an unreachable endpoint delays the window not at all.
+
+- **FR-5.14** *(Shipped, NEWS-89)* Three commands make up the whole bridge: `get_pending_update` (read the parked version), `check_for_update` (ask now, from Settings), and `install_update` (download + install). All three are **`#[cfg(not(debug_assertions))]`-guarded**, so `tauri dev` never tries to update an unsigned binary whose version is whatever `tauri.conf.json` last said. In a debug build they compile to `Ok(None)` / `Ok(())`.
+
+- **FR-5.15** *(Shipped, NEWS-89)* An install ends by **asking for a restart** rather than relaunching: the new binary is on disk, but this process is still the old one. Killing an app mid-read to save one click is the wrong trade, so the banner switches to "…is installed — restart to start using it." `tauri-plugin-process` is registered for the relaunch capability regardless.
+
+- **FR-5.16** *(Shipped, NEWS-89)* **Settings → App → "Check for updates"** is the manual path, and it is the only one that reports *negative* results — "Newsmonger is up to date." and "Could not check for updates." The startup check stays silent on both, deliberately: a failed background check is not worth a banner, but silence in answer to a button press reads as a bug. The control is **desktop-only** (`isTauri()`), since the browser build has no app binary to replace.
+
+- **FR-5.17** *(Shipped, NEWS-89)* A **dismissal survives the re-announcement of the same version** but not a newer one. The startup poll reads `get_pending_update` up to three times and a Settings check can announce a fourth time; without this the banner a user just closed reappears seconds later. A newer version resets both the dismissal and any install progress — otherwise someone who installed 0.2.0 and left the app open would meet the 0.3.0 banner with no Install button on it.
+
+The banner's Install button sits inside an always-present `.update-actions` slot, for the structural reason in [docs/3-ui.md](./3-ui.md): it disappears once the update is on disk, and a conditional element *between* siblings fails the render outright under the E2E suite's `invariants: 'throw'`. That was found by the suite, not by review.
+
+Covered by `tests/unit/update.test.ts` (store transitions, walked as sequences) and `tests/e2e/update.spec.ts` (the banner, install, retry, dismiss and both Settings outcomes, against a faked `window.__TAURI__`). Everything below the bridge — the Rust commands, the signed manifest, a real install — is in [docs/manual-test-plan.md](./manual-test-plan.md).
 
 ### Windows Authenticode — deliberately not set up
 

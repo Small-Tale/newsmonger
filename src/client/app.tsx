@@ -95,7 +95,7 @@ import {
   TOPIC_SORTS,
   writeOnboardingSeen,
 } from './stores.js';
-import { openExternalUrl } from './tauri.js';
+import { getTauriInvoke, isTauri, openExternalUrl } from './tauri.js';
 import type { TopicRow } from './topic-sort.js';
 import { isHeading, sortTopics, topicRows } from './topic-sort.js';
 
@@ -134,6 +134,18 @@ const TOAST_MS = 2600;
  */
 const UNDO_TOAST_MS = 9000;
 let toastTimer: ReturnType<typeof setTimeout> | undefined;
+
+/**
+ * Delays before each poll of `get_pending_update` at startup (NEWS-89).
+ *
+ * The shell's update check is spawned, not awaited, so at the moment the client
+ * loads the answer usually isn't in yet. Poll a few times with growing gaps
+ * instead of a fixed interval: if the check already finished the first read
+ * catches it for free, and a slow network gets ~13s to answer before we stop
+ * asking. Giving up is fine — the Settings check is always there, and the next
+ * launch checks again.
+ */
+const UPDATE_POLL_DELAYS_MS = [0, 3000, 10_000];
 
 /** Debounce for the server-side feed search refetch (NEWS-76). */
 const SEARCH_DEBOUNCE_MS = 250;
@@ -1890,6 +1902,27 @@ function settingsPanelJsx(s: AppState): SafeHtml {
             Show the setup guide again
           </button>
         </p>
+        {/* Updates (NEWS-89). Desktop-only: the browser build is served by a
+            server the user already controls, so there is no app binary here to
+            replace and the button would be a lie. Always-present slot so the
+            result line is announced when it arrives (see #banners, NEWS-99). */}
+        {isTauri() ? (
+          <div class="update-check">
+            <button
+              class="btn subtle"
+              type="button"
+              data-action="check-updates"
+              disabled={s.updateChecking}
+            >
+              {s.updateChecking ? 'Checking…' : 'Check for updates'}
+            </button>
+            <div class="update-check-note" role="status" aria-live="polite">
+              {s.updateCheckMessage !== null ? <p class="note">{s.updateCheckMessage}</p> : ''}
+            </div>
+          </div>
+        ) : (
+          ''
+        )}
         {/* Collapsed by default (NEWS-120): a bug-report bundle is an advanced,
             rarely-used tool, and an always-open run log is the loudest thing on
             a settings screen while being the least often wanted. Inside the App
@@ -2269,6 +2302,43 @@ function appJsx(): SafeHtml {
               data-run-id={lastFailure.id}
               aria-label="Dismiss"
             >
+              {icon('clear', 15)}
+            </button>
+          </div>
+        ) : (
+          ''
+        )}
+        {s.updateVersion !== null && !s.updateDismissed ? (
+          <div class="banner update">
+            {icon('download', 14)}
+            <span class="banner-text">
+              {s.updateInstall === 'installed'
+                ? `Newsmonger ${s.updateVersion} is installed — restart to start using it.`
+                : `Newsmonger ${s.updateVersion} is available.`}
+            </span>
+            {/* Always-present slot: the Install button goes away once the update
+                is on disk, and a conditional element *between* siblings is the
+                shape docs/3-ui.md rules out — the E2E suite runs with
+                `invariants: 'throw'`, so it fails the render outright. */}
+            <div class="update-actions">
+              {s.updateInstall === 'installed' ? (
+                ''
+              ) : (
+                <button
+                  class="btn subtle"
+                  type="button"
+                  data-action="install-update"
+                  disabled={s.updateInstall === 'installing'}
+                >
+                  {s.updateInstall === 'installing'
+                    ? 'Installing…'
+                    : s.updateInstall === 'failed'
+                      ? 'Install failed — retry'
+                      : 'Install'}
+                </button>
+              )}
+            </div>
+            <button class="banner-dismiss" type="button" data-action="dismiss-update" aria-label="Dismiss">
               {icon('clear', 15)}
             </button>
           </div>
@@ -3470,6 +3540,18 @@ function wireEvents(root: HTMLElement): void {
   void delegate(root, 'click', '[data-action=dismiss-behind]', () => {
     appStore.actions.dismissBehind();
   });
+  void delegate(root, 'click', '[data-action=install-update]', () => {
+    void installPendingUpdate();
+  });
+  void delegate(root, 'click', '[data-action=dismiss-update]', () => {
+    appStore.actions.dismissUpdate();
+  });
+  void delegate(root, 'click', '[data-action=check-updates]', () => {
+    appStore.actions.setUpdateChecking(true);
+    void requestUpdateCheck().then((message) => {
+      appStore.actions.setUpdateCheckMessage(message);
+    });
+  });
 
   // Notification toggle. Enabling requires a permission grant, and the request
   // must ride the user gesture that is this change event.
@@ -3755,6 +3837,71 @@ if (__KERF_DEV__) {
   });
 }
 
+/**
+ * Poll the shell for an update found by its startup check (NEWS-89).
+ *
+ * A no-op outside the desktop shell, and silent on failure: a failed update
+ * check is not worth a banner. The user is told there's an update, never
+ * interrupted by one — nothing here installs anything.
+ */
+async function pollPendingUpdate(): Promise<void> {
+  const invoke = getTauriInvoke();
+  if (!invoke) return;
+
+  for (const delay of UPDATE_POLL_DELAYS_MS) {
+    if (delay > 0) await new Promise((resolve) => setTimeout(resolve, delay));
+    try {
+      const version = await invoke('get_pending_update');
+      if (typeof version === 'string' && version !== '') {
+        appStore.actions.setUpdateVersion(version);
+        return;
+      }
+    } catch {
+      return;
+    }
+  }
+}
+
+/**
+ * Ask the shell to check for an update right now, from Settings (NEWS-89).
+ *
+ * Returns what to tell the user. Unlike the startup poll this one reports
+ * failure and "up to date" — the user asked, so silence would read as a bug.
+ */
+async function requestUpdateCheck(): Promise<string> {
+  const invoke = getTauriInvoke();
+  if (!invoke) return 'Updates are managed outside the desktop app.';
+  try {
+    const version = await invoke('check_for_update');
+    if (typeof version === 'string' && version !== '') {
+      appStore.actions.setUpdateVersion(version);
+      return `Update available: v${version}`;
+    }
+    return 'Newsmonger is up to date.';
+  } catch {
+    return 'Could not check for updates.';
+  }
+}
+
+/**
+ * Download and install the pending update (NEWS-89).
+ *
+ * The new binary only takes effect on relaunch, so this ends at `installed` and
+ * asks the user to restart rather than killing the app under them — a news feed
+ * they're mid-read is not something to close without asking.
+ */
+async function installPendingUpdate(): Promise<void> {
+  const invoke = getTauriInvoke();
+  if (!invoke) return;
+  appStore.actions.setUpdateInstall('installing');
+  try {
+    await invoke('install_update');
+    appStore.actions.setUpdateInstall('installed');
+  } catch {
+    appStore.actions.setUpdateInstall('failed');
+  }
+}
+
 const root = document.getElementById('app');
 if (root) {
   mount(root, () => appJsx());
@@ -3765,6 +3912,10 @@ if (root) {
   // Learn the OS notification permission up front in the desktop shell, so a
   // session that already had notifications on keeps firing them (NEWS-66).
   void syncTauriNotificationPermission();
+  // Surface an update the shell already found (NEWS-89). Fire-and-forget: the
+  // banner appears whenever the answer arrives, which is never on the critical
+  // path to reading the news.
+  void pollPendingUpdate();
   startPolling();
   startForegroundHeartbeat();
 }

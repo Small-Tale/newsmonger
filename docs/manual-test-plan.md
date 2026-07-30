@@ -186,6 +186,21 @@ Browser-verified both paths (OS-sheet path via a stubbed `navigator.share`, and 
 3. If no share sheet appears, the story text must land on the clipboard and a **"Copied to clipboard"** toast must show and then fade. Paste somewhere to confirm the block (title, blank line, summary, blank line, URL).
 4. If `navigator.share` works in the WKWebView, the fallback path won't fire — note which path this platform took (NEWS-45 tracks confirming the sheet in a live shell).
 
+## Auto-update in a real signed build (NEWS-89) — needs two releases
+
+Everything above the Tauri bridge is automated: the banner, install, retry, dismiss and both Settings outcomes run in `tests/e2e/update.spec.ts` against a faked `window.__TAURI__`, and the store transitions in `tests/unit/update.test.ts`. What no test can reach is the part that *is* the feature — a signed manifest fetched over the network and a binary actually replaced on disk. That needs two real releases, because an update requires something to update *from*.
+
+Note the commands are `#[cfg(not(debug_assertions))]`-guarded, so **`tauri dev` will always report no update** — that is correct behaviour, not a failure. This has to be tested against installed release builds.
+
+1. Cut a release (`npm run release:beta:auto` or `npm run release`) and let `release-desktop.yml` finish. Confirm the published release carries **`latest.json`** alongside the bundles, and that its `signature` fields are non-empty.
+2. Install that build from the `.dmg` — a real install, not a run from `target/`. Launch it and confirm no update banner (it is current).
+3. Settings → App → **Check for updates** → confirm "Newsmonger is up to date."
+4. Cut a *second*, higher-versioned release the same way.
+5. Relaunch the installed older app. Within ~13 s (the poll delays) confirm the banner reads "Newsmonger &lt;version&gt; is available."
+6. Press **Install**, wait for "…is installed — restart to start using it." Quit and relaunch; confirm the running app is the new version (About panel / `appVersion` in the diagnostics bundle).
+7. Confirm the update was **signature-verified rather than merely downloaded**: temporarily point `plugins.updater.endpoints` at a manifest signed by a *different* key, rebuild, and confirm the check fails instead of installing. This is the one step that actually tests the security property; skipping it means the pubkey has never been proven load-bearing.
+8. Offline behaviour: pull the network and relaunch — confirm no banner, no error dialog, and **no delay to the window appearing** (the check is spawned, not awaited).
+
 ## Automated Coverage Summary
 
 - Topics CRUD, scheduling logic, dedup, parsing, API validation, and full UI flows are covered by `npm test` + `npm run test:e2e` (mock AI service).

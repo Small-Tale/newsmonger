@@ -321,7 +321,40 @@ export interface AppState {
    * later failure has a new id and shows again, which is what you want.
    */
   dismissedRunId: string | null;
+  /**
+   * Version of a desktop update waiting to be installed, or null (NEWS-89).
+   *
+   * Only ever set inside the Tauri shell — the browser build has nothing to
+   * update, so this stays null and the banner never renders.
+   */
+  updateVersion: string | null;
+  /**
+   * Whether the update banner has been dismissed this session (NEWS-89).
+   *
+   * Session-level like `dismissedBehind`, deliberately: an update the user
+   * waved off is still worth mentioning next launch, and the banner is the only
+   * passive surface telling them a new version exists.
+   */
+  updateDismissed: boolean;
+  /** Progress of the in-place update install, driving the banner's button. */
+  updateInstall: UpdateInstallState;
+  /** True while a user-initiated update check from Settings is in flight. */
+  updateChecking: boolean;
+  /**
+   * Result of the last Settings update check, or null before the first one.
+   *
+   * Kept separate from the banner: the banner only ever says an update *exists*,
+   * while this line has to be able to say "up to date" and "couldn't check" —
+   * answers that are only worth showing to someone who just asked.
+   */
+  updateCheckMessage: string | null;
 }
+
+/**
+ * Install progress for a pending update (NEWS-89). `installed` is terminal for
+ * this process — the new binary is on disk but only takes effect on restart.
+ */
+export type UpdateInstallState = 'idle' | 'installing' | 'installed' | 'failed';
 
 /**
  * Persisted per device rather than in the store: how you've sized your own
@@ -465,6 +498,11 @@ export const appStore = defineStore({
     renameItemCount: null,
     notifyPermissionDenied: false,
     dismissedRunId: readDismissedRunId(),
+    updateVersion: null,
+    updateDismissed: false,
+    updateInstall: 'idle',
+    updateChecking: false,
+    updateCheckMessage: null,
     dismissedBehind: false,
     behindGraceUntil: Date.now() + BEHIND_GRACE_MS,
     toast: null,
@@ -635,6 +673,27 @@ export const appStore = defineStore({
     },
     dismissBehind: () => {
       set({ ...get(), dismissedBehind: true });
+    },
+    /**
+     * Record a pending update (NEWS-89). Re-announcing the *same* version leaves
+     * a dismissal alone; a newer version un-dismisses, since it's news again.
+     */
+    setUpdateVersion: (updateVersion: string | null) => {
+      const prev = get();
+      if (prev.updateVersion === updateVersion) return;
+      set({ ...prev, updateVersion, updateDismissed: false, updateInstall: 'idle' });
+    },
+    dismissUpdate: () => {
+      set({ ...get(), updateDismissed: true });
+    },
+    setUpdateInstall: (updateInstall: UpdateInstallState) => {
+      set({ ...get(), updateInstall });
+    },
+    setUpdateChecking: (updateChecking: boolean) => {
+      set({ ...get(), updateChecking, updateCheckMessage: updateChecking ? null : get().updateCheckMessage });
+    },
+    setUpdateCheckMessage: (updateCheckMessage: string | null) => {
+      set({ ...get(), updateChecking: false, updateCheckMessage });
     },
     bumpBehindGrace: () => {
       set({ ...get(), behindGraceUntil: Date.now() + BEHIND_GRACE_MS });
