@@ -163,7 +163,7 @@ jobs:
       - run: npm run test:e2e
       - name: Upload Playwright report + traces
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: playwright-report-linux
           path: |
@@ -249,7 +249,7 @@ jobs:
         with:
           args: --target ${{ matrix.target }}${{ matrix.target == 'x86_64-pc-windows-msvc' && ' --bundles nsis' || '' }}
       - name: Upload Tauri artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: tauri-${{ matrix.friendly }}
           path: src-tauri/target/${{ matrix.target }}/release/bundle/
