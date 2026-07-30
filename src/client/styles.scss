@@ -948,11 +948,26 @@ h2.eyebrow {
   grid-template-columns: repeat(auto-fill, minmax(min(100%, 400px), 1fr));
   gap: 12px;
 
+  // The day heading — Today / Yesterday / "Jul 20". Larger than the `.eyebrow`
+  // base it inherits, and with **no rule** (NEWS-183), which is the same
+  // correction NEWS-154 made to the sidebar's section headings and for the same
+  // two reasons.
+  //
+  // Size: at 11px it was the *smallest* type in the feed, while being the
+  // structure the eye scans to find a day. Matched to `.topic-section`'s 0.8rem
+  // so the app's two grouping headings read as one device rather than two.
+  //
+  // Rule: the cards below already carry their own borders, so a hairline under
+  // the heading fenced the group off from a page that separates by whitespace
+  // everywhere else. It also sat only a few pixels above the first card's own
+  // top edge, reading as a doubled line.
   h2 {
     grid-column: 1 / -1;
-    margin-bottom: 2px;
-    padding-bottom: 6px;
-    border-bottom: 1px solid var(--line);
+    font-size: 0.8rem;
+    letter-spacing: 0.1em;
+    // Space where the rule and its padding used to be, so the heading still
+    // separates from the cards — by air rather than by a line.
+    margin-bottom: 10px;
   }
 
   // Grid `gap` handles spacing; the stacked-list top margin would double it.

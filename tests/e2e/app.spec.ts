@@ -90,6 +90,33 @@ test('check now finds stories with summaries and source links', async ({ page })
   await expect(link.locator('img.favicon')).toHaveCount(0);
 });
 
+test('the day heading reads as structure, not a fenced-off block (NEWS-183)', async ({ page }) => {
+  await page.goto('/');
+  await expect(page.locator('.day h2')).toHaveText(['Today']);
+
+  // Sized against the `.eyebrow` base it inherits rather than a magic number,
+  // because that comparison *is* the complaint: at 11px the heading dividing
+  // the feed by day was the smallest type on the page, while being the
+  // structure the eye scans. Same correction NEWS-154 made in the sidebar.
+  const type = await page.evaluate(() => {
+    const heading = document.querySelector('.day h2');
+    const eyebrow = document.querySelector('.topics-panel .eyebrow');
+    if (!heading || !eyebrow) return null;
+    const h = getComputedStyle(heading);
+    return {
+      size: Number.parseFloat(h.fontSize),
+      eyebrowSize: Number.parseFloat(getComputedStyle(eyebrow).fontSize),
+      border: Number.parseFloat(h.borderBottomWidth),
+    };
+  });
+  expect(type).not.toBeNull();
+  expect(type?.size ?? 0).toBeGreaterThan(type?.eyebrowSize ?? 0);
+  // No rule: the cards below carry their own borders, so a hairline here fenced
+  // the group off from a page that separates by whitespace everywhere else —
+  // and sat a few pixels above the first card's own top edge, reading doubled.
+  expect(type?.border).toBe(0);
+});
+
 test('a second check deduplicates already-seen stories', async ({ page }) => {
   await page.goto('/');
   await expect(page.locator('.item')).toHaveCount(2);

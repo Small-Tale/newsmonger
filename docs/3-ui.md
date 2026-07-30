@@ -226,6 +226,14 @@ Source art lives in `assets/`, in two shapes — rounded and full-bleed — and 
 
   Fills are read **positionally** (first path = `News`, second = `monger.`) rather than by `id`, because the drawing tool has already renamed one — `monger` became `monger.` when the period was folded into the mark.
 
+- **FR-3.59** *(Shipped, NEWS-183)* The feed's **day heading** — Today / Yesterday / "Jul 20" — is **larger than the eyebrow base it inherits, and carries no rule**. This is FR-3.54's correction applied to the other half of the app, for the same two reasons.
+
+  At 11px it was the *smallest* type in the feed while being the structure the eye scans to find a day, which is backwards in exactly the way the sidebar's section headings were. Matched to `.topic-section`'s `0.8rem` so the app's two grouping headings read as one device rather than two unrelated ones.
+
+  The rule went for a reason specific to the feed: the story cards below **already carry their own borders**, so a hairline under the heading fenced the group off from a page that separates by whitespace everywhere else — and it sat only a few pixels above the first card's own top edge, reading as a doubled line rather than as a divider. The margin it vacated became whitespace, so the heading still separates from the cards, by air.
+
+  The E2E sizes the heading **against the eyebrow** rather than against a number, because that comparison is the complaint; and asserts the computed `border-bottom-width` is 0 rather than checking the declaration, since the rule could return through any selector.
+
 - **FR-3.55** *(Shipped, NEWS-153)* The dial's track is drawn in **translucent ink, not a fixed grey**. `--line` is mixed for the *page* background, so the ring was faint everywhere (1.18:1 in light against the page) and on a selected or hovered row — filled with `--pine-soft` — it all but vanished: about **1.01:1** in light and **1.02:1** in dark. Invisible, and precisely when the user had singled that topic out.
 
   `--ink` at `stroke-opacity: 0.24` composites over whatever is behind it, so the ring keeps its contrast against any fill the row ever gains rather than against the one background someone had in mind when they chose the grey. Now 1.61–1.97:1 across light/dark × selected/unselected.
