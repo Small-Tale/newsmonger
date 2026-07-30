@@ -15,9 +15,33 @@ cd "$(dirname "$0")/.."
 
 # 22.5 is the floor: the server uses the built-in `node:sqlite` (NEWS-94).
 NODE_VERSION="v22.14.0"
-# Tauri passes $TAURI_ENV_TARGET_TRIPLE to beforeBuildCommand, but it expands to
-# an empty string outside a Tauri build — fall back to the host triple.
+# Target triple, in precedence order: explicit argument, then Tauri's own env var,
+# then the host.
+#
+# **Reading the env var here rather than interpolating it in `beforeBuildCommand` is
+# the whole point** (NEWS-211). That config used to say:
+#
+#   bash scripts/build-sidecar.sh "$TAURI_ENV_TARGET_TRIPLE"
+#
+# which works on macOS and Linux and cannot work on Windows: Tauri runs
+# `beforeBuildCommand` through **cmd.exe**, which does not expand `$VAR`. bash then
+# received the literal text and died with `Unsupported target:
+# \$TAURI_ENV_TARGET_TRIPLE"`. An environment variable reaches the child process
+# whatever shell launched it, so letting the script read it is portable where
+# interpolating it is not.
 TARGET="${1:-}"
+
+# Defend against that shape coming back. Without this the symptom is a baffling
+# "Unsupported target" naming a variable, on Windows only.
+case "$TARGET" in
+  *'$'*|*'%'*)
+    echo "warning: ignoring an unexpanded variable reference as the target: $TARGET" >&2
+    echo "         Pass a real triple, or let \$TAURI_ENV_TARGET_TRIPLE through." >&2
+    TARGET=""
+    ;;
+esac
+
+[ -n "$TARGET" ] || TARGET="${TAURI_ENV_TARGET_TRIPLE:-}"
 [ -n "$TARGET" ] || TARGET="$(rustc --print host-tuple 2>/dev/null || echo unknown)"
 
 case "$TARGET" in

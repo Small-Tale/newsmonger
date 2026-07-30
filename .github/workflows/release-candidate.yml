@@ -199,7 +199,14 @@ jobs:
     name: Build Tauri (${{ matrix.friendly }})
     needs: [lint, typecheck, test-unit, audit, rust]
     strategy:
-      fail-fast: true
+      # `false`, where glassbox uses `true` — a deliberate deviation while three of
+      # the four targets have never been bundle-built here (NEWS-20). Fail-fast
+      # cancels the siblings the moment one target dies, which on the first real run
+      # meant a Windows failure (NEWS-211) cancelled macOS and Linux before either
+      # reported, turning "what works?" into a one-platform-per-run interrogation.
+      # Flip back to `true` once all four are known-good and the value of cancelling
+      # early outweighs the value of a complete picture.
+      fail-fast: false
       matrix:
         include:
           - platform: macos-latest

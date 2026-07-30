@@ -5,7 +5,7 @@
   "identifier": "com.smalltale.newsmonger",
   "build": {
     "beforeDevCommand": "npm run build:client",
-    "beforeBuildCommand": "bash scripts/build-sidecar.sh \"$TAURI_ENV_TARGET_TRIPLE\"",
+    "beforeBuildCommand": "bash scripts/build-sidecar.sh",
     "frontendDist": "loading"
   },
   "app": {
