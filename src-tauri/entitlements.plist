@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
-  Entitlements for the hardened runtime (NEWS-21).
+  Entitlements for the hardened runtime (NEWS-21, narrowed in NEWS-215).
 
   Notarization requires the hardened runtime, and Tauri enables it by default
   (`bundle.macOS.hardenedRuntime`, default true). That matters more here than in
@@ -10,21 +10,32 @@
   cleanly and then dies on launch — on someone else's machine, not the build
   machine, which is the worst possible place to find out.
 
-  These are the entitlements Node's own official binary carries, *minus* two:
+  **This set now matches ~/Documents/glassbox's exactly.** Glassbox ships the same
+  Node-sidecar architecture and has notarized and shipped with these three for
+  months, which is better evidence than deriving the set from Node's own binary:
+  what matters is what the notary service accepts and what a Node sidecar needs
+  at launch, and glassbox is a live answer to both.
 
-  - `com.apple.security.get-task-allow` is deliberately absent. It permits a
-    debugger to attach, and the notary service rejects any binary carrying it.
-    Node ships it because Node's binaries are signed but not notarized; ours are
-    both, so it has to go.
-  - `com.apple.security.cs.allow-dyld-environment-variables` is absent because
-    nothing here sets DYLD_* for the sidecar. It is an injection surface, and an
-    entitlement that isn't needed is one that shouldn't be granted.
+  Deliberately absent, and why:
 
-  `disable-library-validation` is also absent: it would let the process load
-  libraries signed by anyone, and the staged dependency tree contains no native
-  addons at all (`find src-tauri/server -name '*.node'` is empty). If a native
-  dependency is ever added, this is the entitlement whose absence will break it,
-  and the failure will look like a mysterious dlopen error.
+  - `com.apple.security.get-task-allow` — permits a debugger to attach, and the
+    notary service **rejects** any binary carrying it. Node ships it because
+    Node's binaries are signed but not notarized; ours are both.
+  - `com.apple.security.cs.allow-dyld-environment-variables` — nothing sets
+    `DYLD_*` for the sidecar, and it is an injection surface. An entitlement that
+    isn't needed shouldn't be granted.
+  - `com.apple.security.cs.disable-executable-page-protection` — this **was**
+    here, derived from Node's own binary, on the reasoning that V8 writes and
+    executes the same pages. Removed in NEWS-215: it is the broadest of the set,
+    Apple discourages it, and glassbox runs a Node sidecar without it. If a
+    signed build's sidecar ever fails to start, this is the first thing to put
+    back — but verify rather than assume, because a missing `allow-jit` produces
+    the same symptom.
+
+  The risk shape here is unusual and worth restating: **an entitlement change
+  cannot be validated by a green build.** Signing, notarization and stapling all
+  succeed regardless; the failure appears only when the packaged app is launched
+  on a Mac. See docs/manual-test-plan.md.
 -->
 <plist version="1.0">
   <dict>
@@ -36,9 +47,14 @@
          the MAP_JIT path; this covers the rest, and Node ships both. -->
     <key>com.apple.security.cs.allow-unsigned-executable-memory</key>
     <true/>
-    <!-- V8's code pages are written and executed without the W^X separation the
-         hardened runtime otherwise enforces. -->
-    <key>com.apple.security.cs.disable-executable-page-protection</key>
+    <!-- Lets the process load libraries not signed by the same team. The staged
+         tree has no native addons today (`find src-tauri/server -name '*.node'`
+         is empty), so this is not strictly required — it is here to match
+         glassbox, which is the configuration with real notarization mileage. It
+         is also the entitlement whose absence would break the first native
+         dependency anyone adds, with a failure that looks like a mysterious
+         dlopen error. -->
+    <key>com.apple.security.cs.disable-library-validation</key>
     <true/>
   </dict>
 </plist>

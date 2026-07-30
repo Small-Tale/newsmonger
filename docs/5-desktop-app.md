@@ -72,20 +72,20 @@ An unsigned bundle opens on the machine that built it and nowhere else. Gatekeep
 
 - **FR-5.5** *(Partial — config shipped, credentials outstanding)* Release bundles are signed with a **Developer ID Application** certificate and notarized. Nothing identity-specific is committed: Tauri reads `APPLE_SIGNING_IDENTITY` (or `APPLE_CERTIFICATE` + `APPLE_CERTIFICATE_PASSWORD` in CI) and, for notarization, **`APPLE_ID` + `APPLE_PASSWORD` + `APPLE_TEAM_ID`** — an **app-specific password**, which is the route this project uses. The App Store Connect key trio (`APPLE_API_ISSUER` + `APPLE_API_KEY` + `APPLE_API_KEY_PATH`) is the documented migration target for when the credential should stop being tied to one person's Apple ID.
 
-- **FR-5.6** *(Shipped)* `src-tauri/entitlements.plist` grants the hardened runtime exceptions **the Node sidecar cannot run without**, and no others.
+- **FR-5.6** *(Shipped; narrowed NEWS-215)* `src-tauri/entitlements.plist` grants the hardened runtime exceptions **the Node sidecar cannot run without**, and no others. The set now **matches glassbox's exactly**.
 
-  This is the trap in signing a Tauri app whose sidecar is a JavaScript runtime. Notarization requires the hardened runtime (Tauri enables it by default), and the hardened runtime blocks exactly what V8 does — writing and executing code at runtime. Get this wrong and the app signs, notarizes and staples cleanly, then dies at launch on someone else's Mac. Every check up to that point is green.
-
-  The set is Node's own, minus three:
+  This is the trap in signing a Tauri app whose sidecar is a JavaScript runtime. Notarization requires the hardened runtime (Tauri enables it by default), and the hardened runtime blocks exactly what V8 does — writing and executing code at runtime. Get this wrong and the app signs, notarizes and staples cleanly, then dies at launch on someone else's Mac. **Every check up to that point is green**, which is why this cannot be validated by CI.
 
   | Entitlement | Why |
   |---|---|
   | `cs.allow-jit` | V8 compiles JavaScript at runtime |
   | `cs.allow-unsigned-executable-memory` | V8 maps executable pages it did not sign |
-  | `cs.disable-executable-page-protection` | V8 writes and executes the same pages |
+  | `cs.disable-library-validation` | Matches glassbox. Not strictly needed today — the staged tree has no native addons — but it is the one whose absence breaks the first native dependency anyone adds, with a failure that looks like an unexplained `dlopen` error |
   | ~~`get-task-allow`~~ | **The notary service rejects it.** Node ships it because Node's binaries are signed but not notarized; ours are both |
   | ~~`cs.allow-dyld-environment-variables`~~ | Nothing sets `DYLD_*` for the sidecar, and it is an injection surface |
-  | ~~`cs.disable-library-validation`~~ | The staged tree has no native addons. **This is the one to add if a native dependency ever appears** — the failure will look like an unexplained `dlopen` error |
+  | ~~`cs.disable-executable-page-protection`~~ | **Removed in NEWS-215.** It was derived from Node's own binary, on the reasoning that V8 writes and executes the same pages — but it is the broadest of the set, Apple discourages it, and glassbox runs a Node sidecar without it. First thing to put back if a signed build's sidecar won't start, though a missing `allow-jit` produces the same symptom, so verify rather than assume |
+
+  The original set was derived from **Node's own official binary** minus the rejected/unneeded ones. Matching glassbox is the better basis: what matters is what the notary service accepts and what a Node sidecar needs at launch, and glassbox is a live answer to both, with months of shipped releases behind it.
 
 - **FR-5.7** *(Shipped)* `bash scripts/verify-signing.sh` asserts, on the build machine, the properties Gatekeeper will check on someone else's: a Developer ID authority, the hardened runtime flag, the sidecar's JIT entitlements, the *absence* of `get-task-allow`, a deep strict `codesign --verify`, `spctl` reporting `source=Notarized Developer ID`, and a stapled ticket on **both** the app and the `.dmg` — notarizing the app does not notarize the disk image it ships in.
 

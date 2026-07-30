@@ -201,6 +201,20 @@ Note the commands are `#[cfg(not(debug_assertions))]`-guarded, so **`tauri dev` 
 7. Confirm the update was **signature-verified rather than merely downloaded**: temporarily point `plugins.updater.endpoints` at a manifest signed by a *different* key, rebuild, and confirm the check fails instead of installing. This is the one step that actually tests the security property; skipping it means the pubkey has never been proven load-bearing.
 8. Offline behaviour: pull the network and relaunch — confirm no banner, no error dialog, and **no delay to the window appearing** (the check is spawned, not awaited).
 
+## Signed build still launches after the entitlement change (NEWS-215) — REQUIRED before the next release
+
+`src-tauri/entitlements.plist` dropped `com.apple.security.cs.disable-executable-page-protection` to match glassbox. **No automated check can cover this.** Signing, notarization and stapling all succeed regardless of whether the entitlements are right; a wrong set fails only when the packaged app is *launched*, and only on the hardened runtime — i.e. on a signed build, not `tauri dev`.
+
+The symptom to watch for is the sidecar dying instantly: the window opens on the loading page and never navigates, with the server process exiting immediately. `[server]` lines in the log would show a crash or nothing at all.
+
+1. `npm run tauri:build:local --sign` (an unsigned build does **not** exercise this — the hardened runtime is what enforces it).
+2. Launch the built `Newsmonger.app` from `Finder`, not from a terminal.
+3. Confirm the window navigates past the loading spinner to the real UI — that alone proves the Node sidecar started and served a page under the hardened runtime.
+4. Add a topic and let a check run, so V8 has done real JIT work rather than just booting.
+5. If it fails: put `cs.disable-executable-page-protection` back **and verify that was the cause**, because a missing `cs.allow-jit` produces an identical symptom.
+
+Worth doing on both an Apple Silicon and an Intel Mac if both are available, since the JIT paths differ.
+
 ## Automated Coverage Summary
 
 - Topics CRUD, scheduling logic, dedup, parsing, API validation, and full UI flows are covered by `npm test` + `npm run test:e2e` (mock AI service).
