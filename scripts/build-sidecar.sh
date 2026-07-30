@@ -71,7 +71,18 @@ mkdir -p "$SERVER_DIR/client"
 cp dist/cli.js "$SERVER_DIR/"
 # The server resolves client assets as ./client relative to cli.js (see
 # clientDir() in src/server.ts), so these must sit next to it.
-cp dist/client/app.global.js dist/client/styles.css dist/client/favicon.svg dist/client/logo-full-bleed.svg "$SERVER_DIR/client/"
+#
+# Copy *everything* `build:client` produced rather than naming files (NEWS-203).
+# This line used to hardcode four filenames, which made it a **third** asset list
+# — after `build:client` and `build:client:dev` — and an invisible one: CLAUDE.md
+# tells you to update "both copy lists". So when the masthead wordmarks were added
+# to those two, this one was missed, and `/static/wordmark-*.svg` 404'd in every
+# packaged build while working perfectly in dev and in every test.
+#
+# Sourcemaps are the one deliberate exclusion: they are large, only useful next to
+# a dev build, and would ship the client source inside the app bundle.
+find dist/client -maxdepth 1 -type f ! -name '*.map' -exec cp {} "$SERVER_DIR/client/" \;
+echo "    client assets: $(find "$SERVER_DIR/client" -maxdepth 1 -type f | wc -l | tr -d ' ') files"
 
 # A package.json beside cli.js does two things: it pins the dependency set that
 # `npm install` below resolves, and its `"type": "module"` declares the bundle as
@@ -118,12 +129,36 @@ else
     sleep 0.5
   done
 
-  # The readiness line only proves it started; fetch a client asset too, since
-  # those are staged separately and resolved relative to cli.js.
+  # The readiness line only proves it started. Fetch every staged client asset
+  # too, since those are staged separately and resolved relative to cli.js.
+  #
+  # Derived from what is on disk, NOT a list (NEWS-203). This check exists to
+  # catch staging mistakes, and it previously fetched `/static/app.js` and
+  # `/static/styles.css` — a hardcoded pair that happened to name two assets that
+  # *were* staged. When the wordmarks went missing from the bundle it sailed
+  # straight past them, and a broken masthead shipped. A check with its own
+  # hardcoded list cannot catch a hardcoded list being wrong.
+  #
+  # `app.global.js` is served at `/static/app.js`, so the URL is not always the
+  # filename — that mapping is the one thing still stated explicitly.
   if [ -n "$ok" ]; then
-    for path in /healthz /static/app.js /static/styles.css; do
+    paths="/healthz"
+    for f in "$VERIFY_DIR"/server/client/*; do
+      [ -f "$f" ] || continue
+      name="$(basename "$f")"
+      case "$name" in
+        app.global.js) paths="$paths /static/app.js" ;;
+        *)             paths="$paths /static/$name" ;;
+      esac
+    done
+    for path in $paths; do
       code="$(curl -s -o /dev/null -w '%{http_code}' "http://127.0.0.1:${VERIFY_PORT}${path}")"
-      [ "$code" = "200" ] || { echo "    $path returned $code" >&2; ok=""; }
+      if [ "$code" = "200" ]; then
+        echo "    200 $path"
+      else
+        echo "    $path returned $code" >&2
+        ok=""
+      fi
     done
   fi
 
