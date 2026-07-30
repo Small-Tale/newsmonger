@@ -201,44 +201,61 @@ A convenient consequence of the app-specific-password route: **every secret maps
 >
 > The runner must be **macOS** — `codesign`, `notarytool` and `stapler` are Apple tools and exist nowhere else. `ubuntu-latest`, which both current CI jobs use, cannot sign a `.app`.
 
-### Cutting a release (NEWS-190)
+### Cutting a release (NEWS-190, NEWS-201)
 
-`.github/workflows/release.yml` builds, signs, notarizes, verifies, and publishes. One workflow covers both channels.
+**Two workflows, split by tag shape.** Getting which is which straight is the whole thing:
 
-**Do a dry run first.** Actions → Release → **Run workflow**. A manual run exercises the entire signing and notarization path and publishes nothing, so a wrong secret costs a red run instead of a half-published tag. The workflow takes no inputs on purpose: a manual run is *always* a dry run, because on a branch `GITHUB_REF` is `refs/heads/<branch>` and a release created from it would be named after the branch.
+| Tag | Workflow | What happens |
+|---|---|---|
+| `v{ver}-rc.N` | `release-candidate.yml` | gates → npm `@beta` → smoke → **promote** → creates `v{ver}` → dispatches the desktop build |
+| `v{ver}-beta.N` | `release-candidate.yml` | gates → npm `@beta` → smoke → signed bundles into a **prerelease**. No promote. |
+| `v{ver}` | `release-desktop.yml` | signed bundles into the stable release, draft until every asset lands |
 
-Once that's green, cut the release through the scripts rather than by hand (NEWS-194):
+**A stable release is never tagged by hand, and never tagged by you.** You tag an `-rc.N`; CI publishes it, installs the *published* package and smoke-tests it, and only then publishes `@latest`, creates `v{ver}` and dispatches the desktop build. That ordering is the point of the model: nothing reaches `latest` until the artifact on the registry has actually been installed and run.
 
 ```sh
-npm run release             # stable:  bump, changelog, commit, tag v{ver}
-npm run release:beta        # beta:    same, tagged v{ver}-beta.N
+npm run release             # stable: bump, changelog, commit, tag v{ver}-rc.N
+npm run release:beta        # beta:   tag v{ver}-beta.N
 npm run release:beta:auto   # beta, non-interactive (--dry-run to rehearse)
 ```
 
-`release` and `release:beta` are the same interactive flow (`scripts/release.sh`): preflight, gitgist-drafted release notes in `$EDITOR`, a version menu, a review screen, then gates → version files → CHANGELOG → commit → tag → push. It is **resumable** — progress lives in `.release-state.json`, so an abort part-way picks up where it stopped instead of re-asking. `release:beta:auto` answers every prompt itself for automation; `--dry-run` does everything except commit, tag and push.
+`release` and `release:beta` are one interactive flow (`scripts/release.sh`): preflight, gitgist-drafted notes in `$EDITOR`, a version menu, a review screen, then gates → version files → CHANGELOG → commit → tag → push. **Resumable** — progress lives in `.release-state.json`, so an abort part-way picks up where it stopped instead of re-asking. `release:beta:auto` answers every prompt itself; `--dry-run` does everything except commit, tag and push.
 
-Doing it by hand still works, and is what the scripts do:
+The **changelog entry is always the clean version** (`## [0.2.0]`), even though the tag is `v0.2.0-rc.1`. The changelog is what users read; the rc is the mechanism that ships it. A beta does get its own heading — every beta is its own release with its own notes.
 
-```sh
-git tag v0.1.0-beta.1     # hyphen => prerelease
-git push origin v0.1.0-beta.1
-```
+#### What a human has to set up once
 
-The prerelease flag is **derived from the tag** — a hyphen anywhere in it means prerelease — so a beta needs no second workflow and no second set of secrets to drift out of sync.
+- **npm trusted publishing** on npmjs.com: the `newsmonger` package authorised for OIDC from this repo. **`release-candidate.yml` must keep its filename** — npm allows one trusted publisher per package and the binding is workflow-*filename*-scoped, so renaming the file breaks token-free publishing, and the failure arrives as a **404 from the registry** rather than an auth error.
+- An **`npm-publish` GitHub environment**, which `publish-beta` and `promote-release` both declare. It exists to put a gate in front of publishing if that is ever wanted; an empty environment is fine.
+- The Apple + updater secrets in the table above.
 
-**The version lives in five files**, and `scripts/set-version.mjs` writes the three that `npm version` doesn't: `tauri.conf.json`, `Cargo.toml`, and `Cargo.lock`. That last one matters more than it looks — it records the workspace package's own version, so skipping it means `cargo build` silently rewrites the lockfile, every release carries an unexplained lockfile diff, and a future `--locked` build hard-fails. The workflow's guard only compares the tag against `package.json` and `tauri.conf.json`, so a missed `Cargo.toml` would pass the guard and ship a crate version that disagrees with its own bundle. `tests/unit/release-scripts.test.ts` pins all of it, including that exactly one line changes per file — `Cargo.lock` has ~400 other `[[package]]` blocks and more than one shares this crate's version.
+No `NPM_TOKEN`. Every `npm publish` omits `NODE_AUTH_TOKEN` deliberately so the CLI uses the OIDC token minted from `id-token: write`, which cannot be broken by an expired or rotated long-lived token.
 
-**A tag whose base version disagrees with `tauri.conf.json` fails the run before the build.** Nothing otherwise links the two: the tag is the only statement of the release version, the bundle takes its version from the config, and tagging `v0.2.0` against a `0.1.0` config would publish a release whose assets are all named `0.1.0` with nothing complaining. Only the *base* version has to match — the prerelease suffix stays on the tag, because macOS bundle version fields do not accept semver prerelease suffixes.
+#### Details that are load-bearing
 
-Notes on the job's shape, each of which is load-bearing:
-
-- **`macos-latest`, and it must be.** `codesign`, `notarytool` and `stapler` are Apple tools. It is also arm64, matching the only target ever bundle-verified (FR-5.3).
-- **`verify-signing.sh` runs before anything is published**, and the build passes no `--target` — the script reads `src-tauri/target/release/bundle/…`, and an explicit target moves everything under `src-tauri/target/<triple>/…` where it would find nothing and pass vacuously.
+- **`npm install -g npm@11` before publishing.** The OIDC handshake landed in npm 11.5.1. Older npm attaches a `--provenance` attestation but cannot use the OIDC token as the *bearer* for the PUT — it falls back to the empty `_authToken=` that `setup-node` writes, and the registry reports that rejection as a **404** to avoid disclosing whether the package exists.
+- **Smoke tests install the exact published version**, not `newsmonger@beta`. The dist-tag rotation is not instant, and `@beta` would happily smoke-test the *previous* beta and report success for a broken publish. There is a 5×15s retry loop for registry propagation.
+- **`npm run build:client` runs before unit tests.** Several suites fetch `/static/…` through `createApp()` and 404 without `dist/client`. This kept CI red for its entire existence before NEWS-191.
+- **Both clippy profiles run.** NEWS-89's updater commands are `#[cfg(not(debug_assertions))]`, so a debug-only clippy never compiles their bodies.
+- **Betas skip the Windows MSI.** The MSI bundler requires the pre-release identifier to be numeric-only, which `0.2.0-beta.1` is not, so betas ship the NSIS `.exe` only. Stable has no suffix and produces both.
+- **The promote step dispatches `release-desktop.yml` explicitly.** A tag pushed with `GITHUB_TOKEN` does not trigger another workflow — GitHub's recursion guard — so without the dispatch the stable bundles would never build.
+- **Prereleases never become `releases/latest`** (`prerelease: true` + `make_latest: 'false'`, on both the create *and* the draft flip, since flipping is a full update call that would otherwise clear the flag). The desktop updater resolves through exactly that pointer, so a prerelease taking it would push a beta to every stable install.
+- **`macos-latest` for the signing jobs, and it must be.** `codesign`, `notarytool` and `stapler` are Apple tools.
 - **Tauri does the keychain work itself** when `APPLE_CERTIFICATE` is set: temporary keychain, import, cleanup. Do not add `security create-keychain` steps — two keychains competing for one identity is a confusing failure.
-- **Artifacts upload even on failure.** When signing goes wrong the bundle is the evidence, and re-running to obtain a copy spends another notarization round trip.
-- Fast gates (typecheck, lint, unit) run before the ~20-minute bundle so a release cannot publish something that does not compile. E2E is covered by `ci.yml` on the same commit.
 
-> **The download from that release is how you satisfy the last manual check.** A locally-built app is never quarantined, so the build machine cannot test what Gatekeeper decides. A `.dmg` downloaded from a GitHub Release *is* quarantined — so fetching the beta onto a Mac that has never seen the app is the real test, and it is the one thing no script can do (NEWS-21).
+**The version lives in five files**, and `scripts/set-version.mjs` writes the three `npm version` doesn't: `tauri.conf.json`, `Cargo.toml`, and `Cargo.lock`. That last one matters more than it looks — it records the workspace package's own version, so skipping it means `cargo build` silently rewrites the lockfile, every release carries an unexplained lockfile diff, and a future `--locked` build hard-fails. `tests/unit/release-scripts.test.ts` pins all of it, including that exactly one line changes per file — `Cargo.lock` has ~400 other `[[package]]` blocks and more than one shares this crate's version.
+
+The version files never carry the `-rc.N` / `-beta.N` suffix; `set-version.mjs` rejects it, because macOS bundle version fields do. For a **beta**, CI bumps `package.json` to the full `0.2.0-beta.1` ephemerally so npm publishes the right version, while the bundle files get the base `0.2.0`.
+
+> ⚠️ **Neither workflow currently guards that the tag's base version matches `tauri.conf.json`.** The old `release.yml` did. Under the rc model a mismatch cannot arise from the scripts — `release.sh` bumps the files and tags the same commit — but a hand-tagged release could still ship assets named after the wrong version with nothing complaining. Tracked separately.
+
+#### Smoke tests (`tests/smoke/smoke-test.sh`)
+
+Run by CI against a globally-installed published package, fresh and after an upgrade from `@latest`. This answers a question the unit and E2E suites structurally *cannot*: both run against the working tree, where every file exists regardless of the `files` allowlist. Newsmonger has shipped that class of bug twice — a dist-only allowlist with no `prepublishOnly` (which published no code at all), and a client asset copied by three separate hardcoded lists, one of which missed the wordmark.
+
+So the checks lean on **what the running server serves** rather than on a list written down in the script: the `/static/…` references are scraped out of the served HTML *and* the served client bundle, then every one is fetched. A hardcoded list here would be a fourth copy with the same failure mode. It also creates a topic, runs a check with `--ai-test`, and asserts stories actually land — which exercises request validation, the provider call, dedup and the SQLite write inside an installed build.
+
+It runs with `--data-dir` into a `mktemp` directory, never `~/.newsmonger`, for the same reason the test suites do.
 
 ### Production vs beta releases
 

@@ -2,36 +2,45 @@
 #
 # Interactive release for Newsmonger (NEWS-194).
 #
-#   npm run release        stable: bump version files, changelog, commit, tag v{ver}
+#   npm run release        stable: bump version files, changelog, commit, tag v{ver}-rc.N
 #   npm run release:beta   beta:   tag v{ver}-beta.N
 #
 # Resumable: progress is kept in .release-state.json, so an abort mid-flow picks
 # up where it left off rather than re-asking everything.
 #
-# Modelled on ~/Documents/{hotsheet,glassbox}/scripts/release.sh, with four
-# deliberate differences — each because this repo's release pipeline differs, not
-# out of preference:
+# Modelled on ~/Documents/{hotsheet,glassbox}/scripts/release.sh. Two of the four
+# original divergences are gone as of NEWS-201, which ported glassbox's
+# `release-candidate.yml` — the pipeline they were compensating for now exists:
 #
-#  1. NO `npm whoami` PREFLIGHT. Those projects publish to npm; this one ships
-#     only GitHub Releases with Tauri bundles (.github/workflows/release.yml).
-#     Requiring an npm login would block a release on a credential it never uses.
-#     If npm publishing is ever added, that check comes back — see NEWS-195.
+#  1. NPM AUTH IS CHECKED AGAIN. It was dropped because this repo shipped only
+#     GitHub Releases, so a login would have gated a release on an unused
+#     credential (NEWS-195). It now publishes to npm. Note this is a *sanity*
+#     check rather than a functional requirement: CI publishes via OIDC trusted
+#     publishing and needs no local credential at all. It is here because being
+#     signed in as someone who owns the package is worth confirming before you
+#     tag, not because the publish depends on it.
 #
-#  2. STABLE PUSHES `v{ver}` DIRECTLY, NOT `v{ver}-rc.N`. Their CI publishes an
-#     RC and then auto-promotes it. Ours has no promote step and treats *any*
-#     hyphenated tag as a prerelease, so an `-rc.N` tag would publish as a
-#     prerelease and sit there forever.
+#  2. STABLE NOW PUSHES `v{ver}-rc.N`, matching glassbox. It used to push
+#     `v{ver}` directly, because there was no promote step and any hyphenated tag
+#     would have published as a prerelease and sat there. `release-candidate.yml`
+#     now runs the rc: publish `@beta` → smoke-test the published artifact →
+#     publish `@latest` → create the clean `v{ver}` tag → dispatch
+#     `release-desktop.yml`. So the stable tag is *produced by CI*, not by this
+#     script. The gain is that no stable release reaches `latest` until the
+#     actual published package has been installed and exercised.
+#
+# Two divergences remain, both still load-bearing:
 #
 #  3. `git describe --match 'v*'`. This repo carries non-version tags
 #     (`favicon-work`, `briefing-reel-abandoned`), and an unfiltered describe
 #     would anchor the release-notes range at one of those.
 #
-#  4. BETA BUMPS THE VERSION FILES TOO. Their beta path deliberately leaves
-#     package.json alone and lets CI bump ephemerally at publish time. Ours
-#     cannot: the release workflow *guards* that the tag's base version matches
-#     package.json and tauri.conf.json, and nothing bumps anything in CI — the
-#     files are the source of the artifact version. A tag ahead of them is
-#     rejected before the build.
+#  4. BETA BUMPS THE VERSION FILES TOO. Glassbox's beta path leaves package.json
+#     alone and lets CI bump ephemerally. Ours bumps here as well — harmless
+#     under the new pipeline (CI's bump is `--allow-same-version`), and it keeps
+#     the committed version honest about what was last tagged. Note the version
+#     *files* never carry the `-beta.N` / `-rc.N` suffix: `set-version.mjs`
+#     rejects it, because macOS bundle version fields do (NEWS-196).
 #
 set -euo pipefail
 cd "$(dirname "$0")/.."
@@ -104,6 +113,18 @@ preflight() {
   if [[ -n "$(git status --porcelain)" ]]; then
     warn "Working tree is not clean:"
     git status --short
+    confirm "Continue anyway?" || exit 1
+  fi
+
+  # Divergence #1 in the header: a sanity check, not a functional requirement —
+  # CI publishes via OIDC and needs no local credential. A warning rather than a
+  # hard stop for exactly that reason: a release from a machine that isn't
+  # npm-logged-in still works.
+  if npm whoami >/dev/null 2>&1; then
+    success "npm: logged in as ${BOLD}$(npm whoami)${RESET}"
+  else
+    warn "Not logged in to npm. CI publishes via OIDC so this won't block the release,"
+    warn "but you won't be able to yank or re-tag the published package by hand."
     confirm "Continue anyway?" || exit 1
   fi
 
@@ -258,7 +279,13 @@ resolve_tag() {
     while git rev-parse "v${version}-beta.${n}" >/dev/null 2>&1; do n=$((n + 1)); done
     printf '%s\t%s' "v${version}-beta.${n}" "${version}-beta.${n}"
   else
-    printf '%s\t%s' "v${version}" "$version"
+    # Stable is tagged `-rc.N` and promoted by CI (divergence #2 in the header).
+    # The changelog label stays the **clean** version: the changelog documents the
+    # release, and the rc is the mechanism that ships it, not a thing users read
+    # about. CI publishes `X.Y.Z` and creates `vX.Y.Z` from this tag's notes.
+    local n=1
+    while git rev-parse "v${version}-rc.${n}" >/dev/null 2>&1; do n=$((n + 1)); done
+    printf '%s\t%s' "v${version}-rc.${n}" "$version"
   fi
 }
 
@@ -317,11 +344,26 @@ step_tag_and_push() {
   echo ""
   success "${tag} pushed."
   echo ""
+  local version; version=$(get_state "version")
   if [[ "$BETA_MODE" == "true" ]]; then
-    echo -e "  ${DIM}CI will build, sign, notarize, verify, and publish a${RESET} ${BOLD}prerelease${RESET}."
-    echo -e "  ${DIM}It stays opt-in: GitHub's releases/latest skips prereleases.${RESET}"
+    echo -e "  ${DIM}CI (release-candidate.yml) will:${RESET}"
+    echo -e "    1. Run gates, audit, Rust, E2E, and a 4-target Tauri build"
+    echo -e "    2. Publish ${BOLD}newsmonger@${version}-beta.N${RESET} to npm under the ${BOLD}beta${RESET} tag"
+    echo -e "    3. Smoke-test the published package (fresh install + upgrade)"
+    echo -e "    4. Build signed bundles into a draft ${BOLD}prerelease${RESET}, then flip it public"
+    echo ""
+    echo -e "  ${DIM}No promote: betas stay opt-in, and GitHub's releases/latest skips${RESET}"
+    echo -e "  ${DIM}prereleases, so the desktop updater keeps serving the prior stable.${RESET}"
   else
-    echo -e "  ${DIM}CI will build, sign, notarize, verify, and publish the release.${RESET}"
+    echo -e "  ${DIM}CI (release-candidate.yml) will:${RESET}"
+    echo -e "    1. Run gates, audit, Rust, E2E, and a 4-target Tauri build"
+    echo -e "    2. Publish ${BOLD}newsmonger@${tag#v}${RESET} to npm under the ${BOLD}beta${RESET} tag"
+    echo -e "    3. Smoke-test the published package (fresh install + upgrade)"
+    echo -e "    4. Promote: publish ${BOLD}newsmonger@${version}${RESET} under ${BOLD}latest${RESET}"
+    echo -e "    5. Create ${BOLD}v${version}${RESET} and dispatch release-desktop.yml for the signed bundles"
+    echo ""
+    echo -e "  ${DIM}The stable tag is created by CI, not here — nothing reaches 'latest'${RESET}"
+    echo -e "  ${DIM}until the published package has actually been installed and run.${RESET}"
   fi
   echo ""
   echo -e "  ${DIM}Monitor:${RESET} https://github.com/Small-Tale/newsmonger/actions"

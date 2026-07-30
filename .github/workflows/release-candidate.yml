@@ -1,0 +1,660 @@
+name: Release Candidate
+
+# Ported from ~/Documents/glassbox/.github/workflows/release-candidate.yml (NEWS-201).
+#
+# The `-rc.N` / `-beta.N` half of the release pipeline. `release-desktop.yml` owns
+# the clean `v[0-9]*` stable tags and is *dispatched by this workflow* at the end of
+# an rc run.
+#
+# **Keep this filename.** npm allows exactly one trusted publisher per package and
+# the binding is workflow-*filename*-scoped, so renaming the file breaks token-free
+# publishing for both tag tracks. Every `npm publish` below deliberately omits
+# `NODE_AUTH_TOKEN` so the CLI uses the OIDC token minted via `id-token: write`
+# rather than a long-lived secret.
+#
+# Tag → behaviour:
+#   - `v*-rc.*`   → validate → tauri gate → publish @beta → smoke → promote → dispatch release-desktop.yml
+#   - `v*-beta.*` → validate → tauri gate → publish @beta → smoke
+#                                         → create-release (draft prerelease) + signed `build` in parallel
+#                                         → publish-release (flip draft → published)
+#
+# **The `if:` conditions are the whole design.** Get one wrong and a beta
+# auto-publishes as stable. Betas stay on the `beta` dist-tag, never flip `latest`,
+# and never dispatch the desktop release.
+
+permissions:
+  contents: write
+  actions: write # rc-only promote step dispatches release-desktop.yml
+  id-token: write # npm OIDC trusted publishing (no NPM_TOKEN)
+
+on:
+  push:
+    tags:
+      - 'v*-rc.*'
+      - 'v*-beta.*'
+
+# Two groups so an in-flight rc and an in-flight beta never cancel each other, but
+# two rcs (or two betas) in quick succession do.
+concurrency:
+  group: release-${{ contains(github.ref, '-beta.') && 'beta' || 'rc' }}
+  cancel-in-progress: true
+
+env:
+  # 22, not glassbox's 20: the server uses built-in `node:sqlite`, which needs
+  # Node 22.5+. Matches ci.yml and the triple the sidecar pins.
+  NODE_VERSION: '22'
+
+jobs:
+  # ══════════════════════════════════════════════════════════════
+  # Phase 1a: Fast checks — cheap, catch most problems (both tracks)
+  # ══════════════════════════════════════════════════════════════
+
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+      - run: npm ci
+      - run: npm run lint
+
+  typecheck:
+    name: Type Check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+
+  test-unit:
+    name: Unit Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+      - run: npm ci
+      # The client must be built before vitest: several suites fetch
+      # `/static/...` through `createApp()` and 404 without `dist/client`.
+      # This is the bug that kept CI red before NEWS-191 — do not drop it.
+      - run: npm run build:client
+      - run: npm test
+
+  # A release publishes to npm AND ships a bundled Node server inside the desktop
+  # app, so a known-vulnerable *shipped* dependency reaches end users.
+  #
+  # `--omit=dev`: build/test tooling never ships, so its advisories can't affect
+  # the artifact and would only block releases with noise. `--audit-level=high`:
+  # high/critical in a shipped dep blocks; moderate and low still print. In steady
+  # state this gate has nothing to block on — it exists to stop a genuinely
+  # vulnerable build from shipping.
+  audit:
+    name: Security Audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+      - run: npm ci
+      - run: npm audit --omit=dev --audit-level=high
+
+  # The desktop shell ships in every release, so its source is held to the same
+  # bar as the TypeScript. Both clippy profiles run because the updater commands
+  # are `#[cfg(not(debug_assertions))]`-guarded (NEWS-89) — a debug-only clippy
+  # never compiles their bodies at all.
+  rust:
+    name: Rust (fmt / clippy / test)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+      - name: Install Linux dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev librsvg2-dev patchelf
+      - name: Stub the sidecar paths tauri-build checks for
+        run: bash scripts/ensure-sidecar-stub.sh
+      - name: Format
+        working-directory: src-tauri
+        run: cargo fmt --check
+      - name: Clippy (debug)
+        working-directory: src-tauri
+        run: cargo clippy --all-targets -- -D warnings
+      - name: Clippy (release)
+        working-directory: src-tauri
+        run: cargo clippy --release --all-targets -- -D warnings
+      - name: Test
+        working-directory: src-tauri
+        run: cargo test
+
+  # ══════════════════════════════════════════════════════════════
+  # Phase 1b: Expensive checks — only if the fast ones pass
+  # ══════════════════════════════════════════════════════════════
+
+  test-e2e:
+    name: E2E Tests
+    needs: [lint, typecheck, test-unit, audit, rust]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+      - run: npm ci
+      - run: npm run build:client
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:e2e
+      - name: Upload Playwright report + traces
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report-linux
+          path: |
+            playwright-report/
+            test-results/
+          retention-days: 7
+
+  npm-pack:
+    name: npm Pack (Dry Run)
+    needs: [lint, typecheck, test-unit, audit, rust]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - run: npm run build:client
+      # Catches the packaging faults the other suites structurally cannot see:
+      # they run against the working tree, where every file exists regardless of
+      # the `files` allowlist. Newsmonger has shipped that bug once already — a
+      # dist-only allowlist with no `prepublishOnly`, which published no code.
+      - run: npm pack --dry-run
+
+  # Unsigned validation build across all four targets, gating publish for both tag
+  # tracks. Runs against the committed version (release.sh does not bump in-tree for
+  # beta tags, and bumps to the clean stable version for rc tags), so the Windows MSI
+  # bundler's numeric-only pre-release check is never tripped here. These bundles are
+  # discarded; the signed beta bundles come from `build` below.
+  build-tauri:
+    name: Build Tauri (${{ matrix.friendly }})
+    needs: [lint, typecheck, test-unit, audit, rust]
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          - platform: macos-latest
+            target: aarch64-apple-darwin
+            friendly: macOS-Apple-Silicon
+          - platform: macos-latest
+            target: x86_64-apple-darwin
+            friendly: macOS-Intel
+          - platform: ubuntu-22.04
+            target: x86_64-unknown-linux-gnu
+            friendly: Linux-x64
+          - platform: windows-latest
+            target: x86_64-pc-windows-msvc
+            friendly: Windows-x64
+    runs-on: ${{ matrix.platform }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+      - name: Install Linux dependencies
+        if: matrix.platform == 'ubuntu-22.04'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev librsvg2-dev patchelf
+      - run: npm ci
+      - name: Build sidecar
+        run: bash scripts/build-sidecar.sh ${{ matrix.target }}
+        shell: bash
+      - name: Build Tauri app (unsigned validation gate)
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        with:
+          args: --target ${{ matrix.target }}${{ matrix.target == 'x86_64-pc-windows-msvc' && ' --bundles nsis' || '' }}
+      - name: Upload Tauri artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: tauri-${{ matrix.friendly }}
+          path: src-tauri/target/${{ matrix.target }}/release/bundle/
+          retention-days: 7
+
+  # ══════════════════════════════════════════════════════════════
+  # Phase 2 (beta only): the GitHub Release shell, as a DRAFT
+  # ══════════════════════════════════════════════════════════════
+  #
+  # The rc path needs none of this: `promote-release` creates the clean tag and
+  # `release-desktop.yml` owns its own draft → flip cycle.
+
+  create-release:
+    name: Create Prerelease (Draft)
+    if: contains(github.ref, '-beta.')
+    needs: [test-e2e, npm-pack, build-tauri]
+    runs-on: ubuntu-latest
+    outputs:
+      beta_version: ${{ steps.version.outputs.beta_version }}
+      release_id: ${{ steps.create.outputs.result }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Extract beta version from tag
+        id: version
+        run: |
+          TAG="${GITHUB_REF_NAME}"
+          BETA_VERSION="${TAG#v}"
+          echo "beta_version=$BETA_VERSION" >> "$GITHUB_OUTPUT"
+          echo "Beta version: $BETA_VERSION"
+
+      - name: Build release notes body
+        id: notes
+        env:
+          TAG: ${{ github.ref_name }}
+          BETA_VERSION: ${{ steps.version.outputs.beta_version }}
+        run: |
+          # The annotated tag's message, which `npm run release:beta` writes from
+          # the gitgist-drafted notes.
+          NOTES=$(git tag -l --format='%(contents)' "$TAG" | sed '/^$/d')
+
+          {
+            echo "> **Beta / pre-release.** This build is opt-in. The desktop auto-updater keeps pointing at the prior stable release."
+            echo ""
+            if [ -n "$NOTES" ]; then
+              echo "$NOTES"
+              echo ""
+            fi
+            echo "## Try it out"
+            echo ""
+            echo "**npm:** \`npm install -g newsmonger@${BETA_VERSION}\` (or \`newsmonger@beta\` for the newest beta)"
+            echo ""
+            echo "**Desktop bundles:** see Assets below."
+          } > /tmp/beta-notes.md
+
+          echo "body<<ENDOFNOTES" >> "$GITHUB_OUTPUT"
+          cat /tmp/beta-notes.md >> "$GITHUB_OUTPUT"
+          echo "ENDOFNOTES" >> "$GITHUB_OUTPUT"
+
+      # Draft *and* prerelease, which are orthogonal and both needed.
+      #
+      # Draft closes the broken-link window: the `build` matrix takes 10–30 minutes
+      # to upload bundles, and the notes above link to assets that don't exist yet.
+      # `prerelease: true` protects the stable channel: GitHub's `releases/latest`
+      # skips prereleases, so the desktop updater (which resolves through exactly
+      # that pointer — see tauri.conf.json) keeps serving the prior stable.
+      - name: Create prerelease (as draft — flipped by publish-release at end)
+        id: create
+        uses: actions/github-script@v7
+        env:
+          RELEASE_BODY: ${{ steps.notes.outputs.body }}
+        with:
+          script: |
+            const tag = '${{ github.ref_name }}';
+            // Body via env, not a template literal: the notes contain backticks
+            // (the npm install snippet) that would break the JS string.
+            const { data } = await github.rest.repos.createRelease({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              tag_name: tag,
+              name: `Newsmonger ${tag} (beta)`,
+              body: process.env.RELEASE_BODY,
+              draft: true,
+              prerelease: true,
+              make_latest: 'false',
+            });
+            return data.id;
+
+  # ══════════════════════════════════════════════════════════════
+  # Phase 3: publish to npm under the `beta` dist-tag (both tracks)
+  # ══════════════════════════════════════════════════════════════
+  #
+  # OIDC trusted publishing — no `NODE_AUTH_TOKEN`, no `NPM_TOKEN`. The trusted
+  # publisher configured at npmjs.com against *this workflow's filename* mints a
+  # short-lived token from the runner's OIDC ID token, so publishing cannot be
+  # broken by an expired or rotated long-lived token.
+
+  publish-beta:
+    name: Publish npm Beta
+    needs: [test-e2e, npm-pack, build-tauri]
+    runs-on: ubuntu-latest
+    environment: npm-publish
+    permissions:
+      contents: read
+      id-token: write
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      base_version: ${{ steps.version.outputs.base_version }}
+    steps:
+      - uses: actions/checkout@v4
+        with: { ref: '${{ github.ref }}' }
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: Extract version from tag
+        id: version
+        run: |
+          TAG="${GITHUB_REF_NAME}"
+          VERSION="${TAG#v}"
+          # base_version is only meaningful for rc tags — it strips `-rc.N` to give
+          # the clean stable version `promote-release` publishes. Computing it on a
+          # beta tag is harmless (nothing to strip); it just isn't consumed there.
+          BASE_VERSION=$(echo "$VERSION" | sed 's/-rc\.[0-9]*//')
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "base_version=$BASE_VERSION" >> "$GITHUB_OUTPUT"
+          echo "Version: $VERSION, base version (rc-only): $BASE_VERSION"
+
+      - run: npm ci
+
+      # npm's trusted-publishing OIDC handshake landed in **npm 11.5.1**. Older npm
+      # knows how to attach a `--provenance` attestation but cannot use the OIDC
+      # token as the bearer for the PUT — it falls through to the empty
+      # `_authToken=` that `setup-node` writes when `NODE_AUTH_TOKEN` is unset, the
+      # registry rejects empty auth, and **npm reports that as a 404** to avoid
+      # disclosing whether the package exists. A confusing failure worth naming.
+      #
+      # Pinned to the npm 11 line rather than `@latest` so a future major can't
+      # change the publish contract under a release.
+      - name: Upgrade npm for OIDC trusted publishing (>=11.5.1)
+        run: npm install -g npm@11
+
+      - name: Set version and publish beta
+        run: |
+          npm version "${{ steps.version.outputs.version }}" --no-git-tag-version --allow-same-version
+          npm run build
+          npm run build:client
+          npm publish --tag beta --provenance --access public
+
+  # ══════════════════════════════════════════════════════════════
+  # Phase 4 (beta only): signed bundles → the draft prerelease
+  # ══════════════════════════════════════════════════════════════
+  #
+  # Runs in parallel with publish-beta. Bumps the in-tree version to the beta
+  # version *before* building, so bundles carry the right version string —
+  # release.sh's beta path deliberately skips the in-tree bump (the macOS bundle
+  # version fields reject a `-beta.N` suffix), so CI does it ephemerally here.
+
+  build:
+    name: Build Tauri Signed (${{ matrix.friendly }})
+    if: contains(github.ref, '-beta.')
+    needs: [create-release]
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: macos-latest
+            target: aarch64-apple-darwin
+            friendly: macOS-Apple-Silicon
+          - platform: macos-latest
+            target: x86_64-apple-darwin
+            friendly: macOS-Intel
+          - platform: ubuntu-22.04
+            target: x86_64-unknown-linux-gnu
+            friendly: Linux-x64
+          - platform: windows-latest
+            target: x86_64-pc-windows-msvc
+            friendly: Windows-x64
+    runs-on: ${{ matrix.platform }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Install Linux dependencies
+        if: matrix.platform == 'ubuntu-22.04'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev librsvg2-dev patchelf
+
+      - run: npm ci
+
+      # `scripts/set-version.mjs` rejects prerelease suffixes (NEWS-196) because the
+      # macOS bundle version fields do — so the Tauri/Cargo versions get the *base*
+      # version while package.json carries the full `-beta.N`. The bundle is
+      # identified by the release it hangs off, not by its own version string.
+      - name: Set version for the bundle build
+        shell: bash
+        run: |
+          VER="${{ needs.create-release.outputs.beta_version }}"
+          BASE="${VER%%-*}"
+          npm version "$VER" --no-git-tag-version --allow-same-version
+          node scripts/set-version.mjs "$BASE"
+
+      - name: Build sidecar
+        run: bash scripts/build-sidecar.sh ${{ matrix.target }}
+        shell: bash
+
+      # The Windows MSI bundler requires the pre-release identifier to be
+      # numeric-only (`0.9.0-1`), which the semver-standard `0.9.0-beta.N` is not:
+      # "optional pre-release identifier in app version must be numeric-only and
+      # cannot be greater than 65535 for msi target". So betas ship the NSIS `.exe`
+      # only. Stable releases (release-desktop.yml, `v[0-9]*`) produce both,
+      # because there is no pre-release identifier to object to.
+      - name: Build Tauri app and upload to release
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        with:
+          tagName: ${{ github.ref_name }}
+          releaseId: ${{ needs.create-release.outputs.release_id }}
+          args: --target ${{ matrix.target }}${{ matrix.target == 'x86_64-pc-windows-msvc' && ' --bundles nsis' || '' }}
+
+  # ══════════════════════════════════════════════════════════════
+  # Phase 5: install + upgrade smoke tests (both tracks)
+  # ══════════════════════════════════════════════════════════════
+  #
+  # Betas run the same matrix as rcs, deliberately: `npm install -g newsmonger@beta`
+  # is the only way a user gets a beta, so it is exactly where the regression class
+  # an rc catches lurks for betas too.
+  #
+  # These run AFTER publish-beta so the artifact exists to debug when smoke fails.
+  # The workflow goes red and the dist-tag can be yanked by hand if needed.
+  #
+  # Installs the **exact version** publish-beta reported rather than `@beta`, so a
+  # slow dist-tag rotation can't have us smoke-testing the previous beta.
+
+  smoke-fresh-install:
+    name: Smoke Test (Fresh Install)
+    needs: publish-beta
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - name: Install beta globally (with registry-propagation retry)
+        run: |
+          for i in 1 2 3 4 5; do
+            npm install -g newsmonger@${{ needs.publish-beta.outputs.version }} && break
+            echo "Attempt $i failed, waiting 15s for npm registry propagation..."
+            sleep 15
+          done
+      - name: Run smoke tests
+        run: bash tests/smoke/smoke-test.sh newsmonger
+
+  smoke-upgrade:
+    name: Smoke Test (Upgrade from Latest)
+    needs: publish-beta
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - name: Install current stable
+        run: npm install -g newsmonger@latest || echo "No previous stable version — skipping the upgrade half"
+      - name: Smoke test the stable version
+        run: |
+          if command -v newsmonger >/dev/null 2>&1; then
+            bash tests/smoke/smoke-test.sh newsmonger
+          fi
+      - name: Upgrade to the beta (with registry-propagation retry)
+        run: |
+          for i in 1 2 3 4 5; do
+            npm install -g newsmonger@${{ needs.publish-beta.outputs.version }} && break
+            echo "Attempt $i failed, waiting 15s for npm registry propagation..."
+            sleep 15
+          done
+      - name: Smoke test the beta version
+        run: bash tests/smoke/smoke-test.sh newsmonger
+
+  # ══════════════════════════════════════════════════════════════
+  # Phase 6 (rc only): promote to clean stable + dispatch desktop
+  # ══════════════════════════════════════════════════════════════
+  #
+  # Only rc tags reach here. Publishes the clean `X.Y.Z` to npm under `latest`,
+  # creates the matching `vX.Y.Z` tag carrying the rc tag's notes, and dispatches
+  # release-desktop.yml to build the signed stable bundles.
+
+  promote-release:
+    name: Promote to Final Release
+    if: contains(github.ref, '-rc.')
+    needs: [publish-beta, smoke-fresh-install, smoke-upgrade]
+    runs-on: ubuntu-latest
+    environment: npm-publish
+    permissions:
+      contents: write
+      id-token: write
+      actions: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: '${{ github.ref }}'
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          registry-url: 'https://registry.npmjs.org'
+      - run: npm ci
+
+      # See publish-beta for why the npm version matters here.
+      - name: Upgrade npm for OIDC trusted publishing (>=11.5.1)
+        run: npm install -g npm@11
+
+      - name: Publish the clean release version to npm
+        run: |
+          npm version "${{ needs.publish-beta.outputs.base_version }}" --no-git-tag-version --allow-same-version
+          npm run build
+          npm run build:client
+          npm publish --tag latest --provenance --access public
+          echo "Published newsmonger@${{ needs.publish-beta.outputs.base_version }} to npm"
+
+      - name: Create the final release tag
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          FINAL_TAG="v${{ needs.publish-beta.outputs.base_version }}"
+          RC_TAG="${GITHUB_REF_NAME}"
+          NOTES=$(git tag -l --format='%(contents)' "$RC_TAG" | sed '/^$/d')
+          if [ -z "$NOTES" ]; then
+            NOTES="Release $FINAL_TAG"
+          fi
+          echo "$NOTES" | git tag -a "$FINAL_TAG" -F -
+          git push origin "$FINAL_TAG"
+          echo "Created and pushed $FINAL_TAG"
+
+      # Dispatch rather than relying on the tag push above to trigger it: a tag
+      # pushed with GITHUB_TOKEN does not fire another workflow, by design (it is
+      # GitHub's recursion guard). Without this the stable release would never
+      # build. `release-desktop.yml` accepts a `tag` input for exactly this.
+      - name: Trigger the desktop release workflow
+        uses: actions/github-script@v7
+        with:
+          script: |
+            await github.rest.actions.createWorkflowDispatch({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              workflow_id: 'release-desktop.yml',
+              ref: 'main',
+              inputs: { tag: 'v${{ needs.publish-beta.outputs.base_version }}' },
+            });
+            console.log('Triggered the desktop release for v${{ needs.publish-beta.outputs.base_version }}');
+
+      - name: Summary
+        run: |
+          echo "## Release Published" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "- **Version:** ${{ needs.publish-beta.outputs.base_version }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "- **npm:** \`npm install -g newsmonger@${{ needs.publish-beta.outputs.base_version }}\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- **RC tag:** ${{ github.ref_name }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "- **Release tag:** v${{ needs.publish-beta.outputs.base_version }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Desktop release workflow triggered." >> "$GITHUB_STEP_SUMMARY"
+
+  # ══════════════════════════════════════════════════════════════
+  # Phase 7 (beta only): flip the prerelease draft → published
+  # ══════════════════════════════════════════════════════════════
+  #
+  # Atomic publication. Only after every platform's `build` has uploaded do we flip
+  # `draft:false`, so the page becomes visible with every embedded link already
+  # resolving. `prerelease: true` stays set — this must never become
+  # `releases/latest`, which is what the desktop updater resolves through.
+  #
+  # No rc equivalent: rc tags create no GitHub Release here at all.
+
+  publish-release:
+    name: Publish Beta Release (Flip Draft)
+    if: contains(github.ref, '-beta.')
+    needs: [create-release, build]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Flip prerelease from draft → published
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const releaseId = ${{ needs.create-release.outputs.release_id }};
+            await github.rest.repos.updateRelease({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              release_id: releaseId,
+              draft: false,
+              prerelease: true,
+              make_latest: 'false',
+            });
+            console.log(`Beta prerelease ${releaseId} flipped from draft → published`);

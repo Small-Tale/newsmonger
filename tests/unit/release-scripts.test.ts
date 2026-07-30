@@ -58,6 +58,8 @@ describe('the release scripts are wired up (NEWS-194)', () => {
     'scripts/tauri-build-local.sh',
     'scripts/set-version.mjs',
     'scripts/add-changelog-entry.mjs',
+    'scripts/ensure-sidecar-stub.sh',
+    'tests/smoke/smoke-test.sh',
   ])(
     '%s exists and is executable',
     (rel) => {
@@ -70,7 +72,13 @@ describe('the release scripts are wired up (NEWS-194)', () => {
     },
   );
 
-  it.each(['scripts/release.sh', 'scripts/release-beta-auto.sh', 'scripts/tauri-build-local.sh'])(
+  it.each([
+    'scripts/release.sh',
+    'scripts/release-beta-auto.sh',
+    'scripts/tauri-build-local.sh',
+    'scripts/ensure-sidecar-stub.sh',
+    'tests/smoke/smoke-test.sh',
+  ])(
     '%s parses as bash',
     (rel) => {
       // `bash -n` catches an unclosed quote or `fi`/`done` mismatch without
@@ -80,7 +88,13 @@ describe('the release scripts are wired up (NEWS-194)', () => {
     },
   );
 
-  it.each(['scripts/release.sh', 'scripts/release-beta-auto.sh', 'scripts/tauri-build-local.sh'])(
+  it.each([
+    'scripts/release.sh',
+    'scripts/release-beta-auto.sh',
+    'scripts/tauri-build-local.sh',
+    'scripts/ensure-sidecar-stub.sh',
+    'tests/smoke/smoke-test.sh',
+  ])(
     '%s uses no bash 4 builtins',
     (rel) => {
       // macOS ships bash **3.2** and `/usr/bin/env bash` resolves to it. The first
@@ -378,4 +392,205 @@ describe('the release scripts resolve the tag before writing (NEWS-196)', () => 
       expect([...src.matchAll(/rev-parse "v[^"]*-beta\./g)], 'beta loop should appear once').toHaveLength(1);
     },
   );
+});
+
+describe('the rc/beta release pipeline (NEWS-201)', () => {
+  const read = (rel: string): string => fs.readFileSync(path.join(root, rel), 'utf8');
+  const rc = (): string => read('.github/workflows/release-candidate.yml');
+
+  /**
+   * `src` with whole-line comments removed.
+   *
+   * These files are heavily commented *about* the very strings being asserted, so
+   * a naive `toContain` / occurrence count reads the explanation as the config.
+   * Whole-line only — a `#` inside a quoted string (the release-notes echo) is
+   * content, not a comment.
+   */
+  const code = (src: string): string =>
+    src
+      .split('\n')
+      .filter((l) => !/^\s*(#|\/\/)/.test(l))
+      .join('\n');
+
+  it('cuts a stable release as an -rc.N tag, not a bare v{ver}', () => {
+    // The model glassbox uses and this repo diverged from until the promote step
+    // existed: CI publishes the rc, smoke-tests the *published* package, then
+    // promotes. A bare `v{ver}` from here would skip all of that and go straight
+    // to `latest`.
+    const src = read('scripts/release.sh');
+    expect([...src.matchAll(/rev-parse "v[^"]*-rc\./g)], 'rc loop should appear once').toHaveLength(1);
+    // The stable branch of resolve_tag must not emit a bare tag any more.
+    expect(src).not.toMatch(/printf '%s\\t%s' "v\$\{version\}" "\$version"/);
+  });
+
+  it('keeps the changelog label clean while the tag carries -rc.N', () => {
+    // The changelog documents the release; the rc is the mechanism that ships it.
+    // `## [0.2.0-rc.1]` in CHANGELOG.md would be an implementation detail leaking
+    // into the user-facing history — and the promoted release would have no entry.
+    const src = read('scripts/release.sh');
+    expect(src).toMatch(/printf '%s\\t%s' "v\$\{version\}-rc\.\$\{n\}" "\$version"/);
+  });
+
+  it('has the release-candidate workflow under its npm-bound filename', () => {
+    // npm allows one trusted publisher per package and the binding is scoped to the
+    // workflow *filename*. Renaming this file silently breaks token-free publishing
+    // for both tag tracks — the failure surfaces as a 404 from the registry.
+    expect(fs.existsSync(path.join(root, '.github/workflows/release-candidate.yml'))).toBe(true);
+  });
+
+  it('fires on both prerelease tag tracks and nothing else', () => {
+    const src = rc();
+    expect(src).toContain("- 'v*-rc.*'");
+    expect(src).toContain("- 'v*-beta.*'");
+    // The stable track belongs to release-desktop.yml. Two workflows racing on one
+    // tag would double-publish.
+    expect(read('.github/workflows/release-desktop.yml')).toContain("- 'v[0-9]*'");
+  });
+
+  it('gates promote on -rc. and the GitHub Release jobs on -beta.', () => {
+    // "Those `if:` conditions are the whole design" — get one wrong and a beta
+    // auto-publishes as stable. Asserted per job rather than by counting, so a
+    // condition moved onto the wrong job fails here.
+    const src = rc();
+    const jobCondition = (job: string): string | undefined => {
+      // The `if:` on the job itself is the first one after the job key, before any
+      // `steps:` block introduces step-level conditions.
+      const start = src.indexOf(`\n  ${job}:\n`);
+      expect(start, `job ${job} should exist`).toBeGreaterThan(-1);
+      const head = src.slice(start, src.indexOf('\n    steps:', start));
+      return /^\s{4}if: (.*)$/m.exec(head)?.[1];
+    };
+
+    expect(jobCondition('promote-release')).toBe("contains(github.ref, '-rc.')");
+    for (const job of ['create-release', 'build', 'publish-release']) {
+      expect(jobCondition(job), `${job} must be beta-only`).toBe("contains(github.ref, '-beta.')");
+    }
+    // Publishing and smoke-testing run on BOTH tracks — a beta nobody installed is
+    // exactly as untested as an rc nobody installed.
+    for (const job of ['publish-beta', 'smoke-fresh-install', 'smoke-upgrade']) {
+      expect(jobCondition(job), `${job} must run on both tracks`).toBeUndefined();
+    }
+  });
+
+  it('never lets a prerelease become releases/latest', () => {
+    // The desktop updater resolves through `releases/latest` (tauri.conf.json), so a
+    // prerelease that took that pointer would push a beta to every stable install.
+    const src = code(rc());
+    expect(src).toContain("make_latest: 'false'");
+    expect(src).not.toContain("make_latest: 'true'");
+    // Both the create and the flip must say prerelease — flipping the draft is a
+    // full update call, so omitting it there would quietly clear the flag.
+    expect([...src.matchAll(/prerelease: true/g)]).toHaveLength(2);
+  });
+
+  it('publishes betas under the beta dist-tag and only promotes under latest', () => {
+    const src = rc();
+    expect(src).toContain('npm publish --tag beta --provenance --access public');
+    expect(src).toContain('npm publish --tag latest --provenance --access public');
+    // `latest` may only be published from the rc-gated promote job.
+    const promote = src.slice(src.indexOf('\n  promote-release:\n'));
+    expect(promote).toContain('--tag latest');
+    expect(src.slice(0, src.indexOf('\n  promote-release:\n'))).not.toContain('--tag latest');
+  });
+
+  it('upgrades npm past the OIDC trusted-publishing floor', () => {
+    // Older npm can attach a --provenance attestation but cannot use the OIDC token
+    // as the bearer for the PUT; it falls through to an empty _authToken and the
+    // registry reports the rejection as a 404. Both publishing jobs need this.
+    const src = rc();
+    expect([...src.matchAll(/npm install -g npm@11/g)]).toHaveLength(2);
+  });
+
+  it('smoke-tests the exact published version, not the dist-tag', () => {
+    // `newsmonger@beta` races the dist-tag rotation, which would smoke-test the
+    // *previous* beta and report success for a broken publish.
+    //
+    // Scoped to the smoke jobs: the release-notes body legitimately *tells* readers
+    // to `npm install -g newsmonger@beta`, which is documentation, not a test step.
+    const src = rc();
+    const smoke = src.slice(src.indexOf('\n  smoke-fresh-install:\n'), src.indexOf('\n  promote-release:\n'));
+    expect(smoke).toContain('newsmonger@${{ needs.publish-beta.outputs.version }}');
+    expect(smoke).not.toContain('newsmonger@beta');
+  });
+
+  it('dispatches the desktop release rather than relying on the tag push', () => {
+    // A tag pushed with GITHUB_TOKEN does not trigger another workflow — GitHub's
+    // recursion guard. Without the explicit dispatch the stable bundles never build.
+    const src = rc();
+    expect(src).toContain('createWorkflowDispatch');
+    expect(src).toContain("workflow_id: 'release-desktop.yml'");
+    expect(read('.github/workflows/release-desktop.yml')).toContain('workflow_dispatch:');
+  });
+
+  it('builds the client before unit tests in the release gates', () => {
+    // NEWS-191: several suites fetch /static/... through createApp() and 404 without
+    // dist/client. This kept CI red once and would fail a release the same way.
+    const src = rc();
+    const unit = src.slice(src.indexOf('\n  test-unit:\n'), src.indexOf('\n  audit:\n'));
+    expect(unit.indexOf('npm run build:client')).toBeGreaterThan(-1);
+    expect(unit.indexOf('npm run build:client')).toBeLessThan(unit.indexOf('npm test'));
+  });
+
+  it('runs both clippy profiles, since the updater commands are cfg-gated', () => {
+    // NEWS-89's three commands are `#[cfg(not(debug_assertions))]`, so a debug-only
+    // clippy never compiles their bodies.
+    const src = rc();
+    expect(src).toContain('cargo clippy --all-targets -- -D warnings');
+    expect(src).toContain('cargo clippy --release --all-targets -- -D warnings');
+  });
+
+  it('uses the extracted sidecar stub in every Rust-only job', () => {
+    // Two hand-maintained copies of the build paths is how the wordmark shipped
+    // broken (tests/unit/client-assets.test.ts).
+    expect(rc()).toContain('bash scripts/ensure-sidecar-stub.sh');
+    expect(read('.github/workflows/ci.yml')).toContain('bash scripts/ensure-sidecar-stub.sh');
+  });
+});
+
+describe('the published-install smoke test (NEWS-201)', () => {
+  const src = (): string => fs.readFileSync(path.join(root, 'tests/smoke/smoke-test.sh'), 'utf8');
+
+  /** Executable lines only — the header explains ~/.newsmonger at length. */
+  const codeOnly = (): string =>
+    src()
+      .split('\n')
+      .filter((l) => !/^\s*#/.test(l))
+      .join('\n');
+
+  it('never writes to the real data directory', () => {
+    // The same rule the unit and E2E suites follow: the default is ~/.newsmonger,
+    // and a smoke test that wrote there would scribble on the real install of
+    // whoever ran it locally.
+    const sh = codeOnly();
+    expect(sh).toContain('--data-dir');
+    expect(sh).toContain('mktemp -d');
+    expect(sh).not.toMatch(/~\/\.newsmonger|\$HOME\/\.newsmonger/);
+  });
+
+  it('derives the static asset list from what the server serves', () => {
+    // A hardcoded list here would be a fourth copy of the same list, with the same
+    // failure mode that shipped a broken wordmark: the asset exists, the build
+    // succeeds, nothing warns.
+    const sh = src();
+    expect(sh).toMatch(/grep -o '\/static\/\[A-Za-z0-9\._-\]\*'/);
+    expect(sh).not.toContain('/static/wordmark-light.svg');
+  });
+
+  it('asserts a check actually produces stories', () => {
+    // The part that proves the *pipeline* runs inside an installed build — request
+    // validation, the provider call, dedup and the SQLite write — rather than just
+    // that the package unpacked.
+    const sh = src();
+    expect(sh).toContain('--ai-test');
+    expect(sh).toContain('/api/check');
+    expect(sh).toMatch(/STORIES.*-gt 0|"\$STORIES" -gt 0/);
+  });
+
+  it('does not assume --help exits zero', () => {
+    // It does not: `--help` is an unrecognised flag, so it prints usage and exits 1.
+    // Combined with `set -o pipefail`, `! cmd | grep -q .` reports "not runnable"
+    // for a command that ran perfectly — which cost a debugging round.
+    const sh = src();
+    expect(sh).toContain('HELP_OUTPUT=$($NEWSMONGER --help 2>&1 || true)');
+  });
 });
