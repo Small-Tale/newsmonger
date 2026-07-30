@@ -41,22 +41,34 @@ ORG="Small Tale"
 
 NOTARIZE=true
 CHECK_ONLY=false
+SAVE_CREDENTIALS=false
 for arg in "$@"; do
   case "$arg" in
-    --no-notarize) NOTARIZE=false ;;
-    --check)       CHECK_ONLY=true; NOTARIZE=false ;;
+    --no-notarize)      NOTARIZE=false ;;
+    --check)            CHECK_ONLY=true; NOTARIZE=false ;;
+    --save-credentials) SAVE_CREDENTIALS=true ;;
     -h|--help)
-      echo "Usage: npm run tauri:build:local [-- --no-notarize | --check]"
-      echo
-      echo "  (default)       sign + notarize + staple, then verify"
-      echo "  --no-notarize   sign only, then verify. Much faster — notarization is"
-      echo "                  the slow part (minutes to over an hour at Apple)."
-      echo "  --check         resolve the signing identity and exit. Confirms the setup"
-      echo "                  in a second instead of finding out 15 minutes in."
-      echo
-      echo "Reads APPLE_ID / APPLE_PASSWORD / APPLE_TEAM_ID from the environment when"
-      echo "set; prompts for whatever is missing. APPLE_PASSWORD is the app-specific"
-      echo "password from appleid.apple.com, not your Apple ID password."
+      cat <<'EOF'
+Usage: npm run tauri:build:local [-- --no-notarize | --check | --save-credentials]
+
+  (default)            sign + notarize + staple the .app AND the .dmg, then verify
+  --no-notarize        sign only, then verify. Prompts for nothing, and much
+                       faster — notarization is the slow part (minutes to over an
+                       hour at Apple).
+  --check              resolve the signing identity and exit. Confirms the setup
+                       in a second instead of finding out 15 minutes in.
+  --save-credentials   store the Apple ID + app-specific password in the login
+                       keychain, then exit. Later runs prompt for nothing.
+
+Notarization credentials resolve in this order: environment, login keychain
+(service "newsmonger-notarization"), then a prompt.
+
+APPLE_PASSWORD is the app-specific password from appleid.apple.com — NOT your
+Apple ID password. Paste it with its hyphens.
+
+The signing identity and Team ID are read from the keychain automatically; there
+is no prompt for those.
+EOF
       exit 0 ;;
     *) echo "Unrecognized arg: $arg" >&2; exit 1 ;;
   esac
@@ -133,8 +145,46 @@ if [[ "$CHECK_ONLY" == "true" ]]; then
 fi
 
 # --- Notarization credentials -------------------------------------------------
+#
+# Resolution order: environment, then the login keychain, then prompt.
+#
+# The keychain rather than a dotfile, deliberately. Tauri accepts **only** env
+# vars for notarization — `APPLE_ID`/`APPLE_PASSWORD`/`APPLE_TEAM_ID` or the App
+# Store Connect trio; it has no `--keychain-profile` equivalent, so
+# `xcrun notarytool store-credentials` cannot cover the app's notarization even
+# though it would cover our dmg step. The way to get both convenience and safety
+# is therefore to keep the secret in the keychain and export it only into this
+# process, which is what happens below. A `.env` file would work too and would
+# leave an app-specific password sitting in plaintext.
+KEYCHAIN_SERVICE="newsmonger-notarization"
+
+if [[ "$SAVE_CREDENTIALS" == "true" ]]; then
+  read -rp "$(echo -e "${CYAN}${BOLD}>>>${RESET} Apple ID (email): ")" save_id
+  read -rsp "$(echo -e "${CYAN}${BOLD}>>>${RESET} App-specific password ${DIM}(xxxx-xxxx-xxxx-xxxx)${RESET}: ")" save_pw
+  echo
+  [[ -n "$save_id" && -n "$save_pw" ]] || { error "Both values are required."; exit 1; }
+  # -U updates in place if it already exists. -w takes the secret on stdin rather
+  # than argv, so it never appears in `ps`.
+  security add-generic-password -U -a "$save_id" -s "$KEYCHAIN_SERVICE" -w "$save_pw" \
+    && success "Saved to the login keychain as service '${KEYCHAIN_SERVICE}'."
+  echo -e "  ${DIM}Future runs need no prompts. Remove with:${RESET}"
+  echo -e "    security delete-generic-password -s ${KEYCHAIN_SERVICE}"
+  exit 0
+fi
+
 if [[ "$NOTARIZE" == "true" ]]; then
+  # The keychain entry stores the Apple ID as the account, so one lookup yields
+  # both halves.
   if [[ -z "${APPLE_ID:-}" ]]; then
+    APPLE_ID="$(security find-generic-password -s "$KEYCHAIN_SERVICE" 2>/dev/null \
+      | sed -n 's/^ *"acct"<blob>="\(.*\)"$/\1/p')" || true
+  fi
+  if [[ -z "${APPLE_PASSWORD:-}" && -n "$APPLE_ID" ]]; then
+    APPLE_PASSWORD="$(security find-generic-password -s "$KEYCHAIN_SERVICE" -w 2>/dev/null)" || true
+    [[ -n "$APPLE_PASSWORD" ]] && info "Notarization credentials: ${DIM}login keychain (${KEYCHAIN_SERVICE})${RESET}"
+  fi
+
+  if [[ -z "$APPLE_ID" ]]; then
     read -rp "$(echo -e "${CYAN}${BOLD}>>>${RESET} Apple ID (email): ")" APPLE_ID
   fi
   [[ -n "$APPLE_ID" ]] || { error "An Apple ID is required to notarize (or pass --no-notarize)."; exit 1; }
@@ -145,6 +195,8 @@ if [[ "$NOTARIZE" == "true" ]]; then
     # that keeps it out of the terminal, the shell history, and `ps` output.
     read -rsp "$(echo -e "${CYAN}${BOLD}>>>${RESET} App-specific password ${DIM}(appleid.apple.com, xxxx-xxxx-xxxx-xxxx)${RESET}: ")" APPLE_PASSWORD
     echo
+    echo -e "  ${DIM}Tip: 'npm run tauri:build:local -- --save-credentials' stores these in the${RESET}"
+    echo -e "  ${DIM}login keychain so later runs prompt for nothing.${RESET}"
   fi
   [[ -n "$APPLE_PASSWORD" ]] || { error "The app-specific password is required (or pass --no-notarize)."; exit 1; }
   export APPLE_PASSWORD

@@ -272,6 +272,17 @@ npm run tauri:build:local -- --check          # resolve the identity and exit
 
 The app-specific password is read with `read -rs`, so it never reaches argv, the shell history, or another user's `ps`. `--check` exists because the alternative to verifying your setup in one second is finding out fifteen minutes into a build.
 
+**Notarization credentials resolve environment → login keychain → prompt.** Run it once with `--save-credentials` and later runs prompt for nothing:
+
+```sh
+npm run tauri:build:local -- --save-credentials   # once
+npm run tauri:build:local                          # thereafter, no prompts
+```
+
+The keychain rather than a `.env` file, for a specific reason: **Tauri accepts only environment variables for notarization** — `APPLE_ID`/`APPLE_PASSWORD`/`APPLE_TEAM_ID` or the App Store Connect trio. It has no `--keychain-profile` equivalent, so `xcrun notarytool store-credentials` would cover our own dmg submission and *not* Tauri's notarization of the app. Keeping the secret in the keychain and exporting it into just this process gets the convenience without leaving an app-specific password in plaintext on disk. Remove it with `security delete-generic-password -s newsmonger-notarization`.
+
+> For contrast, glassbox's `tauri:build:local` caches nothing and asks only for its updater passphrase — because its local build **never notarizes**. Its `APPLE_*` values exist only as CI secrets. The nearest equivalent here is plain `npm run tauri:build`.
+
 `scripts/verify-signing.sh` runs automatically afterwards — a production build nobody verified is exactly what FR-5.7 exists to prevent.
 
 **It does not replace the release workflow.** Locally, signing comes from the login keychain; in CI a `.p12` is imported into a throwaway keychain (`APPLE_CERTIFICATE` + `APPLE_CERTIFICATE_PASSWORD` + `KEYCHAIN_PASSWORD`). That path exists only there, so a green local build says nothing about it — and this repo has already had two "passes on a dev machine, fails on a runner" bugs (NEWS-191, NEWS-193). Nor does it replace opening a *downloaded* `.dmg`: a file this machine produced is never quarantined.
