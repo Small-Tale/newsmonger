@@ -14,9 +14,10 @@ import type { LinkProbe } from './ai/verify-links.js';
 import { verifyItemLinks } from './ai/verify-links.js';
 import { Attendance } from './attendance.js';
 import { activeCategories, BUILTIN_CATEGORIES, findCategory, findSubcategory } from './categories.js';
-import type { NewsItem, Settings, Topic } from './db/schemas.js';
+import type { NewsItem, NewsSource, Settings, Topic } from './db/schemas.js';
 import type { Store } from './db/store.js';
-import type { ImageFetcher } from './images/index.js';
+import { originOf } from './images/favicon.js';
+import type { FaviconFetcher, ImageFetcher } from './images/index.js';
 import { liveImageHashes, pruneImageCache } from './images/index.js';
 
 /**
@@ -98,13 +99,24 @@ export class CheckRunner {
      * `sleep` exists so tests don't wait real seconds; production passes nothing
      * and gets a real timer.
      */
-    opts: { sleep?: (ms: number) => Promise<void>; backoff?: BackoffConfig } = {},
+    opts: {
+      sleep?: (ms: number) => Promise<void>;
+      backoff?: BackoffConfig;
+      /**
+       * Resolves an origin to a locally cached favicon (NEWS-169). Here rather
+       * than as a sixth positional parameter, for exactly the reason stated
+       * above — the positional list is already at its limit.
+       */
+      fetchFavicon?: FaviconFetcher | null;
+    } = {},
   ) {
     this.sleep = opts.sleep ?? ((ms) => new Promise((resolve) => setTimeout(resolve, ms)));
+    this.fetchFavicon = opts.fetchFavicon ?? null;
     this.backoff = opts.backoff ?? DEFAULT_BACKOFF;
   }
 
   private readonly sleep: (ms: number) => Promise<void>;
+  private readonly fetchFavicon: FaviconFetcher | null;
   private readonly backoff: BackoffConfig;
 
   /**
@@ -210,6 +222,10 @@ export class CheckRunner {
       // and then pops a picture in a moment later. Failures are silent by
       // design: a missing image is cosmetic, and must not fail the check.
       const images = await this.resolveImages(fresh.map(({ item }) => item.sources[0]?.url));
+      // Favicons are resolved per distinct ORIGIN across the whole batch
+      // (NEWS-169), not per source: an outlet cited by six stories is one icon,
+      // and the same outlets recur every check. Same silence policy as images.
+      const favicons = await this.resolveFavicons(fresh.flatMap(({ item }) => item.sources.map((s) => s.url)));
 
       // The topic may have been deleted while the check was in flight.
       if (this.store.getTopic(topicId)) {
@@ -225,6 +241,7 @@ export class CheckRunner {
               // stored shape is uniform and the UI has one case to handle.
               outlet: source.outlet ?? null,
               publishedAt: source.publishedAt ?? null,
+              favicon: favicons.get(originOf(source.url) ?? '') ?? null,
             })),
             image: images[i] ?? null,
             dedupeKey,
@@ -385,6 +402,32 @@ export class CheckRunner {
     // (FR-22.6) rather than a reason to discard the whole classification.
     const sub = findSubcategory(table, category.slug, classification.subcategory);
     this.store.setTopicCategory(topicId, category.slug, sub?.slug ?? null, 'auto');
+  }
+
+  /**
+   * Resolve a favicon per distinct origin, in parallel, never throwing.
+   *
+   * Deduplicating by origin first is the whole point: a batch of ten stories
+   * citing three outlets is three requests, not ten (or thirty). The map is
+   * keyed by origin so every source sharing an outlet reads the same entry.
+   */
+  private async resolveFavicons(urls: readonly string[]): Promise<Map<string, NewsSource['favicon']>> {
+    const resolved = new Map<string, NewsSource['favicon']>();
+    const fetchFavicon = this.fetchFavicon;
+    if (fetchFavicon === null) return resolved;
+
+    const origins = [...new Set(urls.map((url) => originOf(url)).filter((o): o is string => o !== null))];
+    const results = await Promise.all(
+      origins.map(async (origin) => {
+        try {
+          return [origin, await fetchFavicon(origin)] as const;
+        } catch {
+          return [origin, null] as const; // an icon is never worth failing a check over
+        }
+      }),
+    );
+    for (const [origin, favicon] of results) resolved.set(origin, favicon);
+    return resolved;
   }
 
   /** Resolve a lead image per story, in parallel, never throwing. */

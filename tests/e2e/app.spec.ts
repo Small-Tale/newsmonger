@@ -80,6 +80,14 @@ test('check now finds stories with summaries and source links', async ({ page })
   await expect(link).toHaveAttribute('href', /https:\/\//);
   await expect(link).toHaveAttribute('target', '_blank');
   await expect(page.locator('.topic-meta').first()).toContainText('checked');
+
+  // Every source link carries exactly one leading mark (NEWS-169): the outlet's
+  // favicon where one resolved, the arrow glyph where it didn't. Under
+  // `--ai-test` no favicons are fetched at all — the mock's URLs are fictional
+  // — so this run exercises the fallback, which is the branch that also serves
+  // the roughly-one-in-three real outlets with no reachable icon.
+  await expect(link.locator('.icon')).toHaveCount(1);
+  await expect(link.locator('img.favicon')).toHaveCount(0);
 });
 
 test('a second check deduplicates already-seen stories', async ({ page }) => {

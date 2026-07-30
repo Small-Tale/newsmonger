@@ -242,7 +242,7 @@ describe('storage engine guarantees (NEWS-94)', () => {
         topicId: topic.id,
         title: `Story ${String(i)}`,
         summary: 'x'.repeat(500),
-        sources: [{ title: 'S', url: `https://example.test/${String(i)}`, outlet: null, publishedAt: null }],
+        sources: [{ title: 'S', url: `https://example.test/${String(i)}`, outlet: null, publishedAt: null, favicon: null }],
         dedupeKey: `k${String(i)}`,
         foundAt: `2026-07-${String((i % 28) + 1).padStart(2, '0')}T00:00:00.000Z`,
       })),

@@ -37,6 +37,17 @@ Unit tests inject the probe; the **live** `probeLink` — real HEAD/ranged-GET b
 3. Watch stderr: a line like `dropped N story/stories and M source link(s) that did not resolve` is expected occasionally and fine. **A run that drops most stories is not** — it means real outlets are being judged dead. If that happens, check whether they are 403-ing the ranged GET too, and widen the fallback rather than accepting the loss.
 4. Disconnect the network mid-check: the run should still succeed with stories stored **unverified** (the probe failing must not lose the news).
 
+## Source favicons against real outlets (needs a real provider) — NEWS-169
+
+Unit tests cover origin canonicalisation, `<link rel=icon>` extraction against the markup shapes real sites use, the mark-and-sweep, and the schema round trip. What they cannot cover is **how real outlets actually answer** — which is the half that decides whether the feed looks finished or patchy. Under `--ai-test` no favicons are fetched at all (the mock's URLs are fictional), so this path never runs in the automated suite.
+
+1. `npm run dev` with a real provider; run a check on a topic that pulls from several outlets.
+2. Most source links should show the outlet's icon rather than the arrow. **A run where almost everything falls back to the arrow is the failure to look for** — it means real outlets are not being resolved, and the fix is to widen the candidate list (an `/apple-touch-icon.png` guess, or reading the *article* page's `<link>` rather than only the homepage's), not to accept the loss.
+3. Check a mixed feed for **alignment**: rows with an icon and rows with the arrow must start their link text at the same x. The two are sized to match deliberately.
+4. Check **dark mode**. Many favicons are near-black monochrome marks made for light browser chrome; the faint `--pine-soft` plate behind them exists for exactly that case. Anything that disappears into the paper is worth reporting.
+5. Confirm the browser still makes **zero third-party requests** (DevTools → Network, filter by domain). Icons must come from `127.0.0.1` like every other image (FR-8.4).
+6. Restart the app and confirm the icons are **still there** — the startup prune runs on boot, and a favicon missing from the mark set would be deleted silently (FR-8.18).
+
 ## Live price updates — NEWS-93
 
 Unit tests cover the file and manifest paths with a stub fetch; these are the end-to-end halves.

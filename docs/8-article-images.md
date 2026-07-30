@@ -53,3 +53,28 @@ Downloads land via a temp file and an atomic rename, so a crash mid-download can
   The mark set *is* the reference count: an image shared by two stories (same URL → same hash) survives as long as either story does, so deleting one topic never orphans another's picture. The sweep is self-healing — it also reclaims orphans from a crash or an older version, not just the delete that triggered it — and best-effort: a cache it can't read simply isn't pruned that pass, and a failed prune never fails the delete.
 
   Not wired to the scheduler tick: the only way the item set shrinks is a topic delete (a re-check only adds), and startup covers everything else. A size/age cap (option 3 in the ticket) was considered unnecessary — images are ≤5 MB and the mark-and-sweep bounds the directory to what's actually referenced.
+
+## Source favicons (FR-8.14–8.18, NEWS-169)
+
+The feed's source links carried a pine arrow glyph — a bullet saying "this is a link", which the underline already said. A favicon says *who*.
+
+- **FR-8.14** *(Shipped, NEWS-169)* Each `NewsSource` carries its outlet's favicon, cached locally and shaped exactly like the item's `image` (`hash` + `sourceUrl`). Per **source**, not per item: a story can cite several outlets and each link wears its own mark.
+
+  **Why this exists when FR-8.1 already fetches a picture:** `og:image` is absent about a third of the time (FR-8.2), while a favicon is near-universal and a couple of kilobytes. For *attribution* it is the more reliable signal of the two.
+
+- **FR-8.15** *(Shipped, NEWS-169)* Resolution is keyed on the **origin**, not the article URL. A favicon belongs to a site, not a page — so one outlet cited by six stories is one request and one cache entry, and the same outlets recur on every check. `originOf()` canonicalises, so `https://reuters.com/a` and `https://reuters.com/b?x=1` collapse to one key.
+
+- **FR-8.16** *(Shipped, NEWS-169)* Two bounded attempts, cheapest first: **`/favicon.ico`** at the origin, then the origin's homepage read for a `<link rel="icon">` / `apple-touch-icon`. The first is the oldest convention on the web and still honoured almost everywhere, costing one small GET with no HTML parse; the second exists because plenty of modern sites ship only an SVG or a hashed asset path. So the common case is one request and the worst case is two.
+
+  `rel` is matched as **whole words** within the attribute, because real markup writes `rel="shortcut icon"` and `rel="icon shortcut"` and means the same thing by both — while a substring match on `icon` would wrongly accept unrelated longer tokens.
+
+- **FR-8.17** *(Shipped, NEWS-169)* Same safety posture as the lead image, and for the same reason: an icon URL read out of a page is a **second attacker-influenced value**, so it goes through `rejectUnsafeUrl` before being fetched (FR-8.9's situation exactly). Bounds differ from a photo's, deliberately:
+
+  - **256 KB**, two orders of magnitude below the lead-image cap. A hero photograph is legitimately megabytes; a site icon is kilobytes, and a server answering `/favicon.ico` with a full-page image should be rejected rather than cached.
+  - A **wider type set** — `image/x-icon` and `image/vnd.microsoft.icon` (both spellings real servers send) plus `image/svg+xml`. None of those belong in the lead-image set, where a `.ico` hero would signal something had gone wrong.
+  - A **zero-length body is refused.** Some servers answer a missing `/favicon.ico` with an empty 200 rather than a 404, and the cache is never re-fetched — so caching that would put a broken image on every link from that outlet permanently.
+
+- **FR-8.18** *(Shipped, NEWS-169)* Favicons **join the FR-8.13 mark-and-sweep** via `liveImageHashes`, which now walks each item's sources as well as its image. Without it the startup prune would reclaim every icon — silently, leaving broken images that reappear only after a fresh check. Because the cache is content-addressed, the mark set is still the reference count: two stories citing one outlet share a hash, and it survives while either does.
+
+  Verified against a real database, not only in a unit test: seed favicons, restart the server, and both files survive the startup prune.
+

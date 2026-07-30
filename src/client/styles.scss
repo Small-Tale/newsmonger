@@ -1074,6 +1074,26 @@ h2.eyebrow {
       margin-top: 2px;
     }
 
+    // The outlet's favicon, standing in for the arrow (NEWS-169). Sized and
+    // nudged to occupy the same optical slot, so a feed of mixed rows — some
+    // outlets have an icon, some don't — keeps one straight left edge for the
+    // link text rather than jittering by a pixel or two per row.
+    .favicon {
+      flex: 0 0 auto;
+      width: 14px;
+      height: 14px;
+      margin-top: 2px;
+      // Publisher icons arrive at whatever aspect they like; `contain` keeps a
+      // wide wordmark-style favicon from being stretched into a square.
+      object-fit: contain;
+      // A dark-mode favicon problem worth pre-empting: many are near-black
+      // monochrome marks designed for light chrome, which vanish on this
+      // theme's near-black paper. A faint rounded plate costs nothing on a
+      // colourful icon and rescues a monochrome one.
+      border-radius: 3px;
+      background: var(--pine-soft);
+    }
+
     &:hover {
       color: var(--pine);
       text-decoration: underline;

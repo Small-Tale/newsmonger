@@ -13,6 +13,7 @@ import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 
+import { extractIconUrl, faviconCandidates } from './favicon.js';
 import { extractImageUrl } from './ogimage.js';
 import { rejectUnsafeUrl } from './safety.js';
 
@@ -28,6 +29,31 @@ const MAX_HTML_BYTES = 512 * 1024;
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
 
 const ALLOWED_IMAGE_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'image/avif']);
+
+/**
+ * A favicon beyond this is not a favicon (NEWS-169).
+ *
+ * Two orders of magnitude below the lead-image cap, because the shapes are
+ * different: a hero photograph is legitimately megabytes, a site icon is a few
+ * kilobytes. Keeping the cap tight means a misconfigured server that answers
+ * `/favicon.ico` with a full-page image is rejected rather than cached.
+ */
+const MAX_FAVICON_BYTES = 256 * 1024;
+
+/**
+ * Types a favicon may be, which is a *wider* set than a lead image's.
+ *
+ * `image/x-icon` and `image/vnd.microsoft.icon` are the two spellings of ICO
+ * that real servers send, and SVG favicons are now common. Both are fine here
+ * and neither belongs in the lead-image set — a `.ico` hero photo would be a
+ * sign something had gone wrong.
+ */
+const ALLOWED_FAVICON_TYPES = new Set([
+  ...ALLOWED_IMAGE_TYPES,
+  'image/x-icon',
+  'image/vnd.microsoft.icon',
+  'image/svg+xml',
+]);
 
 /** Cache filenames are content-addressed by source URL — stable and safe. */
 export function imageHash(url: string): string {
@@ -156,10 +182,22 @@ export function sniffImageType(bytes: Buffer): string {
  * hash, the point of content addressing) is in the set as long as either story
  * survives, so the sweep below never deletes a file another item still uses.
  */
-export function liveImageHashes(items: readonly { image: { hash: string } | null }[]): Set<string> {
+export function liveImageHashes(
+  items: readonly {
+    image: { hash: string } | null;
+    /** Optional so callers that only have lead images still type-check. */
+    sources?: readonly { favicon?: { hash: string } | null }[];
+  }[],
+): Set<string> {
   const hashes = new Set<string>();
   for (const item of items) {
     if (item.image !== null) hashes.add(item.image.hash);
+    // Source favicons live in the same cache and must join the mark set or the
+    // sweep below deletes them (NEWS-169) — and it would do so *silently*,
+    // leaving broken icons that only reappear after a fresh check.
+    for (const source of item.sources ?? []) {
+      if (source.favicon != null) hashes.add(source.favicon.hash);
+    }
   }
   return hashes;
 }
@@ -196,4 +234,67 @@ export function pruneImageCache(dataDir: string, liveHashes: ReadonlySet<string>
     }
   }
   return removed;
+}
+
+/**
+ * Download and cache one icon URL. Shared by both favicon attempts.
+ *
+ * Re-checks the URL before fetching, like every other hop: an icon URL taken
+ * from a page's `<link>` is an attacker-influenced value, exactly the FR-8.9
+ * situation the lead-image path already guards.
+ */
+async function cacheIconUrl(iconUrl: string, dataDir: string): Promise<{ hash: string; sourceUrl: string } | null> {
+  if ((await rejectUnsafeUrl(iconUrl)) !== null) return null;
+
+  const hash = imageHash(iconUrl);
+  const file = cachedImagePath(dataDir, hash);
+  if (fs.existsSync(file)) return { hash, sourceUrl: iconUrl };
+
+  const icon = await fetchWithLimit(iconUrl, MAX_FAVICON_BYTES, 'image/*', 'reject');
+  if (icon === null) return null;
+
+  const type = icon.contentType.split(';')[0]?.trim().toLowerCase() ?? '';
+  if (!ALLOWED_FAVICON_TYPES.has(type)) return null;
+  // A zero-length body is what some servers return instead of a 404 for a
+  // missing /favicon.ico. Caching it would put a broken <img> on every link
+  // from that outlet, permanently, since the cache is never re-fetched.
+  if (icon.body.length === 0) return null;
+
+  fs.mkdirSync(imagesDir(dataDir), { recursive: true });
+  const tmp = `${file}.tmp`;
+  fs.writeFileSync(tmp, icon.body);
+  fs.renameSync(tmp, file);
+  return { hash, sourceUrl: iconUrl };
+}
+
+/**
+ * Resolve an origin to a cached favicon (NEWS-169).
+ *
+ * Two bounded attempts: `/favicon.ico`, then the origin's homepage read for a
+ * `<link rel="icon">`. The first covers the overwhelming majority in a single
+ * small request with no HTML parse; the second exists because plenty of modern
+ * sites ship only an SVG or a hashed asset path and never place a file at the
+ * legacy location.
+ *
+ * Returns null on every failure. A link without an icon falls back to the arrow
+ * glyph it always had, so this is cosmetic by construction — it must never cost
+ * a story or fail a check.
+ */
+export async function cacheFavicon(
+  origin: string,
+  dataDir: string,
+): Promise<{ hash: string; sourceUrl: string } | null> {
+  for (const candidate of faviconCandidates(origin)) {
+    const cached = await cacheIconUrl(candidate, dataDir);
+    if (cached !== null) return cached;
+  }
+
+  // Fallback: ask the homepage what its icon is.
+  if ((await rejectUnsafeUrl(origin)) !== null) return null;
+  const page = await fetchWithLimit(origin, MAX_HTML_BYTES, 'text/html', 'truncate');
+  if (page === null || !page.contentType.toLowerCase().includes('html')) return null;
+
+  const declared = extractIconUrl(page.body.toString('utf-8'), origin);
+  if (declared === null) return null;
+  return cacheIconUrl(declared, dataDir);
 }

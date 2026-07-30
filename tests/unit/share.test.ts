@@ -9,7 +9,7 @@ function item(over: Partial<NewsItem> = {}): NewsItem {
     topicId: 't1',
     title: 'Fusion milestone',
     summary: 'A reactor sustained net-positive output for a full minute.',
-    sources: [{ title: 'Lab', url: 'https://example.com/fusion', outlet: null, publishedAt: null }],
+    sources: [{ title: 'Lab', url: 'https://example.com/fusion', outlet: null, publishedAt: null, favicon: null }],
     image: null,
     saved: false,
     offTopic: false,
@@ -30,8 +30,8 @@ describe('shareText', () => {
     const text = shareText(
       item({
         sources: [
-          { title: 'A', url: 'https://a.example/1', outlet: null, publishedAt: null },
-          { title: 'B', url: 'https://b.example/2', outlet: null, publishedAt: null },
+          { title: 'A', url: 'https://a.example/1', outlet: null, publishedAt: null, favicon: null },
+          { title: 'B', url: 'https://b.example/2', outlet: null, publishedAt: null, favicon: null },
         ],
       }),
     );

@@ -144,7 +144,7 @@ describe('Store', () => {
         topicId: topic.id,
         title: 'Launch',
         summary: 'A rocket launched.',
-        sources: [{ title: 'src', url: 'https://ex.com/a', outlet: null, publishedAt: null }],
+        sources: [{ title: 'src', url: 'https://ex.com/a', outlet: null, publishedAt: null, favicon: null }],
         dedupeKey: 'url:ex.com/a',
         foundAt: new Date().toISOString(),
       },

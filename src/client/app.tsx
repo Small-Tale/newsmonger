@@ -512,7 +512,20 @@ function itemJsx(item: NewsItem, topicName: string, variant: 'normal' | 'review'
         {item.sources.map((source, i) => (
           <li data-key={`${item.id}-${i}`}>
             <a href={source.url} target="_blank" rel="noopener noreferrer" data-external="1">
-              {icon('arrow', 13)}
+              {/* The outlet's own mark where we have it, the arrow glyph where
+                  we don't (NEWS-169). Roughly a third of stories have no lead
+                  image but almost every site has a favicon, so this is the
+                  more reliable signal — and it says *who* rather than merely
+                  "this is a link". Decorative beside a link that already names
+                  the outlet, hence the empty alt. */}
+              {source.favicon !== null ? (
+                <img class="favicon" src={`/api/image/${source.favicon.hash}`} alt="" width="14" height="14" />
+              ) : (
+                // 14, matching the favicon box exactly — at 13 the fallback
+                // rows started their text one pixel left of the rest, and a
+                // feed mixes the two constantly.
+                icon('arrow', 14)
+              )}
               {source.title !== '' ? source.title : source.url}
             </a>
             <span class="source-meta">

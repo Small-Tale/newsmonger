@@ -200,6 +200,8 @@ Subscription-backed providers (`attended: true`) run *scheduled* checks only whi
 
 ## [8 — Article Images](../8-article-images.md) — Shipped (verified against live sites)
 
+- FR-8.14–8.18 **source favicons Shipped (NEWS-169)**: each `NewsSource` carries its outlet's icon, replacing the arrow before feed source links (arrow remains the fallback). Keyed **per origin** — one outlet cited six times is one request/cache entry. Two bounded attempts: `/favicon.ico`, then the homepage's `<link rel=icon>`. Tighter bounds than a lead image (256 KB, wider type set incl. ICO/SVG, empty body refused). **Joins the FR-8.13 mark-and-sweep** or the startup prune reclaims every icon silently.
+
 - FR-8.1–8.3 og:image scraped server-side; no-image is the normal case; failures never cost a story: **Shipped**
 - FR-8.4–8.5 proxied through `/api/image/:hash`, content-addressed cache, zero third-party browser requests: **Shipped**
 - FR-8.6–8.11 SSRF guards (protocol, host, post-DNS address, re-validated image URL, cache-only route, size/type caps): **Shipped**

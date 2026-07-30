@@ -102,7 +102,7 @@ describe('restoring a cleared topic', () => {
         topicId: topic.id,
         title: k.toUpperCase(),
         summary: k,
-        sources: [{ title: 't', url: `https://e.com/${k}`, outlet: null, publishedAt: null }],
+        sources: [{ title: 't', url: `https://e.com/${k}`, outlet: null, publishedAt: null, favicon: null }],
         dedupeKey: k,
         foundAt: new Date().toISOString(),
       })),

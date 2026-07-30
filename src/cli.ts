@@ -9,7 +9,7 @@ import { parseArgs } from './config.js';
 import type { Settings } from './db/schemas.js';
 import { Store } from './db/store.js';
 import { DiscoveryService } from './discovery.js';
-import { createImageFetcher, liveImageHashes, pruneImageCache } from './images/index.js';
+import { createFaviconFetcher, createImageFetcher, liveImageHashes, pruneImageCache } from './images/index.js';
 import { openInBrowser } from './routes/api.js';
 import { startScheduler } from './scheduler.js';
 import { createApp, startServer } from './server.js';
@@ -64,6 +64,9 @@ async function main(): Promise<void> {
   // No image fetching under --ai-test: the mock provider's URLs are fake, and
   // a test run must not reach out to the network.
   const fetchImage = options.aiTest ? null : createImageFetcher(options.dataDir);
+  // Same gate as images: under --ai-test the mock's URLs are fictional, so
+  // there is nothing to fetch an icon from (NEWS-169).
+  const fetchFavicon = options.aiTest ? null : createFaviconFetcher(options.dataDir);
   // Apply the retention window at startup too (NEWS-87): an install that has
   // been closed for months should come back trimmed, not with a year of
   // backlog waiting for the first check to clear it.
@@ -86,7 +89,9 @@ async function main(): Promise<void> {
   if (pruned > 0) console.error(`newsmonger: pruned ${String(pruned)} orphaned cached image(s)`);
   // No link probing under --ai-test either: the mock's URLs are fictional, so
   // every story would be dropped as unreachable.
-  const runner = new CheckRunner(store, resolve, attendance, fetchImage, options.aiTest ? null : probeLink);
+  const runner = new CheckRunner(store, resolve, attendance, fetchImage, options.aiTest ? null : probeLink, {
+    fetchFavicon,
+  });
   // Shares the resolver with the runner so discovery follows the same provider
   // setting, but is its own object: `CheckRunner` is topic-shaped throughout and
   // a discovery call has no topic (NEWS-125).

@@ -31,7 +31,7 @@ function seed(store: Store, name: string, stories = 2) {
       topicId: topic.id,
       title: `${name} story ${String(i)}`,
       summary: 's',
-      sources: [{ title: 't', url: `https://e.com/${name}/${String(i)}`, outlet: null, publishedAt: null }],
+      sources: [{ title: 't', url: `https://e.com/${name}/${String(i)}`, outlet: null, publishedAt: null, favicon: null }],
       dedupeKey: `${name}-${String(i)}`,
       foundAt: new Date().toISOString(),
     })),

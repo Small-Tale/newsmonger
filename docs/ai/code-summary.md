@@ -19,7 +19,8 @@ src/
   checks.ts           CheckRunner (checkTopic/checkDue/checkAll, in-flight guard) + isDue()/isDueDaily()/isDueUnderSchedule()/lastSlotBefore() (NEWS-84) + effectiveInterval() + byCheckOrder() (most-overdue-first, NEWS-58). No budget logic — NEWS-119 removed it
   types.ts            Hono AppEnv (store, runner injected)
   keychain.ts         OS credential store via platform CLI (security/secret-tool/cmdkey)
-  images/             og:image scrape + local cache; safety.ts holds the SSRF guards
+  images/             og:image scrape + favicon resolution + local cache; safety.ts holds the SSRF guards
+    favicon.ts        originOf (cache key) + extractIconUrl + faviconCandidates (NEWS-169)
   attendance.ts       Attendance: in-memory lastSeenAt + 5 min window; gates attended providers
   db/
     schemas.ts        zod: Topic, NewsItem, Settings, CheckRun, DataFile; DEFAULT_CHECK_INTERVAL_MS, MAX_GUIDANCE_LENGTH
@@ -158,6 +159,7 @@ Data dir: `--data-dir` flag → `NEWSMONGER_DATA_DIR` → `~/.newsmonger`. Also 
 | A topic held back after failures | `consecutiveFailures`/`retryAfter` columns; `recordCheckFailure`/`clearCheckFailures` in `db/store.ts`; the cooldown check at the top of `isDueUnderSchedule`. See FR-23.7 |
 | Settings tabs / panels | `SETTINGS_TABS`, `settingsTabsJsx`, `settingsPanelJsx` in `client/app.tsx`; `settingsTab` in `stores.ts`; `.settings-tabs` in `styles.scss`. See `docs/3-ui.md` FR-3.45 |
 | Privacy dialog | `privacyDialogJsx` + `#privacy-slot` + the footer `[data-action=open-privacy]`. See FR-3.47 |
+| Source favicons in the feed | `src/images/favicon.ts` (origin canonicalisation + `<link rel=icon>` extraction) → `cacheFavicon` in `images/cache.ts` → `NewsSource.favicon` → the `img.favicon` / arrow-fallback branch in `client/app.tsx`. **Keyed per ORIGIN, not per article** — one outlet cited six times is one request. Resolved in `CheckRunner.resolveFavicons` (deduped across the whole batch), passed via the constructor's `opts.fetchFavicon`. **Favicons must be in `liveImageHashes` or the startup prune silently deletes them.** See `docs/8-article-images.md` FR-8.14–8.18 |
 | Icons, favicon, web app manifest | `assets/*.svg` sources; `manifest()` + the `/manifest.webmanifest` route in `src/routes/pages.tsx`; `<link>`s in `src/components/layout.tsx`. See `docs/3-ui.md` FR-3.43–3.44 |
 | Masthead wordmark | `assets/wordmark-{light,dark}.svg` → copied to `dist/client` by the `build:client`/`build:client:dev` copy list in `package.json` → served from `/static/`. `<picture>` + `prefers-color-scheme` in the `<h1 class="wordmark">` in `client/app.tsx`; `.wordmark` in `styles.scss`. **Adding an asset means editing both copy lists.** See `docs/3-ui.md` FR-3.58 |
 | Brand colours in an asset vs the stylesheet | `tests/unit/brand-assets.test.ts` — parses the `:root` / dark-`:root` token blocks out of `styles.scss` and the fills out of both wordmark SVGs, then asserts each mark's accent **is** its theme's `--pine` and clears a contrast floor on its `--paper`. Edit a token or re-export a mark and this is the gate that catches the drift. See `docs/3-ui.md` FR-3.58a |

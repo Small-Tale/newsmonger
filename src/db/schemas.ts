@@ -110,6 +110,24 @@ export const NewsSourceSchema = z.object({
    * downtime files week-old articles under today.
    */
   publishedAt: z.string().nullable().default(null),
+  /**
+   * The outlet's favicon, cached locally (NEWS-169). Shaped exactly like the
+   * item's `image` — `hash` names the file the image route serves, `sourceUrl`
+   * is kept for attribution and debugging and is never fetched by the browser.
+   *
+   * Per **source**, not per item, because a story can cite several outlets and
+   * each link wears its own mark. Content-addressed by icon URL, so sources
+   * sharing an origin share one cache entry.
+   *
+   * Null is an ordinary outcome — an outlet with no reachable icon, or a story
+   * stored before this existed. The feed falls back to the arrow glyph it always
+   * had, which is why this is safe to default rather than migrate.
+   */
+  favicon: z
+    .object({ hash: z.string(), sourceUrl: z.string() })
+    .nullable()
+    .default(null)
+    .catch(null),
 });
 export type NewsSource = z.infer<typeof NewsSourceSchema>;
 
