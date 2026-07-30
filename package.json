@@ -4,7 +4,15 @@
   "description": "Topic-based news tracker: enter topics, and on a configurable interval the app asks Claude (with web search) for new developments, deduplicating against previously seen stories.",
   "type": "module",
   "license": "MIT",
-  "author": "westphal",
+  "author": "Small Tale Inc.",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Small-Tale/newsmonger.git"
+  },
+  "bugs": {
+    "url": "https://github.com/Small-Tale/newsmonger/issues"
+  },
+  "homepage": "https://github.com/Small-Tale/newsmonger#readme",
   "engines": {
     "node": ">=22.5"
   },

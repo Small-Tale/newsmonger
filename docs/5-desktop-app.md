@@ -52,6 +52,12 @@ The check is skipped when cross-compiling, since the downloaded Node binary won'
 
   That divergence is **correct rather than a compromise**: on Windows and Linux the titlebar text is the only place the window names itself in the chrome, since the wordmark lives inside the content area. Hiding it there would be a loss. (Neither platform has ever been bundle-verified anyway — FR-5.3, NEWS-20.)
 
+- **FR-5.11** *(Shipped, NEWS-186)* The bundle **identifier is `com.smalltale.newsmonger`** — the owning company's reverse-DNS prefix, not a personal one. It was `com.brianwestphal.newsmonger`, from before the repo moved to [Small-Tale/newsmonger](https://github.com/Small-Tale/newsmonger).
+
+  This is the one naming field that is expensive to change *later* rather than merely tidy: the identifier is the app's permanent identity on macOS, keying code signing and notarization (FR-5.5), notification authorization, and the system's per-app support directory. Changing it after a release makes macOS treat the update as a **different app** — a second Gatekeeper prompt, notification permission asked again, and any system-side state abandoned under the old id. Pre-launch it costs nothing, which is the whole reason to do it now.
+
+  Nothing reads the identifier at runtime, so the change is inert for this codebase in particular: the keychain service name (`newsmonger`, `src/keychain.ts`) and the data directory (`~/.newsmonger`) are chosen by our own code and are **not** derived from it, so no stored key or database moved. `tests/unit/ownership.test.ts` pins the prefix, the reverse-DNS form, and the absence of a personal name — the realistic way this regresses is a scaffolding tool defaulting the identifier from `git config user.name`.
+
 - **FR-5.4** *(Shipped, verified)* The spawned server exits itself when its parent dies without cleanup: the shell sets `NEWSMONGER_WATCH_PARENT=1`, and the server polls `process.ppid` every 2 s, shutting down when re-parented to init. This covers hard kills (SIGTERM/SIGKILL of the shell, where `RunEvent::Exit` never fires) and `tauri dev` rebuild restarts — each of which would otherwise orphan a server and push later instances down the port-fallback chain. Dev mode deliberately omits `--strict-port` for the same reason (glassbox precedent).
 
 ### Debug aids
