@@ -196,6 +196,28 @@ fi
 info "Building (this also runs scripts/build-sidecar.sh via beforeBuildCommand)..."
 npm run tauri:build
 
+# --- Notarize the .dmg, which Tauri does not (NEWS-200) -----------------------
+#
+# Tauri notarizes and staples the .app, then builds the .dmg from it and only
+# *signs* the dmg. The dmg is what people download, and a downloaded dmg is
+# quarantined — Gatekeeper assesses the disk image itself, and a signed but
+# un-notarized one is refused outright. The app inside being notarized does not
+# help, because the user cannot get to it.
+if [[ "$NOTARIZE" == "true" ]]; then
+  dmg="$(find src-tauri/target/release/bundle/dmg -name '*.dmg' 2>/dev/null | head -1)"
+  if [[ -z "$dmg" ]]; then
+    warn "No .dmg was produced — skipping its notarization."
+  else
+    echo
+    info "Notarizing the disk image separately: ${BOLD}$(basename "$dmg")${RESET}"
+    xcrun notarytool submit "$dmg" \
+      --apple-id "$APPLE_ID" --team-id "$APPLE_TEAM_ID" --password "$APPLE_PASSWORD" \
+      --wait
+    xcrun stapler staple "$dmg"
+    success "Disk image notarized and stapled"
+  fi
+fi
+
 # --- Verify -------------------------------------------------------------------
 # Automatic, because a production build nobody verified is exactly what FR-5.7
 # exists to prevent — the build machine trusts its own certificate and never

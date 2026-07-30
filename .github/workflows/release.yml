@@ -134,6 +134,34 @@ jobs:
         # moves everything under src-tauri/target/<triple>/release/bundle/.
         run: npm run tauri:build
 
+      # Notarize the .dmg too — Tauri does not (NEWS-200).
+      #
+      # Tauri notarizes and staples the .app, then builds the .dmg from it and
+      # only *signs* the dmg. But the dmg is what a person downloads, and a
+      # downloaded dmg is quarantined: on double-click Gatekeeper assesses the
+      # **disk image**, and a Developer-ID-signed but un-notarized one is refused
+      # with "Apple could not verify Newsmonger is free of malware." The app
+      # inside being notarized doesn't help, because the user can't reach it.
+      #
+      # `verify-signing.sh` catches this, which is how it was found — so this step
+      # exists to make that check pass honestly rather than to silence it.
+      #
+      # Bonus: this is our own notarytool call, so its full output lands in the
+      # log — submission id and status included (cf. NEWS-197).
+      - name: Notarize and staple the .dmg
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          dmg=$(find src-tauri/target/release/bundle/dmg -name '*.dmg' | head -1)
+          [ -n "$dmg" ] || { echo "::error::No .dmg found to notarize."; exit 1; }
+          echo "Submitting $dmg"
+          xcrun notarytool submit "$dmg" \
+            --apple-id "$APPLE_ID" --team-id "$APPLE_TEAM_ID" --password "$APPLE_PASSWORD" \
+            --wait
+          xcrun stapler staple "$dmg"
+
       # Ask Apple what it thinks happened, when the build step fails.
       #
       # Tauri drives `notarytool` internally and swallows its output, so a failed
