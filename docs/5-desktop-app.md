@@ -201,6 +201,33 @@ A convenient consequence of the app-specific-password route: **every secret maps
 >
 > The runner must be **macOS** — `codesign`, `notarytool` and `stapler` are Apple tools and exist nowhere else. `ubuntu-latest`, which both current CI jobs use, cannot sign a `.app`.
 
+### Cutting a release (NEWS-190)
+
+`.github/workflows/release.yml` builds, signs, notarizes, verifies, and publishes. One workflow covers both channels.
+
+**Do a dry run first.** Actions → Release → **Run workflow**. A manual run exercises the entire signing and notarization path and publishes nothing, so a wrong secret costs a red run instead of a half-published tag. The workflow takes no inputs on purpose: a manual run is *always* a dry run, because on a branch `GITHUB_REF` is `refs/heads/<branch>` and a release created from it would be named after the branch.
+
+Once that's green:
+
+```sh
+git tag v0.1.0-beta.1     # hyphen => prerelease
+git push origin v0.1.0-beta.1
+```
+
+The prerelease flag is **derived from the tag** — a hyphen anywhere in it means prerelease — so a beta needs no second workflow and no second set of secrets to drift out of sync.
+
+**A tag whose base version disagrees with `tauri.conf.json` fails the run before the build.** Nothing otherwise links the two: the tag is the only statement of the release version, the bundle takes its version from the config, and tagging `v0.2.0` against a `0.1.0` config would publish a release whose assets are all named `0.1.0` with nothing complaining. Only the *base* version has to match — the prerelease suffix stays on the tag, because macOS bundle version fields do not accept semver prerelease suffixes.
+
+Notes on the job's shape, each of which is load-bearing:
+
+- **`macos-latest`, and it must be.** `codesign`, `notarytool` and `stapler` are Apple tools. It is also arm64, matching the only target ever bundle-verified (FR-5.3).
+- **`verify-signing.sh` runs before anything is published**, and the build passes no `--target` — the script reads `src-tauri/target/release/bundle/…`, and an explicit target moves everything under `src-tauri/target/<triple>/…` where it would find nothing and pass vacuously.
+- **Tauri does the keychain work itself** when `APPLE_CERTIFICATE` is set: temporary keychain, import, cleanup. Do not add `security create-keychain` steps — two keychains competing for one identity is a confusing failure.
+- **Artifacts upload even on failure.** When signing goes wrong the bundle is the evidence, and re-running to obtain a copy spends another notarization round trip.
+- Fast gates (typecheck, lint, unit) run before the ~20-minute bundle so a release cannot publish something that does not compile. E2E is covered by `ci.yml` on the same commit.
+
+> **The download from that release is how you satisfy the last manual check.** A locally-built app is never quarantined, so the build machine cannot test what Gatekeeper decides. A `.dmg` downloaded from a GitHub Release *is* quarantined — so fetching the beta onto a Mac that has never seen the app is the real test, and it is the one thing no script can do (NEWS-21).
+
 ### Production vs beta releases
 
 **The Apple credentials are identical for both.** There is no such thing as a beta Developer ID certificate, and notarization does not distinguish channels. Anyone setting up a second set of Apple secrets for beta has misread the model. What actually differs is release *metadata*, and — once an updater exists — which manifest a build points at:
