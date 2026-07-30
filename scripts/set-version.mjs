@@ -60,7 +60,9 @@ results.push(
     // Anchored to the first `version =` in the file, which is `[package]`'s.
     // A bare global replace would also rewrite every dependency's version
     // pin — `tauri = { version = "2" }` and friends.
-    const out = src.replace(/^version = "[^"]*"$/m, `version = "${version}"`);
+    //
+    // `\r?$` rather than `$`: see the Cargo.lock note below.
+    const out = src.replace(/^version = "[^"]*"(\r?)$/m, `version = "${version}"$1`);
     return out === src && !src.includes(`version = "${version}"`) ? null : out;
   }),
 );
@@ -70,7 +72,14 @@ results.push(
     // Only the `newsmonger` package's own block. Matching on the name first is
     // what keeps this from touching the ~400 other `[[package]]` entries, any
     // one of which having version "0.1.0" would otherwise be a candidate.
-    const re = /(\[\[package\]\]\nname = "newsmonger"\nversion = ")[^"]*(")/;
+    //
+    // **`\r?\n`, not `\n`** (NEWS-213). Git for Windows checks out with CRLF by
+    // default, so on a Windows runner this file arrives with `\r\n` line endings
+    // and an `\n`-only pattern silently fails to match. The failure mode is
+    // nasty: `edit()` reports "NO MATCH" and the script exits 1, which killed the
+    // signed Windows release build *after* the tag was already public. macOS and
+    // Linux never see it, so nothing local reproduces it.
+    const re = /(\[\[package\]\]\r?\nname = "newsmonger"\r?\nversion = ")[^"]*(")/;
     if (!re.test(src)) return null;
     return src.replace(re, `$1${version}$2`);
   }),

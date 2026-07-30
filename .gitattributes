@@ -1,0 +1,24 @@
+# Line endings (NEWS-213).
+#
+# Git for Windows checks out with CRLF by default, and this repo now runs real
+# work on Windows runners — bash scripts under `shell: bash`, and Node scripts
+# that pattern-match multi-line file content. Both break on CRLF in ways that
+# reproduce nowhere else:
+#
+#   - A `.sh` file with CRLF fails in Git Bash with `$'\r': command not found`,
+#     or worse, silently passes a trailing `\r` into a variable.
+#   - `scripts/set-version.mjs` matched `\n` between Cargo.lock lines, found
+#     nothing on Windows, and exited 1 — which killed the signed Windows build of
+#     a release whose tag was already public.
+#
+# The script is CRLF-tolerant now, but that is belt to this file's braces: the
+# right fix is for these files to *be* LF everywhere, so the question stops
+# coming up. Scoped to the files where it matters rather than a blanket
+# `* text=auto eol=lf`, which would renormalize the whole tree in one commit.
+
+*.sh    text eol=lf
+*.mjs   text eol=lf
+Cargo.toml  text eol=lf
+Cargo.lock  text eol=lf
+*.json  text eol=lf
+*.yml   text eol=lf

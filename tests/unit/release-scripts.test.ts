@@ -30,10 +30,14 @@ const root = path.join(path.dirname(fileURLToPath(import.meta.url)), '../..');
 /** Every file `set-version.mjs` is responsible for, and how to read its version. */
 const VERSIONED = [
   { rel: 'src-tauri/tauri.conf.json', read: (s: string) => z.object({ version: z.string() }).parse(JSON.parse(s)).version },
-  { rel: 'src-tauri/Cargo.toml', read: (s: string) => /^version = "([^"]+)"$/m.exec(s)?.[1] },
+  { rel: 'src-tauri/Cargo.toml', read: (s: string) => /^version = "([^"]+)"\r?$/m.exec(s)?.[1] },
   {
+    // `\r?\n`, like the script's own pattern — these readers are handed CRLF
+    // fixtures by the Windows regression test below, and a reader that only
+    // understands LF would report "undefined" for a file the script bumped
+    // correctly, blaming the script for the harness's limitation (NEWS-213).
     rel: 'src-tauri/Cargo.lock',
-    read: (s: string) => /\[\[package\]\]\nname = "newsmonger"\nversion = "([^"]+)"/.exec(s)?.[1],
+    read: (s: string) => /\[\[package\]\]\r?\nname = "newsmonger"\r?\nversion = "([^"]+)"/.exec(s)?.[1],
   },
 ] as const;
 
@@ -361,6 +365,42 @@ describe('set-version.mjs writes every file that states a version (NEWS-194)', (
     for (const { rel, read } of VERSIONED) {
       expect(read(fs.readFileSync(path.join(sandbox, rel), 'utf8'))).not.toBe(bad);
     }
+  });
+
+  it('works on CRLF checkouts, as Windows runners produce (NEWS-213)', () => {
+    // The bug this pins killed the signed Windows build of an already-tagged
+    // release. Git for Windows checks out with CRLF by default, and the Cargo.lock
+    // transform matched `\n` between lines — so on Windows it matched nothing,
+    // reported "NO MATCH", and exited 1. macOS and Linux never saw it, which is
+    // exactly why it reached a release: nothing local reproduced it.
+    //
+    // Rewriting the fixtures to CRLF here is the cheapest faithful reproduction —
+    // it is the only thing the Windows runner did differently.
+    for (const { rel } of VERSIONED) {
+      const full = path.join(sandbox, rel);
+      const lf = fs.readFileSync(full, 'utf8');
+      fs.writeFileSync(full, lf.replace(/\r?\n/g, '\r\n'));
+    }
+
+    const result = runInSandbox('9.8.7');
+    expect(result.stdout).not.toContain('NO MATCH');
+    expect(result.status).toBe(0);
+    for (const { rel, read } of VERSIONED) {
+      expect(read(fs.readFileSync(path.join(sandbox, rel), 'utf8')), `${rel} should be bumped`).toBe('9.8.7');
+    }
+  });
+
+  it('keeps CRLF files as CRLF rather than silently reformatting them', () => {
+    // Rewriting every line ending of a file it was asked to change one line of
+    // would turn a version bump into a whole-file diff.
+    const rel = 'src-tauri/Cargo.lock';
+    const full = path.join(sandbox, rel);
+    fs.writeFileSync(full, fs.readFileSync(full, 'utf8').replace(/\r?\n/g, '\r\n'));
+
+    expect(runInSandbox('9.8.7').status).toBe(0);
+    const after = fs.readFileSync(full, 'utf8');
+    expect(after).toContain('\r\n');
+    expect(after.match(/(?<!\r)\n/g), 'no bare LF should have been introduced').toBeNull();
   });
 
   it('fails loudly when a file it expects to edit no longer matches', () => {
