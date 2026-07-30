@@ -14,6 +14,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { beforeEach, describe, expect, it } from 'vitest';
+import { z } from 'zod';
 
 import { appStore } from '../../src/client/stores.js';
 import { getTauriInvoke, isTauri } from '../../src/client/tauri.js';
@@ -208,15 +209,22 @@ describe('the Tauri command bridge', () => {
 });
 
 describe('the updater endpoint is single-channel by decision (NEWS-205)', () => {
-  const conf = (): { plugins?: { updater?: { endpoints?: string[]; pubkey?: string } } } =>
-    JSON.parse(fs.readFileSync(path.join(root, 'src-tauri/tauri.conf.json'), 'utf8'));
+  // Parsed through zod rather than cast — validate, don't assert, same as the
+  // rest of the project (and `strictTypeChecked` rejects the bare `any` anyway).
+  const ConfSchema = z.object({
+    plugins: z.object({
+      updater: z.object({ endpoints: z.array(z.string()), pubkey: z.string() }),
+    }),
+  });
+  const conf = (): z.infer<typeof ConfSchema> =>
+    ConfSchema.parse(JSON.parse(fs.readFileSync(path.join(root, 'src-tauri/tauri.conf.json'), 'utf8')));
 
   it('points every build at exactly one manifest', () => {
     // Copied from glassbox, which ships one endpoint and no channel handling.
     // The consequence is deliberate: `releases/latest` skips prereleases, so a
     // beta install takes the next *stable* release and rejoins the stable
     // channel. A beta is a one-way trip (FR-5.18, docs/5-desktop-app.md).
-    const endpoints = conf().plugins?.updater?.endpoints ?? [];
+    const endpoints = conf().plugins.updater.endpoints;
     expect(endpoints).toHaveLength(1);
     expect(endpoints[0]).toBe(
       'https://github.com/Small-Tale/newsmonger/releases/latest/download/latest.json',
@@ -233,6 +241,6 @@ describe('the updater endpoint is single-channel by decision (NEWS-205)', () => 
   });
 
   it('carries a pubkey, without which the endpoint is meaningless', () => {
-    expect(conf().plugins?.updater?.pubkey ?? '').not.toBe('');
+    expect(conf().plugins.updater.pubkey).not.toBe('');
   });
 });
