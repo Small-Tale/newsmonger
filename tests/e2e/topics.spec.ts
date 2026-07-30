@@ -527,10 +527,22 @@ test('renaming a topic keeps its stories by default (NEWS-139)', async ({ page }
 
 test('renaming can clear that topic’s stories, and only that topic’s', async ({ page }) => {
   await page.goto('/');
-  const otherBefore = await page.locator('.item').count();
   const target = page.locator('.topic', { hasText: 'Renamed Topic' });
+  // Wait for the feed to be on screen **before counting anything**. Counting
+  // straight after `goto` reads a half-rendered feed: `otherBefore` was captured
+  // at 2 while `targetStories` resolved to 4 a moment later, so the assertion at
+  // the end expected **-2** items — an impossible count, which is what gave it
+  // away. Found on a slower machine (Windows under Parallels, NEWS-209); macOS
+  // renders fast enough to hide it, and Playwright's retry papered over it by
+  // re-running against different state.
+  await expect(page.locator('.item', { hasText: 'Renamed Topic' }).first()).toBeVisible({ timeout: 15_000 });
+  const otherBefore = await page.locator('.item').count();
   const targetStories = await page.locator('.item', { hasText: 'Renamed Topic' }).count();
   expect(targetStories).toBeGreaterThan(0);
+  // The arithmetic below is only meaningful if both counts came from the same
+  // settled render. Asserting it here fails with something readable instead of an
+  // expected count that cannot exist.
+  expect(otherBefore).toBeGreaterThanOrEqual(targetStories);
 
   await topicAction(page, target, 'rename');
   await page.fill('.dialog.rename input[name=topic-name]', 'Cleared Topic');
