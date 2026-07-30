@@ -91,18 +91,142 @@ An unsigned bundle opens on the machine that built it and nowhere else. Gatekeep
 
   Run against the current unsigned build it reports exactly what is missing, including that the sidecar inherits `get-task-allow` from Node's own signature. That was found by running it, not by reasoning about it.
 
-### What still needs a human
+### What still needs a human — the full credential recipe (NEWS-21)
 
-Everything below requires the Apple Developer account and must not be committed:
+Everything below requires the Apple Developer account, is done **once**, and must never be committed. Nothing here is wired up yet: `security find-identity -v -p codesigning` on the current dev machine reports **0 valid identities found**, and there is no release workflow — `.github/workflows/ci.yml` is gates only.
 
-1. **Create a Developer ID Application certificate** (Apple Developer → Certificates) and install it in the login keychain. `security find-identity -v -p codesigning` should then list it.
-2. **Get the Team ID** from the membership page.
-3. **Create an app-specific password** at appleid.apple.com (Sign-In and Security → App-Specific Passwords) for notarization — *not* the Apple ID password. The App Store Connect API key is the better option for CI, since it isn't tied to one person's account.
-4. **Export the certificate as `.p12`** only when CI needs it (NEWS-6); a local build uses the keychain directly and needs no export.
+Env var names below are Tauri v2's and were taken from its own signing and updater docs, not from memory. Tauri reads them; we do not define them, so they cannot be renamed to taste.
 
-Then a signed local build is `APPLE_SIGNING_IDENTITY="Developer ID Application: … (TEAMID)" APPLE_ID=… APPLE_PASSWORD=… APPLE_TEAM_ID=… npm run tauri:build`, followed by `bash scripts/verify-signing.sh`.
+#### 1. Developer ID Application certificate
 
-**Windows Authenticode** is untouched — no Windows bundle has been verified at all yet (NEWS-20), so signing one would be signing something unproven.
+This is the signing identity. It is *not* the "Apple Development" or "Mac App Distribution" certificate — those sign for a debug device and the Mac App Store respectively, and neither notarizes for direct distribution.
+
+1. Keychain Access → **Certificate Assistant → Request a Certificate From a Certificate Authority**. Save the CSR to disk. Keychain Access generates the private key locally and keeps it — this is why the machine that makes the CSR is the machine that can sign.
+2. [developer.apple.com/account/resources/certificates](https://developer.apple.com/account/resources/certificates) → **+** → **Developer ID Application** → upload the CSR → download the `.cer`.
+3. Double-click the `.cer` to install it into the login keychain.
+4. Confirm, and copy the full identity string:
+
+   ```sh
+   security find-identity -v -p codesigning
+   # 1) ABC123… "Developer ID Application: Small Tale Inc. (TEAMID)"
+   ```
+
+   That quoted string is `APPLE_SIGNING_IDENTITY`, verbatim, including the parenthesised Team ID.
+
+#### 2. Team ID
+
+[developer.apple.com/account](https://developer.apple.com/account) → Membership details. Ten characters. Also visible inside the identity string above. This is `APPLE_TEAM_ID`.
+
+#### 3. Notarization credential — pick **one** of two
+
+**App Store Connect API key (recommended, and required for CI).** Not tied to one person's Apple ID, revocable independently, and survives that person leaving.
+
+[appstoreconnect.apple.com](https://appstoreconnect.apple.com) → Users and Access → **Integrations** → App Store Connect API → **+**. Give it the **Developer** role. Then:
+
+- The **Issuer ID** shown above the keys table → `APPLE_API_ISSUER`
+- The **Key ID** column → `APPLE_API_KEY`
+- The downloaded **`AuthKey_<KeyID>.p8`** → its *file path* is `APPLE_API_KEY_PATH`
+
+> ⚠️ **`APPLE_API_KEY` is the Key ID, not the key file.** It is a ~10-character string. Putting the `.p8` contents there fails with an unhelpful authentication error. The `.p8` goes at `APPLE_API_KEY_PATH`, and **Apple lets you download it exactly once** — lose it and you issue a new key.
+
+**App-specific password (simpler, local only).** [appleid.apple.com](https://appleid.apple.com) → Sign-In and Security → App-Specific Passwords → generate. This is `APPLE_PASSWORD`; your Apple account email is `APPLE_ID`. It is **not** your Apple ID password. Fine for signing from your own laptop; a poor fit for CI because it binds every release to one human's account.
+
+#### 4. Export the `.p12` — only for CI
+
+A local build signs straight from the login keychain and needs no export. CI has no keychain, so it needs the certificate *and its private key* as a portable file:
+
+Keychain Access → My Certificates → select the **Developer ID Application** row → right-click → **Export** → `.p12`, and set a password (that password is `APPLE_CERTIFICATE_PASSWORD`).
+
+> Export the row that expands to show a private key under it. Exporting the bare certificate produces a `.p12` that signs nothing, and the failure appears only at build time in CI.
+
+Then base64 it for the secret store:
+
+```sh
+# macOS emits a single line already; the tr is belt-and-braces.
+base64 -i DeveloperID.p12 | tr -d '\n' | pbcopy
+```
+
+On Linux use `base64 -w0`. **A secret with embedded newlines fails to decode**, and that is a confusing failure to debug from a CI log.
+
+#### 5. Updater signing keypair — only when an auto-updater ships
+
+Separate from Apple entirely, and easy to miss for that reason: Tauri signs its *update manifests* with its own keypair so a client can verify an update came from us. There is no updater configured today (`bundle.createUpdaterArtifacts` is absent from `tauri.conf.json` and there is no `plugins.updater` block), so this is forward-looking.
+
+```sh
+npm run tauri signer generate -- -w ~/.tauri/newsmonger.key
+```
+
+That writes the private key and prints the public key. The **public** key goes in `tauri.conf.json` under `plugins.updater.pubkey` and is committed — it is public by design. The **private** key is `TAURI_SIGNING_PRIVATE_KEY` (path or contents) and its passphrase is `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`.
+
+> ⚠️ **Losing this key is unrecoverable.** The public key is baked into every shipped binary, so a new keypair cannot update apps already in the field — every existing user has to reinstall by hand. Back it up somewhere that is not one laptop.
+
+### GitHub Actions secrets
+
+Repository → Settings → Secrets and variables → Actions. Names on the left are what a release workflow must expose to the build step; the middle column is which are Tauri's own env var names (those must match exactly) versus ours (free to name).
+
+| Secret name | Tauri env var? | Value | Needed for |
+|---|---|---|---|
+| `APPLE_CERTIFICATE` | ✅ exact | base64 of the `.p12` (step 4) | signing |
+| `APPLE_CERTIFICATE_PASSWORD` | ✅ exact | the `.p12` export password | signing |
+| `KEYCHAIN_PASSWORD` | ✅ exact | any random string — CI creates a throwaway keychain and unlocks it with this | signing |
+| `APPLE_SIGNING_IDENTITY` | ✅ exact | `Developer ID Application: Small Tale Inc. (TEAMID)` | signing |
+| `APPLE_API_ISSUER` | ✅ exact | Issuer ID (UUID) | notarization |
+| `APPLE_API_KEY` | ✅ exact | Key **ID**, ~10 chars | notarization |
+| `APPLE_API_KEY_P8_BASE64` | ❌ ours | base64 of `AuthKey_<KeyID>.p8` | notarization |
+| `APPLE_TEAM_ID` | ✅ exact | 10-char Team ID | notarization |
+| `TAURI_SIGNING_PRIVATE_KEY` | ✅ exact | contents of `~/.tauri/newsmonger.key` | updater only |
+| `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` | ✅ exact | that key's passphrase | updater only |
+
+`GITHUB_TOKEN` is injected automatically — do not create one.
+
+> ⚠️ **`APPLE_API_KEY_PATH` is a filesystem path, and a secret cannot be a path.** This is the one place the mapping is not one-to-one. Store the key's *contents* as `APPLE_API_KEY_P8_BASE64` and materialize the file in the job, before the build step:
+>
+> ```yaml
+> - name: Materialize App Store Connect key
+>   run: |
+>     mkdir -p ~/.appstoreconnect/private_keys
+>     echo "${{ secrets.APPLE_API_KEY_P8_BASE64 }}" | base64 --decode \
+>       > ~/.appstoreconnect/private_keys/AuthKey_${{ secrets.APPLE_API_KEY }}.p8
+>     echo "APPLE_API_KEY_PATH=$HOME/.appstoreconnect/private_keys/AuthKey_${{ secrets.APPLE_API_KEY }}.p8" >> "$GITHUB_ENV"
+> ```
+>
+> The runner must be **macOS** — `codesign`, `notarytool` and `stapler` are Apple tools and exist nowhere else. `ubuntu-latest`, which both current CI jobs use, cannot sign a `.app`.
+
+### Production vs beta releases
+
+**The Apple credentials are identical for both.** There is no such thing as a beta Developer ID certificate, and notarization does not distinguish channels. Anyone setting up a second set of Apple secrets for beta has misread the model. What actually differs is release *metadata*, and — once an updater exists — which manifest a build points at:
+
+| | Production | Beta |
+|---|---|---|
+| Tag | `v1.2.0` | `v1.2.0-beta.1` |
+| GitHub Release | normal | `prerelease: true` |
+| Apple secrets | same set | **same set** |
+| Updater endpoint | `.../latest.json` | `.../beta.json` (or `?channel=beta`) |
+| Updater keypair | shared | **shared — see below** |
+
+**Use one updater keypair across both channels.** The tempting alternative — a separate keypair per channel, for blast-radius isolation — has a trap: the public key is compiled into the binary, so a beta build could never accept a production update. Every beta tester would be stranded on the beta channel until they reinstalled by hand. One keypair with two manifests lets a tester move back to stable as a normal update. Do not split the keypair unless you are willing to own that migration.
+
+### Windows Authenticode — deliberately not set up
+
+Untouched, and that is a decision rather than an omission: no Windows bundle has been verified at all yet (NEWS-20), so signing one would be attesting to something unproven.
+
+For when it is time, Tauri v2 offers two routes. `bundle.windows.certificateThumbprint` + `digestAlgorithm` + `timestampUrl` in `tauri.conf.json` uses a certificate installed on the build machine. `bundle.windows.signCommand` delegates to any signing tool — the usual choice for Azure Trusted Signing or Key Vault, which read `AZURE_CLIENT_ID`, `AZURE_CLIENT_SECRET`, and `AZURE_TENANT_ID`. An OV/EV certificate from a CA is a paid annual purchase with identity vetting, so budget lead time, and note that a plain OV certificate accrues SmartScreen reputation slowly — early downloads still get warned.
+
+### Doing a signed local build
+
+```sh
+# Signing + notarization via App Store Connect key
+APPLE_SIGNING_IDENTITY="Developer ID Application: Small Tale Inc. (TEAMID)" \
+APPLE_API_ISSUER=… APPLE_API_KEY=… APPLE_API_KEY_PATH=~/.appstoreconnect/private_keys/AuthKey_….p8 \
+APPLE_TEAM_ID=… \
+npm run tauri:build
+
+bash scripts/verify-signing.sh
+```
+
+Substitute `APPLE_ID` + `APPLE_PASSWORD` + `APPLE_TEAM_ID` for the three `APPLE_API_*` vars to use the app-specific-password route instead.
+
+**Do not paste any of these values into a shell history, a chat, or a commit.** Prefer a `.envrc` that direnv loads, or read them from the keychain — and remember `verify-signing.sh` exists precisely because the build machine cannot test what Gatekeeper checks (FR-5.7).
 
 ### If the app icon looks stale in dev
 
