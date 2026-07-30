@@ -102,19 +102,3 @@ Authored in `src/briefing/cards/` (see its README) as plain HTML/CSS, because th
 - **FR-27.23** *(Shipped as design, NEWS-166)* The photo card's copy **overlaps the image's bottom scrim** rather than sitting below it. That overlap is what makes the two halves read as one card instead of a picture with a caption under it. Two gradients are used, not one: the bottom scrim carries the photo into the page colour so the image ends without a seam, and a much lighter top scrim stops the photo reading as a floating rectangle. Verified against a **bright, busy** photograph — a dark image flatters the scrim and hides whether the headline is legible over the picture.
 
 - **FR-27.24** *(Design only)* **Formats ship vertical-first.** `reel` 1080×1920 is designed and reviewed. `square` 1080×1080 and `landscape` 1920×1080 are wanted but not designed: a tall story card does not become a wide one by rescaling, and the photo/copy split in particular has to be rethought rather than adapted. Tracked separately.
-
-## 27.7 — The offline generator
-
-`npm run briefing` renders a reel from the local database. Deliberately **not** a product surface (NEWS-167): it exists so the card design can be iterated against real stories with no UI in the way, and because everything it works out is what `GET /api/briefing.svg` will call.
-
-- **FR-27.25** *(Shipped, NEWS-167)* Story selection goes through the **same** `selectForExport` the export routes use, rather than a second query. FR-27.2 asked for this and it was worth extracting the shared function to get it: two definitions of "the recent stories" would drift, and the drift would be invisible — both would keep returning plausible-looking stories.
-
-- **FR-27.26** *(Shipped, NEWS-167)* Scene *markup* (`reel.ts`) is separated from *staging and subprocess* (`stage.ts`). The split is what lets the rules that matter — the long-headline step-down, the no-photo card, and above all the FR-27.8 remote-reference guard — be tested with no browser anywhere near them.
-
-- **FR-27.27** *(Shipped, NEWS-167)* The FR-27.8 guard is an **assertion in the pipeline**, run over every scene as it is built. It rejects any `src`/`href` that is not a staged local file, allowing loopback (`127.0.0.1`) because that is the sanctioned image route. Photos are **copied** into the staging directory rather than referenced at their origin, and the cache's opaque `.bin` files get a real extension from **sniffed magic bytes** — the same thing `GET /api/image/:hash` does — since a browser loading from `file://` has nothing else to go on.
-
-- **FR-27.28** *(Shipped, NEWS-167)* Card durations are **reading time**, not a fixed beat: scaled by headline-plus-deck length, floored so a short story still lands and capped so a long one cannot stall the reel.
-
-- **FR-27.29** *(Shipped, NEWS-167)* The reel's play length is **read from domotion's own report**, not recomputed. Summing scene durations is wrong — transitions add time on top, and a six-scene reel whose cards total 34.0 s actually plays for **36.4 s**. That gap matters precisely because this number is what a caller passes to `svg-to-video --duration` (FR-27.13): too small and the export is silently truncated mid-reel. The sum survives only as a fallback if a future release phrases the line differently.
-
-  Worth noting *how* this was found: the first implementation summed the durations, and the discrepancy only appeared when the CLI was run against a real database and its output read next to the printed hint. It is exactly the class of bug that a green unit test suite does not catch, because the arithmetic was self-consistently wrong.

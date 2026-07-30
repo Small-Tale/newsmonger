@@ -28,9 +28,6 @@ src/
     warnings.ts       filters ONLY node:sqlite's ExperimentalWarning; imported before the require in sqlite.ts
   briefing/
     domotion.ts       find/version-gate the user's GLOBAL domotion install; TTL-cached (NEWS-178)
-    reel.ts           scene markup + FR-27.8 remote-ref guard + pacing + storyboard config (pure)
-    stage.ts          stage photos/assets to a temp dir, run `domotion storyboard`, read back the loop length
-    cli.ts / main.ts  `npm run briefing` — render a reel from the local DB (NEWS-167)
     cards/            briefing-reel card design: cards.css + 5 scene templates + README. Design only, no generator (NEWS-166)
   ai/
     types.ts          AUTO_ORDER (client-safe, NEWS-128); DISCOVERY_MODELS + usesLegacyRequestShape (NEWS-132); NewsService (checkTopic + suggestTopics) + NewsProvider, TopicContext, CheckResult/TokenUsage, SuggestRequest/SuggestScope/TopicSuggestion (NEWS-124), PROVIDER_NAMES/INFO, FoundNewsItem, KnownItem
@@ -129,8 +126,7 @@ Data dir: `--data-dir` flag → `NEWSMONGER_DATA_DIR` → `~/.newsmonger`. Also 
 | Undoing a clear | `src/undo.ts` (`ClearUndoBuffer`), `Store.clearItemsForTopic`/`restoreClearedItems`, `POST /api/topics/:id/restore-cleared`, `showUndoToast` + `[data-undo-clear]` in `client/app.tsx`. See `docs/26-undo.md` |
 | Briefing card design (HTML/CSS) | `src/briefing/cards/` — `cards.css` holds the whole design; five scene templates beside it; `README.md` explains the two deliberately-unresolved references (`photo.png`, `wordmark-dark.svg`) and how to preview. **Design only, no generator.** See `docs/27-briefing-reel.md` §27.6 |
 | Is domotion available? | `src/briefing/domotion.ts` — `probeDomotion` (pure, injected deps), `domotionStatus` (30 s TTL cache — `/api/state` polls every 4 s), `domotionMessage`, `MIN_DOMOTION_VERSION` (0.21.0, the release that added `storyboard`). domotion is an *external global install*, not a dependency; **`which domotion` is NOT sufficient** — GUI `PATH` has no nvm/Homebrew, `PATH` can hit a project-local `node_modules/.bin`, and presence ≠ usable version. See `docs/27-briefing-reel.md` FR-27.14a–d |
-| Rendering a briefing reel | `src/briefing/reel.ts` (markup, pacing, the FR-27.8 guard — pure) + `stage.ts` (temp-dir staging, `domotion storyboard`, loop-length readback) + `cli.ts` (`npm run briefing`). **Play length comes from domotion's reported loop, never from summing scene durations** — transitions add time. See `docs/27-briefing-reel.md` §27.7 |
-| Briefing reel / shareable cards | **No endpoint yet** — spec in `docs/27-briefing-reel.md`. Attribution posture decided (FR-27.4–27.7); everything else Design only. Renders via `domotion-svg`. Open tickets: NEWS-166 (card design), 167 (offline CLI), 168 (image downscaling), 169 (favicons), 170 (endpoint), 171 (video), 173 (in-app playback) |
+| Briefing reel / shareable cards | **No pipeline yet** — spec in `docs/27-briefing-reel.md`. Attribution posture decided (FR-27.4–27.7); everything else Design only. Renders via `domotion-svg`. Open tickets: NEWS-166 (card design), 167 (offline CLI), 168 (image downscaling), 169 (favicons), 170 (endpoint), 171 (video), 173 (in-app playback) |
 | Dedup behavior | `src/ai/dedupe.ts` (keys), `src/checks.ts` (application) |
 | Dead / hallucinated source links | `src/ai/verify-links.ts`, called from `CheckRunner.verifyLinks` **before** dedup. Reuses `images/safety.ts` SSRF vetting; null probe under `--ai-test`. See `docs/2-news-checks-and-dedup.md` FR-2.6–2.10 |
 | Scheduling rules | `src/checks.ts` (`isDueUnderSchedule` picks interval vs daily — NEWS-84; `isDue`, `effectiveInterval`, `byCheckOrder`), `src/scheduler.ts` (tick + overrun drain). **Adding a topic checks it immediately** — `POST /api/topics` fires `checkTopic({manual:true})` in the background (NEWS-54, FR-1.12) |

@@ -20,7 +20,7 @@ import {
   UpdateSettingsReqSchema,
   UpdateTopicReqSchema,
 } from '../api/schemas.js';
-import { ExportScopeSchema, selectForExport, selectionLabel, toAtom, toJson, toMarkdown } from '../export.js';
+import { toAtom, toJson, toMarkdown } from '../export.js';
 import { cachedImagePath, isValidHash, liveImageHashes, pruneImageCache, sniffImageType } from '../images/index.js';
 import { isKeychainAvailable, keychainLabel } from '../keychain.js';
 import type { AppEnv } from '../types.js';
@@ -64,6 +64,12 @@ function appVersion(): string {
   }
   return cachedVersion;
 }
+
+/**
+ * Ceiling on one export or feed (NEWS-85). Generous for a document, bounded so
+ * an install with a year of retained stories can't build a 40 MB response.
+ */
+const EXPORT_LIMIT = 2000;
 
 export function registerApi(app: Hono<AppEnv>): void {
   app.get('/api/state', (c) => {
@@ -448,13 +454,21 @@ export function registerApi(app: Hono<AppEnv>): void {
    */
   const exportHandler = (kind: 'md' | 'json' | 'atom') => (c: Context<AppEnv>) => {
     const store = c.get('store');
-    // Selection lives in `export.ts` so the briefing reel uses the *same* rule
-    // rather than a second definition of "the recent stories" (FR-27.2).
-    const scope = ExportScopeSchema.catch('all').parse(c.req.query('scope'));
+    const scope = c.req.query('scope') ?? 'all';
     const topicId = c.req.query('topic') ?? '';
+    const all = store.listItems().filter((i) => !i.offTopic);
+    const items = all
+      .filter((i) => (scope === 'saved' ? i.saved : true))
+      .filter((i) => (scope === 'topic' && topicId !== '' ? i.topicId === topicId : true))
+      .sort((a, b) => (a.foundAt < b.foundAt ? 1 : a.foundAt > b.foundAt ? -1 : 0))
+      .slice(0, EXPORT_LIMIT);
     const topics = store.listTopics();
-    const items = selectForExport({ items: store.listItems(), scope, topicId });
-    const label = selectionLabel(scope, topics, topicId);
+    const label =
+      scope === 'saved'
+        ? 'Saved stories'
+        : scope === 'topic'
+          ? (topics.find((t) => t.id === topicId)?.name ?? 'Unknown topic')
+          : 'All stories';
     const input = {
       items,
       topics,

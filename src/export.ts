@@ -1,5 +1,3 @@
-import { z } from 'zod';
-
 import type { NewsItem, Topic } from './db/schemas.js';
 
 /** Stories plus the topics they belong to, ready to render (NEWS-85). */
@@ -16,57 +14,6 @@ export interface ExportInput {
 
 function topicNames(topics: Topic[]): Map<string, string> {
   return new Map(topics.map((t) => [t.id, t.name]));
-}
-
-/**
- * The scopes every "get me a set of stories" surface understands (FR-21.1).
- *
- * A schema rather than a bare union because the value arrives as a query
- * string — a trust boundary, so it is validated rather than cast, and an
- * unrecognised scope falls back to `all` instead of silently selecting nothing.
- */
-export const ExportScopeSchema = z.enum(['all', 'saved', 'topic']);
-export type ExportScope = z.infer<typeof ExportScopeSchema>;
-
-/**
- * Ceiling on one export or feed (NEWS-85). Generous for a document, bounded so
- * an install with a year of retained stories can't build a 40 MB response.
- */
-export const EXPORT_LIMIT = 2000;
-
-/**
- * Choose the stories a selection contains (FR-21.1/21.2).
- *
- * Extracted from the export route so the briefing reel can reuse it rather
- * than grow a second definition of "the recent stories" (FR-27.2). Two
- * definitions of that would drift, and the drift would be invisible: both
- * would keep returning plausible-looking stories.
- *
- * Off-topic flagged stories are dropped **before** anything else, in every
- * scope. They are hidden from the feed, so having them appear in an export —
- * or, worse, in something the user shares — would be a surprise.
- */
-export function selectForExport(opts: {
-  items: readonly NewsItem[];
-  scope: ExportScope;
-  /** Only consulted when `scope` is `topic`; an empty id selects nothing special. */
-  topicId?: string;
-  limit?: number;
-}): NewsItem[] {
-  const topicId = opts.topicId ?? '';
-  return opts.items
-    .filter((i) => !i.offTopic)
-    .filter((i) => (opts.scope === 'saved' ? i.saved : true))
-    .filter((i) => (opts.scope === 'topic' && topicId !== '' ? i.topicId === topicId : true))
-    .sort((a, b) => (a.foundAt < b.foundAt ? 1 : a.foundAt > b.foundAt ? -1 : 0))
-    .slice(0, opts.limit ?? EXPORT_LIMIT);
-}
-
-/** The human label for a selection — the export's title and the reel's subtitle. */
-export function selectionLabel(scope: ExportScope, topics: readonly Topic[], topicId = ''): string {
-  if (scope === 'saved') return 'Saved stories';
-  if (scope === 'topic') return topics.find((t) => t.id === topicId)?.name ?? 'Unknown topic';
-  return 'All stories';
 }
 
 /**
