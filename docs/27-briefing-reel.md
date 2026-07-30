@@ -71,8 +71,6 @@ Everything below is a **decision, not a default**. A shared card takes a publish
 
   So: resolve the binary, ask it for its version, and compare against a declared minimum. Below the floor is a *different message* from absent — "update domotion" and "install domotion" are different problems and the user can only act on the right one.
 
-- **FR-27.14d** *(Shipped, NEWS-178)* The probe result is **cached with a TTL** (`domotionStatus`, 30 s). Probing spawns a process and the natural consumer is `/api/state`, which the client polls every 4 s — uncached that is sixteen subprocesses a minute for a fact that changes when someone runs an installer, so this is a correctness requirement rather than an optimization. A TTL rather than a permanent memo is what lets a user install or upgrade domotion and have the app notice **without restarting**, which is exactly what they will do on reading the "not installed" message.
-
 - **FR-27.14c** *(Design only)* Because the tool is external, integration happens over the **CLI and the filesystem** — `domotion capture`, `domotion storyboard`, `svg-to-video` — not through the programmatic API. The library's named exports are unavailable to us by construction. This is a real constraint on how the generator is written and is not a detail to discover halfway through.
 
 - **FR-27.15** *(Design only)* Rendering is a **background job with progress**, never a synchronous request handler. A 5-scene reel measured 10.7 s and a real digest is longer; video export runs at roughly 2.4× realtime on top of that. The check runner and `src/client/discover-progress.ts` already establish the pattern.
