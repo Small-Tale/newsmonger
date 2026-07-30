@@ -235,4 +235,4 @@ Subscription-backed providers (`attended: true`) run *scheduled* checks only whi
 
 - FR-11.1 bookmark/save a story (`item.saved` persisted via `PATCH /api/items/:id`): **Shipped**
 - FR-11.2 Saved feed filter (ephemeral view, composes with Solo): **Shipped**
-- FR-11.3 share a story — formatted title+summary+link via OS share sheet, clipboard fallback + toast: **Shipped**
+- FR-11.3 share a story — formatted title+summary+link via OS share sheet, clipboard fallback + toast: **Shipped**; the real OS sheet is now **confirmed working in the Tauri WKWebView on macOS** (NEWS-45, owner's live run). `navigator.share` is *not* a WKWebView no-op the way `window.confirm`/`window.alert` are, which had been the working assumption. Fallback retained for desktop browsers and for unverified Windows/Linux.

@@ -173,7 +173,11 @@ Browser-verified (toggle, permission, firing, throttle). The native desktop path
 5. Quit and relaunch with the toggle still on — confirm notifications still fire (the startup permission re-sync), without re-toggling.
 6. If the plugin's `requestPermission()` still doesn't prompt (e.g. macOS requires a signed/bundled app rather than `tauri dev`), test again with `npm run tauri:build` — real notifications on macOS generally need the bundled app. Record which build works. (Related: NEWS-40.)
 
-## Share a story in Tauri (NEWS-43) — needs a desktop run
+## Share a story in Tauri (NEWS-43) — run on macOS, works (NEWS-45)
+
+**Outcome:** the owner ran this on macOS and reported the share sheet "seems to work" — so `navigator.share` is *not* a WKWebView no-op the way `window.confirm` is (NEWS-39). The OS-sheet path is the one macOS takes; the clipboard fallback does not fire there.
+
+Recorded as the owner's observation from a live run, not as an instrumented result: nobody asserted the sheet's contents field-by-field, so treat "the sheet carries title + summary + link" as expected rather than confirmed. Keep the steps below — the fallback path still needs checking on Windows and Linux, neither of which has ever been bundle-verified (FR-5.3, NEWS-20), and a WebKit or Tauri upgrade could regress this on macOS with nothing to catch it.
 
 Browser-verified both paths (OS-sheet path via a stubbed `navigator.share`, and the clipboard fallback + toast). The **real** desktop share sheet is manual, because `navigator.share` may be absent or a no-op in the WKWebView (cf. the `window.confirm` no-op in NEWS-39). The clipboard fallback is the reliable path and is what a WKWebView will use if the sheet doesn't work.
 
