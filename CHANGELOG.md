@@ -14,6 +14,12 @@ fields reject semver prerelease suffixes.
 
 <!-- Nothing released yet. The first `npm run release` inserts its entry below. -->
 
+## [0.2.0-beta.3] - 2026-07-30
+
+## Bug Fixes
+
+- Fixed the Windows desktop bundle build failing immediately with `Unsupported target: $TAURI_ENV_TARGET_TRIPLE` — the sidecar build script now reads the target triple from the environment instead of relying on shell variable expansion, and ignores an unexpanded `$VAR`/`%VAR%` argument with a clear warning rather than treating it as a real target.
+
 ## [0.2.0-beta.2] - 2026-07-30
 
 ## Developer Experience
