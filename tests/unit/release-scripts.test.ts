@@ -124,9 +124,9 @@ describe('add-changelog-entry.mjs (NEWS-194)', () => {
    * repo's copy with a different cwd would edit the real changelog. It did,
    * once, when a sandboxed `mktemp` failed and the fallback was the repo root.
    */
-  function addEntry(version: string, notes: string): { status: number; output: string } {
+  function addEntry(version: string, notes: string, extra: string[] = []): { status: number; output: string } {
     try {
-      const stdout = execFileSync('node', [path.join(sandbox, 'scripts/add-changelog-entry.mjs'), version], {
+      const stdout = execFileSync('node', [path.join(sandbox, 'scripts/add-changelog-entry.mjs'), version, ...extra], {
         input: notes,
         encoding: 'utf8',
       });
@@ -197,9 +197,72 @@ describe('add-changelog-entry.mjs (NEWS-194)', () => {
     expect(changelog()).not.toContain('0.6.0');
   });
 
-  it.each(['', '1.2', 'v1.2.3', '1.2.3-beta.1'])('rejects %o as a version', (bad) => {
+  it.each(['', '1.2', 'v1.2.3', 'nonsense'])('rejects %o as a version', (bad) => {
     expect(addEntry(bad, '- x\n').status).not.toBe(0);
     expect(changelog()).not.toContain(`[${bad}]`);
+  });
+
+  // --- Duplicate handling (NEWS-196) ---
+  //
+  // Hit for real cutting v0.1.0-beta.1: the CI run failed *after* the local script
+  // had committed the bump and the entry, so the natural recovery — re-run — would
+  // have prepended a second `## [0.1.0]`.
+
+  it('accepts a prerelease version, unlike set-version.mjs', () => {
+    // Deliberately divergent. The version *files* cannot carry `-beta.N` (macOS
+    // bundle version fields reject it), but the changelog is history and each beta
+    // is its own release with its own notes.
+    expect(addEntry('0.1.0-beta.1', '- beta one\n').status).toBe(0);
+    expect(changelog()).toContain('## [0.1.0-beta.1]');
+  });
+
+  it('gives each beta of a version its own heading', () => {
+    // The case that bites on every increment, not just a retry: beta.2 targets the
+    // same base version as beta.1, so a base-version heading would always collide.
+    addEntry('0.1.0-beta.1', '- beta one\n');
+    expect(addEntry('0.1.0-beta.2', '- beta two\n').status).toBe(0);
+    const headings = [...changelog().matchAll(/^## \[([^\]]+)]/gm)].map((m) => m[1]);
+    expect(headings).toEqual(['0.1.0-beta.2', '0.1.0-beta.1']);
+  });
+
+  it('refuses a duplicate version rather than prepending a second heading', () => {
+    addEntry('0.2.0', '- first\n');
+    const again = addEntry('0.2.0', '- second\n');
+    expect(again.status).not.toBe(0);
+    expect(again.output).toContain('already has an entry for 0.2.0');
+    expect([...changelog().matchAll(/^## \[0\.2\.0]/gm)]).toHaveLength(1);
+  });
+
+  it('replaces in place with --replace, keeping newest-first order', () => {
+    addEntry('0.1.0-beta.1', '- older\n');
+    addEntry('0.3.0', '- original notes\n');
+    expect(addEntry('0.3.0', '- corrected notes\n', ['--replace']).status).toBe(0);
+    const text = changelog();
+    expect([...text.matchAll(/^## \[0\.3\.0]/gm)]).toHaveLength(1);
+    expect(text).toContain('- corrected notes');
+    expect(text).not.toContain('- original notes');
+    const headings = [...text.matchAll(/^## \[([^\]]+)]/gm)].map((m) => m[1]);
+    expect(headings).toEqual(['0.3.0', '0.1.0-beta.1']);
+  });
+
+  it('--replace inserts when there is nothing to replace', () => {
+    // The release scripts always pass it, so it must work on a first release too.
+    expect(addEntry('0.4.0', '- brand new\n', ['--replace']).status).toBe(0);
+    expect(changelog()).toContain('## [0.4.0]');
+  });
+
+  it('replacing an entry does not eat the one below it', () => {
+    // The section boundary is "up to the next `## [` or EOF"; an off-by-one here
+    // would silently delete release history.
+    addEntry('0.1.0', '- oldest\n');
+    addEntry('0.2.0', '- middle\n');
+    addEntry('0.3.0', '- newest\n');
+    addEntry('0.3.0', '- newest, fixed\n', ['--replace']);
+    const text = changelog();
+    expect(text).toContain('- oldest');
+    expect(text).toContain('- middle');
+    expect(text).toContain('- newest, fixed');
+    expect([...text.matchAll(/^## \[/gm)]).toHaveLength(3);
   });
 });
 
@@ -292,4 +355,27 @@ describe('set-version.mjs writes every file that states a version (NEWS-194)', (
     expect(result.status).not.toBe(0);
     expect(result.stdout).toContain('NO MATCH');
   });
+});
+
+describe('the release scripts resolve the tag before writing (NEWS-196)', () => {
+  const read = (rel: string): string => fs.readFileSync(path.join(root, rel), 'utf8');
+
+  it.each(['scripts/release.sh', 'scripts/release-beta-auto.sh'])(
+    '%s passes --replace, since both flows are re-runnable',
+    (rel) => {
+      expect(read(rel)).toMatch(/add-changelog-entry\.mjs "\$\{?\w+\}?" --replace/);
+    },
+  );
+
+  it.each(['scripts/release.sh', 'scripts/release-beta-auto.sh'])(
+    '%s resolves the beta number exactly once',
+    (rel) => {
+      // It used to be computed inside the tag step only, i.e. *after* the changelog
+      // was written — so the entry could not carry the suffix. Two separate loops
+      // would also be free to disagree.
+      const src = read(rel);
+      expect(src).toContain('resolve_tag');
+      expect([...src.matchAll(/rev-parse "v[^"]*-beta\./g)], 'beta loop should appear once').toHaveLength(1);
+    },
+  );
 });

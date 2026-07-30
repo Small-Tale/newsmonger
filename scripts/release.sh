@@ -241,13 +241,37 @@ step_update_version() {
   success "Version files updated"
 }
 
+# The tag this run will create, resolved before anything is written (NEWS-196).
+#
+# The beta number has to be known before the changelog entry, so its heading can
+# read `0.1.0-beta.2` rather than `0.1.0`. Otherwise every beta after the first
+# collides with the first one's heading — not only a re-run, but the ordinary
+# second beta of a version.
+#
+# Echoes `<tag>\t<changelog-label>`. They differ for a beta: the label carries the
+# prerelease suffix, the version *files* never do (macOS bundle version fields
+# reject it). One resolver so the heading and the tag can never disagree.
+resolve_tag() {
+  local version; version=$(get_state "version")
+  if [[ "$BETA_MODE" == "true" ]]; then
+    local n=1
+    while git rev-parse "v${version}-beta.${n}" >/dev/null 2>&1; do n=$((n + 1)); done
+    printf '%s\t%s' "v${version}-beta.${n}" "${version}-beta.${n}"
+  else
+    printf '%s\t%s' "v${version}" "$version"
+  fi
+}
+
 step_update_changelog() {
-  local version notes
-  version=$(get_state "version"); notes=$(get_state "release_notes")
-  info "Updating CHANGELOG.md..."
+  local notes label
+  notes=$(get_state "release_notes")
+  label=$(resolve_tag | cut -f2)
+  info "Updating CHANGELOG.md (${label})..."
   # Notes go via stdin — they are multi-line markdown with quotes and backticks,
   # and passing that as a shell argument is how a changelog gets mangled.
-  printf '%s\n' "$notes" | node scripts/add-changelog-entry.mjs "$version"
+  # `--replace` because this flow is resumable: an abort after this step and a
+  # re-run would otherwise prepend a second heading for the same version.
+  printf '%s\n' "$notes" | node scripts/add-changelog-entry.mjs "$label" --replace
   success "CHANGELOG.md updated"
 }
 
@@ -274,16 +298,10 @@ step_commit() {
 }
 
 step_tag_and_push() {
-  local version notes tag
-  version=$(get_state "version"); notes=$(get_state "release_notes")
-
-  if [[ "$BETA_MODE" == "true" ]]; then
-    local n=1
-    while git rev-parse "v${version}-beta.${n}" >/dev/null 2>&1; do n=$((n + 1)); done
-    tag="v${version}-beta.${n}"
-  else
-    tag="v${version}"
-  fi
+  local notes tag
+  notes=$(get_state "release_notes")
+  # The same resolver the changelog step used, so the heading and the tag agree.
+  tag=$(resolve_tag | cut -f1)
 
   info "Creating annotated tag ${BOLD}${tag}${RESET}..."
   printf '%s\n' "$notes" | git tag -a "$tag" -F -

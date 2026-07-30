@@ -201,22 +201,38 @@ run_gates() {
   success "Gates passed"
 }
 
+# --- Resolve the tag before anything is written ------------------------------
+#
+# The beta number has to be known *before* the changelog is written (NEWS-196), so
+# the entry can be headed `0.1.0-beta.2` rather than `0.1.0`. Every beta of a
+# version would otherwise collide with the first one's heading — not just a
+# re-run, but the ordinary second beta.
+resolve_tag() {
+  local n=1
+  while git rev-parse "v${VERSION}-beta.${n}" >/dev/null 2>&1; do n=$((n + 1)); done
+  TAG="v${VERSION}-beta.${n}"
+  # The changelog heading carries the prerelease suffix; the version *files* never
+  # do (macOS bundle version fields reject it), which is why these differ.
+  LABEL="${VERSION}-beta.${n}"
+  info "Target tag: ${BOLD}${TAG}${RESET}"
+}
+
 # --- Version files + changelog + commit + tag -------------------------------
 apply_version() {
   info "Writing v${BOLD}${VERSION}${RESET} into every file that states it..."
   npm version "$VERSION" --no-git-tag-version --allow-same-version >/dev/null
   node scripts/set-version.mjs "$VERSION"
 
-  info "Updating CHANGELOG.md..."
+  info "Updating CHANGELOG.md (${LABEL})..."
   # Notes go via stdin — they are multi-line markdown with quotes and backticks,
   # and passing that as a shell argument is how a changelog gets mangled.
-  printf '%s\n' "$NOTES" | node scripts/add-changelog-entry.mjs "$VERSION"
+  # `--replace` because this script is re-runnable by design: a run that failed in
+  # CI leaves the entry already committed, and the natural recovery is to run again.
+  printf '%s\n' "$NOTES" | node scripts/add-changelog-entry.mjs "$LABEL" --replace
 }
 
 commit_tag_push() {
-  local n=1
-  while git rev-parse "v${VERSION}-beta.${n}" >/dev/null 2>&1; do n=$((n + 1)); done
-  local tag="v${VERSION}-beta.${n}"
+  local tag="$TAG"
 
   if [[ "$DRY_RUN" == "true" ]]; then
     echo ""
@@ -262,6 +278,7 @@ echo ""
 
 preflight
 read_version
+resolve_tag
 draft_notes
 run_gates
 apply_version
