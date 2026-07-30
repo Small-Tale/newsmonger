@@ -14,6 +14,15 @@ fields reject semver prerelease suffixes.
 
 <!-- Nothing released yet. The first `npm run release` inserts its entry below. -->
 
+## [0.2.0-beta.2] - 2026-07-30
+
+## Developer Experience
+
+- `npm run test:all` now runs the Rust gates (`cargo fmt --check`, clippy in both debug and release profiles, and `cargo test`) alongside the existing typecheck, lint, unit, and E2E steps.
+- New `npm run gates:rust` runs just the Rust gates on their own.
+- The Rust gates skip with a visible notice when no `cargo` toolchain is present, so the JavaScript gates stay runnable without Rust; set `RUST_GATES=required` to make a missing toolchain a failure instead.
+- CI now runs `cargo test` in the Tauri job.
+
 ## [0.2.0-beta.1] - 2026-07-30
 
 ## Features
