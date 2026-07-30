@@ -46,7 +46,17 @@ jobs:
     # nowhere else. macos-latest is arm64, which matches the only target that has
     # ever been bundle-verified (FR-5.3).
     runs-on: macos-latest
-    timeout-minutes: 60
+    # 120, not 60. The first real run of this workflow signed everything cleanly
+    # in ~8 seconds and then sat in `notarytool` for **57 minutes** without a
+    # verdict before the 60-minute cap cancelled the job — the cleanup line
+    # `Terminate orphan process: notarytool` is the tell. Notarization is usually
+    # 5–15 minutes, but a first submission under a new Team ID is commonly far
+    # slower and Apple's queue can stall for hours. Nothing was wrong with the
+    # bundle; the cap was just tighter than Apple's worst case.
+    #
+    # Raising it costs nothing when notarization is fast — the job exits when the
+    # work finishes, not when the timer does.
+    timeout-minutes: 120
 
     steps:
       - uses: actions/checkout@v4
@@ -123,6 +133,26 @@ jobs:
         # src-tauri/target/release/bundle/..., and passing an explicit target
         # moves everything under src-tauri/target/<triple>/release/bundle/.
         run: npm run tauri:build
+
+      # Ask Apple what it thinks happened, when the build step fails.
+      #
+      # Tauri drives `notarytool` internally and swallows its output, so a failed
+      # run shows one "Notarizing …" line and then nothing (NEWS-197). That makes
+      # a slow Apple queue and a genuine *rejection* look almost identical — and a
+      # rejection is exactly when you need the reason. This prints the recent
+      # submission history, which distinguishes them in one line: `In Progress`
+      # means Apple is still thinking, `Invalid` means the bundle was refused.
+      - name: On failure, dump Apple's notarization history
+        if: failure()
+        continue-on-error: true
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          xcrun notarytool history \
+            --apple-id "$APPLE_ID" --team-id "$APPLE_TEAM_ID" --password "$APPLE_PASSWORD" \
+            2>&1 | head -40
 
       # The gate that matters. The build machine cannot test what it needs to —
       # it trusts its own certificate and never quarantines a file it made — so
