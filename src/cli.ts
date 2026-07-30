@@ -1,6 +1,7 @@
 import v8 from 'node:v8';
 
 import { createMockProvider, resolveProvider } from './ai/providers/index.js';
+import { PROVIDER_NAMES } from './ai/types.js';
 import { probeLink } from './ai/verify-links.js';
 import { Attendance } from './attendance.js';
 import type { ProviderResolver } from './checks.js';
@@ -20,8 +21,15 @@ async function main(): Promise<void> {
     options = parseArgs(process.argv.slice(2));
   } catch (err) {
     console.error(err instanceof Error ? err.message : String(err));
+    // The provider list is interpolated from PROVIDER_NAMES rather than written
+    // out (NEWS-204). Hardcoded, it had drifted twice over: it advertised
+    // `ollama`, which is not a provider, and omitted `claude-cli` and `codex-cli`,
+    // which are — so the one place a user goes when they have got the flag wrong
+    // was itself wrong. The binary name was also still `news`, from before the
+    // NEWS-164 rename.
     console.error(
-      'usage: news [--port N] [--data-dir PATH] [--provider auto|anthropic|openai|ollama|mock] [--model ID] [--endpoint URL] [--no-open] [--strict-port] [--ai-test]',
+      `usage: newsmonger [--port N] [--data-dir PATH] [--provider ${PROVIDER_NAMES.join('|')}] ` +
+        '[--model ID] [--endpoint URL] [--no-open] [--strict-port] [--ai-test]',
     );
     process.exit(1);
   }
