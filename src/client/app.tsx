@@ -51,7 +51,7 @@ import {
 } from './api.js';
 import { outletFor, publishedLabel } from './attribution.js';
 import { buildDiagnostics, formatDuration, runRows } from './diagnostics.js';
-import { dialRemaining } from './dial.js';
+import { dialCountdownMs, dialRemaining, formatCountdown } from './dial.js';
 import type { TunerState } from './discover.js';
 import {
   currentCandidate,
@@ -201,13 +201,18 @@ function dialJsx(topic: Topic, checking: boolean, intervalMs: number): SafeHtml 
   const remaining = dialRemaining(topic, intervalMs);
   const filled = (remaining * DIAL_C).toFixed(1);
   const state = checking ? 'checking' : topic.paused ? 'paused' : 'watching';
+  // A duration, not a percentage (NEWS-202). "3% of the interval left" made the
+  // reader do the arithmetic — and they can't, because the tooltip never said what
+  // the interval was. The ring already conveys the proportion; the tooltip's job is
+  // the thing the ring can't show.
+  const countdown = dialCountdownMs(topic, intervalMs);
   const title = checking
     ? 'Checking now'
     : topic.paused
       ? 'Paused'
-      : topic.lastCheckedAt === null
+      : topic.lastCheckedAt === null || countdown === null
         ? 'Waiting for first check'
-        : `${Math.round(remaining * 100)}% of the interval left before the next check`;
+        : `Next check ${formatCountdown(countdown)}`;
   return (
     <span class={`dial ${state}`} title={title} aria-hidden="true">
       <svg viewBox="0 0 20 20" width="20" height="20">

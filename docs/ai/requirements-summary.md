@@ -155,6 +155,8 @@ Default Anthropic provider (`claude-opus-4-8` + web search), prompt-level exclus
 
 Header/interval/check-all, topics panel with actions + confirm-delete, newest-first feed with source links, error + last-failure banners, 4 s visible-tab polling, empty states, light/dark. kerf structural conventions documented and E2E-regression-tested.
 
+- **NEWS-202 (requirement change): the dial tooltip shows a duration, not a percentage.** "3% of the interval left" required arithmetic from an interval the tooltip never named. Now "Next check in 42m", via pure `dialCountdownMs`/`formatCountdown` in `src/client/dial.ts` (13 unit tests) plus an E2E assertion on the rendered `title`, since the string is assembled in `dialJsx` rather than the helpers. Rounds **down** to match the adjacent "checked 23h ago" label; "in under a minute" rather than "due now" while the ring is visibly non-empty; paused / never-checked keep their own wording.
+
 ## [4 — CLI, Server, and Storage](../4-cli-server-storage.md) — Shipped
 
 Flags, usage errors, readiness line (`running at ` — synced with Tauri shell), clean shutdown, localhost-only Hono server with port fallback, zod-validated API, atomic single-file JSON store with corrupt-file recovery.

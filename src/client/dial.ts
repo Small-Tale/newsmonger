@@ -25,3 +25,50 @@ export function dialRemaining(topic: Pick<Topic, 'lastCheckedAt' | 'paused'>, in
   if (!Number.isFinite(elapsed)) return 1;
   return Math.min(1, Math.max(0, 1 - elapsed / intervalMs));
 }
+
+/**
+ * Milliseconds until this topic's next automatic check (NEWS-202).
+ *
+ * `null` when a countdown would be meaningless — never checked, paused, or an
+ * unparseable timestamp. Those states already have their own tooltip wording, and
+ * returning 0 for them would claim a check is imminent when none is scheduled.
+ *
+ * Separate from `dialRemaining` rather than derived from it: that returns a
+ * *fraction* for drawing the ring, and multiplying it back out by the interval
+ * would reintroduce the rounding it already did.
+ */
+export function dialCountdownMs(
+  topic: Pick<Topic, 'lastCheckedAt' | 'paused'>,
+  intervalMs: number,
+): number | null {
+  if (topic.lastCheckedAt === null || topic.paused) return null;
+  // A non-positive interval means "no waiting period", i.e. due now.
+  if (!Number.isFinite(intervalMs) || intervalMs <= 0) return 0;
+  const elapsed = Date.now() - Date.parse(topic.lastCheckedAt);
+  if (!Number.isFinite(elapsed)) return null;
+  // Clamped: an overdue check is "due now", never a negative countdown. A
+  // `lastCheckedAt` in the future is capped at the full interval rather than
+  // promising a check further out than the schedule allows.
+  return Math.min(intervalMs, Math.max(0, intervalMs - elapsed));
+}
+
+/**
+ * A duration as the tooltip says it (NEWS-202).
+ *
+ * Deliberately the same compact vocabulary as the "checked 23h ago" label the
+ * dial sits beside — `42m`, `3h`, `2d` — so a row doesn't mix two ways of saying
+ * how long. Coarse on purpose: the check fires on a minute tick, so second-level
+ * precision would be false, and a tooltip that changes while you read it is worse
+ * than one that rounds.
+ */
+export function formatCountdown(ms: number): string {
+  if (ms <= 0) return 'due now';
+  // Not "due now" — there is still time left, and saying otherwise would have the
+  // tooltip contradict a ring that is visibly not empty.
+  if (ms < 60_000) return 'in under a minute';
+  const minutes = Math.floor(ms / 60_000);
+  if (minutes < 60) return `in ${minutes}m`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `in ${hours}h`;
+  return `in ${Math.floor(hours / 24)}d`;
+}

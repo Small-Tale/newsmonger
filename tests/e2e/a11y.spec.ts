@@ -248,3 +248,43 @@ test('the dial stays visible on a selected row, in both themes (NEWS-153)', asyn
   await page.emulateMedia({ colorScheme: 'light' });
   await topicAction(page, row, 'delete');
 });
+
+test('the dial tooltip counts down in real time, not in percent (NEWS-202)', async ({ page }) => {
+  // It used to read "3% of the interval left before the next check", which asked
+  // the reader to do arithmetic from a number the tooltip never gave them — the
+  // interval. The ring already shows the proportion; the tooltip's job is the
+  // duration, which the ring cannot express.
+  //
+  // Driven through the real UI because the string is assembled in the component,
+  // not in the pure helper the unit tests cover: `dial.ts` could be perfect while
+  // `dialJsx` still stitched a percentage into the title.
+  await page.goto('/');
+  await page.fill('.add-topic input', 'Dial Countdown');
+  await page.press('.add-topic input', 'Enter');
+  const row = page.locator('.topic', { hasText: 'Dial Countdown' });
+  await expect(row).toBeVisible();
+
+  const dial = row.locator('.dial');
+
+  // Not asserting the "Waiting for first check" state here: a newly added topic
+  // is checked automatically (FR, NEWS-54), so that state is gone before the row
+  // can be inspected — this test first asserted it and found the tooltip already
+  // reading "Next check in 23h". The unit tests cover the null-countdown branch
+  // directly, which is the reliable place for it.
+  await expect(row).toContainText('checked', { timeout: 15_000 });
+
+  const title = await dial.getAttribute('title');
+  expect(title, 'tooltip after a check').toMatch(
+    /^Next check (due now|in under a minute|in \d+[mhd])$/,
+  );
+  // The requirement change, asserted where it is user-visible rather than only in
+  // the formatter.
+  expect(title ?? '').not.toContain('%');
+
+  // Pausing stops the interval, so the countdown must give way rather than keep
+  // ticking toward a check that will never fire.
+  await topicAction(page, row, 'pause');
+  await expect(dial).toHaveAttribute('title', 'Paused');
+
+  await topicAction(page, row, 'delete');
+});
