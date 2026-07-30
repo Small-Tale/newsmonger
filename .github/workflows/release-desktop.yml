@@ -161,72 +161,6 @@ jobs:
           releaseId: ${{ needs.create-release.outputs.release_id }}
           args: --target ${{ matrix.target }}
 
-  # Notarize the .dmg files, which tauri-action does not (NEWS-200).
-  #
-  # THE ONE DELIBERATE DEVIATION FROM GLASSBOX here, and it exists because
-  # glassbox's own shipped dmg fails. Downloaded from its v1.0.0 release and
-  # assessed the way Gatekeeper does:
-  #
-  #   $ xcrun stapler validate Glassbox-1.0.0-macOS-Apple-Silicon.dmg
-  #   ... does not have a ticket stapled to it.
-  #   $ spctl --assess --type open --context context:primary-signature -vvv ...
-  #   rejected
-  #   source=Unnotarized Developer ID
-  #
-  # Tauri notarizes and staples the .app, then builds the .dmg from it and only
-  # *signs* the dmg. But the dmg is what a person downloads, and a downloaded dmg
-  # is quarantined — Gatekeeper assesses the disk image itself and refuses a
-  # signed-but-un-notarized one with "Apple could not verify … is free of
-  # malware." The notarized app inside does not help; nobody can reach it to run it.
-  #
-  # Ordered before rename-assets and publish-release so a failure here leaves the
-  # release a draft rather than publishing something Gatekeeper blocks.
-  #
-  # macOS-only: Linux and Windows installers have no notarization concept.
-  notarize-dmg:
-    needs: [create-release, build]
-    runs-on: macos-latest
-    timeout-minutes: 120
-    steps:
-      - name: Notarize and staple every .dmg on the release
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          RELEASE_ID: ${{ needs.create-release.outputs.release_id }}
-          APPLE_ID: ${{ secrets.APPLE_ID }}
-          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
-          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-        run: |
-          set -euo pipefail
-          TAG="${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}"
-
-          assets=$(gh api "repos/${GITHUB_REPOSITORY}/releases/${RELEASE_ID}/assets" \
-            --paginate --jq '.[] | select(.name | endswith(".dmg")) | "\(.id)\t\(.name)"')
-          [ -n "$assets" ] || { echo "::error::No .dmg assets on the release to notarize."; exit 1; }
-
-          # A here-string, not a pipe: `while … | read` runs the loop in a subshell
-          # where `set -e` cannot fail the step, so a notarization error would be
-          # silently swallowed. This is a release gate, so it has to be able to fail.
-          while IFS="$(printf '\t')" read -r id name; do
-            [ -n "$name" ] || continue
-            echo "==> $name"
-            # Fetch, notarize, staple, replace. It has to be replaced rather than
-            # patched: stapling a ticket rewrites the file's bytes.
-            gh api -H "Accept: application/octet-stream" \
-              "repos/${GITHUB_REPOSITORY}/releases/assets/${id}" > "$name"
-            xcrun notarytool submit "$name" \
-              --apple-id "$APPLE_ID" --team-id "$APPLE_TEAM_ID" --password "$APPLE_PASSWORD" \
-              --wait
-            xcrun stapler staple "$name"
-            # Assert rather than assume — this is the exact check glassbox's
-            # published dmg fails, so proving it passes here is the point.
-            xcrun stapler validate "$name"
-            # Delete then re-upload: the API has no replace-asset-content call.
-            gh api -X DELETE "repos/${GITHUB_REPOSITORY}/releases/assets/${id}"
-            gh release upload "$TAG" "$name" --clobber
-            rm -f "$name"
-            echo "    notarized, stapled, re-uploaded"
-          done <<< "$assets"
-
   # Rename the user-facing installer assets to human-friendly names. Runs once,
   # after every platform shard has uploaded, so the rename is race-free (a single
   # job touching each asset exactly once). The names come from
@@ -234,7 +168,7 @@ jobs:
   # download links — so links and asset names cannot drift apart. Only .dmg files
   # are renamed; the updater's latest.json references the others by original name.
   rename-assets:
-    needs: [create-release, build, notarize-dmg]
+    needs: [create-release, build]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -283,7 +217,7 @@ jobs:
   # `make_latest: 'true'` is the API equivalent of the "Set as the latest release"
   # checkbox — explicit so the flip can't be silently downgraded by repo settings.
   publish-release:
-    needs: [create-release, build, notarize-dmg, rename-assets]
+    needs: [create-release, build, rename-assets]
     runs-on: ubuntu-latest
     steps:
       - name: Flip release from draft → published
