@@ -54,24 +54,10 @@ Everything below is a **decision, not a default**. A shared card takes a publish
 
 ## 27.5 — What this costs
 
-- **FR-27.14** *(Decided, NEWS-167)* **Domotion is an external tool the user installs, not a dependency this project ships.** The app detects a global install, enables the briefing features when it finds a usable one, and otherwise explains how to get it. This is the same relationship the project already has with ffmpeg (FR-27.16), and for the same reasons — plus two of its own:
+- **FR-27.14** *(Design only)* Rendering requires **Playwright's Chromium**, which enters the sidecar's dependency closure that `scripts/build-sidecar.sh` stages wholesale into the release bundle (FR-5.3). The dependency was accepted knowingly. Two things it commits us to, neither of which should be assumed to work:
 
-  - **It keeps `sharp` out of the shipped closure.** `domotion-svg` depends on sharp, which currently carries four unpatched libvips CVEs with no fixed version available. As a bundled `dependencies` entry those ship inside a notarized desktop app; as an external tool they are the user's own install, entered into knowingly.
-  - **It keeps a second browser engine out of the signed bundle**, so the FR-5.6 hardened-runtime entitlements — scoped deliberately to exactly one JS runtime — do not have to be reopened, and `scripts/build-sidecar.sh` does not stage ~150 MB of Chromium into `resources/server/`.
-
-  The cost is that briefing is **off by default**: a user who never installs domotion never sees it. That is acceptable for an opt-in creative feature and is not acceptable for anything on the app's main path, so nothing on the main path may come to depend on it.
-
-- **FR-27.14a** *(Design only)* **Detection cannot just be `which domotion`.** Three things break that, all three verified on the development machine rather than reasoned about:
-
-  - **A GUI-launched macOS app does not inherit the shell's `PATH`.** It gets roughly `/usr/gnu/bin:/usr/local/bin:/bin:/usr/bin` — no Homebrew, and no nvm. The global bin on the dev machine lives under `~/.nvm/versions/node/v22.14.0/bin`, a path that is **version-specific** and set up by shell rc files. A packaged Newsmonger would find nothing while the same machine's terminal finds it immediately, which is the worst kind of bug report to receive.
-  - **`PATH` can resolve to the wrong copy.** On the dev machine `which domotion` resolves to a *project-local* `node_modules/.bin` in an unrelated repo, shadowing the global install entirely.
-  - So detection must probe **known install roots** (`npm root -g`, nvm's versioned directories, Homebrew prefixes, `NEWSMONGER_DOMOTION` as an explicit override) as well as `PATH`, and it must report *which* binary it chose so a wrong pick is diagnosable.
-
-- **FR-27.14b** *(Design only)* **A version floor is required, and it is not theoretical.** The reel needs `domotion storyboard`, and the copy globally installed on the development machine is **0.13.3**, which has only `capture` and `animate` — no `storyboard`, no `template`, no `composite`, and no `svg-to-image` bin at all. A presence check alone would enable the feature and then fail at render time with an unhelpful CLI error.
-
-  So: resolve the binary, ask it for its version, and compare against a declared minimum. Below the floor is a *different message* from absent — "update domotion" and "install domotion" are different problems and the user can only act on the right one.
-
-- **FR-27.14c** *(Design only)* Because the tool is external, integration happens over the **CLI and the filesystem** — `domotion capture`, `domotion storyboard`, `svg-to-video` — not through the programmatic API. The library's named exports are unavailable to us by construction. This is a real constraint on how the generator is written and is not a detail to discover halfway through.
+  - The hardened-runtime entitlements were scoped to exactly **one** JS runtime (FR-5.6). A second browser engine spawning its own subprocesses needs the entitlement set re-verified, not merely extended — this is the failure mode that signs, notarizes and staples cleanly and then dies at launch on someone else's Mac.
+  - Playwright normally fetches its browser on first use. A packaged app cannot rely on that at runtime, so Chromium must be staged into the bundle at build time and resolved from there.
 
 - **FR-27.15** *(Design only)* Rendering is a **background job with progress**, never a synchronous request handler. A 5-scene reel measured 10.7 s and a real digest is longer; video export runs at roughly 2.4× realtime on top of that. The check runner and `src/client/discover-progress.ts` already establish the pattern.
 
