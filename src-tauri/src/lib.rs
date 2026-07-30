@@ -138,7 +138,9 @@ pub fn run() {
                 #[cfg(not(debug_assertions))]
                 {
                     use tauri_plugin_updater::UpdaterExt;
-                    let Ok(updater) = handle.updater() else { return };
+                    let Ok(updater) = handle.updater() else {
+                        return;
+                    };
                     let Ok(Some(update)) = updater.check().await else {
                         return;
                     };

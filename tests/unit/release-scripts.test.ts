@@ -59,6 +59,7 @@ describe('the release scripts are wired up (NEWS-194)', () => {
     'scripts/set-version.mjs',
     'scripts/add-changelog-entry.mjs',
     'scripts/ensure-sidecar-stub.sh',
+    'scripts/gates-rust.sh',
     'tests/smoke/smoke-test.sh',
   ])(
     '%s exists and is executable',
@@ -77,6 +78,7 @@ describe('the release scripts are wired up (NEWS-194)', () => {
     'scripts/release-beta-auto.sh',
     'scripts/tauri-build-local.sh',
     'scripts/ensure-sidecar-stub.sh',
+    'scripts/gates-rust.sh',
     'tests/smoke/smoke-test.sh',
   ])(
     '%s parses as bash',
@@ -93,6 +95,7 @@ describe('the release scripts are wired up (NEWS-194)', () => {
     'scripts/release-beta-auto.sh',
     'scripts/tauri-build-local.sh',
     'scripts/ensure-sidecar-stub.sh',
+    'scripts/gates-rust.sh',
     'tests/smoke/smoke-test.sh',
   ])(
     '%s uses no bash 4 builtins',
@@ -592,5 +595,57 @@ describe('the published-install smoke test (NEWS-201)', () => {
     // for a command that ran perfectly — which cost a debugging round.
     const sh = src();
     expect(sh).toContain('HELP_OUTPUT=$($NEWSMONGER --help 2>&1 || true)');
+  });
+});
+
+describe('the local gates cover what CI checks', () => {
+  const read = (rel: string): string => fs.readFileSync(path.join(root, rel), 'utf8');
+
+  // This exists because it went wrong. `test:all` was typecheck + lint + unit +
+  // E2E and contained **no Rust**, while ci.yml has a whole Tauri job — so the
+  // command whose entire promise is "everything" passed green with a
+  // `cargo fmt --check` violation in src-tauri/src/lib.rs, and main was red for
+  // two commits before anyone opened Actions. Clippy had been run by hand;
+  // nothing named the formatter, so nothing ran it.
+  it('runs the Rust gates as part of test:all', () => {
+    expect(read('scripts/test-all.sh')).toContain('bash scripts/gates-rust.sh');
+  });
+
+  it('exposes the Rust gates on their own too', () => {
+    // Parsed through zod rather than cast — same rule as the rest of the project:
+    // validate, don't assert (and `strictTypeChecked` rejects the cast anyway).
+    const { scripts } = z
+      .object({ scripts: z.record(z.string(), z.string()) })
+      .parse(JSON.parse(read('package.json')));
+    expect(scripts['gates:rust']).toBe('bash scripts/gates-rust.sh');
+  });
+
+  it.each([
+    ['cargo fmt', /cargo fmt[^\n]*--check/],
+    ['clippy (debug)', /cargo clippy(?![^\n]*--release)[^\n]*-D warnings/],
+    ['clippy (release)', /cargo clippy[^\n]*--release[^\n]*-D warnings/],
+    ['cargo test', /cargo test/],
+  ])('checks %s locally, matching the CI job', (_label, pattern) => {
+    // Drift is the risk: a check added to ci.yml and not here reintroduces exactly
+    // the blind spot above. Both clippy profiles are required — the updater
+    // commands are cfg(not(debug_assertions)), so a debug-only clippy never
+    // compiles their bodies (NEWS-89).
+    expect(read('scripts/gates-rust.sh')).toMatch(pattern);
+    expect(read('.github/workflows/ci.yml')).toMatch(pattern);
+  });
+
+  it('stubs the bundle paths before running cargo', () => {
+    // Every cargo command fails before compiling without them — tauri-build
+    // validates externalBin/resources inside its build script.
+    expect(read('scripts/gates-rust.sh')).toContain('bash scripts/ensure-sidecar-stub.sh');
+  });
+
+  it('skips rather than fails when there is no cargo toolchain', () => {
+    // The JS gates must stay runnable on a machine without Rust. Loudly, though —
+    // a silent skip is how this class of gap opens in the first place.
+    const src = read('scripts/gates-rust.sh');
+    expect(src).toContain('command -v cargo');
+    expect(src).toContain('SKIPPING');
+    expect(src).toContain('RUST_GATES');
   });
 });

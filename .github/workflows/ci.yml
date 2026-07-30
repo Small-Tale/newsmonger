@@ -96,3 +96,11 @@ jobs:
       - name: Check (release cfg)
         working-directory: src-tauri
         run: cargo clippy --release --all-targets -- -D warnings
+
+      # There are no Rust tests today, so this is a no-op that costs seconds — but
+      # it means the first one someone writes is run rather than silently ignored,
+      # and it keeps this job identical to `release-candidate.yml`'s and to
+      # `scripts/gates-rust.sh` (asserted by tests/unit/release-scripts.test.ts).
+      - name: Test
+        working-directory: src-tauri
+        run: cargo test

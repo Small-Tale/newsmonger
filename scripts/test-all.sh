@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Full gate: typecheck + lint + unit tests + E2E tests, with merged coverage.
+# Full gate: typecheck + lint + Rust + unit tests + E2E tests, with merged coverage.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
@@ -8,6 +8,13 @@ npm run typecheck
 
 echo "== lint =="
 npm run lint
+
+# The Rust gates belong in "everything" (NEWS-201 follow-on). They were absent,
+# so `test:all` passed green with a `cargo fmt --check` violation in
+# src-tauri/src/lib.rs and main went red for two commits. Skips itself with a
+# notice when there's no cargo; see scripts/gates-rust.sh.
+echo "== rust (fmt + clippy debug/release + test) =="
+bash scripts/gates-rust.sh
 
 # Client assets, before the unit tests rather than only before E2E (NEWS-191).
 #
