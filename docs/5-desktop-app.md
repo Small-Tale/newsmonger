@@ -263,6 +263,24 @@ For when it is time, Tauri v2 offers two routes. `bundle.windows.certificateThum
 ### Doing a signed local build
 
 ```sh
+npm run tauri:build:local                     # sign + notarize + staple, then verify
+npm run tauri:build:local -- --no-notarize    # sign only — much faster while iterating
+npm run tauri:build:local -- --check          # resolve the identity and exit
+```
+
+`scripts/tauri-build-local.sh` (NEWS-198) supplies the credentials `npm run tauri:build` lacks, without any of them touching a command line. It **resolves `APPLE_SIGNING_IDENTITY` from the login keychain by organization** and derives `APPLE_TEAM_ID` from the identity's own parenthesised suffix, so the two cannot disagree. That is not convenience: this machine carries **five** Developer ID certificates, four of them personal, and signing a Small Tale release with a personal one succeeds locally and is wrong. It refuses to guess if more than one org identity matches.
+
+The app-specific password is read with `read -rs`, so it never reaches argv, the shell history, or another user's `ps`. `--check` exists because the alternative to verifying your setup in one second is finding out fifteen minutes into a build.
+
+`scripts/verify-signing.sh` runs automatically afterwards — a production build nobody verified is exactly what FR-5.7 exists to prevent.
+
+**It does not replace the release workflow.** Locally, signing comes from the login keychain; in CI a `.p12` is imported into a throwaway keychain (`APPLE_CERTIFICATE` + `APPLE_CERTIFICATE_PASSWORD` + `KEYCHAIN_PASSWORD`). That path exists only there, so a green local build says nothing about it — and this repo has already had two "passes on a dev machine, fails on a runner" bugs (NEWS-191, NEWS-193). Nor does it replace opening a *downloaded* `.dmg`: a file this machine produced is never quarantined.
+
+> **macOS ships bash 3.2**, and `/usr/bin/env bash` resolves to it. The first version of this script used `mapfile` and died instantly on `command not found`; `bash -n` passed, because a missing builtin is a runtime failure rather than a syntax error. `tests/unit/release-scripts.test.ts` now greps the scripts for bash-4-only builtins for that reason.
+
+### Doing it by hand
+
+```sh
 # Signing from the login keychain + notarization via app-specific password
 APPLE_SIGNING_IDENTITY="Developer ID Application: Small Tale Inc. (TEAMID)" \
 APPLE_ID="you@example.com" \

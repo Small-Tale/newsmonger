@@ -47,6 +47,7 @@ describe('the release scripts are wired up (NEWS-194)', () => {
     ['release', 'bash scripts/release.sh'],
     ['release:beta', 'bash scripts/release.sh --beta'],
     ['release:beta:auto', 'bash scripts/release-beta-auto.sh'],
+    ['tauri:build:local', 'bash scripts/tauri-build-local.sh'],
   ])('npm run %s -> %s', (name, command) => {
     expect(pkg().scripts[name]).toBe(command);
   });
@@ -54,6 +55,7 @@ describe('the release scripts are wired up (NEWS-194)', () => {
   it.each([
     'scripts/release.sh',
     'scripts/release-beta-auto.sh',
+    'scripts/tauri-build-local.sh',
     'scripts/set-version.mjs',
     'scripts/add-changelog-entry.mjs',
   ])(
@@ -68,12 +70,34 @@ describe('the release scripts are wired up (NEWS-194)', () => {
     },
   );
 
-  it.each(['scripts/release.sh', 'scripts/release-beta-auto.sh'])('%s parses as bash', (rel) => {
-    // `bash -n` catches an unclosed quote or `fi`/`done` mismatch without running
-    // anything. These scripts commit and push, so a syntax error found by
-    // executing them is found too late.
-    expect(() => execFileSync('bash', ['-n', path.join(root, rel)])).not.toThrow();
-  });
+  it.each(['scripts/release.sh', 'scripts/release-beta-auto.sh', 'scripts/tauri-build-local.sh'])(
+    '%s parses as bash',
+    (rel) => {
+      // `bash -n` catches an unclosed quote or `fi`/`done` mismatch without
+      // running anything. These scripts commit, push and sign, so a syntax error
+      // found by executing them is found too late.
+      expect(() => execFileSync('bash', ['-n', path.join(root, rel)])).not.toThrow();
+    },
+  );
+
+  it.each(['scripts/release.sh', 'scripts/release-beta-auto.sh', 'scripts/tauri-build-local.sh'])(
+    '%s uses no bash 4 builtins',
+    (rel) => {
+      // macOS ships bash **3.2** and `/usr/bin/env bash` resolves to it. The first
+      // version of `tauri-build-local.sh` used `mapfile` and died instantly with
+      // "command not found" — and `bash -n` above passed, because a missing
+      // builtin is a runtime failure, not a syntax error.
+      const src = fs.readFileSync(path.join(root, rel), 'utf8');
+      // Only flag real invocations, not the comments explaining why they're absent.
+      const code = src
+        .split('\n')
+        .filter((l) => !/^\s*#/.test(l))
+        .join('\n');
+      for (const builtin of ['mapfile', 'readarray', 'declare -A', 'wait -n']) {
+        expect(code, `${rel} uses ${builtin}, which bash 3.2 lacks`).not.toContain(builtin);
+      }
+    },
+  );
 
   it('keeps .release-state.json out of git', () => {
     // The interactive flow writes it at the repo root, and it holds draft release
