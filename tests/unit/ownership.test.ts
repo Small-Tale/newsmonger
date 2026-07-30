@@ -35,6 +35,7 @@ const readJson = (rel: string): unknown => JSON.parse(fs.readFileSync(path.join(
 const PackageSchema = z.object({
   name: z.string().min(1),
   author: z.string().min(1),
+  license: z.string().min(1),
   repository: z.object({ type: z.literal('git'), url: z.string().min(1) }),
   bugs: z.object({ url: z.string().min(1) }),
   homepage: z.string().min(1),
@@ -69,6 +70,43 @@ describe('the package attributes itself to the owning company (NEWS-186)', () =>
     const { author, repository, bugs, homepage } = pkg();
     const owned = [author, repository.url, bugs.url, homepage, tauri().identifier].join(' ').toLowerCase();
     expect(owned).not.toContain('westphal');
+  });
+});
+
+describe('the declared license has actual license text (NEWS-187)', () => {
+  const license = (): string => fs.readFileSync(path.join(root, 'LICENSE'), 'utf8');
+
+  it('has a LICENSE file at all', () => {
+    // The whole reason NEWS-187 existed. `package.json` claimed MIT for months
+    // with no license text anywhere, and GitHub — which reads LICENSE files, not
+    // `package.json` — reported the public repo as having no license. Default
+    // copyright says "all rights reserved" while the manifest says "take it",
+    // and nobody could tell which governed.
+    expect(fs.existsSync(path.join(root, 'LICENSE'))).toBe(true);
+  });
+
+  it('names the same license package.json declares', () => {
+    // Two declarations of one fact, in files nothing links together. Changing
+    // one and not the other is the failure this catches.
+    expect(license()).toContain(`${pkg().license} License`);
+  });
+
+  it('names the copyright holder as the package author', () => {
+    expect(license()).toContain('Copyright (c) 2026 Small Tale Inc.');
+    expect(license()).toContain(pkg().author);
+  });
+
+  it('contains the actual grant, not just a header', () => {
+    // A file that says "MIT License" and stops grants nothing. These two clauses
+    // are the operative parts — the permission grant and the warranty
+    // disclaimer — so their presence distinguishes real license text from a
+    // placeholder somebody meant to fill in later.
+    expect(license()).toContain('Permission is hereby granted, free of charge');
+    expect(license()).toContain('WITHOUT WARRANTY OF ANY KIND');
+  });
+
+  it('attributes copyright to the company, not a person', () => {
+    expect(license().toLowerCase()).not.toContain('westphal');
   });
 });
 
