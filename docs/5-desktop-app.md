@@ -34,6 +34,14 @@ The check is skipped when cross-compiling, since the downloaded Node binary won'
 
   `tests/unit/tauri-icons.test.ts` closes the cheap half: the array is non-empty, every declared path resolves on disk, an `.icns` and an `.ico` are both present, none is suspiciously small, and the `.icns` starts with the `icns` magic bytes — because `tauri icon` writes `icon.png` beside it and copying the wrong one over would pass every other check while shipping a file macOS cannot read. A full `tauri build` needs a Rust toolchain and minutes, so the *bundled* result stays in the manual plan.
 
+- **FR-5.9** *(Shipped, NEWS-182 follow-on / NEWS-184)* The binary is named **`Newsmonger`**, via an explicit `[[bin]]` target in `src-tauri/Cargo.toml` — not the Cargo *package* name, which is lowercase by crates.io convention.
+
+  macOS names a **running** application from `CFBundleExecutable`, not from `CFBundleName` or `CFBundleDisplayName`. Both of the latter were already correct and the Dock still showed `newsmonger`: hovering the Dock icon, its context menu, and the menu bar all read the executable's filename. Finder and Spotlight, which do read `CFBundleName`, showed `Newsmonger` — so the app had two names depending on where you looked, and `lsappinfo` confirmed a third layer, with helper processes registering as `newsmonger Networking` and `newsmonger Web Content`.
+
+  Renamed in `Cargo.toml` rather than through `tauri.conf.json`'s **`mainBinaryName`** deliberately: that option only renames the output during `tauri build`, so `tauri dev` would have kept the lowercase name. Having cargo emit the right name covers both, and it is what the Tauri config schema itself recommends ("change the package name or set the name field instead").
+
+  The sidecar (`binaries/newsmonger-node`) is a **separate** name and stays lowercase — `externalBin` resolves `<name>-<target-triple>` on disk, so it is unrelated to the app binary. `tests/unit/tauri-naming.test.ts` asserts they cannot collide.
+
 - **FR-5.4** *(Shipped, verified)* The spawned server exits itself when its parent dies without cleanup: the shell sets `NEWSMONGER_WATCH_PARENT=1`, and the server polls `process.ppid` every 2 s, shutting down when re-parented to init. This covers hard kills (SIGTERM/SIGKILL of the shell, where `RunEvent::Exit` never fires) and `tauri dev` rebuild restarts — each of which would otherwise orphan a server and push later instances down the port-fallback chain. Dev mode deliberately omits `--strict-port` for the same reason (glassbox precedent).
 
 ### Debug aids

@@ -8,6 +8,22 @@ edition = "2021"
 name = "newsmonger_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
+# The binary is `Newsmonger`, not the package's lowercase `newsmonger` (NEWS-184).
+#
+# macOS names a *running* application from `CFBundleExecutable` — not from
+# `CFBundleName` or `CFBundleDisplayName`, both of which were already correct.
+# So the Dock's hover label, its context menu and the menu bar all read the
+# executable's filename, and showed `newsmonger` while Finder and Spotlight
+# showed `Newsmonger`.
+#
+# Renaming the binary here rather than via tauri.conf.json's `mainBinaryName`
+# fixes `tauri dev` too: that option only renames during `tauri build`, whereas
+# cargo emitting the right name covers both. It is also what the Tauri config
+# schema recommends — set the target's name rather than override it downstream.
+[[bin]]
+name = "Newsmonger"
+path = "src/main.rs"
+
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
 
