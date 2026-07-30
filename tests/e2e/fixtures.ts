@@ -96,6 +96,31 @@ let covFileCounter = 0;
  */
 export const test = base.extend({
   page: async ({ page }, use) => {
+    // Suppress the first-run wizard's *auto*-open (NEWS-193).
+    //
+    // `maybeOpenOnboarding()` opens it when there are no topics AND no usable
+    // provider AND it hasn't been seen on this device. Every test starts with a
+    // fresh context (empty localStorage) and specs reset topics, so the only
+    // term that varied was "usable provider" — and that is decided by whether
+    // the *host* has a signed-in `claude` or `codex` CLI.
+    //
+    // So the suite passed on a dev machine and could never pass on a CI runner:
+    // there, onboarding opened and `.onboarding-backdrop` intercepted pointer
+    // events for the rest of the run. The tell was that read-only a11y scans
+    // passed and the first test that *clicked* timed out.
+    //
+    // Seeding the flag costs no coverage. No test asserts the auto-open, and the
+    // specs that exercise onboarding open it explicitly via Settings →
+    // `[data-action=rerun-onboarding]`. Deliberately not "give CI an API key":
+    // that would paper over it and assert a state no first-run user is in.
+    await page.addInitScript(() => {
+      try {
+        localStorage.setItem('news:onboarding-seen', '1');
+      } catch {
+        // Storage disabled — the wizard reappears, which is the pre-fix state.
+      }
+    });
+
     const collect = process.env['E2E_COVERAGE'] === '1';
     if (collect) await page.coverage.startJSCoverage({ resetOnNavigation: false });
 
