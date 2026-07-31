@@ -10,6 +10,8 @@ Hybrid model borrowed from glassbox: the Node server is the app in both modes; T
 
   **Verified end to end:** the built `Newsmonger.app` starts its sidecar, serves the real UI (request log shows `GET /` → assets → `/api/state` → `/api/providers`), and leaves no orphaned server on quit. Only macOS (`aarch64-apple-darwin`) has been built and *run as an app*; the Windows `CREATE_NO_WINDOW` flag is still unexecuted.
 
+  **All four targets now bundle in CI** as of `v0.2.0-beta.7`: `.dmg` for both macOS architectures, `.deb`/`.rpm`/`.AppImage` for Linux, and an NSIS `.exe` for Windows, all signed, with the macOS pair notarized and stapled. That exercised the last untaken branch of `build-sidecar.sh` — the Windows `.zip` extraction path, which until then had never run. **Building is not launching**: no Windows or Linux bundle has been installed and opened (NEWS-20).
+
   **Both Linux triples now build their sidecar for real** (NEWS-20): `bash scripts/verify-sidecar-linux.sh` runs `build-sidecar.sh` inside a Linux container for `x86_64-unknown-linux-gnu` and `aarch64-unknown-linux-gnu`, and both produce a correct ELF and pass the isolated boot check, serving all seven static assets.
 
   The container is not a convenience — it is what makes the boot check *run*. That check self-skips when cross-compiling, because the downloaded Node binary can't execute on the build host, so cross-building the Linux sidecar from macOS verifies the download and nothing else. Inside a Linux container the target is the host and the check is real. The repo is mounted read-only and copied in, so a container run cannot leave a Linux `node_modules` or sidecar behind for the next macOS build.
