@@ -65,6 +65,7 @@ describe('the release scripts are wired up (NEWS-194)', () => {
     'scripts/ensure-sidecar-stub.sh',
     'scripts/gates-rust.sh',
     'scripts/notary-watch.sh',
+    'scripts/verify-signing.sh',
     'tests/smoke/smoke-test.sh',
   ])(
     '%s exists and is executable',
@@ -85,6 +86,7 @@ describe('the release scripts are wired up (NEWS-194)', () => {
     'scripts/ensure-sidecar-stub.sh',
     'scripts/gates-rust.sh',
     'scripts/notary-watch.sh',
+    'scripts/verify-signing.sh',
     'tests/smoke/smoke-test.sh',
   ])(
     '%s parses as bash',
@@ -103,6 +105,7 @@ describe('the release scripts are wired up (NEWS-194)', () => {
     'scripts/ensure-sidecar-stub.sh',
     'scripts/gates-rust.sh',
     'scripts/notary-watch.sh',
+    'scripts/verify-signing.sh',
     'tests/smoke/smoke-test.sh',
   ])(
     '%s uses no bash 4 builtins',
@@ -901,5 +904,59 @@ describe('the release workflows keep their notarization diagnostics (NEWS-197)',
     // Losing it does not fail anything — it just lets a stalled submission burn
     // six hours on two macOS runners at 10x billing.
     expect(read(rel)).toContain('timeout-minutes: 120');
+  });
+});
+
+describe('the signing gate is actually wired into the release (NEWS-220)', () => {
+  const read = (rel: string): string => fs.readFileSync(path.join(root, rel), 'utf8');
+  const WORKFLOWS = ['.github/workflows/release-desktop.yml', '.github/workflows/release-candidate.yml'];
+
+  it.each(WORKFLOWS)('%s runs verify-signing.sh on the macOS shards', (rel) => {
+    // FR-5.7 asserts on the build machine what Gatekeeper decides on someone
+    // else's. The old `release.yml` ran it before publishing; the NEWS-201 port
+    // dropped it, and nothing went red — signed releases published without the
+    // check for the whole window. That silence is why this is pinned.
+    const src = read(rel);
+    expect(src, `${rel} should run the signing gate`).toContain('scripts/verify-signing.sh');
+    expect(src).toContain('Verify the bundle is distributable');
+  });
+
+  it.each(WORKFLOWS)('%s lets the signing gate fail the job', (rel) => {
+    // The diagnostics around it are `continue-on-error` on purpose; this must not
+    // be. Every property it checks can be wrong while the build is green, and the
+    // symptom is a user who cannot open the app.
+    //
+    // Comments are stripped first, as elsewhere in this file: these workflows are
+    // heavily commented *about* the very strings being asserted, and the next
+    // step's explanation of why *it* is `continue-on-error` sits between this
+    // step and the following `- name:`.
+    const src = read(rel)
+      .split('\n')
+      .filter((l) => !/^\s*#/.test(l))
+      .join('\n');
+    const step = src.slice(src.indexOf('Verify the bundle is distributable'));
+    const nextStep = step.indexOf('\n      - name:');
+    const body = nextStep === -1 ? step : step.slice(0, nextStep);
+    expect(body, 'the signing gate must not be continue-on-error').not.toContain('continue-on-error');
+  });
+
+  it('discovers the bundle in both layouts, since CI builds with an explicit target', () => {
+    // `tauri-action` passes `--target`, which cargo puts under
+    // `target/<triple>/release/bundle/`; a local build writes
+    // `target/release/bundle/`. A path that only matches one would "pass" in CI
+    // by finding nothing — the exact failure this gate exists to prevent.
+    const src = read('scripts/verify-signing.sh');
+    expect(src).toContain("-path '*/release/bundle/macos/*'");
+    // The depth limit has to clear the triple'd layout, which is one deeper.
+    const depth = /-maxdepth (\d+)/.exec(src)?.[1];
+    expect(Number(depth ?? 0), 'maxdepth must reach <triple>/release/bundle/macos/X.app').toBeGreaterThanOrEqual(6);
+  });
+
+  it('derives the dmg directory from the bundle rather than hardcoding it', () => {
+    // Notarizing the app does not notarize the disk image it ships in, so the
+    // .dmg needs its own stapled ticket — and a hardcoded dmg path would silently
+    // stop matching the moment the app path moved under a target triple.
+    const src = read('scripts/verify-signing.sh');
+    expect(src).toMatch(/DMG_DIR="\$\(dirname "\$\(dirname "\$APP"\)"\)\/dmg"/);
   });
 });

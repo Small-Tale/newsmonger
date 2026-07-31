@@ -191,6 +191,27 @@ jobs:
         shell: bash
         run: bash scripts/notary-watch.sh report
 
+      # The gate that matters (FR-5.7). The build machine cannot test what it
+      # needs to — it trusts its own certificate and never quarantines a file it
+      # made — so this asserts here what Gatekeeper will decide there: a Developer
+      # ID authority, the hardened runtime, the sidecar's JIT entitlements, the
+      # *absence* of `get-task-allow`, a deep strict verify, and a stapled ticket
+      # on **both** the app and the `.dmg`.
+      #
+      # NOT `continue-on-error`, unlike the diagnostics around it: every one of
+      # these can be wrong while the build is green and the release page looks
+      # right, and the symptom is a user who cannot open the app. Failing the job
+      # is the point (NEWS-220).
+      #
+      # The assets are already uploaded by this step — `tauri-action` uploads as
+      # it builds — but the release is still a **draft** until `publish-release`
+      # flips it, and this job is in that job's `needs`. So a failure here stops
+      # anything reaching a user, which is the property worth having.
+      - name: Verify the bundle is distributable
+        if: runner.os == 'macOS'
+        shell: bash
+        run: bash scripts/verify-signing.sh
+
       # Restored with NEWS-197 (NEWS-194 added it to the workflow NEWS-201
       # deleted). `In Progress` means Apple is still thinking, `Invalid` means it
       # refused — one word, and the fixes share nothing. Also prints the newest

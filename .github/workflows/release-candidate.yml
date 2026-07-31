@@ -518,6 +518,16 @@ jobs:
         shell: bash
         run: bash scripts/notary-watch.sh report
 
+      # FR-5.7, restored with NEWS-220 — see release-desktop.yml for the full
+      # reasoning. Deliberately **not** `continue-on-error`: `publish-release`
+      # needs this job, so a rejected bundle keeps the prerelease a draft rather
+      # than handing testers something Gatekeeper will block. A beta whose whole
+      # purpose is to be installed is exactly where this must not be skipped.
+      - name: Verify the bundle is distributable
+        if: runner.os == 'macOS'
+        shell: bash
+        run: bash scripts/verify-signing.sh
+
       - name: On failure, dump Apple's notarization history
         if: failure() && runner.os == 'macOS'
         continue-on-error: true

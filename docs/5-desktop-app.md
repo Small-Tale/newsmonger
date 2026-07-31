@@ -91,7 +91,11 @@ An unsigned bundle opens on the machine that built it and nowhere else. Gatekeep
 
   Run against the current unsigned build it reports exactly what is missing, including that the sidecar inherits `get-task-allow` from Node's own signature. That was found by running it, not by reasoning about it.
 
-  > ⚠️ **This step is not currently run by either release workflow.** The old `release.yml` ran it before publishing; the NEWS-201 port did not carry it over. Tracked as **NEWS-220**.
+  **It runs on the macOS shards of both release workflows** (NEWS-220), and is deliberately *not* `continue-on-error` where the diagnostics beside it are: `publish-release` needs the build job, so a rejected bundle keeps the release a **draft** rather than handing anyone something Gatekeeper will block.
+
+  It was absent from CI between NEWS-201 (which deleted the `release.yml` that ran it) and NEWS-220. Nothing went red in that window, which is the whole problem with losing a gate: the signal that it is missing is indistinguishable from the signal that it passes.
+
+  The bundle is **discovered**, not assumed: a local `npm run tauri:build` writes `src-tauri/target/release/bundle/`, while `tauri-action` passes an explicit `--target` and cargo writes `src-tauri/target/<triple>/release/bundle/`. A hardcoded path would match only one — and would "pass" in CI by finding nothing, which is exactly the failure this gate exists to prevent. The `.dmg` directory is derived from the resolved app path for the same reason.
 
 - **FR-5.8** *(Shipped, NEWS-197)* **`bash scripts/notary-watch.sh` makes Apple's queue visible while CI waits on it.** Tauri drives `notarytool` internally and prints one `Notarizing …` line, then nothing until it returns. On this project's first submissions that silence ran **1h38m**, and six of seven submissions sat `In Progress` for hours — one for 10.8. While it is happening, a slow queue and a hung one are indistinguishable, and the visible outcome is an opaque `-1009` or a timeout.
 

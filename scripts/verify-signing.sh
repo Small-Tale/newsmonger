@@ -8,7 +8,7 @@
 # this asserts the properties Gatekeeper will check *there*, here.
 #
 # Usage:
-#   bash scripts/verify-signing.sh                       # default release paths
+#   bash scripts/verify-signing.sh                       # find the built bundle
 #   bash scripts/verify-signing.sh path/to/Newsmonger.app      # explicit bundle
 #
 # Exits non-zero if the bundle would be rejected. Safe to run on an unsigned
@@ -16,8 +16,29 @@
 set -uo pipefail
 cd "$(dirname "$0")/.."
 
-APP="${1:-src-tauri/target/release/bundle/macos/Newsmonger.app}"
-DMG_DIR="src-tauri/target/release/bundle/dmg"
+# The bundle lives in one of two places and the caller should not have to know
+# which (NEWS-220). A local `npm run tauri:build` writes
+# `src-tauri/target/release/bundle/`, but `tauri-action` builds with an explicit
+# `--target`, which cargo puts under `src-tauri/target/<triple>/release/bundle/`.
+# CI passing the wrong one would "pass" by finding nothing, which is the failure
+# this gate exists to prevent — so discovery is the default and `$1` is the
+# override, not the other way round.
+#
+# `find`, not `**`: macOS ships bash 3.2, which has no `globstar`.
+if [ -n "${1:-}" ]; then
+  APP="$1"
+else
+  # Depth 6: the triple'd layout is <triple>/release/bundle/macos/X.app, one
+  # level deeper than the plain one. A too-shallow limit silently finds nothing,
+  # which this gate must never do quietly.
+  APP="$(find src-tauri/target -maxdepth 6 -type d -name '*.app' -path '*/release/bundle/macos/*' 2>/dev/null | head -1)"
+  APP="${APP:-src-tauri/target/release/bundle/macos/Newsmonger.app}"
+fi
+# Derived from the bundle rather than hardcoded, so it follows `$APP` into a
+# triple'd path. Notarizing the app does not notarize the disk image it ships in,
+# so the `.dmg` needs its own stapled ticket — checking the app alone would miss
+# the case where a user's very first double-click is the thing Gatekeeper blocks.
+DMG_DIR="$(dirname "$(dirname "$APP")")/dmg"
 
 fail=0
 ok()   { printf '  \033[32m✓\033[0m %s\n' "$1"; }
