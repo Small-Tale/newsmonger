@@ -792,6 +792,53 @@ describe('the Rust gates skip only where a sibling job covers them', () => {
   });
 });
 
+describe('the beta smoke install (seen failing on v0.2.0-beta.5)', () => {
+  const read = (rel: string): string => fs.readFileSync(path.join(root, rel), 'utf8');
+  const rc = (): string => read('.github/workflows/release-candidate.yml');
+
+  /** Just the `run:` body of the retrying install step. */
+  function installStep(): string {
+    const text = rc();
+    const start = text.indexOf('Install beta globally');
+    expect(start, 'the retrying install step should exist').toBeGreaterThan(-1);
+    const next = text.indexOf('- name:', start);
+    return text.slice(start, next === -1 ? undefined : next);
+  }
+
+  it('fails when the retries run out, rather than exiting 0', () => {
+    // The bug this pins: the original loop's last statement was `sleep 15`,
+    // which succeeds — so an exhausted loop exited 0, the step went green with
+    // nothing installed, and the failure surfaced in the *next* step as a
+    // baffling "newsmonger: not found". A retry loop that cannot fail is not a
+    // retry loop.
+    const step = installStep();
+    expect(step).toContain('exit 1');
+    expect(step).toContain('::error::');
+    // And it must succeed early rather than falling through to the error.
+    expect(step).toContain('exit 0');
+  });
+
+  it('waits long enough for the registry to propagate', () => {
+    // beta.5 404'd for the whole 5 x 15s budget and was installable shortly
+    // after: `publish-beta` succeeding means the registry accepted the tarball,
+    // not that every CDN edge can serve it yet.
+    const step = installStep();
+    const attempts = /for i in ([\d ]+); do/.exec(step)?.[1]?.trim().split(/\s+/).length ?? 0;
+    expect(attempts, 'too few attempts to ride out CDN propagation').toBeGreaterThanOrEqual(8);
+    // Backoff rather than a flat sleep, so the tail is long without the common
+    // case paying for it.
+    expect(step).toMatch(/sleep "\$\{i\}0"/);
+  });
+
+  it('installs the exact published version, not a floating tag', () => {
+    // Installing `@beta` would smoke-test whatever the tag happened to point at,
+    // which on a re-run is a *different* build than the one just published.
+    const step = installStep();
+    expect(step).toContain('newsmonger@$VERSION');
+    expect(step).not.toMatch(/npm install -g newsmonger@beta\b/);
+  });
+});
+
 describe('the notarization watcher (NEWS-197)', () => {
   const script = path.join(root, 'scripts/notary-watch.sh');
 

@@ -676,13 +676,35 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version: ${{ env.NODE_VERSION }}
+      # Two things this has to get right, and the previous version got both
+      # wrong (seen on v0.2.0-beta.5):
+      #
+      # 1. **It must fail when it runs out of attempts.** The old loop ended on
+      #    `sleep`, which succeeds — so an exhausted loop exited 0, the step went
+      #    green with nothing installed, and the failure surfaced one step later
+      #    as a confusing "smoke-test.sh: newsmonger: not found".
+      # 2. **75 seconds is not long enough.** `publish-beta` succeeding means the
+      #    registry accepted the tarball, not that every CDN edge can serve it.
+      #    beta.5 404'd for the whole retry budget and was installable soon after.
+      #
+      # Backs off up to ~6 minutes, and says which version it is waiting for so a
+      # genuine "published the wrong version" never reads as slow propagation.
       - name: Install beta globally (with registry-propagation retry)
+        env:
+          VERSION: ${{ needs.publish-beta.outputs.version }}
         run: |
-          for i in 1 2 3 4 5; do
-            npm install -g newsmonger@${{ needs.publish-beta.outputs.version }} && break
-            echo "Attempt $i failed, waiting 15s for npm registry propagation..."
-            sleep 15
+          for i in 1 2 3 4 5 6 7 8 9 10; do
+            if npm install -g "newsmonger@$VERSION"; then
+              echo "Installed newsmonger@$VERSION on attempt $i."
+              exit 0
+            fi
+            echo "Attempt $i: newsmonger@$VERSION not installable yet; waiting ${i}0s for registry propagation..."
+            sleep "${i}0"
           done
+          echo "::error::newsmonger@$VERSION was still not installable after 10 attempts (~9 minutes)."
+          echo "Published versions:"
+          npm view newsmonger versions --json || true
+          exit 1
       - name: Run smoke tests
         run: bash tests/smoke/smoke-test.sh newsmonger
 
