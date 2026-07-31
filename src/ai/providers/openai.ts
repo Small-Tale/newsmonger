@@ -93,6 +93,9 @@ export function createOpenAIProvider(config: {
   return {
     name: 'openai',
     model,
+    // The Responses API has `reasoning.effort`, but this provider passes none
+    // yet, so a check here always runs at the model's default (NEWS-189/226).
+    effort: '' as const,
     // Metered and billed per token — safe to run on a schedule unattended.
     attended: false,
     isAvailable: async () => (await getApiKey()) !== null,

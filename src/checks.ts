@@ -191,10 +191,15 @@ export class CheckRunner {
     const run = this.store.startRun(topicId);
     let providerName: string | null = null;
     let modelName: string | null = null;
+    // Read off the provider, not off settings: the provider was built for this
+    // check, so this is the level the request actually carried even if the
+    // setting changes mid-sweep (NEWS-226).
+    let effortUsed: string | null = null;
     try {
       const provider = await this.resolveProvider();
       providerName = provider.name;
       modelName = provider.model;
+      effortUsed = provider.effort;
       const known: KnownItem[] = this.store
         .listItems(topicId)
         .map((i) => ({ title: i.title, foundAt: i.foundAt }));
@@ -267,6 +272,7 @@ export class CheckRunner {
         newItems: fresh.length,
         provider: providerName,
         model: modelName,
+        effort: effortUsed,
         // Recorded even when null: the run happened, and "we don't know what it
         // cost" is a fact worth keeping (NEWS-79).
         usage: found.usage,
@@ -313,6 +319,7 @@ export class CheckRunner {
         error: err instanceof Error ? err.message : String(err),
         provider: providerName,
         model: modelName,
+        effort: effortUsed,
       });
       return 0;
     } finally {

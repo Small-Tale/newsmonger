@@ -345,6 +345,17 @@ export interface NewsProvider extends NewsService {
   readonly name: ConcreteProviderName;
   /** Human-facing model id in use (for display / run records); '' if not applicable. */
   readonly model: string;
+  /**
+   * Effort this provider will actually run checks at (NEWS-226); '' when the
+   * provider takes no such parameter, or when the level is the model's default.
+   *
+   * Read off the **provider object**, not off settings, when recording a run.
+   * A provider is constructed once per check with the settings as they were
+   * then, so this is what the request carried — settings can change mid-sweep,
+   * and a run row reporting the current setting rather than the one it ran under
+   * is worse than no row at all.
+   */
+  readonly effort: Effort;
   /** Whether this provider is usable right now (key present, endpoint reachable, …). */
   isAvailable(): Promise<boolean>;
 }

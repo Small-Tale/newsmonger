@@ -77,6 +77,12 @@ The Settings model field is a **combobox** (NEWS-37): an editable text input bac
 
   Stored with `.catch('')` for the same reason `provider` has one: a level that stops being valid must degrade to "provider default", not reset the user's whole settings row.
 
+  **Each run records the level it ran at** (NEWS-226) — `runs.effort`, beside the provider, model and token usage already there, and shown in the diagnostics bundle. It is read off the **provider object**, not off settings: a provider is constructed for the check with the settings as they were then, so that is the level the request actually carried. Reading settings at record time would report a level the run never used if someone changed the dropdown mid-sweep, which is worse than recording nothing.
+
+  `null` and `''` mean different things and are kept apart: `null` is "not recorded" (a run from before the column existed, which the v3 → v4 migration leaves alone), `''` is "ran at the model's default". Collapsing them would make every historical run look like a default-effort data point — poisoning exactly the comparison the column exists to support.
+
+  This is what dissolves NEWS-19's blocker: that ticket is parked waiting on budget for a formal multi-sample effort comparison, and with the level recorded per run, every ordinary check becomes a data point instead.
+
 See also: [2 — News Checks and Deduplication](2-news-checks-and-dedup.md), [4 — CLI, Server, and Storage](4-cli-server-storage.md).
 
 Key storage and the Settings dialog are covered in [7 — API Keys and Settings Dialog](7-api-keys.md). Providers still report token usage on each check and it is stored on the `CheckRun`, but nothing reads it: the spend estimate, the budget cap and the price table were removed in NEWS-119. The counts are kept as telemetry rather than deleted, since dropping the column would be a migration for no visible gain.

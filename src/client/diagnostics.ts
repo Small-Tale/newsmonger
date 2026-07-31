@@ -12,6 +12,15 @@ export interface RunRow {
   durationMs: number | null;
   provider: string | null;
   model: string | null;
+  /**
+   * Effort the check ran at (NEWS-226). `null` = not recorded (a run from
+   * before the column existed); `''` = the model's own default.
+   *
+   * The two are kept apart deliberately: collapsing them would make every
+   * historical run look like a default-effort data point, which is exactly the
+   * comparison this field exists to support.
+   */
+  effort: string | null;
   newItems: number;
   /** Estimated cost, or null when it can't be known (NEWS-79). */
   error: string | null;
@@ -28,9 +37,21 @@ export function runRows(state: Pick<StateResp, 'runs' | 'topics'>): RunRow[] {
     durationMs: run.finishedAt === null ? null : Date.parse(run.finishedAt) - Date.parse(run.startedAt),
     provider: run.provider,
     model: run.model,
+    effort: run.effort,
     newItems: run.newItems,
     error: run.error,
   }));
+}
+
+/**
+ * How a run's effort reads in the bundle: ` · effort max`, or nothing at all.
+ *
+ * Silent for both "not recorded" and "provider default" — a line saying
+ * "effort default" on every run from a provider that has no such parameter
+ * would be noise on the majority of rows.
+ */
+export function effortLabel(effort: string | null): string {
+  return effort === null || effort === '' ? '' : ` · effort ${effort}`;
 }
 
 /** "1.2s" / "4m 08s" — a duration a person can compare at a glance. */
@@ -97,7 +118,7 @@ export function buildDiagnostics(state: StateResp, opts: DiagnosticsOptions): st
     const who = opts.includeTopicNames ? row.topicName : `topic ${String(i + 1)}`;
     lines.push(
       `- ${row.startedAt} ${row.status} ${who} · ${row.provider ?? 'no provider'}/${row.model ?? '?'}` +
-        ` · ${formatDuration(row.durationMs)} · ${String(row.newItems)} new`,
+        `${effortLabel(row.effort)} · ${formatDuration(row.durationMs)} · ${String(row.newItems)} new`,
     );
     // Error text is the whole point of the bundle, so it is never truncated
     // away — it is also the one field that could echo a topic name back, which

@@ -65,3 +65,56 @@ describe('effort is a setting, and a checks-only one (NEWS-189)', () => {
     expect(seen[1]?.effort, 'discovery must not').not.toBe('max');
   });
 });
+
+describe('the effort a run used is recorded (NEWS-226)', () => {
+  it('reads the level off the provider, not off settings', () => {
+    // A provider is constructed for the check with the settings as they were
+    // then, so `provider.effort` is what the request actually carried. Reading
+    // settings at record time would report a level the run never used if
+    // someone changed the dropdown mid-sweep — worse than recording nothing.
+    expect(createAnthropicProvider({ effort: 'xhigh' }).effort).toBe('xhigh');
+    expect(createAnthropicProvider({}).effort).toBe('');
+  });
+
+  it('reports empty rather than a level for providers that take none', async () => {
+    // The CLI providers and OpenAI pass no effort parameter, so a run on them
+    // genuinely ran at the model's default — '' says that, and is distinct from
+    // the null a pre-NEWS-226 run reads back as.
+    const { createOpenAIProvider } = await import('../../src/ai/providers/openai.js');
+    const { createMockProvider } = await import('../../src/ai/providers/mock.js');
+    expect(createOpenAIProvider({}).effort).toBe('');
+    expect(createMockProvider().effort).toBe('');
+  });
+});
+
+describe('null and empty effort mean different things (NEWS-226)', () => {
+  it('renders a level, and stays silent for both unknown and default', async () => {
+    const { effortLabel } = await import('../../src/client/diagnostics.js');
+    expect(effortLabel('max')).toBe(' · effort max');
+    // Not recorded (a run from before the column existed) and "ran at the
+    // model's default" both read as nothing — a line saying "effort default" on
+    // every run from a provider without the parameter would be noise.
+    expect(effortLabel(null)).toBe('');
+    expect(effortLabel('')).toBe('');
+  });
+
+  it('keeps a historical run distinguishable from a default-effort one', async () => {
+    // Collapsing null into '' would make every run recorded before this shipped
+    // look like a default-effort data point — poisoning the comparison the
+    // column exists to make possible.
+    const { CheckRunSchema } = await import('../../src/db/schemas.js');
+    const base = {
+      id: 'r1',
+      topicId: 't1',
+      startedAt: '2026-07-31T00:00:00.000Z',
+      finishedAt: null,
+      status: 'running' as const,
+      newItems: 0,
+      error: null,
+    };
+    // A row written before the column existed parses, and reads back as null.
+    expect(CheckRunSchema.parse(base).effort).toBe(null);
+    expect(CheckRunSchema.parse({ ...base, effort: '' }).effort).toBe('');
+    expect(CheckRunSchema.parse({ ...base, effort: 'low' }).effort).toBe('low');
+  });
+});

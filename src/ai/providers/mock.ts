@@ -152,6 +152,7 @@ export function createMockProvider(
   return {
     name: 'mock',
     model: 'mock',
+    effort: '',
     attended: config.attended ?? false,
     calls,
     suggestCalls,

@@ -172,6 +172,7 @@ export function createCodexCliProvider(
   return {
     name: 'codex-cli' satisfies ConcreteProviderName,
     model: model !== '' ? model : 'codex default',
+    effort: '',
     attended: true,
     isAvailable: () => runner.available(),
     async checkTopic(

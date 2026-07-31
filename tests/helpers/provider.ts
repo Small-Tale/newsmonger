@@ -23,6 +23,7 @@ export function fakeProvider(
   return {
     name: opts.name ?? 'mock',
     model: opts.model ?? 'fake',
+    effort: '' as const,
     attended: opts.attended ?? false,
     isAvailable: () => Promise.resolve(true),
     checkTopic,

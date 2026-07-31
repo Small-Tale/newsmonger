@@ -177,6 +177,9 @@ export function createAnthropicProvider(config: {
   return {
     name: 'anthropic',
     model,
+    // What checks will actually run at — read off the provider when recording a
+    // run, not off settings, which can change mid-sweep (NEWS-226).
+    effort: config.effort ?? '',
     // Metered and billed per token — safe to run on a schedule unattended.
     attended: false,
     isAvailable: async () => (await getApiKey()) !== null,

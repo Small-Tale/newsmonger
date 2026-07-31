@@ -31,7 +31,7 @@ const { DatabaseSync } = createRequire(import.meta.url)('node:sqlite') as {
  */
 
 /** Bumped when `SCHEMA` changes in a way an existing database must be migrated for. */
-export const SCHEMA_VERSION = 3;
+export const SCHEMA_VERSION = 4;
 
 /**
  * Upgrades for a database created by an older `SCHEMA_VERSION`.
@@ -54,6 +54,13 @@ const MIGRATIONS: Partial<Record<number, (db: DatabaseSyncType) => void>> = {
   2: (db) => {
     db.exec(`ALTER TABLE topics ADD COLUMN consecutive_failures INTEGER NOT NULL DEFAULT 0`);
     db.exec(`ALTER TABLE topics ADD COLUMN retry_after TEXT`);
+  },
+  // v3 → v4: the effort a check ran at (NEWS-226). Additive and nullable —
+  // and nullable is the point: a run recorded before this column existed truly
+  // has no level, and must not read back as "ran at the default", which would
+  // quietly poison the comparison this column exists to make possible.
+  3: (db) => {
+    db.exec(`ALTER TABLE runs ADD COLUMN effort TEXT`);
   },
 };
 
@@ -132,7 +139,8 @@ CREATE TABLE IF NOT EXISTS runs (
   error       TEXT,
   provider    TEXT,
   model       TEXT,
-  usage       TEXT
+  usage       TEXT,
+  effort      TEXT
 );
 
 CREATE INDEX IF NOT EXISTS runs_started ON runs(started_at);

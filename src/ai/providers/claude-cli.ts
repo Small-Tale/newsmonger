@@ -190,6 +190,7 @@ export function createClaudeCliProvider(
   return {
     name: 'claude-cli' satisfies ConcreteProviderName,
     model: model !== '' ? model : 'claude-code default',
+    effort: '',
     attended: true,
     isAvailable: () => runner.available(),
     async checkTopic(

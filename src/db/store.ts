@@ -253,6 +253,7 @@ export class Store {
       provider: row['provider'] ?? null,
       model: row['model'] ?? null,
       usage: parseJson(row['usage']),
+      effort: row['effort'] ?? null,
     });
   }
 
@@ -304,8 +305,8 @@ export class Store {
   private insertRun(run: CheckRun): void {
     this.db
       .prepare(
-        `INSERT INTO runs (id, topic_id, started_at, finished_at, status, new_items, error, provider, model, usage)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO runs (id, topic_id, started_at, finished_at, status, new_items, error, provider, model, usage, effort)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         run.id,
@@ -318,6 +319,7 @@ export class Store {
         run.provider,
         run.model,
         run.usage === null ? null : JSON.stringify(run.usage),
+        run.effort,
       );
   }
 
@@ -874,6 +876,7 @@ export class Store {
       provider: null,
       model: null,
       usage: null,
+      effort: null,
     };
     this.insertRun(run);
     // Retention is applied by `pruneOldRuns` in the housekeeping sweep, not here
@@ -892,6 +895,8 @@ export class Store {
       provider?: string | null;
       model?: string | null;
       usage?: TokenUsage | null;
+      /** Effort the check ran at (NEWS-226); '' = the model's default. */
+      effort?: string | null;
     },
   ): void {
     const sets = ['finished_at = ?', 'status = ?', 'new_items = ?', 'error = ?'];
@@ -915,6 +920,11 @@ export class Store {
     if (result.usage !== undefined) {
       sets.push('usage = ?');
       params.push(result.usage === null ? null : JSON.stringify(result.usage));
+    }
+    // Same "absent means don't touch" rule as the three above.
+    if (result.effort !== undefined) {
+      sets.push('effort = ?');
+      params.push(result.effort);
     }
     this.db.prepare(`UPDATE runs SET ${sets.join(', ')} WHERE id = ?`).run(...params, runId);
   }

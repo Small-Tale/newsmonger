@@ -78,6 +78,7 @@ export function createDemoProvider(): NewsProvider {
     // nicer fixtures than the one `--ai-test` uses.
     name: 'mock',
     model: '',
+    effort: '' as const,
     // Never gated on a foreground window — a capture runs headless, and a demo
     // that silently refused to check would be a confusing thing to debug.
     attended: false,

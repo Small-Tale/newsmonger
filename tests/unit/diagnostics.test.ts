@@ -55,6 +55,7 @@ function state(over: Partial<StateResp> = {}): StateResp {
           outputTokens: 3_000,
           webSearches: 8,
         },
+        effort: null,
       },
     ],
     checking: [],

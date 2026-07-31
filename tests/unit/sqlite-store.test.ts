@@ -625,6 +625,11 @@ describe('schema migration v1 → v2 (NEWS-97)', () => {
       `INSERT INTO items (id, topic_id, title, summary, sources, dedupe_key, found_at)
        VALUES ('i1', 't1', 'Final set', 'It went long.', '[]', 'k1', '2026-07-02T00:00:00.000Z')`,
     ).run();
+    // A completed run, so the v3 → v4 effort migration has a real row to widen.
+    db.prepare(
+      `INSERT INTO runs (id, topic_id, started_at, finished_at, status, new_items, provider, model)
+       VALUES ('r1', 't1', '2026-07-02T00:00:00.000Z', '2026-07-02T00:01:00.000Z', 'succeeded', 2, 'anthropic', 'claude-opus-4-8')`,
+    ).run();
     db.close();
   }
 
@@ -645,6 +650,23 @@ describe('schema migration v1 → v2 (NEWS-97)', () => {
     expect(topic?.category).toBeNull();
     expect(topic?.subcategory).toBeNull();
     expect(topic?.categorySource).toBe('auto');
+  });
+
+  it('widens runs with an effort column, and an old run reads back as unknown (NEWS-226)', () => {
+    const dir = tmpDataDir();
+    v1Database(dir);
+
+    const store = new Store(dir);
+    const run = store.listRuns().find((r) => r.id === 'r1');
+    // The v1 row's own fields survive the widening...
+    expect(run?.provider).toBe('anthropic');
+    expect(run?.model).toBe('claude-opus-4-8');
+    expect(run?.newItems).toBe(2);
+    // ...and effort is **null**, not ''. A run recorded before the column
+    // existed genuinely has no level; reading it back as "ran at the default"
+    // would make every historical run a bogus data point in exactly the
+    // comparison this column exists to support.
+    expect(run?.effort).toBeNull();
   });
 
   it('leaves a migrated database writable and at the new version', () => {

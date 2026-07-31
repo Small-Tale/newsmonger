@@ -20,6 +20,7 @@ function run(topicId: string, status: CheckRun['status']): CheckRun {
     provider: 'mock',
     model: null,
     usage: null,
+    effort: null,
   };
 }
 

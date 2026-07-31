@@ -272,6 +272,15 @@ export const CheckRunSchema = z.object({
    * zero — spend figures must keep the two apart.
    */
   usage: TokenUsageSchema.nullable().default(null),
+  /**
+   * Effort the check actually ran at (NEWS-226); null for runs recorded before
+   * this existed, and '' when the provider takes no such parameter.
+   *
+   * Null and '' are deliberately different: null is "we did not record this",
+   * '' is "it ran at the model's default". Collapsing them would make every
+   * historical run look like a default-effort data point.
+   */
+  effort: z.string().nullable().default(null),
 });
 export type CheckRun = z.infer<typeof CheckRunSchema>;
 
