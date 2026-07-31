@@ -14,6 +14,34 @@ fields reject semver prerelease suffixes.
 
 <!-- Nothing released yet. The first `npm run release` inserts its entry below. -->
 
+## [0.2.0-beta.6] - 2026-07-31
+
+## Features
+
+- **Backup to a synced folder.** Point Newsmonger at a folder in iCloud Drive, Google Drive, OneDrive or Dropbox and it writes a full snapshot — topics, stories, settings and run history — after a successful check, at most once an hour. The live database stays local, so a sync daemon never touches an open SQLite file. API keys are never included; they stay in the OS keychain. There's also a "Back up now" button in Settings → Data.
+- **The app offers to set backups up.** After your third topic, a dialog appears listing the sync folders that actually exist on your machine, one click each. "Not now" holds it off for a day; "Don't ask again" is permanent and survives a reinstall.
+- **AI effort is now a setting.** A dropdown in Settings → Source picks how hard the model works on each check — low, medium, high, extra high or max, or the provider's own default (unchanged behaviour until you choose). Seedable with `--effort` / `NEWSMONGER_EFFORT`. It applies to Anthropic checks only; the control is disabled for other providers, and topic discovery always runs at the model's default.
+- **Runs record the effort they used.** The diagnostics bundle shows the level each check actually ran at, so a change to the setting can be compared against what it bought. Runs from before this shipped read as unknown rather than being backfilled as "default".
+- **`newsmonger --help` and `--version`.** Both print to stdout and exit 0, and are answered before anything else on the command line is parsed — so `--help` works even alongside a flag that wouldn't.
+
+## Bug Fixes
+
+- **The app no longer asks for access to your Documents folder.** The Claude and Codex CLI providers were spawned with whatever working directory the app inherited; macOS attributes a child process's file reads to the app that started it, so an agent reading its own working directory triggered Documents/Downloads/Media prompts in Newsmonger's name. Spawned agents now start in a dedicated temp directory, and the desktop shell anchors the server to a directory the app owns.
+- **Beta builds carry their real version.** Prerelease bundles reported the base version (`0.2.0` for `v0.2.0-beta.1` and `-beta.2` alike), so the Tauri updater could never see one beta as newer than another. The full `-beta.N` version is now written into the bundle.
+
+## Documentation
+
+- The README now shows what the app looks like: seven inline screenshots — the feed, topics sidebar, discovery, the keep/skip tuner, review mode, Settings → Source, and export — all captured from the running app rather than mocked up.
+- Development setup, commands and the from-source workflow moved into a new `CONTRIBUTING.md`, leaving the README for people using the app. The documented install path is now `npm install -g newsmonger`.
+
+## Release & Packaging
+
+- Releases are gated again: typecheck, lint and tests run before any build, the git tag must match the version in `package.json` and `tauri.conf.json`, and a prerelease suffix is refused on the stable release path (a mistyped `v0.3.0-rc1` would otherwise have flipped `releases/latest` and pushed itself to everyone).
+- Code signing is verified before publishing, and the check now finds the bundle wherever the build put it. An unstapled `.dmg` is no longer treated as a failure.
+- Manual `workflow_dispatch` runs get a `dry_run` option that builds, signs, notarizes and verifies without publishing, and a release build now checks out the tag being released rather than whatever `main` points at.
+- Release runs no longer cancel each other, bundles are kept as artifacts even when a job fails, and Apple's notarization queue is polled and logged so a slow submission is distinguishable from a hung one.
+- The npm smoke install can now actually fail — an exhausted retry loop used to exit green — and it waits out the registry CDN before giving up.
+
 ## [0.2.0-beta.5] - 2026-07-31
 
 ## Documentation
