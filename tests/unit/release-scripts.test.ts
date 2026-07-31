@@ -68,6 +68,7 @@ describe('the release scripts are wired up (NEWS-194)', () => {
     'scripts/verify-signing.sh',
     'scripts/check-tag-version.sh',
     'scripts/verify-sidecar-linux.sh',
+    'scripts/verify-released-dmg.sh',
     'tests/smoke/smoke-test.sh',
   ])(
     '%s exists and is executable',
@@ -91,6 +92,7 @@ describe('the release scripts are wired up (NEWS-194)', () => {
     'scripts/verify-signing.sh',
     'scripts/check-tag-version.sh',
     'scripts/verify-sidecar-linux.sh',
+    'scripts/verify-released-dmg.sh',
     'tests/smoke/smoke-test.sh',
   ])(
     '%s parses as bash',
@@ -112,6 +114,7 @@ describe('the release scripts are wired up (NEWS-194)', () => {
     'scripts/verify-signing.sh',
     'scripts/check-tag-version.sh',
     'scripts/verify-sidecar-linux.sh',
+    'scripts/verify-released-dmg.sh',
     'tests/smoke/smoke-test.sh',
   ])(
     '%s uses no bash 4 builtins',
@@ -999,6 +1002,65 @@ describe('the release workflows keep their notarization diagnostics (NEWS-197)',
     // Losing it does not fail anything — it just lets a stalled submission burn
     // six hours on two macOS runners at 10x billing.
     expect(read(rel)).toContain('timeout-minutes: 120');
+  });
+});
+
+describe('the released-dmg check tests what a user meets (NEWS-21)', () => {
+  const read = (rel: string): string => fs.readFileSync(path.join(root, rel), 'utf8');
+  const script = (): string => read('scripts/verify-released-dmg.sh');
+
+  it('sets the quarantine attribute before assessing anything', () => {
+    // Without `com.apple.quarantine` **every check in the script is theatre**:
+    // Gatekeeper only assesses files carrying it, so `spctl` would accept things
+    // it rejects in a real Downloads folder and the script would pass on a
+    // release nobody could open. The ordering matters as much as the presence —
+    // quarantining after the assessment proves nothing.
+    // Comment lines stripped: the header *explains* spctl several paragraphs
+    // before the code runs it, so an ordering check against the raw text
+    // compares against prose and fails on a correct script.
+    const code = script()
+      .split('\n')
+      .filter((l) => !/^\s*#/.test(l))
+      .join('\n');
+    expect(code).toContain('xattr -w com.apple.quarantine');
+    expect(
+      code.indexOf('xattr -w com.apple.quarantine'),
+      'the file must be quarantined before spctl assesses it',
+      // `spctl -a`, the invocation — the bare word also appears inside the
+      // platform-guard's error message, which is not an assessment.
+    ).toBeLessThan(code.indexOf('spctl -a'));
+  });
+
+  it('checks the dragged-out copy, not just the mounted volume', () => {
+    // Nobody runs an app from the disk image. The copy is what inherits
+    // quarantine and what actually gets launched.
+    const src = script();
+    expect(src).toMatch(/cp -R/);
+    expect(src).toContain('still accepted once installed');
+  });
+
+  it('requires the assessment to say Notarized, not merely "accepted"', () => {
+    // `spctl` accepts plenty of things for reasons other than notarization, so
+    // matching on the source string is what makes this a notarization check.
+    expect(script()).toContain('source=Notarized Developer ID');
+  });
+
+  it('runs the sidecar rather than only reading its entitlements', () => {
+    // The failure this exists for — a bundle that signs, notarizes and staples
+    // cleanly and then dies at launch on someone else's Mac — is invisible to
+    // every static check. Only executing it under the hardened runtime shows it.
+    const src = script();
+    expect(src).toContain('--version');
+    expect(src, 'a hot loop, so V8 actually reaches the optimizing compiler').toMatch(/i<3e7/);
+    expect(src).toContain('jit-ok');
+  });
+
+  it('fails the run when any check fails', () => {
+    // A verification script that always exits 0 is worse than none: it is a
+    // green light nobody earned.
+    const src = script();
+    expect(src).toMatch(/fail=1/);
+    expect(src).toMatch(/exit "\$fail"/);
   });
 });
 

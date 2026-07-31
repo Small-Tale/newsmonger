@@ -171,7 +171,11 @@ Still manual, and **unverified on every other platform**:
 1. Build on Windows and Linux — confirm the target-triple → Node-platform mapping in `scripts/build-sidecar.sh` is right and the app launches.
 2. On Windows, confirm no console window flashes when the sidecar spawns (`CREATE_NO_WINDOW`, written but never run).
 3. Install from the `.dmg` (not just the build tree) and launch — confirms resources resolve from a real install location.
-4. On macOS, signing config is in place (NEWS-21) but no build has been signed yet — the bundle is still unsigned, so Gatekeeper will block it on another machine. After a signed build, `bash scripts/verify-signing.sh` checks it mechanically; the one thing it cannot check is the launch itself, so **open the .dmg on a Mac that has never seen the app** and confirm the window loads. That is the only test that exercises the sidecar's entitlements under a real quarantine.
+4. On macOS this is now **automated** — `bash scripts/verify-released-dmg.sh <tag> [aarch64|x64]` (NEWS-21). It downloads the published dmg, sets `com.apple.quarantine` exactly as a browser does, and checks the path a user actually takes: the app inside is stapled, Gatekeeper reports `source=Notarized Developer ID`, the copy dragged out of the volume **keeps its quarantine** and is still accepted, and — the part nothing else can check — the Node sidecar **starts and JITs** while quarantined under the hardened runtime. Entitlements can be read statically; only running the thing proves the hardened runtime lets V8 map and write executable memory, which is the failure that stays invisible until it happens on a stranger's Mac.
+
+   `verify-signing.sh` still runs in CI and checks a different thing: the bundle on the machine that built it. That machine holds the signing key, never quarantines its own output, and is checking something that has not been through GitHub.
+
+   **What remains manual:** launching the GUI and confirming the window loads and the feed appears. The script proves the sidecar can run; it does not click anything. Also, running the **x64** dmg on an Apple Silicon Mac exercises it through Rosetta — good evidence, not identical to a native Intel machine.
 
 ## App name and icon in the built bundle — NEWS-182 / NEWS-184
 
@@ -282,3 +286,5 @@ Worth doing on both an Apple Silicon and an Intel Mac if both are available, sin
 
 - Topics CRUD, scheduling logic, dedup, parsing, API validation, and full UI flows are covered by `npm test` + `npm run test:e2e` (mock AI service).
 - API key precedence, the `/api/keys` routes, and the Settings dialog save/remove flows are covered by `tests/unit/api-keys*.test.ts` and `tests/e2e/keys.spec.ts`, against the in-memory keychain (`NEWSMONGER_FAKE_KEYCHAIN=1`). The OS keychain layer itself stays manual per platform, above.
+- **Gatekeeper on a published macOS release** moved here from manual (NEWS-21): `bash scripts/verify-released-dmg.sh <tag>` downloads the real artifact, quarantines it, and verifies stapling, `spctl` assessment, quarantine inheritance through drag-out, and that the sidecar starts and JITs under the hardened runtime. First run on `v0.2.0-beta.7` — both `aarch64` and `x64` pass. Only the GUI launch itself is still manual.
+- **The Linux sidecar build** is covered by `bash scripts/verify-sidecar-linux.sh` (NEWS-20), which runs `build-sidecar.sh` in a container for both Linux triples so the isolated boot check actually executes instead of self-skipping as it does when cross-compiling.
