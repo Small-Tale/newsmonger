@@ -209,7 +209,6 @@ Repository → Settings → Secrets and variables → Actions. Names on the left
 |---|---|---|---|
 | `APPLE_CERTIFICATE` | ✅ exact | base64 of the `.p12` (step 4) | signing |
 | `APPLE_CERTIFICATE_PASSWORD` | ✅ exact | the `.p12` export password | signing |
-| `KEYCHAIN_PASSWORD` | ✅ exact | any random string — CI creates a throwaway keychain and unlocks it with this | signing |
 | `APPLE_SIGNING_IDENTITY` | ✅ exact | `Developer ID Application: Small Tale Inc. (TEAMID)` | signing |
 | `APPLE_ID` | ✅ exact | Apple account email | notarization |
 | `APPLE_PASSWORD` | ✅ exact | app-specific password, `xxxx-xxxx-xxxx-xxxx` | notarization |
@@ -217,7 +216,9 @@ Repository → Settings → Secrets and variables → Actions. Names on the left
 | `TAURI_SIGNING_PRIVATE_KEY` | ✅ exact | contents of `~/.tauri/newsmonger.key` | updater only |
 | `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` | ✅ exact | that key's passphrase | updater only |
 
-**Seven secrets, all of them plain strings.** `GITHUB_TOKEN` is injected automatically — do not create one.
+**Eight secrets, all of them plain strings.** `GITHUB_TOKEN` is injected automatically — do not create one.
+
+> **There is deliberately no `KEYCHAIN_PASSWORD`** (NEWS-225). This table listed one until it was checked against the source: `tauri-action` contains no signing code at all, and the Tauri v2 bundler *generates* both the temporary keychain's name and its password as random 16-character strings per build (`crates/tauri-macos-sign/src/keychain.rs`). Tauri v1 never read it either — it used a hardcoded constant. The variable belongs to the hand-rolled `security create-keychain` recipes people paste alongside `tauri-action`, not to Tauri, which is how it reached this table. Glassbox has shipped signed releases for months without it. See also the note below about not adding `security create-keychain` steps — the two say the same thing, and this table used to contradict it.
 
 A convenient consequence of the app-specific-password route: **every secret maps 1:1 onto an env var Tauri already reads**, so the release job needs no credential-preparation step at all — just `env:` entries on the build step. Nothing to decode, no files to write, nothing to clean up.
 

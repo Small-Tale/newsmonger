@@ -1303,3 +1303,39 @@ describe('release runs keep their evidence and do not cancel each other (NEWS-22
     expect(read(rel)).toContain('Swatinem/rust-cache@v2');
   });
 });
+
+describe('the signing secrets are the ones Tauri actually reads (NEWS-225)', () => {
+  const read = (rel: string): string => fs.readFileSync(path.join(root, rel), 'utf8');
+
+  it('does not ask for a KEYCHAIN_PASSWORD, which Tauri generates itself', () => {
+    // The docs listed it as required for months and the workflows never set it —
+    // a discrepancy about a signing credential that nobody had resolved.
+    // Checked against the source: `tauri-action` has no signing code at all, and
+    // the v2 bundler generates the temporary keychain's name AND password as
+    // random 16-char strings per build (crates/tauri-macos-sign/src/keychain.rs).
+    // v1 used a hardcoded constant. It has never been a Tauri variable.
+    for (const rel of ['.github/workflows/release-desktop.yml', '.github/workflows/release-candidate.yml']) {
+      expect(read(rel), `${rel} should not set KEYCHAIN_PASSWORD`).not.toContain('KEYCHAIN_PASSWORD');
+    }
+    // The doc may name it once, in the note explaining why it is absent.
+    const doc = read('docs/5-desktop-app.md');
+    expect(doc.match(/KEYCHAIN_PASSWORD/g) ?? []).toHaveLength(1);
+    expect(doc, 'the note should say Tauri generates it').toContain('deliberately no `KEYCHAIN_PASSWORD`');
+  });
+
+  it('sets the six Apple variables the bundler does read', () => {
+    for (const rel of ['.github/workflows/release-desktop.yml', '.github/workflows/release-candidate.yml']) {
+      const src = read(rel);
+      for (const v of [
+        'APPLE_CERTIFICATE',
+        'APPLE_CERTIFICATE_PASSWORD',
+        'APPLE_SIGNING_IDENTITY',
+        'APPLE_ID',
+        'APPLE_PASSWORD',
+        'APPLE_TEAM_ID',
+      ]) {
+        expect(src, `${rel} is missing ${v}`).toContain(v);
+      }
+    }
+  });
+});
