@@ -10,7 +10,13 @@ Hybrid model borrowed from glassbox: the Node server is the app in both modes; T
 
   **Verified end to end:** the built `Newsmonger.app` starts its sidecar, serves the real UI (request log shows `GET /` → assets → `/api/state` → `/api/providers`), and leaves no orphaned server on quit. Only macOS (`aarch64-apple-darwin`) has been built and *run as an app*; the Windows `CREATE_NO_WINDOW` flag is still unexecuted.
 
-  **All four targets now bundle in CI** as of `v0.2.0-beta.7`: `.dmg` for both macOS architectures, `.deb`/`.rpm`/`.AppImage` for Linux, and an NSIS `.exe` for Windows, all signed, with the macOS pair notarized and stapled. That exercised the last untaken branch of `build-sidecar.sh` — the Windows `.zip` extraction path, which until then had never run. **Building is not launching**: no Windows or Linux bundle has been installed and opened (NEWS-20).
+  **All four targets now bundle in CI** as of `v0.2.0-beta.7`: `.dmg` for both macOS architectures, `.deb`/`.rpm`/`.AppImage` for Linux, and an NSIS `.exe` for Windows, with the macOS pair notarized and stapled. That exercised the last untaken branch of `build-sidecar.sh` — the Windows `.zip` extraction path, which until then had never run.
+
+  **Windows is now verified end to end** (NEWS-20), from the *published* installer rather than a build tree: `Newsmonger_0.2.0-beta.7_x64-setup.exe` installs to `%LOCALAPPDATA%\Newsmonger`, the app launches, the sidecar spawns, the webview loads the real UI, and a graceful close leaves **no orphaned `newsmonger-node.exe`**. `CREATE_NO_WINDOW` works: the sidecar's `MainWindowHandle` is `0` and so is its `conhost.exe`'s, so no console window is ever shown.
+
+  Worth recording precisely, because the obvious check is misleading: **`CREATE_NO_WINDOW` still allocates a console**, so a `conhost.exe` *does* appear as a child of the sidecar. Its absence is not the thing to test — a hidden window is. Counting conhosts is doubly wrong here, since any remote-execution shell used to do the measuring spawns one of its own.
+
+  **Linux is the remaining gap**: the bundles build and the sidecar is verified in a container, but no `.deb`/`.AppImage` has been installed and opened, which needs a Linux desktop session rather than Docker (NEWS-20).
 
   **Both Linux triples now build their sidecar for real** (NEWS-20): `bash scripts/verify-sidecar-linux.sh` runs `build-sidecar.sh` inside a Linux container for `x86_64-unknown-linux-gnu` and `aarch64-unknown-linux-gnu`, and both produce a correct ELF and pass the isolated boot check, serving all seven static assets.
 
