@@ -5,7 +5,7 @@ Topic-based news tracker. The user enters topics; on a configurable interval (de
 ## Tech Stack
 
 - Node 22.5+ (built-in `node:sqlite`), TypeScript (strict), ESM
-- [kerfjs](https://github.com/brianwestphal/kerf) 4.0 UI (JSX → HTML strings, signals + morph) — **read `.claude/skills/kerf-app/SKILL.md` before touching client code**
+- [kerfjs](https://github.com/brianwestphal/kerf) 4.1 UI (JSX → HTML strings, signals + morph) — **read `.claude/skills/kerf-app/SKILL.md` before touching client code**
 - Hono + `@hono/node-server` (localhost-only, default port 4187)
 - Pluggable AI providers (`src/ai/providers/`, like `~/Documents/gitgist`) behind a `NewsProvider` interface — **only platforms that do their own web search** (Anthropic, OpenAI); default `anthropic` uses `@anthropic-ai/sdk` (`claude-opus-4-8`, adaptive thinking, `web_search_20260209`, streamed). See `docs/6-providers.md`.
 - SQLite storage via built-in `node:sqlite` (`~/.newsmonger/newsmonger.db`; `--data-dir` / `NEWSMONGER_DATA_DIR` override). Rows validated with the same zod schemas on read; a legacy `data.json` is imported once (NEWS-94)

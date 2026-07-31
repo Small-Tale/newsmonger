@@ -70,6 +70,18 @@ describe('the npm package would ship something usable (NEWS-204)', () => {
   });
 });
 
+/**
+ * Every test that spawns the CLI needs far more than vitest's 5 s default.
+ *
+ * Each `run()` is an `npx tsx` cold start — resolving the package, then
+ * compiling the whole server entry — and one test does three of them. Alone
+ * that is comfortably under the default; inside the full suite, competing with
+ * every other file for CPU, it is not, and the test failed on load rather than
+ * on behaviour. The number is deliberately generous: it exists to stop a false
+ * red, not to assert anything about speed.
+ */
+const SPAWN_TIMEOUT_MS = 60_000;
+
 describe('the CLI usage line stays true (NEWS-204)', () => {
   // The usage line and the help text live in `src/config.ts` since NEWS-216, so
   // `--help` can answer before the args are parsed at all.
@@ -92,7 +104,7 @@ describe('the CLI usage line stays true (NEWS-204)', () => {
     }
   });
 
-  it('prints every real provider when it rejects a bad flag', () => {
+  it('prints every real provider when it rejects a bad flag', { timeout: SPAWN_TIMEOUT_MS }, () => {
     // Through the actual binary, since that is where the string is assembled.
     let out = '';
     try {
@@ -129,7 +141,7 @@ describe('the installed binary answers the first two things anyone types (NEWS-2
     }
   };
 
-  it('prints help on stdout and exits 0', () => {
+  it('prints help on stdout and exits 0', { timeout: SPAWN_TIMEOUT_MS }, () => {
     // It used to exit 1 with "unknown argument: --help" — after `npm install -g
     // newsmonger`, that is very likely the first command someone runs, and the
     // answer was that asking for help was an error. stdout so `--help | less`
@@ -141,7 +153,7 @@ describe('the installed binary answers the first two things anyone types (NEWS-2
     for (const name of PROVIDER_NAMES) expect(stdout, `help omits ${name}`).toContain(name);
   });
 
-  it('prints the package version on --version, and the same for -h/-v', () => {
+  it('prints the package version on --version, and the same for -h/-v', { timeout: SPAWN_TIMEOUT_MS }, () => {
     const version = z
       .object({ version: z.string() })
       .parse(JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'))).version;
@@ -152,7 +164,7 @@ describe('the installed binary answers the first two things anyone types (NEWS-2
     expect(run('-h').stdout).toContain('usage: newsmonger');
   });
 
-  it('starts no server and writes no data directory when it is only answering', () => {
+  it('starts no server and writes no data directory when it is only answering', { timeout: SPAWN_TIMEOUT_MS }, () => {
     // Both paths return before the Store is constructed. Pointing --data-dir at a
     // directory that does not exist proves it: creating it would be the giveaway.
     const dir = path.join(os.tmpdir(), `newsmonger-help-${String(process.pid)}`);
@@ -161,7 +173,7 @@ describe('the installed binary answers the first two things anyone types (NEWS-2
     expect(fs.existsSync(dir), 'answering --version should not create a data dir').toBe(false);
   });
 
-  it('still rejects a bad flag with the usage line on stderr and a non-zero exit', () => {
+  it('still rejects a bad flag with the usage line on stderr and a non-zero exit', { timeout: SPAWN_TIMEOUT_MS }, () => {
     // The other half of FR-4.2 — help being free must not make errors free too.
     const { stderr, code } = run('--bogus');
     expect(code).not.toBe(0);
