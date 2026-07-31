@@ -14,6 +14,13 @@ fields reject semver prerelease suffixes.
 
 <!-- Nothing released yet. The first `npm run release` inserts its entry below. -->
 
+## [0.2.0-beta.7] - 2026-08-01
+
+## CI
+
+- The pre-upgrade smoke test against the published stable release is now advisory — it emits a warning instead of failing the run, since an already-published build can't satisfy smoke assertions added after it shipped. The post-upgrade smoke test against the beta remains strict.
+- Beta install now retries up to 10 times with escalating backoff (~9 minutes total) to wait out npm registry propagation, and reports a clear error if the version never becomes installable.
+
 ## [0.2.0-beta.6] - 2026-07-31
 
 ## Features
