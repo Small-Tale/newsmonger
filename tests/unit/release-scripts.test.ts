@@ -1227,3 +1227,37 @@ describe('the stable release builds the tag, not whatever main is now (NEWS-223)
     ).toBeLessThan(createRelease.indexOf('check-tag-version.sh'));
   });
 });
+
+describe('the stable release path is gated too (NEWS-224)', () => {
+  const src = (): string => fs.readFileSync(path.join(root, '.github/workflows/release-desktop.yml'), 'utf8');
+
+  it('runs typecheck, lint and unit tests before anything is created or built', () => {
+    // The old release.yml ran exactly these, stating why: "so a release can't
+    // publish something that doesn't even compile." The NEWS-201 port left them
+    // only on release-candidate.yml, so a hand-pushed tag or a workflow_dispatch
+    // — both documented as supported — published with no gating at all.
+    const s = src();
+    expect(s).toContain('gates:');
+    for (const cmd of ['npm run typecheck', 'npm run lint', 'npm test']) {
+      expect(s, `the stable path should run ${cmd}`).toContain(cmd);
+    }
+    // Same trap as everywhere else: several suites fetch /static/... and 404
+    // without dist/client.
+    const gates = s.slice(s.indexOf('gates:'), s.indexOf('create-release:'));
+    expect(gates.indexOf('npm run build:client'), 'build:client must precede npm test').toBeLessThan(
+      gates.indexOf('npm test'),
+    );
+  });
+
+  it('makes create-release wait on the gates, so a broken commit opens no draft', () => {
+    expect(src()).toMatch(/create-release:\n\s+needs: \[gates\]/);
+  });
+
+  it('gates the same commit it releases', () => {
+    // Interacts with NEWS-223: unpinned, the gates would run against main while
+    // the bundles came from the tag — gating the wrong thing and reporting green.
+    const s = src();
+    const gates = s.slice(s.indexOf('gates:'), s.indexOf('create-release:'));
+    expect(gates).toContain('ref: ${{ inputs.tag || github.ref }}');
+  });
+});

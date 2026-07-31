@@ -23,8 +23,47 @@ on:
         required: true
 
 jobs:
+  # Restored with NEWS-224. The old `release.yml` ran exactly these three before
+  # any build, stating the reason plainly: "so a release can't publish something
+  # that doesn't even compile." The NEWS-201 port left them only on
+  # `release-candidate.yml`.
+  #
+  # On the normal path that is harmless — a stable release arrives via
+  # `promote-release`, which dispatches with the rc tag's ref after the rc run
+  # gated that exact commit. It is not harmless on the **two other entry points**,
+  # both documented as supported: a hand-pushed `v[0-9]*` tag, and a
+  # `workflow_dispatch`. Those published with zero type, lint or test gating. A
+  # Rust error still fails the tauri build loudly; a TypeScript error, a lint
+  # violation or a failing unit test shipped.
+  #
+  # A few minutes against a 20+ minute signed build, and it does not depend on
+  # trusting how the tag was cut — which is the whole point, since the paths it
+  # protects are the ones where a human cut the tag by hand.
+  #
+  # `create-release` needs this, so a broken commit never even opens a draft.
+  gates:
+    name: Gates (typecheck, lint, unit)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.tag || github.ref }}
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm run lint
+      # Before vitest, not optional: several suites fetch `/static/...` through
+      # `createApp()` and 404 without `dist/client`. This kept CI red for its
+      # entire existence before NEWS-191.
+      - run: npm run build:client
+      - run: npm test
+
   # Create the GitHub Release first so build jobs don't race
   create-release:
+    needs: [gates]
     runs-on: ubuntu-latest
     outputs:
       release_id: ${{ steps.create.outputs.result }}

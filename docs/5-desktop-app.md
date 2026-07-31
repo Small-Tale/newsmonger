@@ -315,6 +315,14 @@ It refuses **loudly** rather than the trigger excluding `v*-*`: an excluded tag 
 
 The pin is also what makes the version guard above meaningful on that path: unpinned, it compared `inputs.tag` against *main's* version files, so it would have passed on exactly the mismatch it exists to catch. The two are load-bearing together.
 
+##### The stable path runs its own gates (NEWS-224)
+
+A `gates` job — typecheck, lint, `build:client`, unit tests — which `create-release` needs, so a broken commit never even opens a draft. These are the three the old `release.yml` ran, for the reason it stated: *"so a release can't publish something that doesn't even compile."*
+
+On the normal path this is redundant: a stable release arrives via `promote-release`, which dispatches with the rc tag's ref after the rc run gated that exact commit. It is not redundant on the **two other supported entry points** — a hand-pushed `v[0-9]*` tag and a `workflow_dispatch` — which published with no type, lint or test gating at all. A Rust error still failed the tauri build loudly; a TypeScript error, a lint violation or a failing unit test shipped.
+
+A few minutes against a 20+ minute signed build, and it does not depend on trusting how the tag was cut — which is the point, since the paths it protects are exactly the ones where a human cut it by hand.
+
 Via the scripts a mismatch cannot arise — `release.sh` writes both files and tags the same commit — so this is aimed at a **hand-cut tag**, which is documented as supported below and is exactly where a human gets it wrong. The failure it prevents is silent: the build succeeds, the release page looks right, and every asset is named after the wrong version while the generated download links point at filenames that never exist.
 
 #### Smoke tests (`tests/smoke/smoke-test.sh`)
