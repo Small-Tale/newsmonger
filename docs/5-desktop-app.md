@@ -297,7 +297,13 @@ The one genuine constraint is the **Windows MSI**, whose pre-release identifier 
 
 `set-version.mjs` now accepts `X.Y.Z[-prerelease]` and rejects build metadata (`+build`), and its guard carries the measured reason rather than the inherited one.
 
-> ⚠️ **Neither workflow currently guards that the tag's base version matches `tauri.conf.json`.** The old `release.yml` did. Under the rc model a mismatch cannot arise from the scripts — `release.sh` bumps the files and tags the same commit — but a hand-tagged release could still ship assets named after the wrong version with nothing complaining. Tracked separately.
+**Both workflows guard that the tag's base version matches `package.json` and `tauri.conf.json`** — `scripts/check-tag-version.sh`, restored in NEWS-208 after the NEWS-201 port dropped it.
+
+Only the **base** is compared: the `-rc.N` / `-beta.N` suffix lives on the tag and never in the files. `release.sh` writes the clean `X.Y.Z` in the tree for *both* channels — betas included, which is a deliberate divergence from glassbox (note 4 in its header) — and CI writes the suffixed version at build time (NEWS-207).
+
+It runs at the earliest point in each: its own `version-guard` job in `release-candidate.yml`, which every expensive job waits on, and the first step of `create-release` in `release-desktop.yml`, before the release shell exists and before the ~20-minute signed build.
+
+Via the scripts a mismatch cannot arise — `release.sh` writes both files and tags the same commit — so this is aimed at a **hand-cut tag**, which is documented as supported below and is exactly where a human gets it wrong. The failure it prevents is silent: the build succeeds, the release page looks right, and every asset is named after the wrong version while the generated download links point at filenames that never exist.
 
 #### Smoke tests (`tests/smoke/smoke-test.sh`)
 

@@ -31,6 +31,16 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
+      # First, before the release shell exists and before the ~20-minute signed
+      # build (NEWS-208). The old `release.yml` had this and the NEWS-201 port
+      # dropped it. Nothing else links the tag to the version files, and a
+      # mismatch is silent: the build succeeds, the release page looks right, and
+      # every asset is named after the wrong version — including the download
+      # links generated below, which would point at filenames that never exist.
+      - name: Check the tag matches the configured version
+        run: bash scripts/check-tag-version.sh "${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}"
+        shell: bash
+
       - name: Extract release notes from tag
         id: tag_notes
         run: |

@@ -49,6 +49,27 @@ jobs:
   # Phase 1a: Fast checks — cheap, catch most problems (both tracks)
   # ══════════════════════════════════════════════════════════════
 
+  # Restored with NEWS-208; the old `release.yml` had it and the NEWS-201 port
+  # dropped it. Nothing else links the tag to the version files, and a mismatch
+  # is **silent**: the build succeeds, the release page looks right, and every
+  # asset is named after the wrong version.
+  #
+  # Its own job, and deliberately first: it needs no dependencies, finishes in
+  # seconds, and everything expensive downstream waits on it. Via `release.sh` a
+  # mismatch cannot arise — it writes both files and tags the same commit — so
+  # this is aimed squarely at a **hand-cut tag**, which `docs/5-desktop-app.md`
+  # documents as supported and which is exactly where a human gets it wrong.
+  version-guard:
+    name: Tag matches the version files
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - run: bash scripts/check-tag-version.sh
+        shell: bash
+
   lint:
     name: Lint
     runs-on: ubuntu-latest
@@ -149,7 +170,7 @@ jobs:
 
   test-e2e:
     name: E2E Tests
-    needs: [lint, typecheck, test-unit, audit, rust]
+    needs: [version-guard, lint, typecheck, test-unit, audit, rust]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -173,7 +194,7 @@ jobs:
 
   npm-pack:
     name: npm Pack (Dry Run)
-    needs: [lint, typecheck, test-unit, audit, rust]
+    needs: [version-guard, lint, typecheck, test-unit, audit, rust]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -191,13 +212,15 @@ jobs:
       - run: npm pack --dry-run
 
   # Unsigned validation build across all four targets, gating publish for both tag
-  # tracks. Runs against the committed version (release.sh does not bump in-tree for
-  # beta tags, and bumps to the clean stable version for rc tags), so the Windows MSI
-  # bundler's numeric-only pre-release check is never tripped here. These bundles are
-  # discarded; the signed beta bundles come from `build` below.
+  # tracks. Runs against the committed version, which is the clean `X.Y.Z` for
+  # **both** channels — `release.sh` bumps the version files for betas too (note 4
+  # in its header; this is a deliberate divergence from glassbox, and the comment
+  # here previously described glassbox's behaviour rather than ours). So the
+  # Windows MSI bundler's numeric-only pre-release check is never tripped here.
+  # These bundles are discarded; the signed beta bundles come from `build` below.
   build-tauri:
     name: Build Tauri (${{ matrix.friendly }})
-    needs: [lint, typecheck, test-unit, audit, rust]
+    needs: [version-guard, lint, typecheck, test-unit, audit, rust]
     strategy:
       # `false`, where glassbox uses `true` — a deliberate deviation while three of
       # the four targets have never been bundle-built here (NEWS-20). Fail-fast

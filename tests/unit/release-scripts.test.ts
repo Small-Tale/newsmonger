@@ -66,6 +66,7 @@ describe('the release scripts are wired up (NEWS-194)', () => {
     'scripts/gates-rust.sh',
     'scripts/notary-watch.sh',
     'scripts/verify-signing.sh',
+    'scripts/check-tag-version.sh',
     'tests/smoke/smoke-test.sh',
   ])(
     '%s exists and is executable',
@@ -87,6 +88,7 @@ describe('the release scripts are wired up (NEWS-194)', () => {
     'scripts/gates-rust.sh',
     'scripts/notary-watch.sh',
     'scripts/verify-signing.sh',
+    'scripts/check-tag-version.sh',
     'tests/smoke/smoke-test.sh',
   ])(
     '%s parses as bash',
@@ -106,6 +108,7 @@ describe('the release scripts are wired up (NEWS-194)', () => {
     'scripts/gates-rust.sh',
     'scripts/notary-watch.sh',
     'scripts/verify-signing.sh',
+    'scripts/check-tag-version.sh',
     'tests/smoke/smoke-test.sh',
   ])(
     '%s uses no bash 4 builtins',
@@ -975,5 +978,112 @@ describe('the signing gate is actually wired into the release (NEWS-220)', () =>
     // stop matching the moment the app path moved under a target triple.
     const src = read('scripts/verify-signing.sh');
     expect(src).toMatch(/DMG_DIR="\$\(dirname "\$\(dirname "\$APP"\)"\)\/dmg"/);
+  });
+});
+
+describe('the tag-vs-config version guard (NEWS-208)', () => {
+  const script = path.join(root, 'scripts/check-tag-version.sh');
+  let sandbox: string;
+
+  /** Run the guard in a sandbox whose two version files say `version`. */
+  function check(tag: string | null, version = '1.2.3'): { status: number; output: string } {
+    fs.writeFileSync(path.join(sandbox, 'package.json'), JSON.stringify({ name: 'newsmonger', version }));
+    fs.writeFileSync(path.join(sandbox, 'src-tauri/tauri.conf.json'), JSON.stringify({ version }));
+    try {
+      const stdout = execFileSync('bash', [path.join(sandbox, 'scripts/check-tag-version.sh'), ...(tag === null ? [] : [tag])], {
+        encoding: 'utf8',
+        env: { ...process.env, GITHUB_REF: '' },
+      });
+      return { status: 0, output: stdout };
+    } catch (err) {
+      const e = err as { status?: number; stdout?: string; stderr?: string };
+      return { status: e.status ?? 1, output: `${e.stdout ?? ''}${e.stderr ?? ''}` };
+    }
+  }
+
+  beforeEach(() => {
+    // The script resolves the version files relative to its own location, so the
+    // copy has to sit in a `scripts/` dir inside the sandbox — running the repo's
+    // copy would read the repo's real files and pass for the wrong reason.
+    sandbox = fs.mkdtempSync(path.join(os.tmpdir(), 'newsmonger-tagguard-'));
+    fs.mkdirSync(path.join(sandbox, 'scripts'), { recursive: true });
+    fs.mkdirSync(path.join(sandbox, 'src-tauri'), { recursive: true });
+    fs.copyFileSync(script, path.join(sandbox, 'scripts/check-tag-version.sh'));
+  });
+
+  afterEach(() => {
+    fs.rmSync(sandbox, { recursive: true, force: true });
+  });
+
+  it.each(['v1.2.3', 'v1.2.3-rc.1', 'v1.2.3-beta.4', 'refs/tags/v1.2.3-beta.4', '1.2.3'])(
+    'accepts %o against matching files',
+    (tag) => {
+      // Only the **base** is compared: the suffix lives on the tag and never in
+      // the files. `release.sh` writes the clean X.Y.Z for *both* channels — betas
+      // included (note 4 in its header) — and CI writes the suffixed version at
+      // build time (NEWS-207).
+      expect(check(tag).status, `${tag} should pass`).toBe(0);
+    },
+  );
+
+  it('rejects a tag whose base does not match, and says which file disagrees', () => {
+    // The bug it exists for: tag v0.2.0 against a 0.1.0 config and everything
+    // succeeds — the release page looks right, and every asset is named 0.1.0
+    // while the generated download links point at 0.2.0 filenames that do not
+    // exist. Nothing else links the tag to the files.
+    const { status, output } = check('v9.9.9');
+    expect(status).toBe(1);
+    expect(output).toContain('tauri.conf.json');
+    expect(output).toContain('package.json');
+    expect(output, 'should use an annotation so it surfaces in the run summary').toContain('::error::');
+  });
+
+  it('catches a mismatch in either file alone', () => {
+    // Both are checked, not just the first: a version that lands in package.json
+    // and misses tauri.conf.json ships a correctly-named npm package beside a
+    // wrongly-named bundle.
+    fs.writeFileSync(path.join(sandbox, 'package.json'), JSON.stringify({ version: '1.2.3' }));
+    fs.writeFileSync(path.join(sandbox, 'src-tauri/tauri.conf.json'), JSON.stringify({ version: '1.2.4' }));
+    let out = '';
+    try {
+      execFileSync('bash', [path.join(sandbox, 'scripts/check-tag-version.sh'), 'v1.2.3'], { encoding: 'utf8' });
+    } catch (err) {
+      const e = err as { stdout?: string; stderr?: string };
+      out = `${e.stdout ?? ''}${e.stderr ?? ''}`;
+    }
+    expect(out).toContain('tauri.conf.json (1.2.4)');
+    expect(out, 'package.json matches, so it should not be blamed').not.toContain("does not match package.json");
+  });
+
+  it('exits distinctly when given no tag at all', () => {
+    // 2, not 1: "nothing to check" is not "the versions disagree", and a workflow
+    // that silently passed on an unset ref would be a guard in name only.
+    expect(check(null).status).toBe(2);
+  });
+});
+
+describe('the version guard is wired into both workflows (NEWS-208)', () => {
+  const read = (rel: string): string => fs.readFileSync(path.join(root, rel), 'utf8');
+
+  it('gates release-candidate.yml before anything expensive runs', () => {
+    const src = read('.github/workflows/release-candidate.yml');
+    expect(src).toContain('scripts/check-tag-version.sh');
+    expect(src, 'it should be its own job so it can gate the others').toContain('version-guard:');
+    // The point of a separate job: the 4-target Tauri build and the E2E run must
+    // not start before a mismatched tag has been rejected.
+    for (const m of src.matchAll(/needs: \[([^\]]*)\]/g)) {
+      const needs = m[1];
+      if (needs.includes('lint')) {
+        expect(needs, `"${needs}" should also wait on version-guard`).toContain('version-guard');
+      }
+    }
+  });
+
+  it('gates release-desktop.yml in create-release, before the signed build', () => {
+    // Earliest possible point: the release shell does not exist yet and the
+    // ~20-minute signed build has not started.
+    const src = read('.github/workflows/release-desktop.yml');
+    const createRelease = src.slice(src.indexOf('create-release:'), src.indexOf('  build:'));
+    expect(createRelease).toContain('scripts/check-tag-version.sh');
   });
 });
