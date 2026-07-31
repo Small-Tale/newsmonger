@@ -134,10 +134,11 @@ test('the update banner can be dismissed (NEWS-89)', async ({ page }) => {
   // (NEWS-228).
   //
   // What is genuinely checkable here is that exactly one poll happened and the
-  // banner stayed closed. Re-announcing the same version is a different case,
-  // and it is **not** protected — `setUpdateVersion` clears `updateDismissed` —
-  // so asserting it here would have been asserting a behaviour the app does not
-  // have. Tracked separately.
+  // banner stayed closed. Re-announcing the same version *is* protected —
+  // `setUpdateVersion` returns early when the version is unchanged, so the
+  // dismissal survives — and that is covered directly in
+  // `tests/unit/update.test.ts` ("keeps a dismissal when the same version is
+  // announced again"), which is the right level for it: no polling, no clock.
   const checks = await page.evaluate(
     () => (window as unknown as { __invoked: string[] }).__invoked.filter((c) => c === 'get_pending_update').length,
   );
