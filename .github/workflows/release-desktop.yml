@@ -9,6 +9,15 @@ name: Release Desktop App
 permissions:
   contents: write
 
+# Absent entirely until NEWS-225. Two runs for the same tag — a push plus a
+# dispatch, or a re-run — both call `createRelease` for that tag and both drive
+# the four-platform matrix over the same asset set. **Never cancel**: a run
+# cancelled mid-notarization abandons an in-flight submission at Apple and can
+# strand a draft holding a partial set of assets.
+concurrency:
+  group: release-desktop-${{ github.event.inputs.tag || github.ref }}
+  cancel-in-progress: false
+
 on:
   push:
     tags:
@@ -208,6 +217,14 @@ jobs:
         with:
           targets: ${{ matrix.target }}
 
+      # Dropped from every bundle build in the NEWS-201 port (NEWS-225). This
+      # matrix was compiling Rust cold on the most expensive runners. Build
+      # minutes only — not a guard.
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+          key: ${{ matrix.target }}
+
       - name: Install Linux dependencies
         if: matrix.platform == 'ubuntu-22.04'
         run: |
@@ -301,6 +318,17 @@ jobs:
           APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         run: bash scripts/notary-watch.sh history
+
+      # See release-candidate.yml — the bundle is the evidence when signing fails,
+      # and another copy costs another Apple round trip (NEWS-225).
+      - name: Upload the built bundle (evidence on failure)
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: signed-bundle-${{ matrix.target }}
+          path: src-tauri/target/${{ matrix.target }}/release/bundle/
+          if-no-files-found: warn
+          retention-days: 14
 
   # Rename the user-facing installer assets to human-friendly names. Runs once,
   # after every platform shard has uploaded, so the rename is race-free (a single

@@ -1261,3 +1261,45 @@ describe('the stable release path is gated too (NEWS-224)', () => {
     expect(gates).toContain('ref: ${{ inputs.tag || github.ref }}');
   });
 });
+
+describe('release runs keep their evidence and do not cancel each other (NEWS-225)', () => {
+  const read = (rel: string): string => fs.readFileSync(path.join(root, rel), 'utf8');
+  const WORKFLOWS = ['.github/workflows/release-desktop.yml', '.github/workflows/release-candidate.yml'];
+
+  it.each(WORKFLOWS)('%s uploads the bundle even when the build fails', (rel) => {
+    // The bundle is the evidence when signing or notarization goes wrong, and
+    // another copy costs another Apple round trip — 5 to 60 minutes, or hours if
+    // the queue stalls. Without `always()` the upload is skipped on exactly the
+    // runs that need it, which is how the old file justified the same line.
+    const src = read(rel);
+    const idx = src.indexOf('Upload the built bundle');
+    expect(idx, `${rel} should keep the bundle on failure`).toBeGreaterThan(-1);
+    expect(src.slice(idx, idx + 400)).toContain('if: always()');
+  });
+
+  it.each(WORKFLOWS)('%s never cancels a release run in progress', (rel) => {
+    // Cancelling is right for branch CI and wrong for a release: a run cancelled
+    // mid-notarization abandons an in-flight Apple submission and can strand a
+    // draft holding a partial set of assets. The old release.yml set this to
+    // false deliberately; the port flipped one to true and dropped the other.
+    const src = read(rel);
+    expect(src, `${rel} needs a concurrency group`).toContain('concurrency:');
+    expect(src).toContain('cancel-in-progress: false');
+    expect(src, 'cancelling a release is never what you want').not.toContain('cancel-in-progress: true');
+  });
+
+  it.each(WORKFLOWS)('%s caps every job that builds a bundle', (rel) => {
+    // An uncapped matrix inherits GitHub's 360-minute default, which is a lot of
+    // macOS runner time to spend on a hang.
+    const src = read(rel);
+    const jobsWithTauri = src.split('\n  ').filter((chunk) => chunk.includes('tauri-action'));
+    expect(jobsWithTauri.length, `${rel} should build with tauri-action`).toBeGreaterThan(0);
+    expect(src).toContain('timeout-minutes:');
+  });
+
+  it.each(WORKFLOWS)('%s caches Rust for the bundle builds', (rel) => {
+    // Cost, not correctness: these matrices were compiling Rust cold on the most
+    // expensive runners. The cache survived only on the Rust lint job.
+    expect(read(rel)).toContain('Swatinem/rust-cache@v2');
+  });
+});

@@ -33,11 +33,20 @@ on:
       - 'v*-rc.*'
       - 'v*-beta.*'
 
-# Two groups so an in-flight rc and an in-flight beta never cancel each other, but
-# two rcs (or two betas) in quick succession do.
+# One group per tag, and **never cancel** (NEWS-225). The old `release.yml` set
+# `cancel-in-progress: false` deliberately and the port flipped it to `true`.
+#
+# Cancelling is right for CI on a branch and wrong for a release: a run cancelled
+# mid-notarization abandons an in-flight submission at Apple — this project has
+# already seen submissions sit `In Progress` for 10.8 hours — and can strand a
+# draft release holding a partial set of assets. Nothing about that reads as a
+# policy decision when it happens; it looks like an infrastructure hiccup.
+#
+# Grouping per `github.ref` rather than per channel, so two different rc tags
+# never queue behind each other either. They are separate releases.
 concurrency:
-  group: release-${{ contains(github.ref, '-beta.') && 'beta' || 'rc' }}
-  cancel-in-progress: true
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
 
 env:
   # 22, not glassbox's 20: the server uses built-in `node:sqlite`, which needs
@@ -221,6 +230,11 @@ jobs:
   build-tauri:
     name: Build Tauri (${{ matrix.friendly }})
     needs: [version-guard, lint, typecheck, test-unit, audit, rust]
+    # Uncapped until NEWS-225, so it inherited GitHub's 360-minute default. It
+    # does not notarize, so NEWS-194's reasoning doesn't apply directly — but a
+    # four-platform matrix with no ceiling is a lot of runner time to spend on a
+    # hang, and the old file capped its only build job.
+    timeout-minutes: 60
     strategy:
       # `false`, where glassbox uses `true` — a deliberate deviation while three of
       # the four targets have never been bundle-built here (NEWS-20). Fail-fast
@@ -254,6 +268,13 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ matrix.target }}
+      # Dropped from every bundle build in the NEWS-201 port; it survived only on
+      # the Rust lint job. These matrices were compiling Rust cold on the most
+      # expensive runners, four times over (NEWS-225). Not a guard — build minutes.
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+          key: ${{ matrix.target }}
       - name: Install Linux dependencies
         if: matrix.platform == 'ubuntu-22.04'
         run: |
@@ -271,12 +292,17 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
           args: --target ${{ matrix.target }}${{ matrix.target == 'x86_64-pc-windows-msvc' && ' --bundles nsis' || '' }}
+      # `always()`, and 14 days (NEWS-225). Without it this is skipped on exactly
+      # the runs worth inspecting: when a build fails, the bundle is the evidence,
+      # and getting another copy costs a full rebuild.
       - name: Upload Tauri artifacts
+        if: always()
         uses: actions/upload-artifact@v7
         with:
           name: tauri-${{ matrix.friendly }}
           path: src-tauri/target/${{ matrix.target }}/release/bundle/
-          retention-days: 7
+          if-no-files-found: warn
+          retention-days: 14
 
   # ══════════════════════════════════════════════════════════════
   # Phase 2 (beta only): the GitHub Release shell, as a DRAFT
@@ -469,6 +495,13 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ matrix.target }}
+      # Dropped from every bundle build in the NEWS-201 port; it survived only on
+      # the Rust lint job. These matrices were compiling Rust cold on the most
+      # expensive runners, four times over (NEWS-225). Not a guard — build minutes.
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+          key: ${{ matrix.target }}
 
       - name: Install Linux dependencies
         if: matrix.platform == 'ubuntu-22.04'
@@ -560,6 +593,19 @@ jobs:
           APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         run: bash scripts/notary-watch.sh history
+
+      # The bundle is the evidence when signing or notarization goes wrong, and
+      # re-running to get a copy costs another Apple round trip — 5 to 60 minutes,
+      # or hours if the queue stalls (NEWS-225). `always()` is the whole point:
+      # without it this is skipped on precisely the runs that need it.
+      - name: Upload the built bundle (evidence on failure)
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: signed-bundle-${{ matrix.friendly }}
+          path: src-tauri/target/${{ matrix.target }}/release/bundle/
+          if-no-files-found: warn
+          retention-days: 14
 
   # ══════════════════════════════════════════════════════════════
   # Phase 5: install + upgrade smoke tests (both tracks)
