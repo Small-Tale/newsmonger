@@ -471,9 +471,20 @@ test('a dismissed failure warning stays dismissed after an app relaunch (NEWS-41
 
   // Relaunch = reload. The failed run is still in server state, but the
   // dismissal now persists, so the warning must not reappear.
+  //
+  // Wait for the poll to have actually happened rather than for the clock
+  // (NEWS-228). This used to sleep 4500ms against a 4000ms poll — 500ms of
+  // margin, which is fine on an idle laptop and not on a loaded CI runner; it
+  // is what failed the suite on Linux while passing 3/3 in isolation. Counting
+  // responses proves the same thing with no timing assumption: the second one
+  // is the poll re-reading the still-failing server state.
+  let statePolls = 0;
+  page.on('response', (r) => {
+    if (r.url().includes('/api/state')) statePolls += 1;
+  });
   await page.reload();
   await expect(row).toBeVisible();
-  await page.waitForTimeout(4500); // a full poll cycle
+  await expect.poll(() => statePolls, { timeout: 20_000 }).toBeGreaterThanOrEqual(2);
   await expect(page.locator('.banner.warn')).toHaveCount(0);
 
   // Clean up.

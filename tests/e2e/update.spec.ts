@@ -127,9 +127,21 @@ test('the update banner can be dismissed (NEWS-89)', async ({ page }) => {
   await page.locator(`${banner} [data-action=dismiss-update]`).click();
   await expect(page.locator(banner)).toHaveCount(0);
 
-  // Still dismissed after the remaining startup polls fire — those re-read the
-  // same version, and re-announcing it must not reopen what was just closed.
-  await page.waitForTimeout(3500);
+  // The sleep that used to be here (3500ms, against the [0, 3000, 10_000] startup
+  // poll delays) was waiting for polls that never fire: `pollPendingUpdate`
+  // *returns* as soon as a version comes back, and this fixture answers on the
+  // first call. So it proved nothing except that 3.5 seconds had passed
+  // (NEWS-228).
+  //
+  // What is genuinely checkable here is that exactly one poll happened and the
+  // banner stayed closed. Re-announcing the same version is a different case,
+  // and it is **not** protected — `setUpdateVersion` clears `updateDismissed` —
+  // so asserting it here would have been asserting a behaviour the app does not
+  // have. Tracked separately.
+  const checks = await page.evaluate(
+    () => (window as unknown as { __invoked: string[] }).__invoked.filter((c) => c === 'get_pending_update').length,
+  );
+  expect(checks, 'the startup loop stops at the first version it finds').toBe(1);
   await expect(page.locator(banner)).toHaveCount(0);
 });
 
