@@ -97,7 +97,7 @@ An unsigned bundle opens on the machine that built it and nowhere else. Gatekeep
 
   The bundle is **discovered**, not assumed: a local `npm run tauri:build` writes `src-tauri/target/release/bundle/`, while `tauri-action` passes an explicit `--target` and cargo writes `src-tauri/target/<triple>/release/bundle/`. A hardcoded path would match only one — and would "pass" in CI by finding nothing, which is exactly the failure this gate exists to prevent. The `.dmg` directory is derived from the resolved app path for the same reason.
 
-- **FR-5.8** *(Shipped, NEWS-197)* **`bash scripts/notary-watch.sh` makes Apple's queue visible while CI waits on it.** Tauri drives `notarytool` internally and prints one `Notarizing …` line, then nothing until it returns. On this project's first submissions that silence ran **1h38m**, and six of seven submissions sat `In Progress` for hours — one for 10.8. While it is happening, a slow queue and a hung one are indistinguishable, and the visible outcome is an opaque `-1009` or a timeout.
+- **FR-5.20** *(Shipped, NEWS-197)* **`bash scripts/notary-watch.sh` makes Apple's queue visible while CI waits on it.** Tauri drives `notarytool` internally and prints one `Notarizing …` line, then nothing until it returns. On this project's first submissions that silence ran **1h38m**, and six of seven submissions sat `In Progress` for hours — one for 10.8. While it is happening, a slow queue and a hung one are indistinguishable, and the visible outcome is an opaque `-1009` or a timeout.
 
   Three subcommands, wired into the macOS shards of both release workflows:
 
@@ -114,6 +114,15 @@ An unsigned bundle opens on the machine that built it and nowhere else. Gatekeep
   Two deliberate properties. It is a **silent no-op without credentials**, because an unsigned build legitimately passes no `APPLE_*` secrets. And every step is `continue-on-error` — a diagnostic that can fail the job obscures the failure it exists to explain (NEWS-194).
 
   The macOS build jobs also carry `timeout-minutes: 120` — past Apple's worst case, but far short of GitHub's 360-minute default, which a stalled submission would otherwise burn in full on two macOS runners at 10× billing. That cap was NEWS-194's and was also lost in the NEWS-201 port.
+
+- **FR-5.19** *(Shipped, NEWS-219)* **Nothing the app spawns runs in a directory the user keeps things in.** macOS attributes a child process's file access to the **responsible application**, so a subprocess reading its working directory makes the OS ask whether *Newsmonger* may read the user's Documents. Three grants were recorded against `com.smalltale.newsmonger` before this was found — Documents, Downloads and MediaLibrary — and a news tracker asking for your documents is alarming precisely because it should be.
+
+  Two inherited working directories caused it, and both are now explicit:
+
+  - `claude` and `codex` are **general-purpose coding agents**: started in a directory, they read it. They inherited the server's cwd — the repo root under `tauri dev`. They now start in `agentCwd()` (`src/ai/providers/agent-cwd.ts`), a subdirectory of the temp dir holding nothing. Newsmonger passes the whole prompt explicitly and wants no project context, so this costs nothing.
+  - The **release sidecar** inherited whatever launched the app. `src-tauri/src/lib.rs` now anchors it to the app's own resource directory.
+
+  The rule worth keeping: **spawn with an explicit `cwd`, always.** An inherited one is a directory some other process chose, and on macOS the user gets asked about it in this app's name.
 
 ### What still needs a human — the full credential recipe (NEWS-21)
 

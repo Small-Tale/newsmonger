@@ -12,6 +12,7 @@ import type {
   TopicContext,
 } from '../types.js';
 import { DISCOVERY_MODELS } from '../types.js';
+import { agentCwd } from './agent-cwd.js';
 
 /**
  * Run checks against the user's Claude Pro/Max **subscription** rather than an
@@ -78,7 +79,9 @@ function spawnRunner(binary: string): ClaudeCliRunner {
     new Promise((resolve, reject) => {
       let child;
       try {
-        child = spawn(binary, args, { stdio: ['ignore', 'pipe', 'pipe'] });
+        // `cwd` is explicit, never inherited (NEWS-219): a CLI agent reads the
+        // directory it starts in, and macOS attributes that read to Newsmonger.
+        child = spawn(binary, args, { stdio: ['ignore', 'pipe', 'pipe'], cwd: agentCwd() });
       } catch {
         reject(new Error(`Could not run "${binary}" — is Claude Code installed?`));
         return;

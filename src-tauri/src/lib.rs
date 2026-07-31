@@ -218,6 +218,14 @@ fn server_command(app: &AppHandle) -> Result<Command, String> {
 
     let mut cmd = Command::new(node);
     cmd.arg(&server_js).arg("--no-open");
+    // Explicit, never inherited (NEWS-219). A GUI app's cwd is whatever launched
+    // it, and everything the server spawns inherits it in turn — so on macOS a
+    // subprocess reading that directory makes the OS ask whether *Newsmonger* may
+    // read the user's Documents. Anchoring to a directory the app owns keeps the
+    // question from ever being asked.
+    if let Some(dir) = server_js.parent() {
+        cmd.current_dir(dir);
+    }
     // Keep the sidecar from flashing a console window on Windows.
     #[cfg(windows)]
     {

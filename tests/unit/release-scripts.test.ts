@@ -835,11 +835,28 @@ describe('the notarization watcher (NEWS-197)', () => {
     }
   }
 
+  /**
+   * Wait for the poller's first line rather than sleeping a fixed interval.
+   *
+   * A fixed `setTimeout` was flaky: the poller sleeps one second *before* its
+   * first poll, and under a loaded parallel suite that lands past the deadline.
+   * Polling for the condition keeps the test fast when the machine is idle and
+   * correct when it is not.
+   */
+  async function waitForPoll(stateDir: string, timeoutMs = 15_000): Promise<void> {
+    const log = path.join(stateDir, 'notary-watch.log');
+    const deadline = Date.now() + timeoutMs;
+    while (Date.now() < deadline) {
+      if (fs.existsSync(log) && fs.readFileSync(log, 'utf8').includes('recent submissions')) return;
+      await new Promise((r) => setTimeout(r, 100));
+    }
+  }
+
   it('records what the queue was doing, with timestamps', async () => {
     // The whole point: Tauri prints one "Notarizing …" line and then nothing, so
     // a 1h38m wait and a hung process look identical while they are happening.
     const { stateDir } = run(['start']);
-    await new Promise((r) => setTimeout(r, 2500));
+    await waitForPoll(stateDir);
     const { output } = run(['report'], { stateDir });
     expect(output).toContain('In Progress');
     expect(output).toContain('newest-id');
@@ -848,7 +865,7 @@ describe('the notarization watcher (NEWS-197)', () => {
 
   it('stops the poller when it reports, so it cannot outlive the job', async () => {
     const { stateDir } = run(['start']);
-    await new Promise((r) => setTimeout(r, 1500));
+    await waitForPoll(stateDir);
     run(['report'], { stateDir });
     expect(fs.existsSync(path.join(stateDir, 'notary-watch.pid'))).toBe(false);
   });

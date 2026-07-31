@@ -1,3 +1,7 @@
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+
 import { describe, expect, it } from 'vitest';
 
 import type { ClaudeCliRunner } from '../../src/ai/providers/claude-cli.js';
@@ -146,5 +150,41 @@ describe('createClaudeCliProvider', () => {
     const p = createClaudeCliProvider({ runner: fakeRunner({ run: () => Promise.resolve(withCite) }) });
     const result = await p.checkTopic('t', [], null);
     expect(result.items[0]?.summary).toBe('Body. Cited bit.');
+  });
+});
+
+describe('spawned CLI agents get a neutral working directory (NEWS-219)', () => {
+  it('is a real directory, and not one macOS protects', async () => {
+    const { agentCwd } = await import('../../src/ai/providers/agent-cwd.js');
+    const dir = agentCwd();
+    expect(fs.existsSync(dir), 'the cwd must exist or spawn fails with ENOENT').toBe(true);
+    expect(fs.statSync(dir).isDirectory()).toBe(true);
+
+    // The bug: `claude` and `codex` read whatever directory they start in, and
+    // macOS attributes that read to the responsible app — so the user got
+    // "Newsmonger would like to access files in your Documents folder". Three
+    // grants were recorded against com.smalltale.newsmonger before this was found.
+    const home = os.homedir();
+    for (const protectedDir of ['Documents', 'Downloads', 'Desktop', 'Music', 'Pictures', 'Movies']) {
+      expect(dir, `must not start an agent in ~/${protectedDir}`).not.toContain(path.join(home, protectedDir));
+    }
+    // Nor the repo itself, which is what `tauri dev` used to inherit.
+    expect(dir).not.toContain(process.cwd());
+  });
+
+  it('is stable across calls, so agents do not scatter directories', async () => {
+    const { agentCwd } = await import('../../src/ai/providers/agent-cwd.js');
+    expect(agentCwd()).toBe(agentCwd());
+  });
+
+  it('is passed to spawn rather than left inherited, in both CLI providers', () => {
+    // The seam these tests inject means the real `spawn` options are never
+    // exercised here — so the one line that actually fixes the bug is asserted
+    // directly. Dropping `cwd` would restore the inherited directory and nothing
+    // else would notice.
+    for (const rel of ['src/ai/providers/claude-cli.ts', 'src/ai/providers/codex-cli.ts']) {
+      const src = fs.readFileSync(path.join(process.cwd(), rel), 'utf8');
+      expect(src, `${rel} should spawn with an explicit cwd`).toContain('cwd: agentCwd()');
+    }
   });
 });
