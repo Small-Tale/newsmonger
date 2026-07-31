@@ -2,12 +2,11 @@ import v8 from 'node:v8';
 
 import { createDemoProvider } from './ai/providers/demo.js';
 import { createMockProvider, resolveProvider } from './ai/providers/index.js';
-import { PROVIDER_NAMES } from './ai/types.js';
 import { probeLink } from './ai/verify-links.js';
 import { Attendance } from './attendance.js';
 import type { ProviderResolver } from './checks.js';
 import { CheckRunner } from './checks.js';
-import { parseArgs } from './config.js';
+import { earlyExitFlag, HELP_TEXT, parseArgs, USAGE_LINE } from './config.js';
 import type { Settings } from './db/schemas.js';
 import { Store } from './db/store.js';
 import { DiscoveryService } from './discovery.js';
@@ -15,23 +14,32 @@ import { createFaviconFetcher, createImageFetcher, liveImageHashes, pruneImageCa
 import { openInBrowser } from './routes/api.js';
 import { startScheduler } from './scheduler.js';
 import { createApp, startServer } from './server.js';
+import { appVersion } from './version.js';
 
 async function main(): Promise<void> {
+  // Answered before anything else — before the store opens, before a provider is
+  // probed, and before the args are parsed at all (NEWS-216). `newsmonger --help`
+  // used to exit 1 with "unknown argument: --help", which is the first thing
+  // someone who just ran `npm install -g newsmonger` is likely to type.
+  switch (earlyExitFlag(process.argv.slice(2))) {
+    case 'help':
+      // stdout, not stderr, and exit 0: asked-for help is not an error, and
+      // `newsmonger --help | less` should show something.
+      console.log(HELP_TEXT);
+      return;
+    case 'version':
+      console.log(appVersion() === '' ? 'unknown' : appVersion());
+      return;
+    case null:
+      break;
+  }
+
   let options;
   try {
     options = parseArgs(process.argv.slice(2));
   } catch (err) {
     console.error(err instanceof Error ? err.message : String(err));
-    // The provider list is interpolated from PROVIDER_NAMES rather than written
-    // out (NEWS-204). Hardcoded, it had drifted twice over: it advertised
-    // `ollama`, which is not a provider, and omitted `claude-cli` and `codex-cli`,
-    // which are — so the one place a user goes when they have got the flag wrong
-    // was itself wrong. The binary name was also still `news`, from before the
-    // NEWS-164 rename.
-    console.error(
-      `usage: newsmonger [--port N] [--data-dir PATH] [--provider ${PROVIDER_NAMES.join('|')}] ` +
-        '[--model ID] [--endpoint URL] [--no-open] [--strict-port] [--ai-test] [--demo]',
-    );
+    console.error(USAGE_LINE);
     process.exit(1);
   }
 

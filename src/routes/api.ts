@@ -1,7 +1,5 @@
 import { spawn } from 'node:child_process';
 import fs from 'node:fs';
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 
 import type { Context, Hono } from 'hono';
 import type { z } from 'zod';
@@ -24,6 +22,7 @@ import { toAtom, toJson, toMarkdown } from '../export.js';
 import { cachedImagePath, isValidHash, liveImageHashes, pruneImageCache, sniffImageType } from '../images/index.js';
 import { isKeychainAvailable, keychainLabel } from '../keychain.js';
 import type { AppEnv } from '../types.js';
+import { appVersion } from '../version.js';
 
 async function parseBody<T extends z.ZodType>(c: { req: { json(): Promise<unknown> } }, schema: T): Promise<z.infer<T> | null> {
   try {
@@ -33,36 +32,6 @@ async function parseBody<T extends z.ZodType>(c: { req: { json(): Promise<unknow
   } catch {
     return null;
   }
-}
-
-/**
- * The app's own version, for diagnostics (NEWS-88).
- *
- * Read from the nearest `package.json` and cached. Returns '' rather than
- * throwing when it can't be found — a diagnostics bundle that says "version
- * unknown" is far better than one that fails to render.
- */
-let cachedVersion: string | undefined;
-function appVersion(): string {
-  if (cachedVersion !== undefined) return cachedVersion;
-  cachedVersion = '';
-  let dir = path.dirname(fileURLToPath(import.meta.url));
-  for (let i = 0; i < 5; i++) {
-    const candidate = path.join(dir, 'package.json');
-    if (fs.existsSync(candidate)) {
-      try {
-        const parsed: unknown = JSON.parse(fs.readFileSync(candidate, 'utf8'));
-        if (typeof parsed === 'object' && parsed !== null && 'version' in parsed && typeof parsed.version === 'string') {
-          cachedVersion = parsed.version;
-        }
-      } catch {
-        // unreadable or not JSON — leave it as ''
-      }
-      break;
-    }
-    dir = path.dirname(dir);
-  }
-  return cachedVersion;
 }
 
 /**

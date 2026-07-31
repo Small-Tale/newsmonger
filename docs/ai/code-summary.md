@@ -9,7 +9,8 @@
 ```
 src/
   cli.ts              entry: arg parse → Store/service/runner → server → scheduler → open browser
-  config.ts           CLI flags (--port --data-dir --provider --model --endpoint --no-open --strict-port --ai-test) + env
+  config.ts           CLI flags (--port --data-dir --provider --model --endpoint --no-open --strict-port --ai-test --demo) + env; USAGE_LINE/HELP_TEXT + earlyExitFlag (--help/--version, scanned before parseArgs — NEWS-216)
+  version.ts          appVersion(): nearest package.json version, cached, '' if not found — used by /api/state and --version
   server.ts           createApp (Hono, DI via middleware) + startServer (127.0.0.1, port fallback), /static handler
   export.ts           toMarkdown/toJson/toAtom + escapeXml — export & feed rendering, pure (NEWS-85)
   origin-guard.ts     Host/Origin check on every route — cross-origin + DNS-rebinding guard (NEWS-86)
@@ -132,7 +133,9 @@ Data dir: `--data-dir` flag → `NEWSMONGER_DATA_DIR` → `~/.newsmonger`. Also 
 | How much a check returns | `searchingSystemPrompt()` volume rule (portable); `max_uses: 8` in `anthropic.ts` is a cost guard, not the mechanism |
 | Persistence / schema change | `src/db/schemas.ts` + `src/db/store.ts` — **removing an enum value needs `.catch()`** or old files get reset (see the migration tests) |
 | UI change | `src/client/app.tsx` (+ `styles.scss`); mind the kerf structural rules in `docs/3-ui.md`. **kerfjs 4.0.0** — dev diagnostics are opt-in by import (we don't import them; NEWS-100), KF-377 is fixed (NEWS-99), and enumerated attributes take keyword strings (NEWS-123) |
-| New CLI flag | `src/config.ts` + `src/cli.ts` |
+| New CLI flag | `src/config.ts` + `src/cli.ts` — and add it to `HELP_TEXT` in `config.ts`, which `tests/unit/config.test.ts` pins against what `parseArgs` accepts |
+| `--help` / `--version` | `earlyExitFlag` + `HELP_TEXT`/`USAGE_LINE` in `src/config.ts`, answered at the top of `main()` in `cli.ts` before the store opens. Both go to stdout and exit 0 (NEWS-216) |
+| What the published npm package ships / whether a global install works | `package.json` `files`/`bin`/`prepublishOnly` + `tests/unit/npm-package.test.ts`; asset lookup is `clientDir()` in `server.ts` (module-relative, not cwd). Pack-install-run procedure in `docs/manual-test-plan.md` |
 | Tauri shell | `src-tauri/src/lib.rs` (`running at ` marker must match `src/cli.ts`) |
 | Rust-only CI jobs failing on missing bundle paths | `scripts/ensure-sidecar-stub.sh` — `tauri-build` validates `externalBin`/`resources` in its build script, so plain `cargo clippy` fails before compiling. Used by `ci.yml` and `release-candidate.yml`; stubs only, idempotent (NEWS-191/201) |
 | Release bundling / sidecar | `scripts/build-sidecar.sh` + `src-tauri/tauri.conf.json` (`externalBin`, `resources`) |

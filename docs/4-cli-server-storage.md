@@ -2,18 +2,32 @@
 
 ## CLI
 
-- **FR-4.1** `news` (dev: `npm run dev` → `tsx src/cli.ts`) starts the server and opens the browser. Flags:
+- **FR-4.1** `newsmonger` (dev: `npm run dev` → `tsx src/cli.ts`) starts the server and opens the browser. Flags:
   - `--port N` — requested port (default 4187)
   - `--data-dir PATH` — data directory (default `$NEWSMONGER_DATA_DIR` or `~/.newsmonger`)
-  - `--provider auto|anthropic|openai|mock` — seed the provider setting (env `NEWSMONGER_PROVIDER`)
+  - `--provider auto|claude-cli|codex-cli|anthropic|openai|mock` — seed the provider setting (env `NEWSMONGER_PROVIDER`)
   - `--model ID` — seed the model setting (env `NEWSMONGER_MODEL`)
   - `--endpoint URL` — seed the endpoint setting for OpenAI-compatible gateways (env `NEWSMONGER_ENDPOINT`)
   - `--no-open` — don't open the browser
   - `--strict-port` — fail instead of falling back when the port is busy
   - `--ai-test` — force the deterministic mock provider (no API key needed)
+  - `--demo` — serve curated fixture stories, for capturing the docs (NEWS-212); implies `--ai-test`
+  - `-h`, `--help` / `-v`, `--version` — see FR-4.1a
 
   Provider/model/endpoint flags **seed** the persisted settings at startup; the UI changes them thereafter. See [6 — AI Providers](6-providers.md) for provider-specific env vars.
-- **FR-4.2** Unknown flags or bad values print a usage line and exit non-zero.
+- **FR-4.1a** *(Shipped, NEWS-216)* **`--help` and `--version` are answered, not run.** Both print to **stdout** and exit **0**: asked-for help is not an error, `newsmonger --help | less` should show something, and a script checking whether the binary is installed should get a yes.
+
+  They are scanned for **before `parseArgs` runs at all** (`earlyExitFlag`), which matters in three ways. `newsmonger --help` previously exited 1 with `unknown argument: --help` — replying "unknown argument" to someone asking *what the arguments are* is exactly backwards, and after `npm install -g newsmonger` it is close to the first thing anyone types. Answering early also means a bad flag or a bad `NEWSMONGER_PROVIDER` in the environment (parsed while building the defaults) can't stop help from printing. And it returns before the `Store` is constructed, so neither flag creates a data directory or starts a server.
+
+  The scan skips the value of a value-taking flag, so `--model -v` seeds a (silly) model rather than printing the version and never starting.
+
+  The help text and the one-line usage both live in `src/config.ts` and interpolate `PROVIDER_NAMES` (NEWS-204) — a hardcoded list had already drifted twice.
+- **FR-4.1b** *(Shipped, NEWS-216)* **`npm install -g newsmonger` then `newsmonger` is the supported way to run it**, and is what the README leads with. That path is a different artifact from the source tree and can break while the whole suite is green (the same property the Tauri bundle has, FR-5.3), so it is checked as a package: `prepublishOnly` builds **both** the server bundle and the client assets, `files` is `dist` minus sourcemaps at every depth, and `bin.newsmonger` points inside `files` (`tests/unit/npm-package.test.ts`, NEWS-204). tsup writes the `#!/usr/bin/env node` banner; `engines` is `>=22.5` for `node:sqlite`.
+
+  The server finds its client assets **relative to its own module**, not the cwd (`clientDir()` in `src/server.ts`), which is what makes an install work from anywhere. Verified end to end for NEWS-216 by packing the tarball, installing it to a throwaway `--prefix`, and driving the result in a browser — see [manual-test-plan.md](manual-test-plan.md).
+
+  The README is written for people **using** Newsmonger; everything about working *on* it moved to [CONTRIBUTING.md](../CONTRIBUTING.md). The quick start used to be `npm install && npm run dev`, which silently assumed a clone the reader had never been told to make.
+- **FR-4.2** Unknown flags or bad values print the usage line **to stderr** and exit non-zero.
 - **FR-4.3** The server prints `newsmonger running at http://127.0.0.1:<port>` on stdout when ready — the Tauri shell watches for this exact `running at ` marker (KEEP IN SYNC with `src-tauri/src/lib.rs`).
 - **FR-4.4** SIGINT/SIGTERM stop the scheduler and server cleanly.
 

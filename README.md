@@ -9,11 +9,15 @@ Built with [kerfjs](https://github.com/brianwestphal/kerf) + Hono + Tauri (hybri
 ## Quick start
 
 ```sh
-npm install
-npm run dev     # http://127.0.0.1:4187
+npm install -g newsmonger
+newsmonger
 ```
 
+That's it — it starts the server and opens the app in your browser at `http://127.0.0.1:4187`.
+
 **No API key needed.** If you're signed in to [Claude Code](https://claude.com/claude-code) or the [Codex CLI](https://developers.openai.com/codex/cli), Newsmonger uses that subscription — it drives the CLI you already have, so checks come out of your existing plan rather than a metered key. That's the default and the recommended way to run it. Add `--ai-test` for an offline mock, or set an API key in Settings if you'd rather pay per call.
+
+Useful flags: `--port N`, `--data-dir PATH`, `--no-open` (don't launch a browser), `--strict-port` (fail rather than fall forward if the port is taken). `newsmonger --help` lists them all.
 
 Data lives in `~/.newsmonger/newsmonger.db`, a SQLite database (override the directory with `--data-dir` or `NEWSMONGER_DATA_DIR`). A `data.json` left by an older build is imported automatically on first start and renamed.
 
@@ -46,18 +50,12 @@ The only other outbound traffic is fetching an article's lead image (proxied thr
 
 The same note is in the app, under Settings → Privacy.
 
-## Commands
+## Desktop app
 
-| Command | What it does |
-|---|---|
-| `npm run dev` | Build client assets and run the server from source |
-| `npm test` | Unit tests (vitest, with coverage) |
-| `npm run test:e2e` | Browser E2E tests (Playwright, mock AI) |
-| `npm run test:all` | Typecheck + lint + unit + E2E |
-| `npm run tauri:dev` | Desktop app in dev mode (needs Rust) |
-| `npm run build` | Bundle the server CLI to `dist/` |
-| `npm run demo:capture` | Regenerate the README hero (`assets/demo.svg`) from the live app |
+Newsmonger also ships as a **macOS desktop app** — the same application in a native window, which keeps it out of a browser tab and lets it send real notifications when new stories arrive. Download the `.dmg` from [Releases](https://github.com/Small-Tale/newsmonger/releases). It updates itself: when a new version ships, the app offers to install it and asks you to restart.
 
-## Docs
+Windows and Linux bundles are built but have not been through a real install-and-run test yet, so treat them as unproven.
 
-Requirements live in `docs/` (numbered); AI session summaries in `docs/ai/`.
+## Contributing
+
+Working on Newsmonger rather than using it? See [CONTRIBUTING.md](CONTRIBUTING.md).

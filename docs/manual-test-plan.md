@@ -99,6 +99,20 @@ The E2E suite drives discovery end to end, but only against the deterministic mo
 4. **Export a file (NEWS-157)**: Settings → Data → click each export link. Each must save a file via the system browser (`<a download>` is a no-op in the WKWebView — this is why the click is routed through `/api/open-external`). Automated in a browser and with a simulated `window.__TAURI__`, but the real webview's download behaviour is what this confirms.
 5. **Delete a topic (NEWS-39)**: select it and press Delete, or right-click → Delete. The **in-app** confirmation must appear (not a native OS dialog), and confirming must actually remove the topic. This is the case that failed with `window.confirm`, which no-ops in the WKWebView — and which no headless test can catch, since Playwright auto-accepts native dialogs. Also verify **Remove** on a stored API key confirms and removes.
 
+## Global npm install — ✅ macOS verified 2026-07-31 (NEWS-216)
+
+The published package is a separate artifact from the source tree, and the suite only inspects it statically (`tests/unit/npm-package.test.ts`): it can be broken while everything is green. The one thing that proves it is installing it.
+
+```sh
+mkdir -p /tmp/nm && npm pack --pack-destination /tmp/nm
+npm install -g --prefix /tmp/nm-prefix /tmp/nm/newsmonger-<version>.tgz
+PATH=/tmp/nm-prefix/bin:$PATH newsmonger --ai-test --no-open --port 4291 --data-dir /tmp/nm-data
+```
+
+Run it from a directory **outside the repo** — the point is that the server resolves its client assets relative to its own module rather than the cwd.
+
+Verified 2026-07-31 on macOS at 0.2.0: the `bin` symlink is created, `newsmonger --help` / `--version` answer and exit 0, the server prints its readiness line, `/` and every `/static/*` asset serve (`app.js` 887 kB, `styles.css`, the SVGs), `/api/state` returns the real state with `appVersion`, and the page renders in Chromium with **no console errors**. Not yet run on Windows or Linux.
+
 ## Tauri release bundle (needs Rust toolchain) — ✅ macOS verified 2026-07-24
 
 `npm run tauri:build` then launch `src-tauri/target/release/bundle/macos/Newsmonger.app`. Verified on `aarch64-apple-darwin` (NEWS-2): the sidecar starts, the webview navigates, the real UI loads (`NEWSMONGER_LOG_REQUESTS=1` shows `GET /` → assets → `/api/state` → `/api/providers`), and quitting leaves no orphaned `newsmonger-node`.

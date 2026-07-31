@@ -3,7 +3,8 @@ import path from 'node:path';
 
 import { describe, expect, it } from 'vitest';
 
-import { defaultDataDir, parseArgs } from '../../src/config.js';
+import { PROVIDER_NAMES } from '../../src/ai/types.js';
+import { defaultDataDir, earlyExitFlag, HELP_TEXT, parseArgs, USAGE_LINE } from '../../src/config.js';
 
 describe('defaultDataDir', () => {
   it('prefers NEWSMONGER_DATA_DIR when set', () => {
@@ -86,5 +87,69 @@ describe('--demo (NEWS-212)', () => {
     expect(parseArgs([], {}).demo).toBe(false);
     expect(parseArgs(['--ai-test'], {}).demo).toBe(false);
     expect(parseArgs(['--ai-test'], {}).aiTest).toBe(true);
+  });
+});
+
+describe('--help and --version (NEWS-216)', () => {
+  it('recognizes both spellings of each', () => {
+    for (const arg of ['--help', '-h']) expect(earlyExitFlag([arg])).toBe('help');
+    for (const arg of ['--version', '-v']) expect(earlyExitFlag([arg])).toBe('version');
+    expect(earlyExitFlag([])).toBe(null);
+    expect(earlyExitFlag(['--ai-test', '--no-open'])).toBe(null);
+  });
+
+  it('answers them even next to arguments that would fail to parse', () => {
+    // The point of the early scan: someone typing `--help` is asking what the
+    // valid flags *are*, so replying "unknown argument" would be backwards. It
+    // has to work before `parseArgs` runs, not inside it.
+    expect(earlyExitFlag(['--bogus', '--help'])).toBe('help');
+    expect(earlyExitFlag(['--port', 'not-a-port', '--version'])).toBe('version');
+    expect(() => parseArgs(['--bogus', '--help'], {})).toThrow(/unknown argument/);
+  });
+
+  it('takes the first of the two when both are given', () => {
+    expect(earlyExitFlag(['--help', '--version'])).toBe('help');
+    expect(earlyExitFlag(['--version', '--help'])).toBe('version');
+  });
+
+  it('does not mistake a flag value for a request', () => {
+    // `--model -v` is a silly model id, but it is a *value*, and treating it as
+    // a version request would print 0.2.0 and never start the server.
+    expect(earlyExitFlag(['--model', '-v'])).toBe(null);
+    expect(earlyExitFlag(['--data-dir', '--help'])).toBe(null);
+    expect(earlyExitFlag(['--model', '-v', '--help'])).toBe('help');
+  });
+
+  it('keeps the help text and the usage line honest about the providers', () => {
+    // Both are built from PROVIDER_NAMES (NEWS-204) — the hardcoded list had
+    // drifted twice, advertising a provider that did not exist and omitting two
+    // that did.
+    for (const text of [USAGE_LINE, HELP_TEXT]) {
+      for (const name of PROVIDER_NAMES) expect(text, `omits ${name}`).toContain(name);
+      expect(text, 'ollama is not a provider').not.toContain('ollama');
+    }
+    expect(HELP_TEXT).toContain('--help');
+    expect(HELP_TEXT).toContain('--version');
+  });
+
+  it('documents every flag parseArgs accepts', () => {
+    // A flag that exists but is undocumented is one nobody finds; the help text
+    // is the only place a user can look.
+    const accepted: string[][] = [
+      ['--port', '5000'],
+      ['--data-dir', '/tmp/x'],
+      ['--provider', 'openai'],
+      ['--model', 'gpt-x'],
+      ['--endpoint', 'http://h:1234/v1'],
+      ['--no-open'],
+      ['--strict-port'],
+      ['--ai-test'],
+      ['--demo'],
+    ];
+    for (const args of accepted) {
+      const flag = args[0] ?? '';
+      expect(HELP_TEXT, `${flag} is missing from --help`).toContain(flag);
+      expect(() => parseArgs(args, {}), `${flag} should parse`).not.toThrow();
+    }
   });
 });
