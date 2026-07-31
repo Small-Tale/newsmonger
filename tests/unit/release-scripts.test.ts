@@ -67,6 +67,7 @@ describe('the release scripts are wired up (NEWS-194)', () => {
     'scripts/notary-watch.sh',
     'scripts/verify-signing.sh',
     'scripts/check-tag-version.sh',
+    'scripts/verify-sidecar-linux.sh',
     'tests/smoke/smoke-test.sh',
   ])(
     '%s exists and is executable',
@@ -89,6 +90,7 @@ describe('the release scripts are wired up (NEWS-194)', () => {
     'scripts/notary-watch.sh',
     'scripts/verify-signing.sh',
     'scripts/check-tag-version.sh',
+    'scripts/verify-sidecar-linux.sh',
     'tests/smoke/smoke-test.sh',
   ])(
     '%s parses as bash',
@@ -109,6 +111,7 @@ describe('the release scripts are wired up (NEWS-194)', () => {
     'scripts/notary-watch.sh',
     'scripts/verify-signing.sh',
     'scripts/check-tag-version.sh',
+    'scripts/verify-sidecar-linux.sh',
     'tests/smoke/smoke-test.sh',
   ])(
     '%s uses no bash 4 builtins',
