@@ -64,6 +64,7 @@ describe('the release scripts are wired up (NEWS-194)', () => {
     'scripts/add-changelog-entry.mjs',
     'scripts/ensure-sidecar-stub.sh',
     'scripts/gates-rust.sh',
+    'scripts/notary-watch.sh',
     'tests/smoke/smoke-test.sh',
   ])(
     '%s exists and is executable',
@@ -83,6 +84,7 @@ describe('the release scripts are wired up (NEWS-194)', () => {
     'scripts/tauri-build-local.sh',
     'scripts/ensure-sidecar-stub.sh',
     'scripts/gates-rust.sh',
+    'scripts/notary-watch.sh',
     'tests/smoke/smoke-test.sh',
   ])(
     '%s parses as bash',
@@ -100,6 +102,7 @@ describe('the release scripts are wired up (NEWS-194)', () => {
     'scripts/tauri-build-local.sh',
     'scripts/ensure-sidecar-stub.sh',
     'scripts/gates-rust.sh',
+    'scripts/notary-watch.sh',
     'tests/smoke/smoke-test.sh',
   ])(
     '%s uses no bash 4 builtins',
@@ -777,5 +780,126 @@ describe('the Rust gates skip only where a sibling job covers them', () => {
     // to `npm run test:all` doesn't reintroduce it.
     const rc = read('.github/workflows/release-candidate.yml');
     expect(rc).not.toContain('npm run test:all');
+  });
+});
+
+describe('the notarization watcher (NEWS-197)', () => {
+  const script = path.join(root, 'scripts/notary-watch.sh');
+
+  /** Run a subcommand with a stubbed `xcrun` on PATH and a scratch state dir. */
+  function run(
+    args: string[],
+    opts: { credentials?: boolean; stub?: boolean; stateDir?: string } = {},
+  ): { status: number; output: string; stateDir: string } {
+    const stateDir = opts.stateDir ?? fs.mkdtempSync(path.join(os.tmpdir(), 'newsmonger-notary-'));
+    const binDir = path.join(stateDir, 'bin');
+    fs.mkdirSync(binDir, { recursive: true });
+    if (opts.stub !== false) {
+      // Shaped like Apple's `--output-format json`, with the newest first — the
+      // ordering the submission-id lookup depends on.
+      fs.writeFileSync(
+        path.join(binDir, 'xcrun'),
+        [
+          '#!/usr/bin/env bash',
+          'if [[ "$1" == "notarytool" && "$2" == "history" ]]; then',
+          '  echo \'{"history":[{"id":"newest-id","createdDate":"2026-07-31T04:00:00Z","status":"In Progress"},{"id":"older-id","createdDate":"2026-07-31T03:00:00Z","status":"Accepted"}]}\'',
+          '  exit 0',
+          'fi',
+          'if [[ "$1" == "notarytool" && "$2" == "log" ]]; then echo "log-for:$3"; exit 0; fi',
+          'exit 1',
+        ].join('\n'),
+        { mode: 0o755 },
+      );
+    }
+    const credentials = opts.credentials !== false;
+    try {
+      const stdout = execFileSync('bash', [script, ...args], {
+        encoding: 'utf8',
+        env: {
+          ...process.env,
+          PATH: `${binDir}:${process.env['PATH'] ?? ''}`,
+          RUNNER_TEMP: stateDir,
+          NOTARY_WATCH_INTERVAL: '1',
+          ...(credentials
+            ? { APPLE_ID: 'a@b.c', APPLE_PASSWORD: 'app-specific-pw', APPLE_TEAM_ID: 'TEAMID' }
+            : { APPLE_ID: '', APPLE_PASSWORD: '', APPLE_TEAM_ID: '' }),
+        },
+      });
+      return { status: 0, output: stdout, stateDir };
+    } catch (err) {
+      const e = err as { status?: number; stdout?: string; stderr?: string };
+      return { status: e.status ?? 1, output: `${e.stdout ?? ''}${e.stderr ?? ''}`, stateDir };
+    }
+  }
+
+  it('records what the queue was doing, with timestamps', async () => {
+    // The whole point: Tauri prints one "Notarizing …" line and then nothing, so
+    // a 1h38m wait and a hung process look identical while they are happening.
+    const { stateDir } = run(['start']);
+    await new Promise((r) => setTimeout(r, 2500));
+    const { output } = run(['report'], { stateDir });
+    expect(output).toContain('In Progress');
+    expect(output).toContain('newest-id');
+    expect(output, 'each poll should be timestamped').toMatch(/\[\d{2}:\d{2}:\d{2}\]/);
+  });
+
+  it('stops the poller when it reports, so it cannot outlive the job', async () => {
+    const { stateDir } = run(['start']);
+    await new Promise((r) => setTimeout(r, 1500));
+    run(['report'], { stateDir });
+    expect(fs.existsSync(path.join(stateDir, 'notary-watch.pid'))).toBe(false);
+  });
+
+  it('names the newest submission and fetches Apple’s log for it', () => {
+    // Every past diagnosis here depended on the submission id, and it was only
+    // recoverable by grepping an error string out of the raw job log.
+    const { output } = run(['history']);
+    expect(output).toContain('newest-id');
+    expect(output).toContain('log-for:newest-id');
+    expect(output, 'the newest submission is the one being built, not an older one').not.toContain('log-for:older-id');
+  });
+
+  it('is a silent no-op without credentials, rather than a failed release', () => {
+    // An unsigned build passes no APPLE_* secrets. A diagnostic that fails the
+    // job obscures the failure it exists to explain (NEWS-194).
+    for (const sub of ['start', 'history', 'report']) {
+      const { status } = run([sub], { credentials: false });
+      expect(status, `${sub} should exit 0 without credentials`).toBe(0);
+    }
+  });
+
+  it('never echoes the app-specific password', () => {
+    // It is passed on argv because notarytool has no stdin form; that is a
+    // deliberate, bounded exposure and must not become an exposure in the log.
+    const { output } = run(['history']);
+    expect(output).not.toContain('app-specific-pw');
+  });
+
+  it('rejects an unknown subcommand instead of doing something surprising', () => {
+    expect(run(['bogus']).status).toBe(2);
+  });
+});
+
+describe('the release workflows keep their notarization diagnostics (NEWS-197)', () => {
+  const read = (rel: string): string => fs.readFileSync(path.join(root, rel), 'utf8');
+  const WORKFLOWS = ['.github/workflows/release-desktop.yml', '.github/workflows/release-candidate.yml'];
+
+  it.each(WORKFLOWS)('%s watches, reports and dumps history', (rel) => {
+    // These were added by NEWS-194 to `release.yml` and **lost** when NEWS-201
+    // replaced that file — nothing failed, so nothing noticed. That is the whole
+    // reason this is pinned: a workflow port drops steps silently.
+    const src = read(rel);
+    for (const sub of ['notary-watch.sh start', 'notary-watch.sh report', 'notary-watch.sh history']) {
+      expect(src, `${rel} should call ${sub}`).toContain(sub);
+    }
+    expect(src, 'the history dump must run on failure').toMatch(/if: failure\(\) && runner\.os == 'macOS'/);
+    expect(src, 'the report must run even on a timeout').toMatch(/if: always\(\) && runner\.os == 'macOS'/);
+  });
+
+  it.each(WORKFLOWS)('%s caps the signing job well short of the 360-minute default', (rel) => {
+    // NEWS-194 set 120 because a 60-minute cap killed a build waiting legitimately.
+    // Losing it does not fail anything — it just lets a stalled submission burn
+    // six hours on two macOS runners at 10x billing.
+    expect(read(rel)).toContain('timeout-minutes: 120');
   });
 });

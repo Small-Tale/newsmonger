@@ -113,6 +113,15 @@ jobs:
 
     runs-on: ${{ matrix.platform }}
 
+    # Restored with NEWS-197; it was lost when NEWS-201 replaced `release.yml`.
+    # NEWS-194 set it because a 60-minute cap killed a build that was waiting
+    # legitimately — notarization normally takes 5–15 minutes, but a first
+    # submission under a new Team ID is commonly far slower. Without it the job
+    # inherits GitHub's **360-minute** default, and this project has seen
+    # submissions sit `In Progress` for 10.8 hours — six hours × two macOS
+    # shards, at 10× billing, to learn nothing the first hour didn't tell you.
+    timeout-minutes: 120
+
     steps:
       - uses: actions/checkout@v7
 
@@ -144,6 +153,19 @@ jobs:
         run: bash scripts/build-sidecar.sh ${{ matrix.target }}
         shell: bash
 
+      # Tauri drives `notarytool` internally and prints one "Notarizing …" line,
+      # then nothing until it returns. This polls Apple from beside the build so
+      # the log says whether the queue was moving (NEWS-197).
+      - name: Watch Apple's notarization queue
+        if: runner.os == 'macOS'
+        continue-on-error: true
+        shell: bash
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: bash scripts/notary-watch.sh start
+
       - name: Build Tauri app and upload to release
         uses: tauri-apps/tauri-action@v0
         env:
@@ -160,6 +182,33 @@ jobs:
           tagName: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
           releaseId: ${{ needs.create-release.outputs.release_id }}
           args: --target ${{ matrix.target }}
+
+      # `always()`: a build that succeeded quickly is itself worth knowing about,
+      # and on a timeout this is the only record of whether Apple ever answered.
+      - name: Report what the notarization queue was doing
+        if: always() && runner.os == 'macOS'
+        continue-on-error: true
+        shell: bash
+        run: bash scripts/notary-watch.sh report
+
+      # Restored with NEWS-197 (NEWS-194 added it to the workflow NEWS-201
+      # deleted). `In Progress` means Apple is still thinking, `Invalid` means it
+      # refused — one word, and the fixes share nothing. Also prints the newest
+      # submission id and Apple's own log for it, which every past diagnosis here
+      # depended on and which was otherwise only recoverable by grepping an error
+      # string out of the raw job log.
+      #
+      # `continue-on-error`, deliberately: a diagnostic that can fail the job
+      # obscures the failure it exists to explain.
+      - name: On failure, dump Apple's notarization history
+        if: failure() && runner.os == 'macOS'
+        continue-on-error: true
+        shell: bash
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: bash scripts/notary-watch.sh history
 
   # Rename the user-facing installer assets to human-friendly names. Runs once,
   # after every platform shard has uploaded, so the rename is race-free (a single

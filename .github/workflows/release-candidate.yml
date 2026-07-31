@@ -414,6 +414,10 @@ jobs:
     name: Build Tauri Signed (${{ matrix.friendly }})
     if: contains(github.ref, '-beta.')
     needs: [create-release]
+    # The signed shards notarize, so they inherit NEWS-194's reasoning: past
+    # Apple's worst case, but far short of GitHub's 360-minute default, which a
+    # stalled submission would otherwise burn in full on two macOS runners.
+    timeout-minutes: 120
     strategy:
       fail-fast: false
       matrix:
@@ -471,6 +475,20 @@ jobs:
         run: bash scripts/build-sidecar.sh ${{ matrix.target }}
         shell: bash
 
+      # Same watcher as release-desktop.yml — Tauri prints one "Notarizing …"
+      # line and then nothing, so this polls Apple from beside the build
+      # (NEWS-197). Duplicated rather than shared because Actions has no include;
+      # both call the one script, so only the wiring is repeated.
+      - name: Watch Apple's notarization queue
+        if: runner.os == 'macOS'
+        continue-on-error: true
+        shell: bash
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: bash scripts/notary-watch.sh start
+
       # The Windows MSI bundler requires the pre-release identifier to be
       # numeric-only (`0.9.0-1`), which the semver-standard `0.9.0-beta.N` is not:
       # "optional pre-release identifier in app version must be numeric-only and
@@ -493,6 +511,22 @@ jobs:
           tagName: ${{ github.ref_name }}
           releaseId: ${{ needs.create-release.outputs.release_id }}
           args: --target ${{ matrix.target }}${{ matrix.target == 'x86_64-pc-windows-msvc' && ' --bundles nsis' || '' }}
+
+      - name: Report what the notarization queue was doing
+        if: always() && runner.os == 'macOS'
+        continue-on-error: true
+        shell: bash
+        run: bash scripts/notary-watch.sh report
+
+      - name: On failure, dump Apple's notarization history
+        if: failure() && runner.os == 'macOS'
+        continue-on-error: true
+        shell: bash
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: bash scripts/notary-watch.sh history
 
   # ══════════════════════════════════════════════════════════════
   # Phase 5: install + upgrade smoke tests (both tracks)

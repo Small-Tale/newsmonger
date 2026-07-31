@@ -91,6 +91,26 @@ An unsigned bundle opens on the machine that built it and nowhere else. Gatekeep
 
   Run against the current unsigned build it reports exactly what is missing, including that the sidecar inherits `get-task-allow` from Node's own signature. That was found by running it, not by reasoning about it.
 
+  > ⚠️ **This step is not currently run by either release workflow.** The old `release.yml` ran it before publishing; the NEWS-201 port did not carry it over. Tracked as **NEWS-220**.
+
+- **FR-5.8** *(Shipped, NEWS-197)* **`bash scripts/notary-watch.sh` makes Apple's queue visible while CI waits on it.** Tauri drives `notarytool` internally and prints one `Notarizing …` line, then nothing until it returns. On this project's first submissions that silence ran **1h38m**, and six of seven submissions sat `In Progress` for hours — one for 10.8. While it is happening, a slow queue and a hung one are indistinguishable, and the visible outcome is an opaque `-1009` or a timeout.
+
+  Three subcommands, wired into the macOS shards of both release workflows:
+
+  | | When | What it does |
+  |---|---|---|
+  | `start` | before the build | backgrounds a poller (120 s) recording each submission's status |
+  | `report` | `always()` | stops the poller and prints the timestamped record — so a **timeout** still says whether Apple ever answered |
+  | `history` | `failure()` | recent submissions, plus the **submission id** and `notarytool log` for the newest |
+
+  `In Progress` means Apple is still thinking; `Invalid` means it refused the bundle. One word, and the fixes share nothing — a missing entitlement, an unsigned nested binary and a present `get-task-allow` are three different bugs.
+
+  The submission id matters more than it looks: **every past diagnosis here depended on having it**, and it was otherwise recoverable only by grepping an error string out of the raw job log.
+
+  Two deliberate properties. It is a **silent no-op without credentials**, because an unsigned build legitimately passes no `APPLE_*` secrets. And every step is `continue-on-error` — a diagnostic that can fail the job obscures the failure it exists to explain (NEWS-194).
+
+  The macOS build jobs also carry `timeout-minutes: 120` — past Apple's worst case, but far short of GitHub's 360-minute default, which a stalled submission would otherwise burn in full on two macOS runners at 10× billing. That cap was NEWS-194's and was also lost in the NEWS-201 port.
+
 ### What still needs a human — the full credential recipe (NEWS-21)
 
 Everything below requires the Apple Developer account, is done **once**, and must never be committed. The release workflow that consumes these now exists (`.github/workflows/release-desktop.yml`, NEWS-190), and the updater keypair in step 5 is in use (FR-5.12) — but the Apple half is still outstanding: `security find-identity -v -p codesigning` on the current dev machine reports **0 valid identities found**.
