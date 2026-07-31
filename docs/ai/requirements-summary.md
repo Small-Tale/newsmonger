@@ -2,6 +2,14 @@
 
 Status markers: **Shipped** · **Partial** · **Design only** · **Deferred**. Source docs win on conflict.
 
+## [27 — Where Data Is Stored](../27-data-location.md) — **Design only** (NEWS-192)
+
+- Nothing built. One blocking decision recorded before any code: **relocate the live data directory (A) vs keep it local and back up to the chosen folder (B)**.
+- The requested mechanism — point `--data-dir` at iCloud/Drive — puts a **live WAL-mode SQLite database inside a directory a sync daemon rewrites**. That is a documented corruption route, not a theoretical one: WAL maintains an invariant across `.db`/`-wal`/`-shm`, and a sync client moves them independently. FR-4.9's `backupUnreadableDb` exists because corruption already happens; this would make it fire far more often, and each firing is data loss — the opposite of what someone asking for backups wants.
+- **Recommended B**: keep running from `~/.newsmonger`, write a snapshot to the chosen folder. `toJson` (FR-21.4) already produces exactly the artifact — one file, human-readable, nothing for a sync client to tear.
+- Prompt spec is settled and mechanism-independent apart from copy: offer after the **3rd topic**, no outside-click dismiss, **"Not now"** (re-ask in a day) and **"Don't ask again"**, OS-appropriate suggestions detected by probing for the directory.
+- Also noted: **API keys are unaffected** (they are in the keychain, not the data dir), and **the browser build cannot pick a directory at all** — the File System Access API yields a sandboxed handle, not a path the Node server can open — so that path is a typed-in path regardless.
+
 ## [24 — Topic Discovery](../24-topic-discovery.md) — **Shipped** (variation D deferred, NEWS-129)
 
 - FR-24.1–24.18, NEWS-116. Approved shape: **two doors into one result list** — a free-text box (FR-24.3) and a grid of the 11 NEWS-97 sections (FR-24.2) — with a **keep/skip tuner as the depth control**, not a third door (FR-24.5–24.9). Reached from beside the add-topic field and from onboarding's Topics step, replacing its six hard-coded chips.
