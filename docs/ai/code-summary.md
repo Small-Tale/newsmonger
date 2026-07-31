@@ -15,6 +15,7 @@ src/
   export.ts           toMarkdown/toJson/toAtom + escapeXml — export & feed rendering, pure (NEWS-85)
   origin-guard.ts     Host/Origin check on every route — cross-origin + DNS-rebinding guard (NEWS-86)
   discovery.ts        DiscoveryService: topic-suggestion exclusions + in-memory request cache + classification validation + call log (NEWS-125)
+  backup.ts           Backups/writeBackup/buildBackup — snapshot to the user's backupDir in DataFileSchema shape, temp+rename, 1/hour (NEWS-192)
   undo.ts             ClearUndoBuffer: in-memory, per-topic, TTL'd snapshot of a cleared topic's stories + covered window (NEWS-145)
   scheduler.ts        startScheduler: 60s tick + 3s startup sweep, non-overlapping; drains an overrun cycle (NEWS-57)
   checks.ts           CheckRunner (checkTopic/checkDue/checkAll, in-flight guard) + isDue()/isDueDaily()/isDueUnderSchedule()/lastSlotBefore() (NEWS-84) + effectiveInterval() + byCheckOrder() (most-overdue-first, NEWS-58). No budget logic — NEWS-119 removed it
@@ -48,7 +49,7 @@ src/
   api/
     schemas.ts        zod request schemas + StateResp (shared client/server)
   routes/
-    api.ts            /api/discover + /api/discover/usage (NEWS-125), /api/state (topics/settings/runs/checking + latestItemIds + flaggedByTopic; NO items), /api/items (paginated feed: filter+sort+cursor), /api/providers, /api/topics, /api/items/:id (save/flag), /api/settings, /api/keys, /api/foreground, /api/check, /api/open-external, /api/export.md, /api/export.json, /feed.xml, /healthz
+    api.ts            /api/discover + /api/discover/usage (NEWS-125), /api/state (topics/settings/runs/checking + latestItemIds + flaggedByTopic; NO items), /api/items (paginated feed: filter+sort+cursor), /api/providers, /api/topics, /api/items/:id (save/flag), /api/settings, /api/backup (NEWS-192), /api/keys, /api/foreground, /api/check, /api/open-external, /api/export.md, /api/export.json, /feed.xml, /healthz
     pages.tsx         GET / — SSR shell
   components/
     layout.tsx        HTML shell
@@ -154,6 +155,7 @@ Data dir: `--data-dir` flag → `NEWSMONGER_DATA_DIR` → `~/.newsmonger`. Also 
 | Feed filters (Solo / Saved / Search) | **Server-side** now (NEWS-76): `Store.queryItems` filters; client sends view params via `refreshFeed` (`src/client/api.ts`). Search is debounced. `feedItems`/`feedTotal` in `stores.ts`. See `docs/14-search.md` + `docs/17-server-pagination.md` |
 | Feed pagination ("Show more") | `feedLimit`/`FEED_PAGE`/`showMoreFeed` in `stores.ts` (reset per view) → `/api/items?limit=`; `moreCount` from server `total`. See `docs/16-pagination.md` |
 | The feed data / where items come from | `/api/items` via `refreshFeed`, NOT `/api/state` (slimmed). Just-flagged overlay: `recentlyFlaggedItems` merged in `app.tsx`. Notifications read `latestItemIds`. See `docs/17-server-pagination.md` |
+| Backups to a synced folder | `src/backup.ts` (`Backups`, `writeBackup`, `MIN_BACKUP_INTERVAL_MS`); `backupDir` in `SettingsSchema`; wired in `src/cli.ts` (startup) and `CheckRunner` opts (after a successful check); `POST /api/backup` for "Back up now"; Settings → Data UI. Format is `DataFileSchema`, so the legacy `data.json` import (FR-4.8a) *is* the restore path. See `docs/27-data-location.md` |
 | Export / the Atom feed | `src/export.ts` (pure renderers) + `/api/export.md`, `/api/export.json`, `/feed.xml` in `routes/api.ts`; Settings "Export & feed" block. `scope=all\|saved\|topic`. See `docs/21-export-and-feed.md` |
 | Story retention / data-file growth | `Store.pruneOldItems` + `itemRetentionDays` setting; called from `cli.ts` at startup and `CheckRunner.pruneAfterCheck` after each success. Bookmarked + flagged items exempt. See `docs/4-cli-server-storage.md` FR-4.11 |
 | Diagnostics / "why did a check fail" | `src/client/diagnostics.ts` (pure, unit-tested) + the Settings Diagnostics section; `appVersion` on `/api/state`. Topic names redacted unless opted in. See `docs/3-ui.md` FR-3.25–3.28 |

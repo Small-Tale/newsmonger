@@ -1,8 +1,13 @@
+import fs from 'node:fs';
+import path from 'node:path';
+
 import { describe, expect, it } from 'vitest';
 
 import { createMockProvider } from '../../src/ai/providers/index.js';
 import type { CheckResult } from '../../src/ai/types.js';
+import { BACKUP_FILE,Backups } from '../../src/backup.js';
 import { byCheckOrder, CheckRunner, effectiveInterval, isDue } from '../../src/checks.js';
+import { DataFileSchema } from '../../src/db/schemas.js';
 import { Store } from '../../src/db/store.js';
 import { asResolver, fakeProvider, noUsage } from '../helpers/provider.js';
 import { tmpDataDir } from '../helpers/tmp.js';
@@ -88,6 +93,61 @@ describe('CheckRunner', () => {
     const run = store.listRuns().at(0);
     expect(run?.status).toBe('succeeded');
     expect(run?.newItems).toBe(2);
+  });
+
+  /**
+   * The backup must include the stories the check just added, not the state
+   * from before it — the whole point is that a snapshot is current.
+   */
+  it('writes a backup after a successful check, once per hour (NEWS-192)', async () => {
+    const store = new Store(tmpDataDir());
+    const dest = path.join(store.dataDir, 'backups');
+    store.updateSettings({ backupDir: dest });
+    let now = Date.now();
+    const backups = new Backups(
+      store,
+      () => store.getSettings().backupDir,
+      () => now,
+    );
+    const runner = new CheckRunner(store, asResolver(createMockProvider()), undefined, null, null, { backups });
+    const topic = store.addTopic('Fusion');
+
+    await runner.checkTopic(topic.id);
+    const at = path.join(dest, BACKUP_FILE);
+    const backup = DataFileSchema.parse(JSON.parse(fs.readFileSync(at, 'utf8')));
+    expect(backup.items).toHaveLength(2);
+
+    // A second topic checked moments later does not rewrite it...
+    const mtime = fs.statSync(at).mtimeMs;
+    await runner.checkTopic(store.addTopic('Optics').id);
+    expect(fs.statSync(at).mtimeMs).toBe(mtime);
+
+    // ...but an hour on, it does, and picks up the new topic.
+    now += 60 * 60 * 1000 + 1;
+    await runner.checkTopic(store.addTopic('Radio').id);
+    const later = DataFileSchema.parse(JSON.parse(fs.readFileSync(at, 'utf8')));
+    expect(later.topics.map((t) => t.name).sort()).toEqual(['Fusion', 'Optics', 'Radio']);
+  });
+
+  /** A backup that cannot be written must not fail the check that triggered it. */
+  it('survives a broken backup destination (NEWS-192)', async () => {
+    const store = new Store(tmpDataDir());
+    const blocked = path.join(store.dataDir, 'not-a-folder');
+    fs.writeFileSync(blocked, 'x');
+    store.updateSettings({ backupDir: blocked });
+    const runner = new CheckRunner(store, asResolver(createMockProvider()), undefined, null, null, {
+      backups: new Backups(
+        store,
+        () => store.getSettings().backupDir,
+        () => Date.now(),
+        () => {
+          /* quiet */
+        },
+      ),
+    });
+    const topic = store.addTopic('Fusion');
+    expect(await runner.checkTopic(topic.id)).toBe(2);
+    expect(store.listRuns().at(0)?.status).toBe('succeeded');
   });
 
   it('deduplicates on a second check (same stories found again)', async () => {

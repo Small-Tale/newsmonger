@@ -8,6 +8,7 @@ import { Hono } from 'hono';
 import type { KeyVerifier } from './ai/verify-key.js';
 import { verifyApiKey } from './ai/verify-key.js';
 import { Attendance } from './attendance.js';
+import type { Backups } from './backup.js';
 import type { CheckRunner } from './checks.js';
 import type { Store } from './db/store.js';
 import type { DiscoveryService } from './discovery.js';
@@ -55,6 +56,11 @@ export function createApp(deps: {
   discovery?: DiscoveryService;
   /** Undo buffer for cleared topics (NEWS-145). Defaults to a fresh one per app. */
   undo?: ClearUndoBuffer;
+  /**
+   * Backup snapshots (NEWS-192). Optional so tests need not construct one; the
+   * "back up now" route reports the feature as unconfigured rather than throwing.
+   */
+  backups?: Backups;
 }): Hono<AppEnv> {
   const app = new Hono<AppEnv>();
   // Same instance the CheckRunner consults, when the caller passes one; tests
@@ -71,6 +77,7 @@ export function createApp(deps: {
     c.set('verifyKey', deps.verifyKey === undefined ? verifyApiKey : deps.verifyKey);
     c.set('discovery', deps.discovery ?? null);
     c.set('undo', undo);
+    c.set('backups', deps.backups ?? null);
     // Debug aid (e.g. verifying the Tauri webview actually hits the server).
     if (process.env['NEWSMONGER_LOG_REQUESTS'] === '1') {
       console.error(`[req] ${c.req.method} ${c.req.path}`);

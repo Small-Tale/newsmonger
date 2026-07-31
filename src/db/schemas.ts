@@ -219,6 +219,15 @@ export const SettingsSchema = z.object({
    */
   effort: z.enum(['', 'low', 'medium', 'high', 'xhigh', 'max']).default('').catch(''),
   /**
+   * Folder to write backups into (NEWS-192); '' = backups off.
+   *
+   * A **backup** destination, not the live data directory — the live SQLite
+   * database stays in the data dir, because a WAL database inside a
+   * sync-daemon-managed folder is a documented corruption route (see
+   * `docs/27-data-location.md`).
+   */
+  backupDir: z.string().default(''),
+  /**
    * Whether to raise an OS notification (and bounce the dock / flash the
    * taskbar) when new stories arrive while the app isn't focused. Opt-in — off
    * by default, since it needs a browser permission grant and shouldn't
@@ -303,6 +312,7 @@ export function emptyDataFile(): DataFile {
       model: '',
       endpoint: '',
       effort: '',
+      backupDir: '',
       notifyOnNewItems: false,
       scheduleMode: 'interval',
       dailyTimes: ['08:00'],

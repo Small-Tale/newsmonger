@@ -232,6 +232,24 @@ export function registerApi(app: Hono<AppEnv>): void {
     return c.json(c.get('store').updateSettings(body));
   });
 
+  /**
+   * Write a backup snapshot right now (NEWS-192, FR-27.9).
+   *
+   * Bypasses the interval throttle on purpose: this route only runs because a
+   * person clicked "Back up now", and "nothing happened, try again in an hour"
+   * is not an acceptable answer to a button press.
+   */
+  app.post('/api/backup', (c) => {
+    const backups = c.get('backups');
+    if (!backups) return c.json({ error: 'backups are not configured' }, 503);
+    if (c.get('store').getSettings().backupDir === '') {
+      return c.json({ error: 'no backup folder chosen' }, 400);
+    }
+    const at = backups.write();
+    if (at === null) return c.json({ error: 'backup failed; see the server log' }, 500);
+    return c.json({ ok: true, path: at });
+  });
+
   app.post('/api/check', async (c) => {
     const body = await parseBody(c, CheckReqSchema);
     if (!body) return c.json({ error: 'invalid request' }, 400);

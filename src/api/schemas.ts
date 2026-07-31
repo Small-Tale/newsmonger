@@ -81,6 +81,10 @@ export const UpdateSettingsReqSchema = z
     endpoint: z.string().max(500),
     // Same closed set as the stored setting; '' = the provider's default.
     effort: z.enum(['', 'low', 'medium', 'high', 'xhigh', 'max']),
+    // '' turns backups off. Length-capped like `endpoint`; validity of the path
+    // itself is decided when a write is attempted, not here — a folder can be
+    // unmounted between the setting and the write anyway.
+    backupDir: z.string().max(1000),
     notifyOnNewItems: z.boolean(),
     scheduleMode: z.enum(['interval', 'daily']),
     checkConcurrency: z.number().int().min(1).max(8),
@@ -251,6 +255,9 @@ export const ProviderInfoSchema = z.object({
   available: z.boolean().nullable(),
 });
 export type ProviderInfo = z.infer<typeof ProviderInfoSchema>;
+
+/** `POST /api/backup` — where the snapshot landed (NEWS-192). */
+export const BackupRespSchema = z.object({ ok: z.literal(true), path: z.string() });
 
 export const ProvidersRespSchema = z.object({ providers: z.array(ProviderInfoSchema) });
 export type ProvidersResp = z.infer<typeof ProvidersRespSchema>;

@@ -31,6 +31,7 @@ function state(over: Partial<StateResp> = {}): StateResp {
       model: 'claude-opus-4-8',
       endpoint: '',
       effort: '',
+      backupDir: '',
       notifyOnNewItems: false,
       itemRetentionDays: 365,
       scheduleMode: 'interval',

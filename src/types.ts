@@ -1,5 +1,6 @@
 import type { KeyVerifier } from './ai/verify-key.js';
 import type { Attendance } from './attendance.js';
+import type { Backups } from './backup.js';
 import type { CheckRunner } from './checks.js';
 import type { Store } from './db/store.js';
 import type { DiscoveryService } from './discovery.js';
@@ -19,5 +20,7 @@ export interface AppEnv {
     discovery: DiscoveryService | null;
     /** In-memory undo for a cleared topic (NEWS-145). */
     undo: ClearUndoBuffer;
+    /** Backup snapshots to the user's chosen folder (NEWS-192); null = no backups wired. */
+    backups: Backups | null;
   };
 }

@@ -13,6 +13,7 @@ import type {
 import type { LinkProbe } from './ai/verify-links.js';
 import { verifyItemLinks } from './ai/verify-links.js';
 import { Attendance } from './attendance.js';
+import type { Backups } from './backup.js';
 import { activeCategories, BUILTIN_CATEGORIES, findCategory, findSubcategory } from './categories.js';
 import type { NewsItem, NewsSource, Settings, Topic } from './db/schemas.js';
 import type { Store } from './db/store.js';
@@ -108,14 +109,23 @@ export class CheckRunner {
        * above — the positional list is already at its limit.
        */
       fetchFavicon?: FaviconFetcher | null;
+      /**
+       * Snapshots the store into the user's chosen backup folder after a
+       * successful check (NEWS-192). Optional: null means backups are off, and
+       * it is the same shape of housekeeping as pruning — never allowed to
+       * fail a check.
+       */
+      backups?: Backups | null;
     } = {},
   ) {
     this.sleep = opts.sleep ?? ((ms) => new Promise((resolve) => setTimeout(resolve, ms)));
     this.fetchFavicon = opts.fetchFavicon ?? null;
     this.backoff = opts.backoff ?? DEFAULT_BACKOFF;
+    this.backups = opts.backups ?? null;
   }
 
   private readonly sleep: (ms: number) => Promise<void>;
+  private readonly backups: Backups | null;
   private readonly fetchFavicon: FaviconFetcher | null;
   private readonly backoff: BackoffConfig;
 
@@ -267,6 +277,10 @@ export class CheckRunner {
       // otherwise never reclaim anything (NEWS-87). Cheap — a filter over an
       // already-in-memory array, and it only writes when something went.
       this.pruneAfterCheck();
+      // After the prune, so the snapshot reflects what the store actually keeps
+      // rather than a set of stories that were about to expire. Throttled
+      // internally, so a sweep of twenty topics writes once, not twenty times.
+      this.backups?.maybeWrite();
       this.store.finishRun(run.id, {
         status: 'succeeded',
         newItems: fresh.length,

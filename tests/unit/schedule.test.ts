@@ -12,6 +12,7 @@ const SETTINGS: StateResp['settings'] = {
   model: '',
   endpoint: '',
   effort: '',
+  backupDir: '',
   notifyOnNewItems: false,
   itemRetentionDays: 365,
   scheduleMode: 'interval',

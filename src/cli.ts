@@ -4,6 +4,7 @@ import { createDemoProvider } from './ai/providers/demo.js';
 import { createMockProvider, resolveProvider } from './ai/providers/index.js';
 import { probeLink } from './ai/verify-links.js';
 import { Attendance } from './attendance.js';
+import { Backups } from './backup.js';
 import type { ProviderResolver } from './checks.js';
 import { CheckRunner } from './checks.js';
 import { earlyExitFlag, HELP_TEXT, parseArgs, USAGE_LINE } from './config.js';
@@ -110,8 +111,16 @@ async function main(): Promise<void> {
   if (pruned > 0) console.error(`newsmonger: pruned ${String(pruned)} orphaned cached image(s)`);
   // No link probing under --ai-test either: the mock's URLs are fictional, so
   // every story would be dropped as unreachable.
+  // Backups are off until the user names a folder, so constructing this
+  // unconditionally costs nothing (NEWS-192).
+  const backups = new Backups(store, () => store.getSettings().backupDir);
+  // One at startup, so a machine that is opened rarely still gets a snapshot
+  // even if no check happens to complete while it is running. Throttled, so
+  // restarting the app in a loop does not rewrite the file each time.
+  backups.maybeWrite();
   const runner = new CheckRunner(store, resolve, attendance, fetchImage, options.aiTest ? null : probeLink, {
     fetchFavicon,
+    backups,
   });
   // Shares the resolver with the runner so discovery follows the same provider
   // setting, but is its own object: `CheckRunner` is topic-shaped throughout and
@@ -122,6 +131,7 @@ async function main(): Promise<void> {
     runner,
     discovery,
     attendance,
+    backups,
     dataDir: options.dataDir,
     // Under --ai-test nothing talks to a vendor, so a live key check would only
     // reject the obviously-fake keys the E2E suite saves on purpose.

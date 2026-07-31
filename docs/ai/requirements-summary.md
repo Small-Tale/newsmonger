@@ -2,13 +2,15 @@
 
 Status markers: **Shipped** · **Partial** · **Design only** · **Deferred**. Source docs win on conflict.
 
-## [27 — Where Data Is Stored](../27-data-location.md) — **Design only** (NEWS-192)
+## [27 — Where Data Is Stored](../27-data-location.md) — **Partial** (NEWS-192)
 
-- Nothing built. One blocking decision recorded before any code: **relocate the live data directory (A) vs keep it local and back up to the chosen folder (B)**.
-- The requested mechanism — point `--data-dir` at iCloud/Drive — puts a **live WAL-mode SQLite database inside a directory a sync daemon rewrites**. That is a documented corruption route, not a theoretical one: WAL maintains an invariant across `.db`/`-wal`/`-shm`, and a sync client moves them independently. FR-4.9's `backupUnreadableDb` exists because corruption already happens; this would make it fire far more often, and each firing is data loss — the opposite of what someone asking for backups wants.
-- **Recommended B**: keep running from `~/.newsmonger`, write a snapshot to the chosen folder. `toJson` (FR-21.4) already produces exactly the artifact — one file, human-readable, nothing for a sync client to tear.
-- Prompt spec is settled and mechanism-independent apart from copy: offer after the **3rd topic**, no outside-click dismiss, **"Not now"** (re-ask in a day) and **"Don't ask again"**, OS-appropriate suggestions detected by probing for the directory.
-- Also noted: **API keys are unaffected** (they are in the keychain, not the data dir), and **the browser build cannot pick a directory at all** — the File System Access API yields a sandboxed handle, not a path the Node server can open — so that path is a typed-in path regardless.
+- **Decided A vs B in favour of B**, plus the owner's added requirement that the snapshot carry the config (topics, settings) but **never API keys**.
+- **Shipped (FR-27.6–27.9):** a `backupDir` setting (`''` = off, Settings → Data); one file `newsmonger-backup.json` holding **topics + items + settings + runs**, written temp-then-rename so a sync client never sees a torn file; written at **startup and after a successful check**, throttled to **once an hour** (throttle reads the file's mtime, so it survives restarts); **"Back up now"** (`POST /api/backup`) bypasses the throttle. Failures are logged and swallowed — never fail a check.
+- **The format is `DataFileSchema`, deliberately** — the shape the legacy `data.json` importer already reads (FR-4.8a), so **restore needs no restore code**: drop it into an empty data dir as `data.json`.
+- **API keys are structurally absent** (keychain, not `Settings` — FR-7.x); asserted on the serialised bytes in both a unit test and an E2E test anyway.
+- Why not A (relocate the live data dir): a **live WAL-mode SQLite database inside a directory a sync daemon rewrites** is a documented corruption route — WAL maintains an invariant across `.db`/`-wal`/`-shm` and a sync client moves them independently. FR-4.9's `backupUnreadableDb` exists because corruption already happens. `--data-dir` on a synced path is still possible for anyone who wants it; the UI just doesn't offer it.
+- **Not built:** the prompt (FR-27.2–27.5) — offer after the **3rd topic**, no outside-click dismiss, **"Not now"** (re-ask in a day) / **"Don't ask again"**, OS-appropriate suggestions probed for on disk. Today the setting is only findable by opening Settings → Data.
+- **Still open:** the path is **typed, not picked** — the browser build cannot produce a filesystem path the Node server can open (File System Access yields a sandboxed handle) and the desktop shell has no dialog plugin yet.
 
 ## [24 — Topic Discovery](../24-topic-discovery.md) — **Shipped** (variation D deferred, NEWS-129)
 

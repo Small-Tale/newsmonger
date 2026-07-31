@@ -1,3 +1,7 @@
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+
 import type { Page } from '@playwright/test';
 
 import { expect, openSettingsTab, resetTopics, test, topicAction } from './fixtures.js';
@@ -1376,4 +1380,49 @@ test('a field hint sits below its field, not on top of it (NEWS-148)', async ({ 
   expect(gap ?? 0).toBeGreaterThanOrEqual(4);
 
   await page.locator('.dialog [data-action=close-settings]').click();
+});
+
+/**
+ * Backups end to end (NEWS-192): choose a folder, click the button, and a real
+ * file with the real content lands there.
+ *
+ * The destination is a folder this test names, not the server's data directory
+ * — the server runs on this machine, so a temp path the test creates is one
+ * both sides can see, and it needs no plumbing to share the pid-scoped dir.
+ */
+test('backs up to a chosen folder, without the API keys (NEWS-192)', async ({ page }) => {
+  const dest = fs.mkdtempSync(path.join(os.tmpdir(), 'newsmonger-backup-e2e-'));
+  await page.goto('/');
+  await openSettingsTab(page, 'Data');
+
+  // The button is unavailable until a folder is named — backing up to nowhere
+  // is not a thing the UI should let you ask for.
+  await expect(page.locator('[data-action=backup-now]')).toBeDisabled();
+
+  await page.fill('[data-action=backup-dir]', dest);
+  await page.locator('[data-action=backup-dir]').blur();
+  await expect(page.locator('[data-action=backup-now]')).toBeEnabled();
+
+  await page.locator('[data-action=backup-now]').click();
+  await expect(page.locator('.toast')).toContainText('Backed up to');
+
+  const at = path.join(dest, 'newsmonger-backup.json');
+  expect(fs.existsSync(at)).toBe(true);
+  const backup = JSON.parse(fs.readFileSync(at, 'utf8')) as {
+    topics: unknown[];
+    settings: Record<string, unknown>;
+  };
+  // Config is in there (the folder we just set is itself part of it)...
+  expect(backup.settings['backupDir']).toBe(dest);
+  expect(Array.isArray(backup.topics)).toBe(true);
+  // ...and nothing key-shaped is, which is the promise the settings copy makes.
+  expect(fs.readFileSync(at, 'utf8')).not.toMatch(/"(apiKey|api_key|secret|token)"/i);
+
+  // Turn it back off so later tests (and reruns) start from the default.
+  await page.fill('[data-action=backup-dir]', '');
+  await page.locator('[data-action=backup-dir]').blur();
+  await expect(page.locator('[data-action=backup-now]')).toBeDisabled();
+
+  await page.locator('.dialog [data-action=close-settings]').click();
+  fs.rmSync(dest, { recursive: true, force: true });
 });

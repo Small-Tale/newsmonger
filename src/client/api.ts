@@ -1,6 +1,7 @@
 import type { Effort,ProviderName} from '../ai/types.js';
 import type { DiscoverReq, DiscoverResp, DiscoverUsageResp, TopicSuggestion } from '../api/schemas.js';
 import {
+  BackupRespSchema,
   DiscoverRespSchema,
   DiscoverUsageRespSchema,
   ItemsRespSchema,
@@ -305,6 +306,24 @@ export function updateHighPriorityInterval(highPriorityIntervalMs: number): Prom
   return withRefresh(() =>
     request('/api/settings', { method: 'PATCH', body: JSON.stringify({ highPriorityIntervalMs }) }),
   );
+}
+
+/**
+ * Point backups at a folder; '' turns them off (NEWS-192).
+ *
+ * A typed path, not a picked one: the browser build cannot produce a filesystem
+ * path a Node server can open (the File System Access API hands back a
+ * sandboxed handle), and the desktop shell has no dialog plugin yet — see
+ * `docs/27-data-location.md`.
+ */
+export function updateBackupDir(backupDir: string): Promise<void> {
+  return withRefresh(() => request('/api/settings', { method: 'PATCH', body: JSON.stringify({ backupDir }) }));
+}
+
+/** Write a backup right now, ignoring the interval throttle (NEWS-192). */
+export async function backupNow(): Promise<string> {
+  const body = await request('/api/backup', { method: 'POST' });
+  return BackupRespSchema.parse(body).path;
 }
 
 /** Fetch the provider list + availability (probes providers; call on demand). */

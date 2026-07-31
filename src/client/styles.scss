@@ -1687,7 +1687,10 @@ h2.eyebrow {
 
 // ---------------------------------------------------------------- export ---
 
-.export-row {
+// Same layout, two rows: the export button and the backup button (NEWS-192).
+// Separate classes because a selector naming one must not also match the other.
+.export-row,
+.backup-row {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;

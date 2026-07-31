@@ -1,6 +1,6 @@
 # 27 — Where Data Is Stored
 
-**Status: design only (NEWS-192).** Nothing here is built. One decision is outstanding — see *The fork* — and it changes what gets built, so it is recorded before any code.
+**Status: the backup half is shipped (NEWS-192); the prompt is design only.** The fork below was decided in favour of **Design B** — local live data, snapshots to a chosen folder — with the added requirement that the snapshot carry the configuration (topics, settings) but never API keys. FR-27.6–27.9 are built; FR-27.2–27.5 (the prompt after the third topic) are not.
 
 The goal, in the requester's words: *"so users can select, for example, an iCloud Drive or Google Drive location to automatically backup their data."*
 
@@ -37,7 +37,18 @@ A setting names a **backup** directory. The app keeps running from `~/.newsmonge
 - Restore becomes an explicit action rather than an implicit one, which is arguably better: the user chooses when to overwrite.
 - Does **not** satisfy someone who wants two machines sharing one live database. That is a sync feature, not a backup feature, and it is a much larger piece of work.
 
-**Recommendation: B**, with A available as an explicit, warned-about option for people who know what they are choosing (a `--data-dir` on a synced path is already possible today and always has been — this would just make it visible).
+**Decided: B.** A remains available to anyone who wants it — `--data-dir` on a synced path has always been possible — but it is not something the UI offers, because the UI offering it would read as an endorsement.
+
+## What is built (FR-27.6–27.9)
+
+- **FR-27.6** *(Shipped)* A **`backupDir`** setting names a folder; `''` (the default) means backups are off. Settings → Data.
+- **FR-27.7** *(Shipped)* The snapshot is a single file, **`newsmonger-backup.json`**, holding **topics, stories, settings and run history**. It is written to a temp file and renamed into place, so a sync client watching the folder never uploads a half-written one.
+  - **The format is `DataFileSchema`** — the very shape the legacy `data.json` importer reads (FR-4.8a). So **restore needs no restore code**: drop the file into an empty data directory as `data.json` and start the app. A bespoke format would have meant a bespoke restore path to write, maintain and test.
+  - **API keys are never in it.** They live in the OS keychain, not in `Settings` (FR-7.x), so this is structural rather than a filter that could be forgotten. A unit test and an E2E test both assert on the serialised bytes anyway, because a future settings field could change that quietly.
+- **FR-27.8** *(Shipped)* Backups are written **at startup and after a successful check**, at most **once an hour**. The throttle reads the existing file's mtime, not just an in-memory timestamp, so an app quit and reopened several times an hour does not rewrite the snapshot on each launch.
+- **FR-27.9** *(Shipped)* **"Back up now"** in Settings → Data writes immediately, ignoring the throttle — "nothing happened, try again in an hour" is not an acceptable answer to a button press. Disabled until a folder is named.
+- A backup that fails is **reported and swallowed**: it is housekeeping, exactly like pruning, and must never turn a successful check into a failed one. The destination is a folder that can be unmounted, full, or renamed by a sync client at any moment.
+- **The path is typed, not picked.** See open decision 4 below — that has not changed, and is the one rough edge in the shipped feature.
 
 ## The prompt (specified by the requester, mechanism-independent apart from wording)
 
@@ -46,13 +57,17 @@ A setting names a **backup** directory. The app keeps running from `~/.newsmonge
 - **FR-27.4** Two explicit exits: **"Not now"**, which re-asks after **one day**, and **"Don't ask again"**, which is permanent.
 - **FR-27.5** Suggested locations are **OS-appropriate**: iCloud Drive on macOS, OneDrive on Windows, Google Drive where present. Detected by looking for the directory rather than assumed — offering a path that does not exist is worse than offering none.
 
-The copy for FR-27.2 depends on the fork: "move your data here" and "keep a backup here" are different promises, and only one of them is safe to make.
+The copy for FR-27.2 follows from the decision: it is **"keep a backup here"**, not "move your data here" — the second is a promise this design deliberately does not make.
 
 ## Open decisions
 
-1. **A or B** — see above. Blocking; it decides everything else.
-2. **If B:** what cadence? After every successful check is simplest and probably too often; daily, or on change with a floor, is likelier right.
-3. **If A:** does choosing a new location *move* the existing data or start empty there? Moving is what a user expects; it is also the step where a failure loses everything, so it needs to copy-verify-then-delete rather than rename.
-4. **Folder picking.** The desktop shell has no `tauri-plugin-dialog` today, so a native picker means a new plugin plus a capability entry. **The browser build cannot pick a directory at all** — the File System Access API yields a sandboxed handle, not a path the Node server can open — so the browser path is a typed-in path with validation, whatever else is decided.
+1. ~~**A or B**~~ — decided: **B**.
+2. ~~**If B:** what cadence?~~ — decided: event-driven (startup + after a successful check) with a one-hour floor, which is "on change with a floor".
+3. **If A:** does choosing a new location *move* the existing data or start empty there? Moving is what a user expects; it is also the step where a failure loses everything, so it needs to copy-verify-then-delete rather than rename. *(Moot unless A is ever built.)*
+4. **Folder picking.** *(Still open — the shipped feature takes a typed path.)* The desktop shell has no `tauri-plugin-dialog` today, so a native picker means a new plugin plus a capability entry. **The browser build cannot pick a directory at all** — the File System Access API yields a sandboxed handle, not a path the Node server can open — so the browser path is a typed-in path with validation, whatever else is decided.
+
+## Not built yet
+
+The prompt (FR-27.2–27.5) is unimplemented: today the setting is only discoverable by opening Settings → Data, which means most people will never find it. Tracked as its own ticket.
 
 See also: [4 — CLI, Server, and Storage](4-cli-server-storage.md) (FR-4.1 data-dir resolution, FR-4.9 corrupt-database recovery), [21 — Export and Feed](21-export-and-feed.md) (the JSON export a backup would reuse), [7 — API Keys](7-api-keys.md) (why keys are not affected).

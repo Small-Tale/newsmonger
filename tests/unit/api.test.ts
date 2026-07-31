@@ -5,8 +5,9 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 
 import { createMockProvider } from '../../src/ai/providers/index.js';
-import { ItemsRespSchema, ProvidersRespSchema, StateRespSchema } from '../../src/api/schemas.js';
+import { BackupRespSchema, ItemsRespSchema, ProvidersRespSchema, StateRespSchema } from '../../src/api/schemas.js';
 import { Attendance } from '../../src/attendance.js';
+import { BACKUP_FILE,Backups } from '../../src/backup.js';
 import { CheckRunner } from '../../src/checks.js';
 import { Store } from '../../src/db/store.js';
 import { createApp } from '../../src/server.js';
@@ -518,5 +519,60 @@ describe('PATCH /api/topics/:id category (NEWS-97)', () => {
     expect(updated?.paused).toBe(true);
     expect(updated?.guidance).toBe('only finals');
     expect(updated?.category).toBe('sports');
+  });
+});
+
+describe('POST /api/backup (NEWS-192)', () => {
+  it('503s when the app was built without backups wired', async () => {
+    const { app } = makeApp();
+    const res = await app.request('/api/backup', { method: 'POST' });
+    expect(res.status).toBe(503);
+  });
+
+  it('400s while no folder has been chosen, then writes one', async () => {
+    const store = new Store(tmpDataDir());
+    const runner = new CheckRunner(store, asResolver(createMockProvider()));
+    const backups = new Backups(store, () => store.getSettings().backupDir);
+    const app = createApp({ store, runner, backups });
+
+    expect((await app.request('/api/backup', { method: 'POST' })).status).toBe(400);
+
+    const dest = path.join(store.dataDir, 'backups');
+    const patch = await app.request('/api/settings', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ backupDir: dest }),
+    });
+    expect(patch.status).toBe(200);
+
+    const res = await app.request('/api/backup', { method: 'POST' });
+    expect(res.status).toBe(200);
+    const body = BackupRespSchema.parse(await json(res));
+    expect(body.path).toBe(path.join(dest, BACKUP_FILE));
+    expect(fs.existsSync(body.path)).toBe(true);
+
+    // And the throttle does not apply here: a second click writes again.
+    expect((await app.request('/api/backup', { method: 'POST' })).status).toBe(200);
+  });
+
+  it('500s when the destination cannot be written', async () => {
+    const store = new Store(tmpDataDir());
+    const runner = new CheckRunner(store, asResolver(createMockProvider()));
+    const blocked = path.join(store.dataDir, 'not-a-folder');
+    fs.writeFileSync(blocked, 'x');
+    store.updateSettings({ backupDir: blocked });
+    const app = createApp({
+      store,
+      runner,
+      backups: new Backups(
+        store,
+        () => store.getSettings().backupDir,
+        () => Date.now(),
+        () => {
+          /* keep the test output clean */
+        },
+      ),
+    });
+    expect((await app.request('/api/backup', { method: 'POST' })).status).toBe(500);
   });
 });

@@ -22,6 +22,7 @@ const SETTINGS: Settings = {
   model: '',
   endpoint: '',
   effort: '',
+  backupDir: '',
   notifyOnNewItems: false,
   itemRetentionDays: 365,
 };

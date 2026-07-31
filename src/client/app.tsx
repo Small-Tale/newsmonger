@@ -21,6 +21,7 @@ import { MAX_GUIDANCE_LENGTH } from '../db/schemas.js';
 import {
   addSuggestedTopic,
   addTopic,
+  backupNow,
   countItemsForTopic,
   deleteKey,
   deleteTopic,
@@ -41,6 +42,7 @@ import {
   setTopicHighPriority,
   setTopicPaused,
   startCheck,
+  updateBackupDir,
   updateConcurrency,
   updateDailyTimes,
   updateHighPriorityInterval,
@@ -1890,6 +1892,40 @@ function settingsPanelJsx(s: AppState): SafeHtml {
         <p class="note">
           Nothing here is trapped in the app. Markdown is for pasting into notes; JSON is the escape hatch.
         </p>
+        {/* Backups (NEWS-192, FR-27.6). The path is typed rather than picked:
+            a browser cannot hand a Node server a real filesystem path, and the
+            desktop shell has no dialog plugin yet — see docs/27-data-location.md. */}
+        <h3 class="eyebrow">Backup</h3>
+        <label class="field">
+          <span>Backup folder</span>
+          <input
+            type="text"
+            data-action="backup-dir"
+            value={s.settings.backupDir}
+            placeholder="e.g. ~/Library/Mobile Documents/com~apple~CloudDocs/Newsmonger"
+            spellCheck="false"
+            autocorrect="off"
+          />
+        </label>
+        {/* Its own class, not `export-row`: two rows with one class in the same
+            tab makes every selector that names it ambiguous. */}
+        <div class="backup-row">
+          <button class="btn" type="button" data-action="backup-now" disabled={s.settings.backupDir === ''}>
+            {icon('database', 15)} Back up now
+          </button>
+        </div>
+        <p class="note">
+          Point this at an iCloud Drive, OneDrive or Google Drive folder and Newsmonger writes a snapshot there —
+          your topics, settings and stories — after a check, at most once an hour. Leave it empty to turn backups
+          off. <strong>Your API keys are never included</strong>; they stay in your {s.keychainLabel}.
+        </p>
+        <p class="note">
+          The database itself stays on this machine on purpose: a live SQLite file inside a folder a sync client
+          rewrites is a known way to corrupt it. To restore, put <code>newsmonger-backup.json</code> in an empty
+          data folder as <code>data.json</code> and start the app.
+        </p>
+
+        <h3 class="eyebrow">Feed</h3>
         <p class="note">
           Subscribe in any feed reader: <code>{`${location.origin}/feed.xml`}</code> (add{' '}
           <code>?scope=saved</code> for bookmarks only). It works from this machine — the app listens on
@@ -3239,6 +3275,23 @@ function wireEvents(root: HTMLElement): void {
 
   void delegate(root, 'change', '[data-action=concurrency]', (_e, el) => {
     if (el instanceof HTMLSelectElement) void updateConcurrency(Number(el.value));
+  });
+
+  // `change`, not `input`: a PATCH per keystroke would write a dozen invalid
+  // half-typed paths on the way to a good one.
+  void delegate(root, 'change', '[data-action=backup-dir]', (_e, el) => {
+    if (el instanceof HTMLInputElement) void updateBackupDir(el.value.trim());
+  });
+
+  void delegate(root, 'click', '[data-action=backup-now]', () => {
+    void backupNow().then(
+      (at) => {
+        showToast(`Backed up to ${at}`);
+      },
+      (err: unknown) => {
+        showToast(`Backup failed: ${err instanceof Error ? err.message : String(err)}`);
+      },
+    );
   });
 
   void delegate(root, 'change', '[data-action=retention]', (_e, el) => {
