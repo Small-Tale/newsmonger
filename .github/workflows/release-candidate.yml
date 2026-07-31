@@ -413,7 +413,7 @@ jobs:
       # that pointer — see tauri.conf.json) keeps serving the prior stable.
       - name: Create prerelease (as draft — flipped by publish-release at end)
         id: create
-        uses: actions/github-script@v7
+        uses: actions/github-script@v9
         env:
           RELEASE_BODY: ${{ steps.notes.outputs.body }}
         with:
@@ -775,7 +775,7 @@ jobs:
       # GitHub's recursion guard). Without this the stable release would never
       # build. `release-desktop.yml` accepts a `tag` input for exactly this.
       - name: Trigger the desktop release workflow
-        uses: actions/github-script@v7
+        uses: actions/github-script@v9
         with:
           script: |
             await github.rest.actions.createWorkflowDispatch({
@@ -815,7 +815,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Flip prerelease from draft → published
-        uses: actions/github-script@v7
+        uses: actions/github-script@v9
         with:
           script: |
             const releaseId = ${{ needs.create-release.outputs.release_id }};
