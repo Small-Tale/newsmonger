@@ -14,6 +14,23 @@ fields reject semver prerelease suffixes.
 
 <!-- Nothing released yet. The first `npm run release` inserts its entry below. -->
 
+## [0.2.0-beta.5] - 2026-07-31
+
+## Documentation
+
+- Documented that all builds — beta and stable — use a single updater endpoint (`releases/latest/download/latest.json`), which means beta installs automatically rejoin the stable channel on the next stable release.
+- Expanded the macOS signing docs with the rationale for the entitlement set and a required manual pre-release check that a signed build's Node sidecar still launches.
+
+## Developer Experience
+
+- Added an animated SVG hero to the README, captured from the live app.
+- New `npm run demo:capture` script regenerates the README hero by booting a real server in demo mode and driving the UI with Playwright.
+- The Rust gate script now honors `RUST_GATES=skip`, so callers that run those checks elsewhere can opt out instead of failing on missing system headers.
+
+## Internal
+
+- macOS hardened-runtime entitlements now grant `cs.disable-library-validation` in place of `cs.disable-executable-page-protection`, matching the reference Node-sidecar configuration.
+
 ## [0.2.0-beta.4] - 2026-07-31
 
 ## Features
