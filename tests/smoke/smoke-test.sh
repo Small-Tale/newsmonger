@@ -71,15 +71,15 @@ echo ""
 
 # --- The binary runs at all ---
 
-# One invocation, captured — deliberately not `$NEWSMONGER --help | grep`.
+# One invocation, captured — deliberately not `$NEWSMONGER --help | grep`. Under
+# `set -o pipefail` a pipeline inherits a non-zero exit even when `grep` matches,
+# so `! cmd | grep -q .` would report "not runnable" for a command that ran fine.
 #
-# Two traps here, both of which cost a debugging round. `newsmonger --help`
-# **exits 1**: the flag is not recognised, so it falls through to the
-# unknown-argument path, which prints the usage line and exits non-zero. (Glassbox's
-# `--help` exits 0, which is why this section diverges from it.) And under
-# `set -o pipefail` a pipeline inherits that 1 even when `grep` matches, so
-# `! cmd | grep -q .` reports "not runnable" for a command that ran perfectly.
-HELP_OUTPUT=$($NEWSMONGER --help 2>&1 || true)
+# `--help` exits **0** as of NEWS-216; it used to fall through to the
+# unknown-argument path and exit 1, which cost a debugging round here. The exit
+# code is now asserted rather than tolerated — that regression is the whole point
+# of the check, and `|| true` would hide its return.
+HELP_OUTPUT=$($NEWSMONGER --help 2>&1) && HELP_STATUS=0 || HELP_STATUS=$?
 
 if [[ -z "$HELP_OUTPUT" ]]; then
   # No output at all is the shape a broken `bin` entry or a missing dist takes.
@@ -92,6 +92,26 @@ if echo "$HELP_OUTPUT" | grep -q "usage: newsmonger"; then
   pass "--help prints usage"
 else
   fail "--help did not print usage (got: $(echo "$HELP_OUTPUT" | head -1))"
+fi
+
+if [[ "$HELP_STATUS" -eq 0 ]]; then
+  pass "--help exits 0"
+else
+  fail "--help exited $HELP_STATUS — asking for help is not an error (NEWS-216)"
+fi
+
+# stdout, not stderr: `newsmonger --help | less` should show something.
+if [[ -n "$($NEWSMONGER --help 2>/dev/null)" ]]; then
+  pass "--help prints to stdout"
+else
+  fail "--help printed nothing to stdout (still going to stderr?)"
+fi
+
+VERSION_OUTPUT=$($NEWSMONGER --version 2>&1) && VERSION_STATUS=0 || VERSION_STATUS=$?
+if [[ "$VERSION_STATUS" -eq 0 && "$VERSION_OUTPUT" =~ ^[0-9]+\.[0-9]+\.[0-9]+ ]]; then
+  pass "--version prints $VERSION_OUTPUT and exits 0"
+else
+  fail "--version exited $VERSION_STATUS with: $VERSION_OUTPUT"
 fi
 
 # --- Start the server ---

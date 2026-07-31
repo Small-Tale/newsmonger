@@ -111,7 +111,37 @@ PATH=/tmp/nm-prefix/bin:$PATH newsmonger --ai-test --no-open --port 4291 --data-
 
 Run it from a directory **outside the repo** — the point is that the server resolves its client assets relative to its own module rather than the cwd.
 
-Verified 2026-07-31 on macOS at 0.2.0: the `bin` symlink is created, `newsmonger --help` / `--version` answer and exit 0, the server prints its readiness line, `/` and every `/static/*` asset serve (`app.js` 887 kB, `styles.css`, the SVGs), `/api/state` returns the real state with `appVersion`, and the page renders in Chromium with **no console errors**. Not yet run on Windows or Linux.
+Verified 2026-07-31 on macOS at 0.2.0: the `bin` symlink is created, `newsmonger --help` / `--version` answer and exit 0, the server prints its readiness line, `/` and every `/static/*` asset serve (`app.js` 887 kB, `styles.css`, the SVGs), `/api/state` returns the real state with `appVersion`, and the page renders in Chromium with **no console errors**.
+
+### Linux — ✅ verified 2026-07-31 (NEWS-217)
+
+Docker, four passes, all green at 0.2.0:
+
+| Pass | Image | Result |
+|---|---|---|
+| arm64 (native) | `node:22` (v22.23.2) | install, `--help`/`--version` exit 0, readiness line, `/` + all `/static/*` + `/api/state` + `/healthz`, `POST /api/topics` → 201 |
+| amd64 (emulated) | `node:22` | identical |
+| Browser | `mcr.microsoft.com/playwright:v1.61.1-noble` (Node 24.17) | first-run onboarding appears, skip, add a topic through the UI, it renders — **no console errors, no failed requests** |
+| Non-root | `node:22`, `tester` user, `npm config set prefix ~/.npm-global` | bin on PATH, server serves, default data dir lands at `$HOME/.newsmonger` owned by the user |
+
+The browser pass is the one worth keeping: it walks the real first-run path (fresh data dir → onboarding wizard → add a topic) rather than just asserting the HTML came back.
+
+`npm install -g` as a non-root user needs a user-writable npm prefix, which is npm's ordinary configuration and not something this package can influence — but it is what a Linux user will actually do, so it is covered.
+
+### Windows — ✅ verified 2026-07-31 (NEWS-218)
+
+Parallels Windows 11 ARM64 (build 10.0.26200), Node 24.16.0 / npm 11.13.0, driven with `prlctl exec --current-user`, installing from a tarball copied onto the VM's own disk (not run over the `\\Mac` share, which would conflate SMB semantics with real portability bugs).
+
+All green at 0.2.0: `npm install -g` writes **both** shims (`newsmonger` and `newsmonger.cmd`) into `%APPDATA%\npm`; `--help` exits 0 and `--version` prints `0.2.0`; a bad flag still exits 1; the server prints its readiness line; `/`, all five `/static/*` assets, `/manifest.webmanifest`, `/api/state`, `/api/providers`, `/healthz`, `/feed.xml` and `/api/export.md` all 200; `POST /api/topics` → 201 and the topic comes back in state. The default data directory lands at **`C:\Users\<user>\.newsmonger`** — the Windows home, not a POSIX path — holding `newsmonger.db` and its `-shm`/`-wal` siblings.
+
+**The browser-open path works, and the way it looks when it fails is worth knowing.** `openInBrowser` runs `cmd /c start "" <url>`. On this VM no browser process ever appeared, and every OS-level idiom behaved identically — `start`, `explorer.exe <url>`, `Start-Process <url>`, `rundll32 url.dll,FileProtocolHandler` — while launching `msedge.exe` directly worked fine. A screenshot of the VM desktop settled it: Windows had raised **"Select an app to open this 'http' link"** and was waiting on a choice, because the VM has no settled default-browser association (Parallels adds the Mac browsers as candidates). The command reached the shell and the shell did its job.
+
+So: **process-count checks cannot verify browser opening on Windows.** Capture the screen — `prlctl capture <vm> --file x.png` — and note that a blanked display captures as a ~20 kB black frame, so capture twice.
+
+Two harness traps, recorded because both cost a round:
+
+- PowerShell's `Invoke-WebRequest` hangs against the local server here; `curl.exe` is fine and is what the check script uses.
+- A JSON body inlined on a `curl.exe` command line loses its quotes crossing the PowerShell/cmd boundary and comes back as a **400 from the app** — which reads exactly like a product bug. Write the body to a file and use `--data-binary "@file"`.
 
 ## Tauri release bundle (needs Rust toolchain) — ✅ macOS verified 2026-07-24
 

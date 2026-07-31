@@ -629,12 +629,25 @@ describe('the published-install smoke test (NEWS-201)', () => {
     expect(sh).toMatch(/STORIES.*-gt 0|"\$STORIES" -gt 0/);
   });
 
-  it('does not assume --help exits zero', () => {
-    // It does not: `--help` is an unrecognised flag, so it prints usage and exits 1.
-    // Combined with `set -o pipefail`, `! cmd | grep -q .` reports "not runnable"
-    // for a command that ran perfectly — which cost a debugging round.
+  it('asserts --help exits zero rather than tolerating a failure', () => {
+    // This assertion used to say the opposite. `--help` was an unrecognised flag,
+    // so it printed usage and exited 1, and the script swallowed that with
+    // `|| true` — under `set -o pipefail` the non-zero exit had made
+    // `! cmd | grep -q .` report "not runnable" for a command that ran perfectly.
+    // NEWS-216 made `--help` exit 0, so the exit code is now the thing being
+    // checked: `|| true` would hide exactly the regression worth catching.
     const sh = src();
-    expect(sh).toContain('HELP_OUTPUT=$($NEWSMONGER --help 2>&1 || true)');
+    expect(sh, 'the || true workaround should be gone').not.toContain('--help 2>&1 || true');
+    expect(sh).toContain('HELP_STATUS');
+    expect(sh).toMatch(/HELP_STATUS.*-eq 0/);
+    expect(sh, '--version should be smoke-tested too').toContain('--version');
+  });
+
+  it('checks --help goes to stdout, not stderr', () => {
+    // `2>&1` on the main capture would pass either way; a separate stdout-only
+    // invocation is what distinguishes them. `newsmonger --help | less` is the
+    // case that breaks if help goes to stderr.
+    expect(src()).toContain('--help 2>/dev/null');
   });
 });
 
