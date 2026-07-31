@@ -349,8 +349,42 @@ test('the high-priority interval is clamped to the default (NEWS-56)', async ({ 
   //
   // It has to be on the `expect` calls: `test.slow()` raises the *test* budget,
   // but the 5 s that actually elapsed is `expect`'s own retry window.
-  const SETTLE = { timeout: 15_000 };
+  //
+  // Raised 15 s → 30 s after this flaked again on a GitHub windows-latest runner
+  // (NEWS-235). Before widening it I re-probed the mechanism, since a 15 s wait
+  // for two localhost round trips is a fair thing to be suspicious of — the
+  // specific worry being that a `<select>` the user has already changed is
+  // "dirty", and per the HTML spec does not move when `selected` is written onto
+  // its options, which is exactly what a morph does. **Measured: it is not that.**
+  // On an idle machine the clamp lands within 250 ms with `value`, `selectedIndex`
+  // and the `selected` attribute all moving together.
+  //
+  // So the number is headroom for a starved runner, not cover for a bug: typical
+  // is ~250 ms, and a real regression — a clamp that never arrives — fails at any
+  // timeout, because the value simply never changes.
+  const SETTLE = { timeout: 30_000 };
   const HOUR = 60 * 60 * 1000;
+
+  /**
+   * The clamp is a *server* rule (NEWS-56); the UI merely reflects it. Asserting
+   * both, in that order, makes a future failure say which half broke — a bare UI
+   * timeout cannot distinguish "the server never clamped" from "the server
+   * clamped and the render lagged", and those have nothing in common.
+   */
+  const expectServerSettings = async (checkIntervalMs: number, highPriorityIntervalMs: number): Promise<void> => {
+    await expect
+      .poll(
+        async () => {
+          const res = await page.request.get('/api/state');
+          const body = (await res.json()) as {
+            settings: { checkIntervalMs: number; highPriorityIntervalMs: number };
+          };
+          return `${String(body.settings.checkIntervalMs)}/${String(body.settings.highPriorityIntervalMs)}`;
+        },
+        { timeout: 15_000 },
+      )
+      .toBe(`${String(checkIntervalMs)}/${String(highPriorityIntervalMs)}`);
+  };
   await page.goto('/');
   // The intervals live on the Schedule tab since NEWS-118.
   await openSettingsTab(page, 'Schedule');
@@ -364,10 +398,12 @@ test('the high-priority interval is clamped to the default (NEWS-56)', async ({ 
 
   // Shorten the default below high-priority → high-priority follows *down*.
   await dflt.selectOption(String(HOUR));
+  await expectServerSettings(HOUR, HOUR);
   await expect(hp).toHaveValue(String(HOUR), SETTLE);
 
   // Lengthen high-priority above the default → the default follows *up*.
   await hp.selectOption(String(12 * HOUR));
+  await expectServerSettings(12 * HOUR, 12 * HOUR);
   await expect(dflt).toHaveValue(String(12 * HOUR), SETTLE);
 
   // Restore a sane default so later serial tests aren't on a short interval.
