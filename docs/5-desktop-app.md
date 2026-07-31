@@ -309,6 +309,12 @@ It runs at the earliest point in each: its own `version-guard` job in `release-c
 
 It refuses **loudly** rather than the trigger excluding `v*-*`: an excluded tag would trigger nothing at all, and a push that silently does nothing is the same class of problem the guard exists to remove.
 
+##### Every checkout in `release-desktop.yml` is pinned to the tag (NEWS-223)
+
+`ref: ${{ inputs.tag || github.ref }}` on all three. On `workflow_dispatch` a bare checkout takes the **workflow ref** — `main` — while `tagName` and the release name come from `inputs.tag`. If main has moved past the tag, the release for `vX.Y.Z` contains bundles built from a **different commit**, and nothing says so. It was correct only because `promote-release` dispatches immediately after pushing the tag from main's HEAD; nothing enforced that ordering.
+
+The pin is also what makes the version guard above meaningful on that path: unpinned, it compared `inputs.tag` against *main's* version files, so it would have passed on exactly the mismatch it exists to catch. The two are load-bearing together.
+
 Via the scripts a mismatch cannot arise — `release.sh` writes both files and tags the same commit — so this is aimed at a **hand-cut tag**, which is documented as supported below and is exactly where a human gets it wrong. The failure it prevents is silent: the build succeeds, the release page looks right, and every asset is named after the wrong version while the generated download links point at filenames that never exist.
 
 #### Smoke tests (`tests/smoke/smoke-test.sh`)

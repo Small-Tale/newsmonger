@@ -29,7 +29,19 @@ jobs:
     outputs:
       release_id: ${{ steps.create.outputs.result }}
     steps:
+      # `ref:` is not optional here (NEWS-223). On `workflow_dispatch` a bare
+      # checkout takes the **workflow ref** — `main` — while `tagName` and the
+      # release name come from `inputs.tag`. If main has moved past the tag, the
+      # release for vX.Y.Z is built from a different commit, silently. It happens
+      # to be correct today only because `promote-release` dispatches immediately
+      # after pushing the tag from main's HEAD, and nothing enforces that ordering.
+      #
+      # It also makes NEWS-208's version guard meaningful on this path: without a
+      # ref it compared the tag against *main's* version files, so it would pass
+      # on exactly the mismatch it exists to catch.
       - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.tag || github.ref }}
 
       # First, before the release shell exists and before the ~20-minute signed
       # build (NEWS-208). The old `release.yml` had this and the NEWS-201 port
@@ -140,7 +152,10 @@ jobs:
     timeout-minutes: 120
 
     steps:
+      # Same reason as create-release: build the tag, not whatever main is now.
       - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.tag || github.ref }}
 
       - uses: actions/setup-node@v7
         with:
@@ -258,7 +273,11 @@ jobs:
     needs: [create-release, build]
     runs-on: ubuntu-latest
     steps:
+      # The tag's copy of release-assets.mjs, so the names it computes match the
+      # ones the release notes were generated from (NEWS-223).
       - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.tag || github.ref }}
 
       - name: Rename user-facing download assets to friendly names
         uses: actions/github-script@v7

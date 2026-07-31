@@ -1189,3 +1189,41 @@ describe('a prerelease tag cannot publish as stable (NEWS-222)', () => {
     expect(rc, 'release-candidate.yml exists to publish prereleases').not.toContain('--stable-only');
   });
 });
+
+describe('the stable release builds the tag, not whatever main is now (NEWS-223)', () => {
+  const src = (): string => fs.readFileSync(path.join(root, '.github/workflows/release-desktop.yml'), 'utf8');
+
+  it('pins every checkout to the tag being released', () => {
+    // On `workflow_dispatch` a bare checkout takes the **workflow ref** (`main`)
+    // while `tagName` and the release name come from `inputs.tag`. If main has
+    // moved past the tag, the release for vX.Y.Z contains bundles built from a
+    // different commit — silently. It is correct today only because
+    // `promote-release` dispatches immediately after pushing the tag from main's
+    // HEAD, and nothing enforces that ordering.
+    const checkouts = src().match(/- uses: actions\/checkout@v\d+\n(?:\s+with:\n\s+ref: [^\n]+\n)?/g) ?? [];
+    expect(checkouts.length, 'expected the create-release, build and rename-assets checkouts').toBeGreaterThanOrEqual(3);
+    for (const c of checkouts) {
+      expect(c, `a bare checkout would build main on dispatch:\n${c}`).toContain('ref:');
+    }
+  });
+
+  it('resolves that ref from the dispatch input, falling back to the pushed ref', () => {
+    // `inputs.tag` is empty on a tag push, so the fallback is what makes the same
+    // expression correct on both triggers.
+    expect(src()).toContain('ref: ${{ inputs.tag || github.ref }}');
+  });
+
+  it('keeps the version guard meaningful on the dispatch path', () => {
+    // Without a pinned ref the guard compared inputs.tag against *main's* version
+    // files, so it would pass on exactly the mismatch it exists to catch. The two
+    // changes are load-bearing together, which is why this is asserted here.
+    const s = src();
+    const createRelease = s.slice(s.indexOf('create-release:'), s.indexOf('  build:'));
+    expect(createRelease).toContain('ref: ${{ inputs.tag || github.ref }}');
+    expect(createRelease).toContain('check-tag-version.sh');
+    expect(
+      createRelease.indexOf('ref: ${{ inputs.tag || github.ref }}'),
+      'the checkout must be pinned before the guard reads the files',
+    ).toBeLessThan(createRelease.indexOf('check-tag-version.sh'));
+  });
+});
