@@ -1410,3 +1410,43 @@ describe('a dry run is structurally incapable of publishing (NEWS-223)', () => {
     expect(build).toContain('!failure() && !cancelled()');
   });
 });
+
+describe('the Windows E2E job is advisory, not a gate (NEWS-209)', () => {
+  const rc = (): string => fs.readFileSync(path.join(root, '.github/workflows/release-candidate.yml'), 'utf8');
+
+  it('runs the suite on a Windows runner', () => {
+    const src = rc();
+    expect(src).toContain('test-e2e-windows:');
+    const job = src.slice(src.indexOf('test-e2e-windows:'), src.indexOf('\n  npm-pack:'));
+    expect(job).toContain('runs-on: windows-latest');
+    expect(job).toContain('npm run test:e2e');
+  });
+
+  it('does not install Linux system deps on a Windows runner', () => {
+    // `--with-deps` installs Linux libraries; on windows-latest it is a no-op at
+    // best and a confusing failure at worst.
+    const src = rc();
+    const job = src.slice(src.indexOf('test-e2e-windows:'), src.indexOf('\n  npm-pack:'));
+    expect(job).toContain('npx playwright install chromium');
+    expect(job).not.toContain('--with-deps');
+  });
+
+  it('cannot block a release', () => {
+    // The whole point: a job nobody expects to pass is a job nobody reads, so
+    // this one is `continue-on-error` and absent from every `needs` until it has
+    // a track record. It also proves only that the *web app* works in a Windows
+    // browser — no Windows bundle has ever been built (NEWS-20).
+    const src = rc();
+    const job = src.slice(src.indexOf('test-e2e-windows:'), src.indexOf('\n  npm-pack:'));
+    expect(job).toContain('continue-on-error: true');
+    for (const m of src.matchAll(/needs: \[([^\]]*)\]/g)) {
+      expect(m[1], 'no job may depend on the advisory Windows run').not.toContain('test-e2e-windows');
+    }
+  });
+
+  it('is capped, so a hang fails rather than burning the default 360 minutes', () => {
+    const src = rc();
+    const job = src.slice(src.indexOf('test-e2e-windows:'), src.indexOf('\n  npm-pack:'));
+    expect(job).toMatch(/timeout-minutes: \d+/);
+  });
+});

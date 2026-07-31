@@ -143,6 +143,25 @@ Two harness traps, recorded because both cost a round:
 - PowerShell's `Invoke-WebRequest` hangs against the local server here; `curl.exe` is fine and is what the check script uses.
 - A JSON body inlined on a `curl.exe` command line loses its quotes crossing the PowerShell/cmd boundary and comes back as a **400 from the app** — which reads exactly like a product bug. Write the body to a file and use `--data-binary "@file"`.
 
+## E2E suite on Windows — ✅ verified 2026-07-31 (NEWS-209)
+
+The harness needed **no porting**. That was measured, not assumed, and it contradicts what NEWS-209 expected: glassbox's Windows port had to fix an `npx.cmd` spawn, add Node `mkdir`s in the config and `build:client`, return a favicon 204 and patch the keychain. None of it applied here — newsmonger already resolves paths through Node APIs and creates its directories with `fs.mkdirSync`, so the suite ran as-is.
+
+Procedure (Parallels Windows 11, build 10.0.26200, Node 24.16.0, driven with `prlctl exec`):
+
+```powershell
+git config --global --add safe.directory '*'   # the Mac share is another owner
+git clone Z:\Documents\news C:\nm-e2e        # clone onto C:, not run over SMB
+cd C:\nm-e2e; npm ci; npx playwright install chromium
+$env:CI = 'true'; npm run test:e2e
+```
+
+Clone onto the VM's own disk rather than running out of `\\Mac\Home`: `node_modules` and Playwright over SMB conflate share latency and filesystem semantics with the real portability bugs you are looking for.
+
+**Result at `ef10d5b`: 173 passed, 1 flaky, ~5 minutes.** The flake was `a11y.spec.ts` — the settings-dialog sweep, which walks every tab in both themes and runs axe — timing out at the 30 s default under full-suite load. It passes **3/3 in isolation**, so it is VM slowness rather than a Windows bug. Worth watching on the CI runner: if it recurs there, the fix is a longer timeout on that one test, not a harness change.
+
+Now covered by the advisory `test-e2e-windows` job in `release-candidate.yml`, so this stays a spot-check rather than a routine step.
+
 ## Tauri release bundle (needs Rust toolchain) — ✅ macOS verified 2026-07-24
 
 `npm run tauri:build` then launch `src-tauri/target/release/bundle/macos/Newsmonger.app`. Verified on `aarch64-apple-darwin` (NEWS-2): the sidecar starts, the webview navigates, the real UI loads (`NEWSMONGER_LOG_REQUESTS=1` shows `GET /` → assets → `/api/state` → `/api/providers`), and quitting leaves no orphaned `newsmonger-node`.

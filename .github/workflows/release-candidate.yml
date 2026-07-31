@@ -201,6 +201,52 @@ jobs:
             test-results/
           retention-days: 7
 
+  # Windows E2E (NEWS-209). **Non-blocking** — `continue-on-error`, and absent
+  # from every downstream `needs` — because no Windows *bundle* has ever been
+  # built or run (NEWS-20), so this proves the web app works in a Windows
+  # browser and nothing more. A job nobody expects to pass is a job nobody
+  # reads; this one is expected to pass, and is advisory until it has a track
+  # record. Promote it into `publish-beta`'s `needs` once it has one.
+  #
+  # The harness needed **no porting**, which was measured rather than assumed:
+  # the whole suite was run on a real Windows 11 machine at ef10d5b and came back
+  # 173/173, the single flake being the a11y sweep timing out under full-suite
+  # load on a slow VM (it passes 3/3 in isolation). Glassbox's port needed an
+  # `npx.cmd` spawn, Node `mkdir`s, a favicon 204 and a keychain fix; newsmonger
+  # already resolves paths through Node APIs and creates its dirs with
+  # `fs.mkdirSync`, so none of that applied.
+  #
+  # No `--with-deps`: that flag installs Linux system libraries and is a no-op
+  # at best on a Windows runner.
+  test-e2e-windows:
+    name: E2E Tests (Windows)
+    needs: [version-guard, lint, typecheck, test-unit, audit, rust]
+    runs-on: windows-latest
+    continue-on-error: true
+    # The suite is serial (`workers: 1`) and takes ~5 minutes on real hardware;
+    # a cap well above that turns a hang into a failed job rather than a
+    # 360-minute one.
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+      - run: npm ci
+      - run: npm run build:client
+      - run: npx playwright install chromium
+      - run: npm run test:e2e
+      - name: Upload Playwright report + traces
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: playwright-report-windows
+          path: |
+            playwright-report/
+            test-results/
+          retention-days: 7
+
   npm-pack:
     name: npm Pack (Dry Run)
     needs: [version-guard, lint, typecheck, test-unit, audit, rust]
