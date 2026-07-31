@@ -211,8 +211,9 @@ resolve_tag() {
   local n=1
   while git rev-parse "v${VERSION}-beta.${n}" >/dev/null 2>&1; do n=$((n + 1)); done
   TAG="v${VERSION}-beta.${n}"
-  # The changelog heading carries the prerelease suffix; the version *files* never
-  # do (macOS bundle version fields reject it), which is why these differ.
+  # The changelog heading carries the prerelease suffix; the in-tree version files
+  # stay on the clean `X.Y.Z` (CI applies the suffix at build time — NEWS-207),
+  # which is why these differ.
   LABEL="${VERSION}-beta.${n}"
   info "Target tag: ${BOLD}${TAG}${RESET}"
 }

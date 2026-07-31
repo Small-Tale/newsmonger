@@ -245,7 +245,24 @@ No `NPM_TOKEN`. Every `npm publish` omits `NODE_AUTH_TOKEN` deliberately so the 
 
 **The version lives in five files**, and `scripts/set-version.mjs` writes the three `npm version` doesn't: `tauri.conf.json`, `Cargo.toml`, and `Cargo.lock`. That last one matters more than it looks — it records the workspace package's own version, so skipping it means `cargo build` silently rewrites the lockfile, every release carries an unexplained lockfile diff, and a future `--locked` build hard-fails. `tests/unit/release-scripts.test.ts` pins all of it, including that exactly one line changes per file — `Cargo.lock` has ~400 other `[[package]]` blocks and more than one shares this crate's version.
 
-The version files never carry the `-rc.N` / `-beta.N` suffix; `set-version.mjs` rejects it, because macOS bundle version fields do. For a **beta**, CI bumps `package.json` to the full `0.2.0-beta.1` ephemerally so npm publishes the right version, while the bundle files get the base `0.2.0`.
+**At rest** the version files carry the clean `X.Y.Z` — the suffix belongs to a tag, and `release.sh` / `release-beta-auto.sh` still refuse a suffixed argument for that reason. For a **beta**, CI writes the full `0.2.0-beta.1` into *every* file ephemerally, `package.json` and the bundle files alike.
+
+##### The bundle files used to get the base version, and that was wrong (NEWS-207)
+
+`set-version.mjs` rejected a prerelease suffix outright, on the recorded reason that "macOS bundle version fields reject them" (NEWS-196). So beta bundles were built at `0.2.0` while npm published `0.2.0-beta.1`.
+
+That is not cosmetic: **the Tauri updater compares versions**, so `v0.2.0-beta.1` and `v0.2.0-beta.2` produced bundles that both reported `0.2.0`, and an installed beta could never see the next one — most of the point of a beta channel. Nothing failed while it was wrong; the build stayed green and the release page looked right.
+
+The claim was inherited rather than measured, and it is **false**. Built locally at `0.2.0-beta.1`:
+
+- `cargo` compiles the crate at that version;
+- the bundler emits `Newsmonger.app` and `Newsmonger_0.2.0-beta.1_aarch64.dmg`;
+- `CFBundleShortVersionString` **and** `CFBundleVersion` both read `0.2.0-beta.1`;
+- the app launches, and `lsappinfo` reports `Version="0.2.0-beta.1"`.
+
+The one genuine constraint is the **Windows MSI**, whose pre-release identifier must be numeric-only — and that is handled where it belongs, with `--bundles nsis` for betas (see above). A bundler flag was never a reason to write a version into a file that the bundle does not have.
+
+`set-version.mjs` now accepts `X.Y.Z[-prerelease]` and rejects build metadata (`+build`), and its guard carries the measured reason rather than the inherited one.
 
 > ⚠️ **Neither workflow currently guards that the tag's base version matches `tauri.conf.json`.** The old `release.yml` did. Under the rc model a mismatch cannot arise from the scripts — `release.sh` bumps the files and tags the same commit — but a hand-tagged release could still ship assets named after the wrong version with nothing complaining. Tracked separately.
 

@@ -39,8 +39,9 @@
 #     alone and lets CI bump ephemerally. Ours bumps here as well — harmless
 #     under the new pipeline (CI's bump is `--allow-same-version`), and it keeps
 #     the committed version honest about what was last tagged. Note the version
-#     *files* never carry the `-beta.N` / `-rc.N` suffix: `set-version.mjs`
-#     rejects it, because macOS bundle version fields do (NEWS-196).
+#     files carry the clean `X.Y.Z` **in the tree** — the suffix belongs to a tag.
+#     CI writes the full `-beta.N` into every file at build time (NEWS-207); the
+#     bundle fields accept it, contrary to what NEWS-196 recorded.
 #
 set -euo pipefail
 cd "$(dirname "$0")/.."
@@ -270,8 +271,8 @@ step_update_version() {
 # second beta of a version.
 #
 # Echoes `<tag>\t<changelog-label>`. They differ for a beta: the label carries the
-# prerelease suffix, the version *files* never do (macOS bundle version fields
-# reject it). One resolver so the heading and the tag can never disagree.
+# prerelease suffix, the in-tree version files stay on the clean `X.Y.Z` (CI applies
+# the suffix at build time). One resolver so the heading and the tag can never disagree.
 resolve_tag() {
   local version; version=$(get_state "version")
   if [[ "$BETA_MODE" == "true" ]]; then

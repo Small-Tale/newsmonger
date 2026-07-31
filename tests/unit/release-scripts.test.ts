@@ -356,14 +356,32 @@ describe('set-version.mjs writes every file that states a version (NEWS-194)', (
     });
   });
 
-  it.each(['', '1.2', 'v1.2.3', '1.2.3-beta.1', 'nonsense'])('rejects %o as a version', (bad) => {
-    // `1.2.3-beta.1` is the one worth calling out: it is valid semver and invalid
-    // here, because macOS bundle version fields reject prerelease suffixes. The
-    // suffix belongs on the git tag.
+  it.each(['', '1.2', 'v1.2.3', '1.2.3+build.5', '1.2.3-', 'nonsense'])('rejects %o as a version', (bad) => {
     const result = runInSandbox(bad);
     expect(result.status).not.toBe(0);
     for (const { rel, read } of VERSIONED) {
       expect(read(fs.readFileSync(path.join(sandbox, rel), 'utf8'))).not.toBe(bad);
+    }
+  });
+
+  it.each(['1.2.3-beta.1', '1.2.3-rc.2', '1.2.3-1'])('accepts %o, suffix and all (NEWS-207)', (version) => {
+    // This assertion used to say the opposite. NEWS-196 rejected a prerelease
+    // suffix on the inherited claim that "macOS bundle version fields reject
+    // them", so beta bundles got the *base* version — and since the Tauri updater
+    // compares versions, every beta reported `0.2.0` and an installed beta could
+    // never see the next one.
+    //
+    // Measured, not reasoned about (NEWS-207): built locally at `0.2.0-beta.1`,
+    // cargo compiles it, the bundler emits `Newsmonger_0.2.0-beta.1_aarch64.dmg`,
+    // both `CFBundleShortVersionString` and `CFBundleVersion` read the beta
+    // version, and the launched app reports it to Launch Services.
+    //
+    // The genuine constraint is the Windows MSI's numeric-only pre-release
+    // identifier, and that is handled where it lives — `--bundles nsis` for betas.
+    const result = runInSandbox(version);
+    expect(result.status, result.stdout).toBe(0);
+    for (const { rel, read } of VERSIONED) {
+      expect(read(fs.readFileSync(path.join(sandbox, rel), 'utf8')), `${rel} should carry ${version}`).toBe(version);
     }
   });
 
@@ -454,6 +472,28 @@ describe('the rc/beta release pipeline (NEWS-201)', () => {
       .split('\n')
       .filter((l) => !/^\s*(#|\/\/)/.test(l))
       .join('\n');
+
+  it('gives beta bundles the full beta version, so the updater can order them (NEWS-207)', () => {
+    // The bug this pins: the beta build job wrote `${VER%%-*}` — the *base*
+    // version — into the Tauri/Cargo files, so `v0.2.0-beta.1` and
+    // `v0.2.0-beta.2` produced bundles that both reported `0.2.0`. The Tauri
+    // updater compares versions, so an installed beta could never see the next
+    // one, which is most of the point of a beta channel.
+    //
+    // Everything still built and the release page still looked right, so nothing
+    // failed — the check has to be on the config, because there is no red build
+    // to notice.
+    const src = code(rc());
+    expect(src, 'the base-version truncation should be gone').not.toContain('${VER%%-*}');
+    expect(src).toMatch(/node scripts\/set-version\.mjs "\$VER"/);
+  });
+
+  it('still builds betas as NSIS only, which is the real Windows constraint', () => {
+    // The MSI bundler rejects a non-numeric pre-release identifier. That is a
+    // bundler flag, and stays one — it was never a reason to write a version into
+    // the file that the bundle does not have.
+    expect(code(rc())).toContain('--bundles nsis');
+  });
 
   it('cuts a stable release as an -rc.N tag, not a bare v{ver}', () => {
     // The model glassbox uses and this repo diverged from until the promote step

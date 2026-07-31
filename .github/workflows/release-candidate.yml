@@ -451,17 +451,21 @@ jobs:
 
       - run: npm ci
 
-      # `scripts/set-version.mjs` rejects prerelease suffixes (NEWS-196) because the
-      # macOS bundle version fields do — so the Tauri/Cargo versions get the *base*
-      # version while package.json carries the full `-beta.N`. The bundle is
-      # identified by the release it hangs off, not by its own version string.
+      # Every file gets the **full** beta version, including the Tauri/Cargo ones
+      # (NEWS-207). This used to write the *base* version there, on NEWS-196's
+      # inherited claim that macOS bundle version fields reject a suffix — measured
+      # and false: a local `0.2.0-beta.1` build bundles, and the installed app
+      # reports `0.2.0-beta.1` to Launch Services.
+      #
+      # It is not cosmetic. The updater compares versions, so with the base version
+      # in the bundle every beta reported `0.2.0` and an installed beta could never
+      # see the next one.
       - name: Set version for the bundle build
         shell: bash
         run: |
           VER="${{ needs.create-release.outputs.beta_version }}"
-          BASE="${VER%%-*}"
           npm version "$VER" --no-git-tag-version --allow-same-version
-          node scripts/set-version.mjs "$BASE"
+          node scripts/set-version.mjs "$VER"
 
       - name: Build sidecar
         run: bash scripts/build-sidecar.sh ${{ matrix.target }}

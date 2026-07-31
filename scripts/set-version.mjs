@@ -25,11 +25,29 @@ import { fileURLToPath } from 'node:url';
 
 const root = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
 
+/**
+ * A prerelease suffix is **accepted** (NEWS-207), and the reason is measured.
+ *
+ * NEWS-196 recorded that "macOS bundle version fields reject them" and wrote the
+ * *base* version into the Tauri/Cargo files for betas. That inherited claim is
+ * wrong. Built locally with `0.2.0-beta.1`: `cargo` compiles it, the bundler
+ * produces `Newsmonger.app` and `Newsmonger_0.2.0-beta.1_aarch64.dmg`, both
+ * `CFBundleShortVersionString` and `CFBundleVersion` read `0.2.0-beta.1`, and the
+ * app launches with Launch Services reporting `Version="0.2.0-beta.1"`.
+ *
+ * It mattered because the Tauri updater compares versions: with the base version
+ * in the bundle, `v0.2.0-beta.1` and `v0.2.0-beta.2` both reported `0.2.0`, so an
+ * installed beta could never see the next one — most of the point of a beta.
+ *
+ * The one real constraint is elsewhere and already handled: the **Windows MSI**
+ * bundler requires a numeric-only pre-release identifier, so betas build the NSIS
+ * `.exe` only (`--bundles nsis` in `release-candidate.yml`). That is a bundler
+ * flag, not a reason to lie about the version in the file.
+ */
 const version = process.argv[2];
-if (version === undefined || !/^\d+\.\d+\.\d+$/.test(version)) {
-  console.error(`Usage: node scripts/set-version.mjs X.Y.Z  (got: ${version ?? '<nothing>'})`);
-  console.error('Prerelease suffixes belong on the git tag, not in these files — macOS bundle');
-  console.error('version fields reject them.');
+if (version === undefined || !/^\d+\.\d+\.\d+(?:-[0-9A-Za-z][0-9A-Za-z.-]*)?$/.test(version)) {
+  console.error(`Usage: node scripts/set-version.mjs X.Y.Z[-prerelease]  (got: ${version ?? '<nothing>'})`);
+  console.error('A prerelease suffix is allowed (0.2.0-beta.1); build metadata (+build) is not.');
   process.exit(1);
 }
 
