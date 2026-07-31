@@ -400,7 +400,11 @@ Covered by `tests/unit/update.test.ts` (store transitions, walked as sequences) 
 
 ### Windows Authenticode — deliberately not set up
 
-Untouched, and that is a decision rather than an omission: no Windows bundle has been verified at all yet (NEWS-20), so signing one would be attesting to something unproven.
+Untouched, and that is a decision rather than an omission — **reaffirmed by the owner after a Windows bundle started existing** (NEWS-236, deferred).
+
+The original reason was that no Windows bundle had been built at all, so signing one would attest to something unproven. Half of that expired with `v0.2.0-beta.7`, which produces a signed-by-nobody `Newsmonger_<version>_x64-setup.exe` through CI and attaches it to the release. The half that still holds: **it has never been launched** (NEWS-20).
+
+Be clear about the consequence for anyone who downloads it. An unsigned NSIS installer triggers **SmartScreen** — "Windows protected your PC", with the run-anyway option behind a "More info" link most people will not click. There is no Windows equivalent of notarization-without-a-certificate, so unlike macOS there is no cheaper middle path.
 
 For when it is time, Tauri v2 offers two routes. `bundle.windows.certificateThumbprint` + `digestAlgorithm` + `timestampUrl` in `tauri.conf.json` uses a certificate installed on the build machine. `bundle.windows.signCommand` delegates to any signing tool — the usual choice for Azure Trusted Signing or Key Vault, which read `AZURE_CLIENT_ID`, `AZURE_CLIENT_SECRET`, and `AZURE_TENANT_ID`. An OV/EV certificate from a CA is a paid annual purchase with identity vetting, so budget lead time, and note that a plain OV certificate accrues SmartScreen reputation slowly — early downloads still get warned.
 
