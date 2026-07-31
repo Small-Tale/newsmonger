@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 
 import { createMockProvider } from '../../src/ai/providers/index.js';
-import { BackupRespSchema, ItemsRespSchema, ProvidersRespSchema, StateRespSchema } from '../../src/api/schemas.js';
+import { BackupLocationsRespSchema, BackupRespSchema, ItemsRespSchema, ProvidersRespSchema, StateRespSchema } from '../../src/api/schemas.js';
 import { Attendance } from '../../src/attendance.js';
 import { BACKUP_FILE,Backups } from '../../src/backup.js';
 import { CheckRunner } from '../../src/checks.js';
@@ -574,5 +574,47 @@ describe('POST /api/backup (NEWS-192)', () => {
       ),
     });
     expect((await app.request('/api/backup', { method: 'POST' })).status).toBe(500);
+  });
+});
+
+describe('GET /api/backup/locations (NEWS-230)', () => {
+  it('answers with a list, even when the machine has no sync folders', async () => {
+    const { app } = makeApp();
+    const res = await app.request('/api/backup/locations');
+    expect(res.status).toBe(200);
+    // Shape-checked rather than content-checked: what this developer machine
+    // happens to have mounted is not something a test can assert on.
+    const body = BackupLocationsRespSchema.parse(await json(res));
+    expect(Array.isArray(body.locations)).toBe(true);
+    for (const l of body.locations) {
+      expect(l.label.length).toBeGreaterThan(0);
+      expect(l.path).toContain('Newsmonger');
+    }
+  });
+});
+
+describe('the backup prompt settings survive a round trip (NEWS-230)', () => {
+  it('stores both dismissal forms and reloads them', async () => {
+    const store = new Store(tmpDataDir());
+    const runner = new CheckRunner(store, asResolver(createMockProvider()));
+    const app = createApp({ store, runner });
+
+    expect(store.getSettings().backupPromptNever).toBe(false);
+    expect(store.getSettings().backupPromptSnoozedUntil).toBe('');
+
+    const until = new Date('2026-08-01T12:00:00Z').toISOString();
+    const res = await app.request('/api/settings', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ backupPromptSnoozedUntil: until, backupPromptNever: true }),
+    });
+    expect(res.status).toBe(200);
+
+    // Through a fresh Store, so this is the persisted value and not a cache.
+    const reloaded = new Store(store.dataDir);
+    expect(reloaded.getSettings().backupPromptSnoozedUntil).toBe(until);
+    expect(reloaded.getSettings().backupPromptNever).toBe(true);
+    reloaded.close();
+    store.close();
   });
 });

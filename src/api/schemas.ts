@@ -85,6 +85,9 @@ export const UpdateSettingsReqSchema = z
     // itself is decided when a write is attempted, not here — a folder can be
     // unmounted between the setting and the write anyway.
     backupDir: z.string().max(1000),
+    backupPromptNever: z.boolean(),
+    // An ISO timestamp, or '' to clear. Bounded so a junk value can't be stored.
+    backupPromptSnoozedUntil: z.string().max(64),
     notifyOnNewItems: z.boolean(),
     scheduleMode: z.enum(['interval', 'daily']),
     checkConcurrency: z.number().int().min(1).max(8),
@@ -255,6 +258,11 @@ export const ProviderInfoSchema = z.object({
   available: z.boolean().nullable(),
 });
 export type ProviderInfo = z.infer<typeof ProviderInfoSchema>;
+
+/** `GET /api/backup/locations` — sync folders that exist here (NEWS-230, FR-27.5). */
+export const BackupLocationsRespSchema = z.object({
+  locations: z.array(z.object({ label: z.string(), path: z.string() })),
+});
 
 /** `POST /api/backup` — where the snapshot landed (NEWS-192). */
 export const BackupRespSchema = z.object({ ok: z.literal(true), path: z.string() });

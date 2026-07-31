@@ -5,6 +5,7 @@ import type { Effort,ProviderName  } from '../ai/types.js';
 import { EFFORT_LABELS, EFFORT_LEVELS, PROVIDER_INFO, PROVIDER_MODELS, PROVIDER_NAMES } from '../ai/types.js';
 import type { TopicSuggestion } from '../api/schemas.js';
 import { MAX_DISCOVER_QUERY_LENGTH, MAX_TUNE_ROUNDS } from '../api/schemas.js';
+import type { BackupLocation } from '../backup-locations.js';
 import {
   BUILTIN_CATEGORIES,
   categoryLabel,
@@ -26,6 +27,8 @@ import {
   deleteKey,
   deleteTopic,
   discoverTopics,
+  dismissBackupPrompt,
+  fetchBackupLocations,
   fetchDiscoveryUsage,
   refreshFeed,
   refreshKeys,
@@ -52,6 +55,7 @@ import {
   updateScheduleMode,
 } from './api.js';
 import { outletFor, publishedLabel } from './attribution.js';
+import { shouldOfferBackup, snoozeUntil } from './backup-prompt.js';
 import { buildDiagnostics, formatDuration, runRows } from './diagnostics.js';
 import { dialCountdownMs, dialRemaining, formatCountdown } from './dial.js';
 import type { TunerState } from './discover.js';
@@ -1220,6 +1224,81 @@ function suggestionCardJsx(suggestion: TopicSuggestion, added: boolean): SafeHtm
 }
 
 /**
+ * The backup offer (NEWS-230, FR-27.2-27.5).
+ *
+ * **No backdrop `data-action`, deliberately** (FR-27.3). Every other dialog in
+ * the app closes on an outside click, and this one must not: a stray click
+ * outside would count as an answer to a question the user never read, and the
+ * two real answers have different consequences -- one re-asks tomorrow, one
+ * never does. A decision needs a decision, not a dismissal. There is no close
+ * button for the same reason; the three buttons *are* the exits.
+ *
+ * The copy is **"keep a backup here"**, never "move your data here". The live
+ * database stays local on purpose (`docs/27-data-location.md`), and promising
+ * otherwise would be promising the one thing this design refuses to do.
+ */
+function backupOfferJsx(locations: BackupLocation[]): SafeHtml {
+  return (
+    <div class="dialog-backdrop onboarding-backdrop">
+      <div class="dialog backup-offer" role="dialog" aria-modal="true" aria-labelledby="backup-offer-title">
+        <div class="dialog-head">
+          <h2 id="backup-offer-title">Keep a backup of your topics?</h2>
+        </div>
+        <p class="onboarding-lead">
+          You&rsquo;re watching a few topics now. Newsmonger can write a copy of them &mdash; your topics, your
+          settings and the stories it has found &mdash; into a folder your computer already syncs, so a lost laptop
+          doesn&rsquo;t mean starting over.
+        </p>
+        <div class="backup-suggestions">
+          {locations.length > 0 ? (
+            <div>
+              <p class="note">Found on this machine:</p>
+              {locations.map((l) => (
+                <button class="btn suggestion-btn" type="button" data-backup-suggestion={l.path}>
+                  <span class="backup-suggestion-label">{l.label}</span>
+                  <span class="backup-suggestion-path">{l.path}</span>
+                </button>
+              ))}
+            </div>
+          ) : (
+            <p class="note">
+              No iCloud Drive, OneDrive, Google Drive or Dropbox folder was found here &mdash; type any folder you
+              like below, including one on an external disk.
+            </p>
+          )}
+        </div>
+        <label class="field">
+          <span>Backup folder</span>
+          <input
+            type="text"
+            data-action="backup-offer-input"
+            placeholder="/path/to/a/folder"
+            spellCheck="false"
+            autocorrect="off"
+          />
+        </label>
+        <p class="note">
+          <strong>Your API keys are never included</strong> &mdash; they stay in your keychain. The database itself
+          stays on this machine on purpose: a live SQLite file inside a folder a sync client rewrites is a known way
+          to corrupt it. You can change this or turn it off later in Settings &rarr; Data.
+        </p>
+        <div class="dialog-actions">
+          <button class="btn subtle" type="button" data-action="backup-offer-never">
+            Don&rsquo;t ask again
+          </button>
+          <button class="btn subtle" type="button" data-action="backup-offer-later">
+            Not now
+          </button>
+          <button class="btn primary" type="button" data-action="backup-offer-save">
+            Keep backups here
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/**
  * First-run flow (NEWS-78).
  *
  * Four steps, because a new user has four things to learn or decide and no
@@ -2264,6 +2343,8 @@ function appJsx(): SafeHtml {
       {/* Always-present container — the dialog appearing must not restructure
           its siblings (kerf KF-377 — see docs/3-ui.md). */}
       <div id="onboarding-slot">{s.onboarding !== null && s.onboarding !== 'auto' ? onboardingJsx(s.onboarding) : ''}</div>
+      {/* Always-present container, like the other dialog slots (docs/3-ui.md). */}
+      <div id="backup-offer-slot">{s.backupOffer !== null ? backupOfferJsx(s.backupOffer) : ''}</div>
       <div id="settings-slot">{s.settingsOpen ? settingsDialogJsx() : ''}</div>
       <div id="menu-slot">{s.contextMenu !== null ? contextMenuJsx(s.contextMenu, s.topics) : ''}</div>
       <div id="item-menu-slot">{s.itemMenu !== null ? itemMenuJsx(s.itemMenu, feedAndFlagged()) : ''}</div>
@@ -2698,6 +2779,59 @@ function maybeOpenOnboarding(): void {
   if (!s.loaded || s.providers.length === 0) return;
   const usable = s.providers.some((p) => p.name !== 'auto' && p.name !== 'mock' && p.available === true);
   appStore.actions.setOnboarding(s.topics.length === 0 && !usable && !readOnboardingSeen() ? 'welcome' : null);
+}
+
+/**
+ * Offer the backup folder once there is something worth backing up (NEWS-230).
+ *
+ * Runs off every `/api/state`, which is how it notices the third topic arriving
+ * without needing the add-topic path to know about backups. Cheap to re-ask:
+ * `shouldOfferBackup` is pure and the guards below stop it doing any work once
+ * the answer is no.
+ */
+let offerFetchInFlight = false;
+function maybeOfferBackup(): void {
+  const s = appStore.state.value;
+  if (s.backupOffer !== null || offerFetchInFlight) return; // already asking
+  if (!s.loaded) return;
+  // Never two modals at once. Onboarding is the more important conversation and
+  // it also creates topics, so it can be the very thing that crosses the
+  // threshold -- stacking a second dialog on top of it would be absurd.
+  if (s.onboarding !== null) return;
+  if (
+    !shouldOfferBackup({
+      topicCount: s.topics.length,
+      backupDir: s.settings.backupDir,
+      never: s.settings.backupPromptNever,
+      snoozedUntil: s.settings.backupPromptSnoozedUntil,
+      now: Date.now(),
+    })
+  ) {
+    return;
+  }
+  offerFetchInFlight = true;
+  // The suggestions are a nicety, not a precondition -- a probe that fails still
+  // gets the dialog, just with nothing pre-filled and a note saying so.
+  void fetchBackupLocations().then(
+    (locations) => {
+      offerFetchInFlight = false;
+      appStore.actions.setBackupOffer(locations);
+    },
+    () => {
+      offerFetchInFlight = false;
+      appStore.actions.setBackupOffer([]);
+    },
+  );
+}
+
+/** Close the offer, recording the answer so it is not asked again today (FR-27.4). */
+function answerBackupOffer(answer: 'never' | 'later'): void {
+  appStore.actions.setBackupOffer(null);
+  void dismissBackupPrompt(
+    answer === 'never'
+      ? { backupPromptNever: true }
+      : { backupPromptSnoozedUntil: snoozeUntil(Date.now()) },
+  );
 }
 
 /** Apply a context-menu action to every targeted topic. */
@@ -3294,6 +3428,43 @@ function wireEvents(root: HTMLElement): void {
     );
   });
 
+  // Clicking a suggestion fills the field rather than saving immediately: the
+  // path is a guess about where they keep things, and committing on one click
+  // would make a misread suggestion into a decision.
+  void delegate(root, 'click', '[data-backup-suggestion]', (_e, el) => {
+    const path = el.getAttribute('data-backup-suggestion');
+    const input = root.querySelector<HTMLInputElement>('[data-action=backup-offer-input]');
+    if (path !== null && input) {
+      input.value = path;
+      input.focus();
+    }
+  });
+
+  void delegate(root, 'click', '[data-action=backup-offer-save]', () => {
+    const input = root.querySelector<HTMLInputElement>('[data-action=backup-offer-input]');
+    const dir = (input?.value ?? '').trim();
+    // Saving nothing is not an answer -- it would close the dialog having
+    // changed nothing and never ask again, which is the worst of both exits.
+    if (dir === '') {
+      showToast('Choose a folder, or use “Not now”.');
+      input?.focus();
+      return;
+    }
+    appStore.actions.setBackupOffer(null);
+    void updateBackupDir(dir).then(
+      () => backupNow().then((at) => { showToast(`Backing up to ${at}`); }),
+      (err: unknown) => { showToast(`Couldn’t save that folder: ${err instanceof Error ? err.message : String(err)}`); },
+    );
+  });
+
+  void delegate(root, 'click', '[data-action=backup-offer-later]', () => {
+    answerBackupOffer('later');
+  });
+
+  void delegate(root, 'click', '[data-action=backup-offer-never]', () => {
+    answerBackupOffer('never');
+  });
+
   void delegate(root, 'change', '[data-action=retention]', (_e, el) => {
     if (el instanceof HTMLSelectElement) void updateRetention(Number(el.value));
   });
@@ -3848,7 +4019,7 @@ function trapTabInDialog(e: KeyboardEvent): boolean {
 
 function startPolling(): void {
   setInterval(() => {
-    if (document.visibilityState === 'visible') void refreshState();
+    if (document.visibilityState === 'visible') void refreshState().then(maybeOfferBackup);
   }, 4000);
 }
 
@@ -3986,7 +4157,7 @@ if (root) {
   mount(root, () => appJsx());
   wireEvents(root);
   wireGlobalKeysAndDismiss();
-  void refreshState().then(maybeOpenOnboarding);
+  void refreshState().then(maybeOpenOnboarding).then(maybeOfferBackup);
   void refreshProviders().then(maybeOpenOnboarding);
   // Learn the OS notification permission up front in the desktop shell, so a
   // session that already had notifications on keeps firing them (NEWS-66).

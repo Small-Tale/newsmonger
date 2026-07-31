@@ -1,6 +1,7 @@
 import { defineStore } from 'kerfjs';
 
 import type { ItemsResp, KeysResp, ProviderInfo, StateResp, TopicSuggestion } from '../api/schemas.js';
+import type { BackupLocation } from '../backup-locations.js';
 import type { TunerState } from './discover.js';
 import type { ExportChoice } from './export-url.js';
 
@@ -177,6 +178,12 @@ export interface AppState {
    * probe has answered.
    */
   onboarding: 'auto' | OnboardingStep | null;
+  /**
+   * The backup offer (NEWS-230). Null when closed; otherwise the sync folders
+   * the server found, which may legitimately be an empty array — a machine with
+   * no sync client still gets the offer, just with nothing pre-filled.
+   */
+  backupOffer: BackupLocation[] | null;
   /**
    * Topics ticked in the onboarding flow, before they're created.
    *
@@ -457,6 +464,8 @@ export const appStore = defineStore({
       endpoint: '',
       effort: '',
       backupDir: '',
+      backupPromptNever: false,
+      backupPromptSnoozedUntil: '',
       notifyOnNewItems: false,
       itemRetentionDays: 365,
       scheduleMode: 'interval',
@@ -474,6 +483,7 @@ export const appStore = defineStore({
     discover: null,
     settingsOpen: false,
     onboarding: 'auto',
+    backupOffer: null,
     onboardingTopics: [],
     onboardingTopicsAtStart: 0,
     keys: [],
@@ -512,6 +522,9 @@ export const appStore = defineStore({
   actions: (set, get) => ({
     setDiagIncludeTopics: (diagIncludeTopics: boolean) => {
       set({ ...get(), diagIncludeTopics });
+    },
+    setBackupOffer: (backupOffer: BackupLocation[] | null) => {
+      set({ ...get(), backupOffer });
     },
     setOnboarding: (onboarding: 'auto' | OnboardingStep | null) => {
       const current = get();

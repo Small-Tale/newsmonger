@@ -1,6 +1,6 @@
 # 27 — Where Data Is Stored
 
-**Status: the backup half is shipped (NEWS-192); the prompt is design only.** The fork below was decided in favour of **Design B** — local live data, snapshots to a chosen folder — with the added requirement that the snapshot carry the configuration (topics, settings) but never API keys. FR-27.6–27.9 are built; FR-27.2–27.5 (the prompt after the third topic) are not.
+**Status: shipped.** The fork below was decided in favour of **Design B** — local live data, snapshots to a chosen folder — with the added requirement that the snapshot carry the configuration (topics, settings) but never API keys. The backup engine landed in NEWS-192 (FR-27.6–27.9) and the offer in NEWS-230 (FR-27.2–27.5).
 
 The goal, in the requester's words: *"so users can select, for example, an iCloud Drive or Google Drive location to automatically backup their data."*
 
@@ -50,24 +50,27 @@ A setting names a **backup** directory. The app keeps running from `~/.newsmonge
 - A backup that fails is **reported and swallowed**: it is housekeeping, exactly like pruning, and must never turn a successful check into a failed one. The destination is a folder that can be unmounted, full, or renamed by a sync client at any moment.
 - **The path is typed, not picked.** See open decision 4 below — that has not changed, and is the one rough edge in the shipped feature.
 
-## The prompt (specified by the requester, mechanism-independent apart from wording)
+## The offer (NEWS-230)
 
-- **FR-27.2** After the user adds their **third topic**, offer the storage-location setting with sensible defaults pre-filled.
-- **FR-27.3** The dialog **does not dismiss on an outside click** — it is a decision, not a notification.
-- **FR-27.4** Two explicit exits: **"Not now"**, which re-asks after **one day**, and **"Don't ask again"**, which is permanent.
-- **FR-27.5** Suggested locations are **OS-appropriate**: iCloud Drive on macOS, OneDrive on Windows, Google Drive where present. Detected by looking for the directory rather than assumed — offering a path that does not exist is worse than offering none.
+- **FR-27.2** *(Shipped)* After the user's **third topic**, a dialog offers the backup folder with the detected locations one click away. Three, not one: someone with a single topic is still deciding whether they want the app at all, and a dialog about protecting data they barely have is noise. By the third, losing it would matter.
+- **FR-27.3** *(Shipped)* The dialog **does not dismiss on an outside click**, and Escape does not close it either. Every other dialog in the app does both. This one must not: a stray click is not an answer, and the two real answers differ in whether it ever asks again. There is no ✕ for the same reason — the buttons *are* the exits.
+- **FR-27.4** *(Shipped)* Three exits: **"Keep backups here"** (saves and immediately writes a first snapshot), **"Not now"** (re-asks after **one day**), and **"Don't ask again"** (permanent). Both dismissals are **settings**, not `localStorage` — "stop asking me" is a promise, and one kept only per-browser is not kept. Saving with an empty folder is refused rather than treated as an answer: it would close the dialog having changed nothing and, since the offer only fires once, quietly never ask again.
+- **FR-27.5** *(Shipped)* Suggested locations are **OS-appropriate and probed, never assumed** (`src/backup-locations.ts`) — iCloud Drive, Google Drive, OneDrive and Dropbox on macOS; OneDrive, Google Drive and Dropbox on Windows; the third-party clients on Linux. A machine with none still gets the dialog, with a note and an empty field. Offering a path that does not exist is worse than offering none: it looks authoritative and then fails at the first write.
+  - macOS needs a **prefix scan**, not a path list: modern mounts live under `~/Library/CloudStorage` with the account in the folder name (`GoogleDrive-someone@example.com`), so there is no fixed path to test. Several accounts of one product each get an entry.
+  - The probe is a **separate route** (`GET /api/backup/locations`), not a field on `/api/state`. It touches the filesystem, and `/api/state` is polled every 4 seconds — probing directories fifteen times a minute to answer a question asked once is the wrong shape.
+- Clicking a suggestion **fills the field rather than saving**: the path is a guess about where the user keeps things, and committing on one click would turn a misread suggestion into a decision.
 
-The copy for FR-27.2 follows from the decision: it is **"keep a backup here"**, not "move your data here" — the second is a promise this design deliberately does not make.
+The copy is **"keep a backup here"**, never "move your data here" — the second is a promise this design deliberately does not make, and an E2E test asserts the dialog never says it.
 
 ## Open decisions
 
 1. ~~**A or B**~~ — decided: **B**.
 2. ~~**If B:** what cadence?~~ — decided: event-driven (startup + after a successful check) with a one-hour floor, which is "on change with a floor".
 3. **If A:** does choosing a new location *move* the existing data or start empty there? Moving is what a user expects; it is also the step where a failure loses everything, so it needs to copy-verify-then-delete rather than rename. *(Moot unless A is ever built.)*
-4. **Folder picking.** *(Still open — the shipped feature takes a typed path.)* The desktop shell has no `tauri-plugin-dialog` today, so a native picker means a new plugin plus a capability entry. **The browser build cannot pick a directory at all** — the File System Access API yields a sandboxed handle, not a path the Node server can open — so the browser path is a typed-in path with validation, whatever else is decided.
+4. **Folder picking.** *(Still open — both shipped surfaces take a typed path, softened by the probed suggestions in FR-27.5. Tracked as NEWS-233.)* The desktop shell has no `tauri-plugin-dialog` today, so a native picker means a new plugin plus a capability entry. **The browser build cannot pick a directory at all** — the File System Access API yields a sandboxed handle, not a path the Node server can open — so the browser path is a typed-in path with validation, whatever else is decided.
 
-## Not built yet
+## Note for anyone writing tests
 
-The prompt (FR-27.2–27.5) is unimplemented: today the setting is only discoverable by opening Settings → Data, which means most people will never find it. Tracked as its own ticket.
+The offer fires on the third topic, and most E2E specs create three or more — so `resetTopics` in `tests/e2e/fixtures.ts` sets `backupPromptNever` for every spec except `backup-prompt.spec.ts`, which clears it and drives the real thing. That suppression lives in the **harness**; the app has no test-only branch for it.
 
 See also: [4 — CLI, Server, and Storage](4-cli-server-storage.md) (FR-4.1 data-dir resolution, FR-4.9 corrupt-database recovery), [21 — Export and Feed](21-export-and-feed.md) (the JSON export a backup would reuse), [7 — API Keys](7-api-keys.md) (why keys are not affected).

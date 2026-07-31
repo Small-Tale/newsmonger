@@ -228,6 +228,19 @@ export const SettingsSchema = z.object({
    */
   backupDir: z.string().default(''),
   /**
+   * "Don't ask again" on the backup offer (NEWS-230, FR-27.4). Permanent.
+   *
+   * A setting rather than `localStorage` because it must survive a reinstall of
+   * the browser and apply to the desktop shell too — and because "stop asking
+   * me" is a promise, and a promise kept only per-browser is not kept.
+   */
+  backupPromptNever: z.boolean().default(false),
+  /**
+   * "Not now" — an ISO timestamp before which the offer stays hidden, or '' if
+   * it was never snoozed (FR-27.4).
+   */
+  backupPromptSnoozedUntil: z.string().default(''),
+  /**
    * Whether to raise an OS notification (and bounce the dock / flash the
    * taskbar) when new stories arrive while the app isn't focused. Opt-in — off
    * by default, since it needs a browser permission grant and shouldn't
@@ -313,6 +326,8 @@ export function emptyDataFile(): DataFile {
       endpoint: '',
       effort: '',
       backupDir: '',
+      backupPromptNever: false,
+      backupPromptSnoozedUntil: '',
       notifyOnNewItems: false,
       scheduleMode: 'interval',
       dailyTimes: ['08:00'],

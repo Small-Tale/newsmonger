@@ -37,6 +37,16 @@ export async function resetTopics(baseURL: string): Promise<void> {
     // back, and it would look exactly like the bug this exists to prevent.
     const after = (await (await ctx.get('/api/state')).json()) as { topics: unknown[] };
     expect(after.topics, 'server should start each attempt with no topics').toHaveLength(0);
+
+    // Silence the backup offer (NEWS-230). It fires on the third topic, and
+    // most specs here create three or more — so without this a modal appears
+    // partway through an unrelated test and swallows the next click, failing
+    // something that has nothing to do with backups.
+    //
+    // Suppressed in the *harness*, not in the product: the app has no test-only
+    // branch for this. `backup-prompt.spec.ts` clears the flag and tests the
+    // offer for real.
+    await ctx.patch('/api/settings', { data: { backupPromptNever: true } });
   } finally {
     await ctx.dispose();
   }

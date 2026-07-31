@@ -1629,6 +1629,53 @@ h2.eyebrow {
   }
 }
 
+// ------------------------------------------------- the backup offer (230) ---
+
+.backup-offer {
+  // Wider than a plain confirm: it carries a path, and a path that wraps to
+  // three lines is unreadable as an identifier.
+  max-width: 560px;
+}
+
+.backup-suggestions {
+  margin: 0 0 12px;
+
+  // One per line: these are paths, and a row of them would truncate the part
+  // that distinguishes them (the account in `GoogleDrive-someone@…`).
+  .suggestion-btn {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 2px;
+    width: 100%;
+    margin: 0 0 6px;
+    text-align: left;
+  }
+}
+
+.backup-suggestion-label {
+  font-weight: 600;
+}
+
+.backup-suggestion-path {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--muted);
+  // A long CloudStorage path must not widen the dialog.
+  overflow-wrap: anywhere;
+}
+
+// "Don't ask again" sits left, away from the two it must not be confused with.
+.dialog-actions {
+  display: flex;
+  gap: 10px;
+  margin: 14px 0 0;
+
+  :first-child {
+    margin-right: auto;
+  }
+}
+
 .onboarding-actions {
   display: inline-flex;
   gap: 10px;

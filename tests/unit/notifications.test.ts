@@ -18,6 +18,8 @@ const BASE_SETTINGS: StateResp['settings'] = {
   endpoint: '',
   effort: '',
   backupDir: '',
+  backupPromptNever: false,
+  backupPromptSnoozedUntil: '',
   notifyOnNewItems: true,
   itemRetentionDays: 365,
   scheduleMode: 'interval',

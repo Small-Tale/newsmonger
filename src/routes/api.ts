@@ -18,6 +18,7 @@ import {
   UpdateSettingsReqSchema,
   UpdateTopicReqSchema,
 } from '../api/schemas.js';
+import { suggestedBackupLocations } from '../backup-locations.js';
 import { toAtom, toJson, toMarkdown } from '../export.js';
 import { cachedImagePath, isValidHash, liveImageHashes, pruneImageCache, sniffImageType } from '../images/index.js';
 import { isKeychainAvailable, keychainLabel } from '../keychain.js';
@@ -231,6 +232,16 @@ export function registerApi(app: Hono<AppEnv>): void {
     if (!body) return c.json({ error: 'invalid request: expected { checkIntervalMs >= 5 minutes }' }, 400);
     return c.json(c.get('store').updateSettings(body));
   });
+
+  /**
+   * Sync folders that actually exist on this machine (NEWS-230, FR-27.5).
+   *
+   * Its own route rather than a field on `/api/state`: this touches the
+   * filesystem, and `/api/state` is polled every 4 seconds. Probing a handful of
+   * directories fifteen times a minute forever, to answer a question asked once,
+   * is the wrong shape. The prompt fetches it when it opens.
+   */
+  app.get('/api/backup/locations', (c) => c.json({ locations: suggestedBackupLocations() }));
 
   /**
    * Write a backup snapshot right now (NEWS-192, FR-27.9).

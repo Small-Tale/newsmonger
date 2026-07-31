@@ -23,6 +23,8 @@ const SETTINGS: Settings = {
   endpoint: '',
   effort: '',
   backupDir: '',
+  backupPromptNever: false,
+  backupPromptSnoozedUntil: '',
   notifyOnNewItems: false,
   itemRetentionDays: 365,
 };

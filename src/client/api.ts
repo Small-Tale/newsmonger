@@ -1,6 +1,7 @@
 import type { Effort,ProviderName} from '../ai/types.js';
 import type { DiscoverReq, DiscoverResp, DiscoverUsageResp, TopicSuggestion } from '../api/schemas.js';
 import {
+  BackupLocationsRespSchema,
   BackupRespSchema,
   DiscoverRespSchema,
   DiscoverUsageRespSchema,
@@ -9,6 +10,7 @@ import {
   ProvidersRespSchema,
   StateRespSchema,
 } from '../api/schemas.js';
+import type { BackupLocation } from '../backup-locations.js';
 import { noteState } from './notifications.js';
 import { appStore } from './stores.js';
 
@@ -318,6 +320,25 @@ export function updateHighPriorityInterval(highPriorityIntervalMs: number): Prom
  */
 export function updateBackupDir(backupDir: string): Promise<void> {
   return withRefresh(() => request('/api/settings', { method: 'PATCH', body: JSON.stringify({ backupDir }) }));
+}
+
+/** Sync folders the server can see (NEWS-230, FR-27.5). Empty is a valid answer. */
+export async function fetchBackupLocations(): Promise<BackupLocation[]> {
+  const body = await request('/api/backup/locations');
+  return BackupLocationsRespSchema.parse(body).locations;
+}
+
+/**
+ * Record a dismissal of the backup offer (NEWS-230, FR-27.4).
+ *
+ * Server-side rather than `localStorage`: "stop asking me" has to survive a
+ * browser reinstall and hold in the desktop shell too.
+ */
+export function dismissBackupPrompt(patch: {
+  backupPromptNever?: boolean;
+  backupPromptSnoozedUntil?: string;
+}): Promise<void> {
+  return withRefresh(() => request('/api/settings', { method: 'PATCH', body: JSON.stringify(patch) }));
 }
 
 /** Write a backup right now, ignoring the interval throttle (NEWS-192). */

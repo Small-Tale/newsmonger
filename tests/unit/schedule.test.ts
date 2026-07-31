@@ -13,6 +13,8 @@ const SETTINGS: StateResp['settings'] = {
   endpoint: '',
   effort: '',
   backupDir: '',
+  backupPromptNever: false,
+  backupPromptSnoozedUntil: '',
   notifyOnNewItems: false,
   itemRetentionDays: 365,
   scheduleMode: 'interval',
