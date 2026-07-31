@@ -17,13 +17,36 @@
 # tree for *both* channels (see note 4 in its header), and CI writes the full
 # suffixed version at build time (NEWS-207).
 #
+# `--stable-only` additionally refuses any tag carrying a prerelease suffix
+# (NEWS-222). `release-desktop.yml` publishes with `prerelease: false` and
+# `make_latest: true`, and its tag filter is `v[0-9]*` minus `!v*-rc.*` and
+# `!v*-beta.*` — so a suffix that is neither, like `v0.3.0-alpha.1` or a mistyped
+# `v0.3.0-rc1`, falls through to the **stable** path and flips `releases/latest`.
+# The updater reads `releases/latest`, so that ships an untested build to every
+# installed user. The old `release.yml` derived the prerelease flag from the tag
+# (`case "$tag" in *-*)`), which was robust to exactly this typo; the glob split
+# lost that.
+#
+# Refusing loudly rather than tightening the trigger to `!v*-*`: an excluded tag
+# would trigger *nothing at all*, and a push that silently does nothing is the
+# same class of problem this exists to remove.
+#
 # Usage:
-#   bash scripts/check-tag-version.sh              # reads $GITHUB_REF
+#   bash scripts/check-tag-version.sh                          # reads $GITHUB_REF
 #   bash scripts/check-tag-version.sh v0.2.0-beta.1
+#   bash scripts/check-tag-version.sh --stable-only v0.2.0
 set -uo pipefail
 cd "$(dirname "$0")/.."
 
-raw="${1:-${GITHUB_REF:-}}"
+stable_only=false
+raw=""
+for arg in "$@"; do
+  case "$arg" in
+    --stable-only) stable_only=true ;;
+    *) [ -z "$raw" ] && raw="$arg" ;;
+  esac
+done
+raw="${raw:-${GITHUB_REF:-}}"
 # Accept a bare tag or a full ref, so it works from a workflow and by hand.
 tag="${raw#refs/tags/}"
 tag="${tag#v}"
@@ -34,6 +57,20 @@ if [ -z "$tag" ]; then
 fi
 
 base="${tag%%-*}"
+
+if [ "$stable_only" = true ] && [ "$base" != "$tag" ]; then
+  echo "::error::'v$tag' carries a prerelease suffix, but this workflow publishes stable releases (prerelease: false, make_latest: true)."
+  echo "" >&2
+  echo "Prerelease tags belong to release-candidate.yml, which claims 'v*-rc.*' and" >&2
+  echo "'v*-beta.*' exactly. A suffix matching neither — '-alpha.1', or '-rc1' with the" >&2
+  echo "dot missing — reaches this workflow instead and would be published as stable," >&2
+  echo "flipping releases/latest. The desktop updater reads releases/latest, so that" >&2
+  echo "ships this build to everyone who has the app installed." >&2
+  echo "" >&2
+  echo "Cut prereleases with 'npm run release:beta' so the shape is never in doubt." >&2
+  exit 1
+fi
+
 conf="$(node -p "require('./src-tauri/tauri.conf.json').version")"
 pkg="$(node -p "require('./package.json').version")"
 

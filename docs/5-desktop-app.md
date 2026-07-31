@@ -305,6 +305,10 @@ Only the **base** is compared: the `-rc.N` / `-beta.N` suffix lives on the tag a
 
 It runs at the earliest point in each: its own `version-guard` job in `release-candidate.yml`, which every expensive job waits on, and the first step of `create-release` in `release-desktop.yml`, before the release shell exists and before the ~20-minute signed build.
 
+`release-desktop.yml` passes **`--stable-only`**, which additionally refuses any tag carrying a prerelease suffix (NEWS-222). Its tag filter is `v[0-9]*` minus `!v*-rc.*` / `!v*-beta.*`, so a suffix matching neither — `v0.3.0-alpha.1`, or `v0.3.0-rc1` with the dot missed — lands on the **stable** path and would publish with `prerelease: false` and `make_latest: true`. Since the updater endpoint is `releases/latest`, that ships an untested build to everyone with the app installed. The old `release.yml` derived the prerelease flag from the tag itself (`case "$tag" in *-*`) and was immune; the glob split lost it.
+
+It refuses **loudly** rather than the trigger excluding `v*-*`: an excluded tag would trigger nothing at all, and a push that silently does nothing is the same class of problem the guard exists to remove.
+
 Via the scripts a mismatch cannot arise — `release.sh` writes both files and tags the same commit — so this is aimed at a **hand-cut tag**, which is documented as supported below and is exactly where a human gets it wrong. The failure it prevents is silent: the build succeeds, the release page looks right, and every asset is named after the wrong version while the generated download links point at filenames that never exist.
 
 #### Smoke tests (`tests/smoke/smoke-test.sh`)

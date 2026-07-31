@@ -37,8 +37,15 @@ jobs:
       # mismatch is silent: the build succeeds, the release page looks right, and
       # every asset is named after the wrong version — including the download
       # links generated below, which would point at filenames that never exist.
+      # `--stable-only` also refuses a prerelease suffix (NEWS-222). This
+      # workflow's filter is `v[0-9]*` minus `!v*-rc.*` / `!v*-beta.*`, so a
+      # suffix that is neither — `v0.3.0-alpha.1`, or `v0.3.0-rc1` with the dot
+      # missing — lands here and would publish as stable with `make_latest: true`.
+      # The updater reads `releases/latest`, so that pushes an untested build to
+      # every installed user. The old `release.yml` derived the flag from the tag
+      # and was immune to this; the glob split lost that.
       - name: Check the tag matches the configured version
-        run: bash scripts/check-tag-version.sh "${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}"
+        run: bash scripts/check-tag-version.sh --stable-only "${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}"
         shell: bash
 
       - name: Extract release notes from tag

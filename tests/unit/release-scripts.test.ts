@@ -1121,3 +1121,71 @@ describe('verify-signing.sh agrees with what CI actually produces (NEWS-221)', (
     }
   });
 });
+
+describe('a prerelease tag cannot publish as stable (NEWS-222)', () => {
+  const script = path.join(root, 'scripts/check-tag-version.sh');
+  let sandbox: string;
+
+  function check(args: string[], version = '1.2.3'): { status: number; output: string } {
+    fs.writeFileSync(path.join(sandbox, 'package.json'), JSON.stringify({ version }));
+    fs.writeFileSync(path.join(sandbox, 'src-tauri/tauri.conf.json'), JSON.stringify({ version }));
+    try {
+      const stdout = execFileSync('bash', [path.join(sandbox, 'scripts/check-tag-version.sh'), ...args], {
+        encoding: 'utf8',
+        env: { ...process.env, GITHUB_REF: '' },
+      });
+      return { status: 0, output: stdout };
+    } catch (err) {
+      const e = err as { status?: number; stdout?: string; stderr?: string };
+      return { status: e.status ?? 1, output: `${e.stdout ?? ''}${e.stderr ?? ''}` };
+    }
+  }
+
+  beforeEach(() => {
+    sandbox = fs.mkdtempSync(path.join(os.tmpdir(), 'newsmonger-stableonly-'));
+    fs.mkdirSync(path.join(sandbox, 'scripts'), { recursive: true });
+    fs.mkdirSync(path.join(sandbox, 'src-tauri'), { recursive: true });
+    fs.copyFileSync(script, path.join(sandbox, 'scripts/check-tag-version.sh'));
+  });
+
+  afterEach(() => {
+    fs.rmSync(sandbox, { recursive: true, force: true });
+  });
+
+  it.each(['v1.2.3-alpha.1', 'v1.2.3-rc1', 'v1.2.3-pre', 'v1.2.3-next.1', 'v1.2.3-beta1'])(
+    'refuses %o under --stable-only',
+    (tag) => {
+      // Each of these matches release-desktop.yml's `v[0-9]*` filter and is NOT
+      // caught by `!v*-rc.*` / `!v*-beta.*`, so it would publish as stable with
+      // `make_latest: true`. The updater reads releases/latest, so it would reach
+      // every installed user. `-rc1` is the one to worry about: it is `-rc.1` with
+      // the dot missed.
+      const { status, output } = check(['--stable-only', tag]);
+      expect(status, `${tag} must not be publishable as stable`).toBe(1);
+      expect(output).toContain('::error::');
+    },
+  );
+
+  it('still accepts a clean stable tag', () => {
+    expect(check(['--stable-only', 'v1.2.3']).status).toBe(0);
+  });
+
+  it('does not refuse prerelease tags without the flag, since the rc/beta workflow wants them', () => {
+    expect(check(['v1.2.3-beta.1']).status).toBe(0);
+    expect(check(['v1.2.3-rc.1']).status).toBe(0);
+  });
+
+  it('takes the flag in either argument position', () => {
+    expect(check(['v1.2.3', '--stable-only']).status).toBe(0);
+    expect(check(['v1.2.3-alpha.1', '--stable-only']).status).toBe(1);
+  });
+
+  it('is actually passed --stable-only by the stable workflow, and not by the rc/beta one', () => {
+    const desktop = fs.readFileSync(path.join(root, '.github/workflows/release-desktop.yml'), 'utf8');
+    expect(desktop, 'release-desktop.yml publishes as latest, so it must refuse prereleases').toContain(
+      'check-tag-version.sh --stable-only',
+    );
+    const rc = fs.readFileSync(path.join(root, '.github/workflows/release-candidate.yml'), 'utf8');
+    expect(rc, 'release-candidate.yml exists to publish prereleases').not.toContain('--stable-only');
+  });
+});
