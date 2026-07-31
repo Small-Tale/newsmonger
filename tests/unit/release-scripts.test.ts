@@ -1002,6 +1002,112 @@ describe('the release workflows keep their notarization diagnostics (NEWS-197)',
   });
 });
 
+describe('the notarization safeguards are on the job that needs them (NEWS-234)', () => {
+  const read = (rel: string): string => fs.readFileSync(path.join(root, rel), 'utf8');
+  const WORKFLOWS = ['.github/workflows/release-desktop.yml', '.github/workflows/release-candidate.yml'];
+
+  /**
+   * One job's YAML block, by name.
+   *
+   * The NEWS-197 tests above assert these same things with a whole-file
+   * `toContain`, which is weaker than it looks: it passes as long as *some* job
+   * in the file carries the cap or the watcher. Moving `timeout-minutes` off the
+   * signing job onto, say, the lint job would keep every one of them green while
+   * restoring exactly the failure this ticket is about — a stalled submission
+   * burning six hours on two macOS runners at 10x billing. Scoping to the job is
+   * the difference between "the string is in the file" and "the safeguard is on
+   * the thing it protects".
+   */
+  function job(src: string, name: string): string {
+    const jobs = src.slice(src.indexOf('\njobs:\n'));
+    const start = jobs.indexOf(`\n  ${name}:\n`);
+    expect(start, `job "${name}" should exist`).toBeGreaterThan(-1);
+    const rest = jobs.slice(start + 1);
+    const next = /\n {2}[a-z][a-z0-9-]*:\n/.exec(rest.slice(1));
+    return next ? rest.slice(0, next.index + 1) : rest;
+  }
+
+  it.each(WORKFLOWS)('%s caps the *signing* job, not merely some job', (rel) => {
+    const signing = job(read(rel), 'build');
+    expect(signing).toMatch(/timeout-minutes: \d+/);
+    const minutes = Number(/timeout-minutes: (\d+)/.exec(signing)?.[1]);
+    // Above Apple's plausible worst case — a 60-minute cap once killed a build
+    // that was waiting legitimately (NEWS-194) — and well under GitHub's
+    // 360-minute default, which is what actually got burned before this existed.
+    expect(minutes).toBeGreaterThanOrEqual(90);
+    expect(minutes).toBeLessThan(360);
+  });
+
+  it.each(WORKFLOWS)('%s watches and reports the queue from the signing job', (rel) => {
+    const signing = job(read(rel), 'build');
+    expect(signing, 'the watcher must start in the signing job').toContain('notary-watch.sh start');
+    expect(signing, 'the report must be in the signing job').toContain('notary-watch.sh report');
+
+    // The report is only ever useful when the build failed, so a condition that
+    // skips it on failure deletes the diagnosis at precisely the moment it is
+    // needed. This is how v0.2.0-beta.6 was diagnosed at all: 95 consecutive
+    // "In Progress" observations, from a job that had already failed.
+    const report = signing.slice(signing.indexOf('notary-watch.sh report') - 400);
+    expect(report).toMatch(/if: always\(\)/);
+  });
+
+  it.each(WORKFLOWS)('%s keeps the queue report from masking the real failure', (rel) => {
+    // `continue-on-error` on the report step: a watcher that itself errors must
+    // not turn a notarization failure into a *reporting* failure, which would
+    // point at the wrong thing entirely.
+    const signing = job(read(rel), 'build');
+    const around = signing.slice(
+      Math.max(0, signing.indexOf('notary-watch.sh report') - 400),
+      signing.indexOf('notary-watch.sh report'),
+    );
+    expect(around).toContain('continue-on-error: true');
+  });
+});
+
+describe('advisory jobs cannot silently stop gating a release (NEWS-234)', () => {
+  const read = (rel: string): string => fs.readFileSync(path.join(root, rel), 'utf8');
+  const WORKFLOWS = [
+    '.github/workflows/release-desktop.yml',
+    '.github/workflows/release-candidate.yml',
+    '.github/workflows/ci.yml',
+  ];
+
+  it.each(WORKFLOWS)('%s: no job another job depends on is continue-on-error', (rel) => {
+    // The trap, met for real while reading v0.2.0-beta.6: a job with
+    // `continue-on-error: true` reports a **green conclusion even when its steps
+    // fail**. As a standalone signal that is fine and intended (test-e2e-windows
+    // is deliberately advisory). As a dependency it is poison: everything
+    // downstream proceeds on a check that cannot fail, and the badge says
+    // success. Nothing in GitHub warns about this.
+    const src = read(rel);
+    const jobs = src.slice(src.indexOf('\njobs:\n'));
+    const names = [...jobs.matchAll(/\n {2}([a-z][a-z0-9-]*):\n/g)].map((m) => m[1]);
+    // A floor, not a claim about how many jobs there are — it exists so a regex
+    // that stopped matching fails here rather than vacuously passing below.
+    expect(names.length, 'should have parsed some job names').toBeGreaterThanOrEqual(2);
+
+    const advisory = names.filter((n) => {
+      const start = jobs.indexOf(`\n  ${n}:\n`);
+      const rest = jobs.slice(start + 1);
+      const next = /\n {2}[a-z][a-z0-9-]*:\n/.exec(rest.slice(1));
+      const body = next ? rest.slice(0, next.index + 1) : rest;
+      // Job-level only: `continue-on-error` on a *step* is a different thing and
+      // is used deliberately (the advisory smoke of an already-published build).
+      return /\n {4}continue-on-error: true/.test(body);
+    });
+
+    for (const name of advisory) {
+      // `needs: [a, b]` and `needs: a` both.
+      const referenced = [...src.matchAll(/needs:\s*(\[[^\]]*\]|[a-z][a-z0-9-]*)/g)]
+        .map((m) => m[1])
+        .some((n) => n.split(/[[\],\s]+/).filter(Boolean).includes(name));
+      expect(referenced, `"${name}" is advisory but something needs it — it cannot gate anything`).toBe(
+        false,
+      );
+    }
+  });
+});
+
 describe('the signing gate is actually wired into the release (NEWS-220)', () => {
   const read = (rel: string): string => fs.readFileSync(path.join(root, rel), 'utf8');
   const WORKFLOWS = ['.github/workflows/release-desktop.yml', '.github/workflows/release-candidate.yml'];
