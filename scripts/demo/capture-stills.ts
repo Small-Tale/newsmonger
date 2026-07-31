@@ -112,6 +112,31 @@ interface Scene {
   clipTo?: string;
   /** Padding around a `clipTo` box, so a cropped scene doesn't look guillotined. */
   clipPad?: number;
+  /**
+   * For a scene that needs *time* to have passed before it is worth a picture.
+   *
+   * The next-check dial drains from full over the check interval, so a topic
+   * checked seconds ago shows a **full** ring — which is what every scene here
+   * would otherwise get, since adding a topic checks it immediately (FR-1.12).
+   * A visibly part-drained ring needs elapsed time, and the interval floor is
+   * five minutes, so it needs *minutes*.
+   *
+   * Rather than sleeping for them outright, a soaking scene's server starts
+   * **before** all the others and is photographed **after** them, so the wait
+   * overlaps work that has to happen anyway. Measured, that overlap is smaller
+   * than it sounds — the other six scenes take about 15 seconds between them —
+   * so a two-minute soak still costs roughly 105 seconds of real waiting. It is
+   * the cheapest option available, not a free one: the alternatives were a
+   * demo-only way to backdate `lastCheckedAt` (a product affordance existing
+   * solely for a screenshot, and one that writes a false timestamp) or shipping
+   * a picture of a dial that never moves.
+   */
+  soak?: {
+    /** Check interval to set, in ms. The dial's denominator. */
+    intervalMs: number;
+    /** How much of it must elapse before capturing. Must be < `intervalMs`. */
+    minElapsedMs: number;
+  };
 }
 
 /** Wait for the feed to actually show `n` stories, rather than guessing a delay. */
@@ -170,12 +195,17 @@ const SCENES: Scene[] = [
   },
   {
     name: 'topics',
-    alt: 'The topics sidebar: each watched topic with its category, its next-check dial, and one marked high priority.',
+    alt: 'The topics sidebar: each watched topic with its category and a dial counting down to its next check, with one marked high priority.',
     // The sidebar alone. At full width the topics panel is a fifth of the frame,
     // and what this scene is about would be a few hundred pixels in the corner
     // of a 1440px image.
     clipTo: '#topics-panel',
     clipPad: 16,
+    // Five minutes is the interval floor the settings API enforces; two of them
+    // elapsed leaves the ring ~60% full, which reads as counting down rather
+    // than as either extreme. Kept well under `intervalMs` on purpose — at the
+    // interval the scheduler checks again and the ring resets to full.
+    soak: { intervalMs: 5 * 60 * 1000, minElapsedMs: 2 * 60 * 1000 },
     // Through the API rather than the row's own menu: right-clicking a row
     // *selects* it, and the screenshot would ship with a highlight bar over the
     // thing it is meant to be showing. Same endpoint the menu calls.
@@ -332,7 +362,16 @@ async function startServer(): Promise<Server> {
   return { proc, base, dataDir };
 }
 
+/**
+ * Idempotent: a soaking scene is stopped in its own `finally` and again in the
+ * outer one that exists to catch a mid-run throw. Killing a dead pid and
+ * force-removing a gone directory both happen to be harmless, but relying on
+ * that is not the same as saying it.
+ */
+const stopped = new Set<ChildProcess>();
 function stopServer(s: Server): void {
+  if (stopped.has(s.proc)) return;
+  stopped.add(s.proc);
   s.proc.kill('SIGTERM');
   setTimeout(() => s.proc.kill('SIGKILL'), 2000).unref();
   rmSync(s.dataDir, { recursive: true, force: true });
@@ -364,42 +403,94 @@ async function main(): Promise<void> {
   const captured: { name: string; tree: Awaited<ReturnType<typeof captureElementTree>>; clip: Clip }[] = [];
   const browser: Browser = await launchChromium();
 
+  /** Seed a scene's server: topics, the soak interval, and its `arrange` step. */
+  const prepare = async (scene: Scene, server: Server): Promise<void> => {
+    // Seed topics through the real API, so the app reaches this state the way a
+    // user would rather than by a fixture write behind its back. Adding a topic
+    // fires an immediate first check (FR-1.12), so stories arrive on their own —
+    // and, for a soaking scene, the dial starts draining from this moment.
+    for (const t of scene.topics ?? DEMO_TOPICS) {
+      await fetch(`${server.base}/api/topics`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: t.name }),
+      });
+    }
+    if (scene.soak) {
+      await fetch(`${server.base}/api/settings`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ checkIntervalMs: scene.soak.intervalMs }),
+      });
+    }
+    await scene.arrange?.(server.base);
+  };
+
+  /** Open a page against a prepared server, run the scene, and capture it. */
+  const shoot = async (scene: Scene, server: Server): Promise<void> => {
+    const page = await browser.newPage({ viewport: VIEWPORT });
+    try {
+      // Onboarding would cover every scene with a modal.
+      await page.addInitScript(() => {
+        localStorage.setItem('news:onboarding-seen', '1');
+      });
+      await page.goto(server.base, { waitUntil: 'networkidle' });
+      await scene.setup(page);
+
+      const clip = await clipFor(page, scene);
+      await page.screenshot({ path: resolve(OUT_DIR, `${scene.name}.png`), clip });
+      captured.push({ name: scene.name, tree: await captureElementTree(page, undefined, clip), clip });
+      console.log(`[stills] ${scene.name} (${String(clip.width)}×${String(clip.height)})`);
+    } finally {
+      await page.close().catch(() => undefined);
+    }
+  };
+
+  // Soaking scenes start first and are shot last, so their wait overlaps the
+  // other scenes instead of being added to the runtime.
+  const soaking: { scene: Scene; server: Server; seededAt: number }[] = [];
+
   try {
-    for (const scene of SCENES) {
+    for (const scene of SCENES.filter((sc) => sc.soak)) {
       const server = await startServer();
-      const page = await browser.newPage({ viewport: VIEWPORT });
+      await prepare(scene, server);
+      soaking.push({ scene, server, seededAt: Date.now() });
+      console.log(`[stills] ${scene.name}: soaking, will shoot after the others`);
+    }
+
+    for (const scene of SCENES.filter((sc) => !sc.soak)) {
+      const server = await startServer();
       try {
-        // Seed topics through the real API, so the app reaches this state the
-        // way a user would rather than by a fixture write behind its back.
-        // Adding a topic fires an immediate first check (FR-1.12), so stories
-        // arrive on their own.
-        for (const t of scene.topics ?? DEMO_TOPICS) {
-          await fetch(`${server.base}/api/topics`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ name: t.name }),
-          });
-        }
-
-        // Onboarding would cover every scene with a modal.
-        await page.addInitScript(() => {
-          localStorage.setItem('news:onboarding-seen', '1');
-        });
-        await scene.arrange?.(server.base);
-
-        await page.goto(server.base, { waitUntil: 'networkidle' });
-        await scene.setup(page);
-
-        const clip = await clipFor(page, scene);
-        await page.screenshot({ path: resolve(OUT_DIR, `${scene.name}.png`), clip });
-        captured.push({ name: scene.name, tree: await captureElementTree(page, undefined, clip), clip });
-        console.log(`[stills] ${scene.name} (${String(clip.width)}×${String(clip.height)})`);
+        await prepare(scene, server);
+        await shoot(scene, server);
       } finally {
-        await page.close().catch(() => undefined);
+        stopServer(server);
+      }
+    }
+
+    for (const { scene, server, seededAt } of soaking) {
+      const soak = scene.soak;
+      if (!soak) continue;
+      const elapsed = Date.now() - seededAt;
+      if (elapsed < soak.minElapsedMs) {
+        const wait = soak.minElapsedMs - elapsed;
+        console.log(`[stills] ${scene.name}: waiting a further ${String(Math.ceil(wait / 1000))}s to drain the dial`);
+        await sleep(wait);
+      }
+      // Past the interval the scheduler checks again and the ring resets to
+      // full, which is the state this scene exists to avoid. Say so rather than
+      // shipping a picture that quietly shows the wrong thing.
+      if (Date.now() - seededAt >= soak.intervalMs) {
+        console.warn(`[stills] ${scene.name}: soak exceeded the interval — the dial has reset to full`);
+      }
+      try {
+        await shoot(scene, server);
+      } finally {
         stopServer(server);
       }
     }
   } finally {
+    for (const { server } of soaking) stopServer(server);
     await browser.close().catch(() => undefined);
   }
 

@@ -8,7 +8,7 @@ Status markers: **Shipped** · **Partial** · **Design only** · **Deferred**. S
 - Shared rules: port read from the server's **own readiness line** (never assumed — a hardcoded one once photographed a stray process), a fresh `mkdtemp` data dir, state reached through the real UI/HTTP API, and SVG rendered **after teardown** with an `@font-face` assertion (domotion's glyph extraction fails *silently* to tofu). Both need to run **outside the sandbox** — Chromium needs Mach ports.
 - Stills specifics: **one server per scene** (scenes mutate state, so sharing one would make screenshots order-dependent), per-scene topic seeding (discovery only suggests *unfollowed* topics), crops as **CSS selectors** not pixel rects, and section/chip labels read from `BUILTIN_CATEGORIES` rather than the fixtures' free-text hints.
 - `tests/unit/stills.test.ts` pins README ↔ scene agreement: identical alt text, no scene without a file, no file without a scene, no `<img>` pointing at nothing.
-- **Not captured:** a dial mid-countdown (the ring drains from full, so it needs minutes of waiting for a subtle difference — filed) and glassbox's terminal-cast beat (deliberate: the app is the story, not the CLI).
+- **Soak (NEWS-232):** a scene can require *elapsed time* — the `topics` scene sets a 5-minute interval and waits 2, so the next-check dial is visibly part-drained rather than full. Its server starts first and it shoots last so the wait overlaps the others, though only by ~15s of the 120. **Not captured:** glassbox's terminal-cast beat (deliberate: the app is the story, not the CLI).
 
 ## [27 — Where Data Is Stored](../27-data-location.md) — **Shipped** (NEWS-192, NEWS-230)
 

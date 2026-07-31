@@ -34,9 +34,15 @@ The README's images are **photographs of the real application**, produced by dri
 - **FR-28.13** *(Shipped)* **Section and subject labels come from `BUILTIN_CATEGORIES`**, not from the demo topics' own `category`/`subcategory` strings. Those are free-text hints for the classifier and do not all name real chips — a fixture says `Climate`, the taxonomy says `Climate & Environment` — so clicking them by name finds nothing.
 - **FR-28.14** *(Shipped)* **The README's alt text and the scene's alt text must be identical**, enforced by `tests/unit/stills.test.ts`. It also fails on a scene with no captured file, a captured file belonging to no scene (what a rename leaves behind), and a README `<img>` pointing at a file that does not exist. None of those break a build on their own; all of them ship a README with a hole in it.
 
+- **FR-28.15** *(Shipped, NEWS-232)* A scene can declare a **soak** — a check interval and a minimum elapsed time — for state that only exists after time passes. The `topics` scene uses it: the next-check ring drains from full over the interval, so a topic checked moments ago shows a *full* ring, and every scene would otherwise get one, since adding a topic checks it immediately (FR-1.12).
+
+  A soaking scene's server starts **before** the others and it is photographed **after** them, so the wait overlaps work that has to happen anyway. Be honest about the size of that: the other six scenes take about 15 seconds between them, so a two-minute soak still costs ~105 seconds of real waiting. It is the cheapest option, not a free one — the alternatives were a demo-only way to backdate `lastCheckedAt` (a product affordance existing purely for a screenshot, writing a false timestamp) or shipping a dial that never moves.
+
+  The soak must stay **under** the interval: at the interval the scheduler checks again and the ring resets to full. The script warns rather than silently shipping a picture of the state the scene exists to avoid.
+
 ### Not captured, and why
 
-- **A dial mid-countdown.** The next-check ring drains from full over the check interval, so a topic checked moments ago shows a *full* ring — which is what every scene here has, since stories arrive from the check that adding a topic fires. Reaching a visibly part-drained ring means the minimum 5-minute interval plus minutes of waiting for a subtle difference, in a script otherwise measured in seconds. Filed rather than faked.
+- ~~**A dial mid-countdown.**~~ *(Now captured — NEWS-232.)* See FR-28.15 above.
 - **The terminal cast beat.** Glassbox opens its hero with a real `domotion term` recording and layers the app over its last frame (`casts.ts` + `popIn.ts`, ~260 lines). It is the most complex piece of that pipeline and buys the least here: Newsmonger's story is the app, not the CLI. Worth revisiting only if the install path becomes a headline feature.
 
 See also: [3 — UI](3-ui.md) (the layouts being photographed), [4 — CLI, Server, and Storage](4-cli-server-storage.md) (`--demo`, `--ai-test`, the readiness line), [24 — Topic Discovery](24-topic-discovery.md) (the tuner the discovery scenes walk into).
