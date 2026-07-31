@@ -168,6 +168,8 @@ Flags, usage errors, readiness line (`running at ` — synced with Tauri shell),
 
 ## [6 — AI Providers](../6-providers.md) — Shipped
 
+- FR-6.13 **Shipped** (NEWS-189): **effort is a setting** — dropdown in the Source block, `effort` in Settings, `--effort`/`NEWSMONGER_EFFORT`, default `''` = provider default. A `<select>` not a slider (levels are named and unevenly spaced — NEWS-19 measured medium and low at the same 72 s with low using ~3× the input tokens). **Checks only, as a correctness constraint**: discovery runs on `claude-haiku-4-5`, which *rejects* `output_config.effort`, so leaking the setting there would 400 every suggestion request. Anthropic-only today; the control is disabled rather than hidden elsewhere.
+
 - Model field is a combobox (datalist suggestions + free text) per provider (NEWS-37): **Shipped**
 
 Pluggable provider abstraction (`NewsProvider`), `FACTORIES`/`AUTO_ORDER`/`resolveProvider`, provider/model/endpoint as persisted settings seeded by CLI/env, provider recorded per `CheckRun`. **Shipped**: the abstraction, `anthropic`, `openai` (Responses API + hosted web search; live path needs a key to verify), and `mock` (test-only), plus the UI provider selector. **Scope decision (NEWS-18)**: only platforms that do their own web search are supported — Ollama/local providers and the whole search-grounding layer were removed as unnecessary complexity.

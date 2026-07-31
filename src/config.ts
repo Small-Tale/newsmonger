@@ -1,8 +1,8 @@
 import os from 'node:os';
 import path from 'node:path';
 
-import type { ProviderName } from './ai/types.js';
-import { PROVIDER_NAMES } from './ai/types.js';
+import type { Effort, ProviderName } from './ai/types.js';
+import { EFFORT_LEVELS, PROVIDER_NAMES } from './ai/types.js';
 
 export interface CliOptions {
   port: number | null;
@@ -18,6 +18,8 @@ export interface CliOptions {
   model: string | null;
   /** Endpoint to seed into settings at startup; null = leave as-is. */
   endpoint: string | null;
+  /** Effort to seed into settings at startup; null = leave as-is (NEWS-189). */
+  effort: Effort | null;
 }
 
 /** Resolve the data directory: `--data-dir` flag, then NEWSMONGER_DATA_DIR, then `~/.newsmonger`. */
@@ -27,13 +29,18 @@ export function defaultDataDir(env: NodeJS.ProcessEnv = process.env): string {
   return path.join(os.homedir(), '.newsmonger');
 }
 
+function parseEffort(value: string): Effort {
+  if ((EFFORT_LEVELS as readonly string[]).includes(value)) return value as Effort;
+  throw new Error(`--effort must be one of: ${EFFORT_LEVELS.filter((l) => l !== '').join(', ')}`);
+}
+
 function parseProvider(value: string): ProviderName {
   if ((PROVIDER_NAMES as readonly string[]).includes(value)) return value as ProviderName;
   throw new Error(`--provider must be one of: ${PROVIDER_NAMES.join(', ')}`);
 }
 
 /** Flags that consume the following argument. */
-const VALUE_FLAGS = new Set(['--port', '--data-dir', '--provider', '--model', '--endpoint']);
+const VALUE_FLAGS = new Set(['--port', '--data-dir', '--provider', '--model', '--endpoint', '--effort']);
 
 /**
  * The one-line usage, printed to stderr when parsing fails (FR-4.2).
@@ -46,7 +53,7 @@ const VALUE_FLAGS = new Set(['--port', '--data-dir', '--provider', '--model', '-
  */
 export const USAGE_LINE =
   `usage: newsmonger [--port N] [--data-dir PATH] [--provider ${PROVIDER_NAMES.join('|')}] ` +
-  '[--model ID] [--endpoint URL] [--no-open] [--strict-port] [--ai-test] [--demo] [--help] [--version]';
+  '[--model ID] [--endpoint URL] [--effort LEVEL] [--no-open] [--strict-port] [--ai-test] [--demo] [--help] [--version]';
 
 /** The full `--help` text, printed to stdout on request (FR-4.1a). */
 export const HELP_TEXT = `${USAGE_LINE}
@@ -64,6 +71,8 @@ Options:
   --model ID          seed the model setting (env NEWSMONGER_MODEL)
   --endpoint URL      seed the endpoint for OpenAI-compatible gateways
                       (env NEWSMONGER_ENDPOINT)
+  --effort LEVEL      how hard the model works on a check: low, medium, high,
+                      xhigh, max (env NEWSMONGER_EFFORT; Anthropic only)
   --no-open           do not open a browser at startup
   --strict-port       fail if the port is busy instead of falling forward
   --ai-test           use the offline deterministic mock provider
@@ -108,6 +117,7 @@ export function parseArgs(argv: string[], env: NodeJS.ProcessEnv = process.env):
   const envProvider = env['NEWSMONGER_PROVIDER'];
   const envModel = env['NEWSMONGER_MODEL'];
   const envEndpoint = env['NEWSMONGER_ENDPOINT'];
+  const envEffort = env['NEWSMONGER_EFFORT'];
   const options: CliOptions = {
     port: null,
     dataDir: defaultDataDir(env),
@@ -118,6 +128,7 @@ export function parseArgs(argv: string[], env: NodeJS.ProcessEnv = process.env):
     provider: envProvider !== undefined && envProvider !== '' ? parseProvider(envProvider) : null,
     model: envModel !== undefined && envModel !== '' ? envModel : null,
     endpoint: envEndpoint !== undefined && envEndpoint !== '' ? envEndpoint : null,
+    effort: envEffort !== undefined && envEffort !== '' ? parseEffort(envEffort) : null,
   };
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
@@ -151,6 +162,12 @@ export function parseArgs(argv: string[], env: NodeJS.ProcessEnv = process.env):
         const value = argv.at(++i);
         if (value === undefined) throw new Error('--endpoint requires a value');
         options.endpoint = value;
+        break;
+      }
+      case '--effort': {
+        const value = argv.at(++i);
+        if (value === undefined) throw new Error('--effort requires a value');
+        options.effort = parseEffort(value);
         break;
       }
       case '--no-open':

@@ -210,6 +210,15 @@ export const SettingsSchema = z.object({
   /** Base URL for endpoint-based providers (Ollama / OpenAI-compatible); '' = default. */
   endpoint: z.string().default(''),
   /**
+   * How hard the model works on a check (NEWS-189). `''` means the provider's
+   * own default, so behaviour is unchanged until someone picks a level.
+   *
+   * `.catch('')` for the same reason `provider` has one: a level that stops
+   * being valid must degrade to "provider default", not reset the user's whole
+   * settings row.
+   */
+  effort: z.enum(['', 'low', 'medium', 'high', 'xhigh', 'max']).default('').catch(''),
+  /**
    * Whether to raise an OS notification (and bounce the dock / flash the
    * taskbar) when new stories arrive while the app isn't focused. Opt-in — off
    * by default, since it needs a browser permission grant and shouldn't
@@ -284,6 +293,7 @@ export function emptyDataFile(): DataFile {
       provider: 'auto',
       model: '',
       endpoint: '',
+      effort: '',
       notifyOnNewItems: false,
       scheduleMode: 'interval',
       dailyTimes: ['08:00'],

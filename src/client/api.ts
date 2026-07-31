@@ -1,4 +1,4 @@
-import type { ProviderName } from '../ai/types.js';
+import type { Effort,ProviderName} from '../ai/types.js';
 import type { DiscoverReq, DiscoverResp, DiscoverUsageResp, TopicSuggestion } from '../api/schemas.js';
 import {
   DiscoverRespSchema,
@@ -321,6 +321,7 @@ export async function updateProviderSettings(patch: {
   provider?: ProviderName;
   model?: string;
   endpoint?: string;
+  effort?: Effort;
 }): Promise<void> {
   await withRefresh(() => request('/api/settings', { method: 'PATCH', body: JSON.stringify(patch) }));
   await refreshProviders();

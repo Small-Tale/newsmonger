@@ -5,6 +5,7 @@ import { buildUserPrompt, parseNewsResult, searchingSystemPrompt } from '../prom
 import { buildSuggestPrompt, parseSuggestResult, suggestSystemPrompt } from '../suggest-prompt.js';
 import type {
   CheckResult,
+  Effort,
   KnownItem,
   NewsProvider,
   SuggestRequest,
@@ -27,6 +28,16 @@ export interface RunOptions {
   /** Cap on server-side web searches. A cost and latency guard, not a coverage one. */
   maxSearches: number;
   maxTokens: number;
+  /**
+   * How hard the model works (NEWS-189). Absent or '' = the model's own default.
+   *
+   * **Checks only.** Discovery runs on `claude-haiku-4-5` (DISCOVERY_MODELS),
+   * and `output_config.effort` is not merely ignored there — Haiku 4.5 rejects
+   * it. Carrying the user's setting into discovery would turn a preference into
+   * a 400 on every suggestion request, which is why this rides on RunOptions
+   * rather than being read from settings inside `messageParams`.
+   */
+  effort?: Effort;
 }
 
 /** Minimal seam over the Anthropic SDK so tests can inject a fake. */
@@ -83,10 +94,14 @@ export function messageParams(
   options: RunOptions,
 ): Anthropic.MessageStreamParams {
   const legacy = usesLegacyRequestShape(model);
+  // Never on a legacy-shape model: those predate `output_config` and reject it.
+  // The same guard that keeps `thinking` off them keeps effort off them.
+  const effort = !legacy && options.effort !== undefined && options.effort !== '' ? options.effort : null;
   return {
     model,
     max_tokens: options.maxTokens,
     ...(legacy ? {} : { thinking: { type: 'adaptive' as const } }),
+    ...(effort === null ? {} : { output_config: { effort } }),
     // The search cap is a digest-size choice, not a coverage one, and is
     // deliberately NOT scaled with the size of the catch-up window: what bounds
     // a useful check is how much a person will read, and that doesn't grow
@@ -138,11 +153,16 @@ function sdkRunner(getApiKey: () => Promise<string | null>): AnthropicRunner {
  */
 export function createAnthropicProvider(config: {
   model?: string;
+  /** Effort for *checks* (NEWS-189); '' or absent = the model's default. */
+  effort?: Effort;
   /** Resolves the key at request time; null means none is configured. */
   getApiKey?: () => Promise<string | null>;
   runner?: AnthropicRunner;
 } = {}): NewsProvider {
   const model = config.model ?? DEFAULT_ANTHROPIC_MODEL;
+  // Applied to checks only — see RunOptions.effort for why discovery must not
+  // inherit it.
+  const checkRun: RunOptions = { ...CHECK_RUN, effort: config.effort ?? '' };
   // One seam for "is there a key" and "what is it", so the two can't disagree.
   // Resolved per call rather than at construction, so a key saved in Settings
   // takes effect without a restart — and so constructing a provider to probe
@@ -170,7 +190,7 @@ export function createAnthropicProvider(config: {
         searchingSystemPrompt(),
         buildUserPrompt(topicName, known, sinceIso, context),
         model,
-        CHECK_RUN,
+        checkRun,
       );
       return { ...parseNewsResult(text), usage };
     },

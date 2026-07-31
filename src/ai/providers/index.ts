@@ -1,4 +1,4 @@
-import type { ConcreteProviderName, NewsProvider, ProviderName } from '../types.js';
+import type { ConcreteProviderName, Effort, NewsProvider, ProviderName } from '../types.js';
 import { AUTO_ORDER, PROVIDER_INFO } from '../types.js';
 import { createAnthropicProvider } from './anthropic.js';
 import { createClaudeCliProvider } from './claude-cli.js';
@@ -19,6 +19,13 @@ export interface ResolveConfig {
   model: string;
   /** Base URL override (OpenAI-compatible endpoints); '' = default. */
   endpoint: string;
+  /**
+   * Effort for checks (NEWS-189); '' = the provider's default.
+   *
+   * Optional so every existing caller — including `probeProviders`, which only
+   * asks "is this available" — keeps compiling and keeps meaning "default".
+   */
+  effort?: Effort;
 }
 
 export type ProviderFactory = (cfg: ResolveConfig) => NewsProvider;
@@ -27,7 +34,7 @@ export type ProviderFactory = (cfg: ResolveConfig) => NewsProvider;
 export const FACTORIES: Record<ConcreteProviderName, ProviderFactory> = {
   'claude-cli': (c) => createClaudeCliProvider({ model: c.model }),
   'codex-cli': (c) => createCodexCliProvider({ model: c.model }),
-  anthropic: (c) => createAnthropicProvider({ model: c.model !== '' ? c.model : undefined }),
+  anthropic: (c) => createAnthropicProvider({ model: c.model !== '' ? c.model : undefined, effort: c.effort }),
   openai: (c) =>
     createOpenAIProvider({
       model: c.model !== '' ? c.model : undefined,

@@ -11,6 +11,7 @@ const SETTINGS: StateResp['settings'] = {
   provider: 'auto',
   model: '',
   endpoint: '',
+  effort: '',
   notifyOnNewItems: false,
   itemRetentionDays: 365,
   scheduleMode: 'interval',

@@ -21,6 +21,7 @@ const SETTINGS: Settings = {
   provider: 'auto',
   model: '',
   endpoint: '',
+  effort: '',
   notifyOnNewItems: false,
   itemRetentionDays: 365,
 };

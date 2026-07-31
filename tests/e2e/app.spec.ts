@@ -206,6 +206,33 @@ test('the provider picker persists a choice across reload', async ({ page }) => 
   await closeSettings(page);
 });
 
+test('the effort dropdown persists, and is disabled off the Anthropic provider (NEWS-189)', async ({ page }) => {
+  await page.goto('/');
+  await openSettingsTab(page, 'Source');
+
+  // Anthropic is the only provider that takes an effort parameter today, so the
+  // control is disabled elsewhere rather than hidden — a control that vanishes
+  // reads as a bug.
+  await page.selectOption('[data-action=provider]', 'anthropic');
+  const effort = page.locator('[data-action=effort]');
+  await expect(effort).toBeEnabled();
+  await expect(effort).toHaveValue('');
+
+  await page.selectOption('[data-action=effort]', 'max');
+  await page.reload();
+  await openSettingsTab(page, 'Source');
+  await expect(page.locator('[data-action=effort]')).toHaveValue('max');
+
+  await page.selectOption('[data-action=provider]', 'openai');
+  await expect(page.locator('[data-action=effort]')).toBeDisabled();
+
+  // Reset for later tests, which build on this state.
+  await page.selectOption('[data-action=provider]', 'anthropic');
+  await page.selectOption('[data-action=effort]', '');
+  await page.selectOption('[data-action=provider]', 'auto');
+  await closeSettings(page);
+});
+
 test('deleting a topic removes its stories from the feed', async ({ page }) => {
   await page.goto('/');
   const row = page.locator('.topic', { hasText: 'Quantum Computing' });

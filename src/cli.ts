@@ -51,6 +51,7 @@ async function main(): Promise<void> {
   if (options.provider !== null) patch.provider = options.provider;
   if (options.model !== null) patch.model = options.model;
   if (options.endpoint !== null) patch.endpoint = options.endpoint;
+  if (options.effort !== null) patch.effort = options.effort;
   if (Object.keys(patch).length > 0) store.updateSettings(patch);
 
   let resolve: ProviderResolver;
@@ -63,7 +64,7 @@ async function main(): Promise<void> {
   } else {
     resolve = () => {
       const s = store.getSettings();
-      return resolveProvider({ provider: s.provider, model: s.model, endpoint: s.endpoint });
+      return resolveProvider({ provider: s.provider, model: s.model, endpoint: s.endpoint, effort: s.effort });
     };
     // Warn only when nothing can authenticate. Probes the same way a check
     // will — which now includes a Claude Code subscription, not just keys, so

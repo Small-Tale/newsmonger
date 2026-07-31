@@ -1,8 +1,8 @@
 import type { SafeHtml } from 'kerfjs';
 import { delegate, each, mount } from 'kerfjs';
 
-import type { ProviderName } from '../ai/types.js';
-import { PROVIDER_INFO, PROVIDER_MODELS, PROVIDER_NAMES } from '../ai/types.js';
+import type { Effort,ProviderName  } from '../ai/types.js';
+import { EFFORT_LABELS, EFFORT_LEVELS, PROVIDER_INFO, PROVIDER_MODELS, PROVIDER_NAMES } from '../ai/types.js';
 import type { TopicSuggestion } from '../api/schemas.js';
 import { MAX_DISCOVER_QUERY_LENGTH, MAX_TUNE_ROUNDS } from '../api/schemas.js';
 import {
@@ -1753,6 +1753,29 @@ function settingsPanelJsx(s: AppState): SafeHtml {
           </select>
         </label>
 
+        {/* Anthropic-only for now: the OpenAI Responses API has `reasoning.effort`
+            but the provider does not pass one yet, and the CLI providers take no
+            such parameter at all. Disabled rather than hidden — a control that
+            vanishes reads as a bug, and the title says why (NEWS-189). */}
+        <label class="field">
+          <span class="field-label">Effort</span>
+          <select
+            data-action="effort"
+            disabled={s.settings.provider === 'anthropic' ? undefined : true}
+            title={
+              s.settings.provider === 'anthropic'
+                ? 'How hard the model works on a check. Higher is slower and costs more.'
+                : 'Only the Anthropic provider takes an effort setting today.'
+            }
+          >
+            {EFFORT_LEVELS.map((level) => (
+              <option value={level} selected={level === s.settings.effort ? true : undefined}>
+                {EFFORT_LABELS[level]}
+              </option>
+            ))}
+          </select>
+        </label>
+
         {sourceStatusJsx()}
 
         {/* Always-present slot: the note appears only for subscription-backed
@@ -3053,6 +3076,9 @@ function wireEvents(root: HTMLElement): void {
   });
   void delegate(root, 'change', '[data-action=endpoint]', (_e, el) => {
     void updateProviderSettings({ endpoint: (el as HTMLInputElement).value.trim() });
+  });
+  void delegate(root, 'change', '[data-action=effort]', (_e, el) => {
+    void updateProviderSettings({ effort: (el as HTMLSelectElement).value as Effort });
   });
 
   void delegate(root, 'click', '[data-action=check-all]', () => {

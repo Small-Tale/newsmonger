@@ -265,6 +265,30 @@ export const AUTO_ORDER: ConcreteProviderName[] = ['claude-cli', 'codex-cli', 'a
  * Empty means "the provider's own default" (the subscription CLIs, where we
  * don't pick the model, and `mock`).
  */
+/**
+ * How hard the model works on a check (NEWS-189). '' = the provider's default.
+ *
+ * Declared here rather than in the Anthropic provider because the client renders
+ * the dropdown from it and the settings schema validates against it — three
+ * copies of a five-item list would eventually disagree.
+ *
+ * The levels are **named, not numeric, and not evenly spaced**: NEWS-19 measured
+ * medium and low at the same 72s while low used ~3x the input tokens. That is why
+ * this is a `<select>` and not a slider.
+ */
+export const EFFORT_LEVELS = ['', 'low', 'medium', 'high', 'xhigh', 'max'] as const;
+export type Effort = (typeof EFFORT_LEVELS)[number];
+
+/** What each level says to a person choosing one. */
+export const EFFORT_LABELS: Record<Effort, string> = {
+  '': 'Provider default',
+  low: 'Low — fastest, cheapest',
+  medium: 'Medium',
+  high: 'High — the provider default for most models',
+  xhigh: 'Extra high',
+  max: 'Max — slowest, most thorough',
+};
+
 export const DISCOVERY_MODELS: Record<ConcreteProviderName, string> = {
   'claude-cli': 'claude-haiku-4-5',
   'codex-cli': 'gpt-5-mini',

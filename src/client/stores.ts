@@ -455,6 +455,7 @@ export const appStore = defineStore({
       provider: 'auto',
       model: '',
       endpoint: '',
+      effort: '',
       notifyOnNewItems: false,
       itemRetentionDays: 365,
       scheduleMode: 'interval',

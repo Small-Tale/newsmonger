@@ -67,6 +67,16 @@ Provider-resolution failures are deliberately *not* swallowed by the gate: if re
 
 The Settings model field is a **combobox** (NEWS-37): an editable text input backed by a `<datalist>` of curated per-provider suggestions (`PROVIDER_MODELS` in `src/ai/types.ts`). It stays free-text — a custom OpenAI-compatible gateway, or a model newer than the list, is still typeable — so the suggestions are discovery, not a constraint. An empty value uses the provider's own default.
 
+- **FR-6.13** *(Shipped, NEWS-189)* **Effort is a setting** — a `<select>` in the Source block, `effort` in `Settings`, seeded by `--effort` / `NEWSMONGER_EFFORT`. Levels: `low`, `medium`, `high`, `xhigh`, `max`, plus **"Provider default"** (`''`), which is the default — so behaviour is unchanged until someone chooses.
+
+  A **dropdown, not a slider.** The levels are named rather than numeric, and they are not evenly spaced: NEWS-19 measured `medium` and `low` at the same 72 s while `low` used ~3× the input tokens. A slider would imply a linear axis that does not exist. It also matches every other enumerated setting in the app.
+
+  **Checks only — and that is a correctness constraint, not a preference.** Discovery runs on `claude-haiku-4-5` (`DISCOVERY_MODELS`), and Haiku 4.5 does not ignore `output_config.effort`, it **rejects** it. Carrying the setting into discovery would turn a user's preference into a 400 on every suggestion request. So effort rides on `RunOptions` and is attached to `CHECK_RUN` alone; `messageParams()` additionally refuses to emit it on any legacy-shape model, the same guard that keeps `thinking` off them.
+
+  **Anthropic-only today.** The OpenAI Responses API has `reasoning.effort` but `src/ai/providers/openai.ts` passes none, and the CLI providers take no such parameter. The control is **disabled** rather than hidden on other providers, with the reason in its `title` — a control that disappears reads as a bug. An OpenAI equivalent is a reasonable follow-on.
+
+  Stored with `.catch('')` for the same reason `provider` has one: a level that stops being valid must degrade to "provider default", not reset the user's whole settings row.
+
 See also: [2 — News Checks and Deduplication](2-news-checks-and-dedup.md), [4 — CLI, Server, and Storage](4-cli-server-storage.md).
 
 Key storage and the Settings dialog are covered in [7 — API Keys and Settings Dialog](7-api-keys.md). Providers still report token usage on each check and it is stored on the `CheckRun`, but nothing reads it: the spend estimate, the budget cap and the price table were removed in NEWS-119. The counts are kept as telemetry rather than deleted, since dropping the column would be a migration for no visible gain.

@@ -30,6 +30,7 @@ function state(over: Partial<StateResp> = {}): StateResp {
       provider: 'anthropic',
       model: 'claude-opus-4-8',
       endpoint: '',
+      effort: '',
       notifyOnNewItems: false,
       itemRetentionDays: 365,
       scheduleMode: 'interval',

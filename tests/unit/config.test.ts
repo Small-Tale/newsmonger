@@ -29,6 +29,7 @@ describe('parseArgs', () => {
       provider: null,
       model: null,
       endpoint: null,
+      effort: null,
     });
   });
 
@@ -145,11 +146,39 @@ describe('--help and --version (NEWS-216)', () => {
       ['--strict-port'],
       ['--ai-test'],
       ['--demo'],
+      ['--effort', 'high'],
     ];
     for (const args of accepted) {
       const flag = args[0] ?? '';
       expect(HELP_TEXT, `${flag} is missing from --help`).toContain(flag);
       expect(() => parseArgs(args, {}), `${flag} should parse`).not.toThrow();
     }
+  });
+});
+
+describe('--effort (NEWS-189)', () => {
+  it.each(['low', 'medium', 'high', 'xhigh', 'max'])('accepts %o', (level) => {
+    expect(parseArgs(['--effort', level], {}).effort).toBe(level);
+  });
+
+  it('rejects a level the API would reject, naming the valid ones', () => {
+    // A bad level is worth catching here rather than as a 400 mid-check.
+    expect(() => parseArgs(['--effort', 'extreme'], {})).toThrow(/--effort must be one of/);
+    expect(() => parseArgs(['--effort'], {})).toThrow(/--effort requires a value/);
+  });
+
+  it('is null unless asked for, so settings are left alone', () => {
+    expect(parseArgs([], {}).effort).toBe(null);
+  });
+
+  it('reads NEWSMONGER_EFFORT, and validates it the same way', () => {
+    expect(parseArgs([], { NEWSMONGER_EFFORT: 'high' }).effort).toBe('high');
+    expect(parseArgs([], { NEWSMONGER_EFFORT: '' }).effort).toBe(null);
+    expect(() => parseArgs([], { NEWSMONGER_EFFORT: 'nope' })).toThrow(/--effort must be one of/);
+  });
+
+  it('takes a value, so --effort -v is a level and not a version request', () => {
+    // The NEWS-216 scan has to know this flag consumes its argument.
+    expect(earlyExitFlag(['--effort', '-v'])).toBe(null);
   });
 });

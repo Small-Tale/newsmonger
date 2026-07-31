@@ -79,6 +79,8 @@ export const UpdateSettingsReqSchema = z
     provider: z.enum(PROVIDER_NAMES),
     model: z.string().max(200),
     endpoint: z.string().max(500),
+    // Same closed set as the stored setting; '' = the provider's default.
+    effort: z.enum(['', 'low', 'medium', 'high', 'xhigh', 'max']),
     notifyOnNewItems: z.boolean(),
     scheduleMode: z.enum(['interval', 'daily']),
     checkConcurrency: z.number().int().min(1).max(8),
