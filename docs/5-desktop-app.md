@@ -87,7 +87,9 @@ An unsigned bundle opens on the machine that built it and nowhere else. Gatekeep
 
   The original set was derived from **Node's own official binary** minus the rejected/unneeded ones. Matching glassbox is the better basis: what matters is what the notary service accepts and what a Node sidecar needs at launch, and glassbox is a live answer to both, with months of shipped releases behind it.
 
-- **FR-5.7** *(Shipped)* `bash scripts/verify-signing.sh` asserts, on the build machine, the properties Gatekeeper will check on someone else's: a Developer ID authority, the hardened runtime flag, the sidecar's JIT entitlements, the *absence* of `get-task-allow`, a deep strict `codesign --verify`, `spctl` reporting `source=Notarized Developer ID`, and a stapled ticket on **both** the app and the `.dmg` — notarizing the app does not notarize the disk image it ships in.
+- **FR-5.7** *(Shipped)* `bash scripts/verify-signing.sh` asserts, on the build machine, the properties Gatekeeper will check on someone else's: a Developer ID authority, the hardened runtime flag, the sidecar's JIT entitlements, the *absence* of `get-task-allow`, a deep strict `codesign --verify`, `spctl` reporting `source=Notarized Developer ID`, and a stapled ticket on the **app**.
+
+  The `.dmg`'s own staple is reported but **not required** (NEWS-221). CI deliberately does not staple it (NEWS-200): the app inside is notarized and stapled, and Gatekeeper assesses the **app** — mount, drag out, run — so the disk image's staple never enters that path. Stapling is an offline optimization; a notarized-but-unstapled artifact still passes on a networked machine. This requirement previously said "both the app and the `.dmg`", which contradicted that decision and would have failed every macOS shard once NEWS-220 made the script a blocking gate.
 
   Run against the current unsigned build it reports exactly what is missing, including that the sidecar inherits `get-task-allow` from Node's own signature. That was found by running it, not by reasoning about it.
 

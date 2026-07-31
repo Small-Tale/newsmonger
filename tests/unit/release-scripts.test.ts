@@ -1087,3 +1087,37 @@ describe('the version guard is wired into both workflows (NEWS-208)', () => {
     expect(createRelease).toContain('scripts/check-tag-version.sh');
   });
 });
+
+describe('verify-signing.sh agrees with what CI actually produces (NEWS-221)', () => {
+  const read = (rel: string): string => fs.readFileSync(path.join(root, rel), 'utf8');
+
+  it('does not fail a release over an unstapled dmg, which CI deliberately does not staple', () => {
+    // The contradiction this pins: NEWS-200 (3e984c8) removed dmg stapling from
+    // CI on the evidence that the app inside is stapled and Gatekeeper assesses
+    // the *app*. NEWS-220 then made verify-signing.sh a blocking gate — and the
+    // script still called an unstapled dmg fatal. Every macOS shard of every
+    // signed release would have failed, leaving the release a permanent draft.
+    //
+    // Neither change was wrong alone; they were incompatible, and nothing
+    // connected them. Hence a test that reads both sides.
+    const src = read('scripts/verify-signing.sh');
+    const dmgSection = src.slice(src.indexOf('# --- 7. The DMG'));
+    expect(dmgSection, 'the dmg staple must be informational, not fatal').not.toMatch(/bad "dmg is not stapled/);
+    expect(dmgSection).toMatch(/note "dmg is not stapled/);
+
+    // The app's own staple is the one that matters, and stays fatal.
+    expect(src).toMatch(/bad "no stapled ticket/);
+  });
+
+  it('is consistent with the workflows, which staple nothing', () => {
+    // If a future change re-adds dmg stapling to CI, this test should be revisited
+    // together with the check above — that is the pairing that broke.
+    for (const rel of ['.github/workflows/release-desktop.yml', '.github/workflows/release-candidate.yml']) {
+      const src = read(rel)
+        .split('\n')
+        .filter((l) => !/^\s*#/.test(l))
+        .join('\n');
+      expect(src, `${rel} does not staple, so the check must not require it`).not.toContain('stapler staple');
+    }
+  });
+});

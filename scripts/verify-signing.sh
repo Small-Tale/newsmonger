@@ -134,10 +134,23 @@ if [ -z "$dmg" ]; then
   note "no .dmg built — skipping (the app bundle alone is not what users download)"
 else
   echo "==> Disk image: $dmg"
+  # Informational, NOT fatal (NEWS-221). This was `bad`, written when CI stapled
+  # the dmg. NEWS-200 (3e984c8) then removed that step deliberately, having
+  # established that the app *inside* the dmg is notarized and stapled and that
+  # Gatekeeper assesses the **app** — mount, drag out, run — so the dmg's own
+  # staple never enters the path. Glassbox has shipped that way for months.
+  #
+  # Stapling is an **offline optimization**: a notarized-but-unstapled artifact
+  # still passes on a machine with a network. The check that matters is the app's
+  # own staple, above, and that one stays fatal.
+  #
+  # Leaving this as a hard failure made `verify-signing.sh` contradict the
+  # workflows the moment NEWS-220 restored it as a blocking gate, which would
+  # have failed every macOS shard of every signed release.
   if xcrun stapler validate "$dmg" >/dev/null 2>&1; then
     ok "dmg has a stapled ticket"
   else
-    bad "dmg is not stapled — notarizing the app does not notarize the disk image it ships in"
+    note "dmg is not stapled — fine: the app inside is, and Gatekeeper assesses the app (NEWS-200)"
   fi
 fi
 
