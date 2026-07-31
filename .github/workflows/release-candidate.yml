@@ -719,18 +719,42 @@ jobs:
           node-version: ${{ env.NODE_VERSION }}
       - name: Install current stable
         run: npm install -g newsmonger@latest || echo "No previous stable version — skipping the upgrade half"
-      - name: Smoke test the stable version
+      # **Advisory, deliberately.** This runs the *current* smoke script against
+      # an *already-published* build, so every assertion added to the script is a
+      # new claim about a binary that shipped before it existed. That is a
+      # ratchet: it guarantees a red check from the moment a smoke test is added
+      # until the next stable release, and it fails on something nobody can fix
+      # — the artifact is on the registry.
+      #
+      # Seen for real on v0.2.0-beta.6: `latest` is 0.1.0, which predates
+      # `--help`/`--version` (NEWS-216), so three assertions failed and took the
+      # job with them while the actual upgrade was fine.
+      #
+      # What this job exists to prove is the step *after* it: that someone on
+      # stable can upgrade to the beta and have it work. That assertion stays
+      # strict.
+      - name: Smoke test the stable version (advisory)
+        continue-on-error: true
         run: |
           if command -v newsmonger >/dev/null 2>&1; then
-            bash tests/smoke/smoke-test.sh newsmonger
+            bash tests/smoke/smoke-test.sh newsmonger \
+              || echo "::warning::The published stable failed the current smoke script — expected when the script has grown since it shipped."
           fi
       - name: Upgrade to the beta (with registry-propagation retry)
+        env:
+          VERSION: ${{ needs.publish-beta.outputs.version }}
         run: |
-          for i in 1 2 3 4 5; do
-            npm install -g newsmonger@${{ needs.publish-beta.outputs.version }} && break
-            echo "Attempt $i failed, waiting 15s for npm registry propagation..."
-            sleep 15
+          for i in 1 2 3 4 5 6 7 8 9 10; do
+            if npm install -g "newsmonger@$VERSION"; then
+              echo "Upgraded to newsmonger@$VERSION on attempt $i."
+              exit 0
+            fi
+            echo "Attempt $i: newsmonger@$VERSION not installable yet; waiting ${i}0s for registry propagation..."
+            sleep "${i}0"
           done
+          echo "::error::newsmonger@$VERSION was still not installable after 10 attempts (~9 minutes)."
+          exit 1
+      # Strict: this is the claim the job is actually making.
       - name: Smoke test the beta version
         run: bash tests/smoke/smoke-test.sh newsmonger
 

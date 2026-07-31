@@ -604,8 +604,15 @@ describe('the rc/beta release pipeline (NEWS-201)', () => {
     // to `npm install -g newsmonger@beta`, which is documentation, not a test step.
     const src = rc();
     const smoke = src.slice(src.indexOf('\n  smoke-fresh-install:\n'), src.indexOf('\n  promote-release:\n'));
-    expect(smoke).toContain('newsmonger@${{ needs.publish-beta.outputs.version }}');
+    // The version reaches the shell through `env:` rather than being
+    // interpolated into the command, so both smoke jobs are checked for the
+    // binding *and* the use — either half alone would pass while installing
+    // nothing (`newsmonger@` with an empty expansion).
+    expect(smoke).toContain('VERSION: ${{ needs.publish-beta.outputs.version }}');
+    expect(smoke).toContain('newsmonger@$VERSION');
     expect(smoke).not.toContain('newsmonger@beta');
+    // Both jobs, not just the first: the upgrade job installs it too.
+    expect([...smoke.matchAll(/VERSION: \$\{\{ needs\.publish-beta\.outputs\.version \}\}/g)]).toHaveLength(2);
   });
 
   it('dispatches the desktop release rather than relying on the tag push', () => {
@@ -828,6 +835,24 @@ describe('the beta smoke install (seen failing on v0.2.0-beta.5)', () => {
     // Backoff rather than a flat sleep, so the tail is long without the common
     // case paying for it.
     expect(step).toMatch(/sleep "\$\{i\}0"/);
+  });
+
+  it('smoke-tests the *published stable* advisorily, and the upgrade strictly', () => {
+    // The ratchet this prevents: the pre-upgrade smoke runs the current script
+    // against a build that shipped before those assertions existed, so every new
+    // smoke test turns this job red until the next stable release — and fails on
+    // an artifact already on the registry, which nobody can fix. Seen on
+    // v0.2.0-beta.6, where `latest` (0.1.0) predates `--help`/`--version`.
+    const text = rc();
+    const job = text.slice(text.indexOf('  smoke-upgrade:'), text.indexOf('  promote-release:'));
+    const advisory = job.indexOf('Smoke test the stable version');
+    const strict = job.indexOf('Smoke test the beta version');
+    expect(advisory).toBeGreaterThan(-1);
+    expect(strict).toBeGreaterThan(advisory);
+    // The stable half tolerates failure...
+    expect(job.slice(advisory, strict)).toContain('continue-on-error: true');
+    // ...and the beta half, which is the claim the job actually makes, does not.
+    expect(job.slice(strict)).not.toContain('continue-on-error');
   });
 
   it('installs the exact published version, not a floating tag', () => {
