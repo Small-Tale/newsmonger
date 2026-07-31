@@ -1339,3 +1339,74 @@ describe('the signing secrets are the ones Tauri actually reads (NEWS-225)', () 
     }
   });
 });
+
+describe('a dry run is structurally incapable of publishing (NEWS-223)', () => {
+  const src = (): string => fs.readFileSync(path.join(root, '.github/workflows/release-desktop.yml'), 'utf8');
+
+  /** The `tauri-action` step that runs on a dry run, comments stripped. */
+  const dryRunStep = (): string => {
+    const s = src()
+      .split('\n')
+      .filter((l) => !/^\s*#/.test(l))
+      .join('\n');
+    const start = s.indexOf('Build Tauri app (dry run');
+    expect(start, 'the dry-run build step should exist').toBeGreaterThan(-1);
+    const next = s.indexOf('\n      - name:', start);
+    return next === -1 ? s.slice(start) : s.slice(start, next);
+  };
+
+  it('offers a dry_run input, and no longer demands a tag', () => {
+    // The old release.yml got this structurally: "a manual run is always a dry
+    // run, so there is no way to publish from a branch." The NEWS-201 port added
+    // a required tag and no guard, so a manual dispatch published for real.
+    const s = src();
+    expect(s).toContain('dry_run:');
+    const tagInput = s.slice(s.indexOf('      tag:'), s.indexOf('dry_run:'));
+    expect(tagInput, 'a dry run may have no tag at all').toContain('required: false');
+  });
+
+  it('passes neither tagName nor releaseId on the dry-run build', () => {
+    // Read from tauri-action's source: with neither set it builds and skips all
+    // uploads — but `tagName` set WITHOUT `releaseId` calls getOrCreateRelease
+    // and *publishes*. A dry run that only blanked releaseId would ship.
+    const step = dryRunStep();
+    expect(step, 'tagName would create a release').not.toContain('tagName');
+    expect(step).not.toContain('releaseId');
+    expect(step, 'it still has to actually build').toContain('args:');
+  });
+
+  it('withholds GITHUB_TOKEN from the dry-run build, which is the hard lock', () => {
+    // create-release.ts and upload-release-assets.ts both throw without it, so
+    // this step cannot touch a release even if the inputs above regressed.
+    expect(dryRunStep()).not.toContain('GITHUB_TOKEN');
+  });
+
+  it('still signs and notarizes on a dry run — that is the point of it', () => {
+    const step = dryRunStep();
+    for (const v of ['APPLE_CERTIFICATE', 'APPLE_SIGNING_IDENTITY', 'APPLE_ID', 'APPLE_TEAM_ID']) {
+      expect(step, `a dry run should still exercise ${v}`).toContain(v);
+    }
+  });
+
+  it('skips every job that could publish', () => {
+    const s = src();
+    for (const job of ['create-release', 'rename-assets', 'publish-release']) {
+      const start = s.indexOf(`\n  ${job}:`);
+      expect(start, `${job} should exist`).toBeGreaterThan(-1);
+      const body = s.slice(start, s.indexOf('\n    steps:', start));
+      expect(body, `${job} must not run on a dry run`).toContain('!inputs.dry_run');
+    }
+  });
+
+  it('still builds when create-release is skipped, and still waits on the gates', () => {
+    // `needs: [gates, create-release]` lists gates explicitly because it used to
+    // reach build only *through* create-release — which a dry run skips. Without
+    // it, a dry run would build ungated (NEWS-224).
+    const s = src();
+    const build = s.slice(s.indexOf('\n  build:'), s.indexOf('\n    steps:', s.indexOf('\n  build:')));
+    expect(build).toContain('needs: [gates, create-release]');
+    // True when a need is skipped, false when one failed — so a broken gate
+    // still stops the build.
+    expect(build).toContain('!failure() && !cancelled()');
+  });
+});

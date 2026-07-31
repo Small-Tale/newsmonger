@@ -316,6 +316,22 @@ It refuses **loudly** rather than the trigger excluding `v*-*`: an excluded tag 
 
 The pin is also what makes the version guard above meaningful on that path: unpinned, it compared `inputs.tag` against *main's* version files, so it would have passed on exactly the mismatch it exists to catch. The two are load-bearing together.
 
+##### `workflow_dispatch` has a dry run again (NEWS-223)
+
+The old `release.yml` guaranteed it structurally — *"no inputs on purpose. A manual run is **always** a dry run, so there is no way to publish from a branch"* — and the NEWS-201 port replaced that with a required `tag` and no guard, so a manual dispatch created and published a real release. There was no way left to exercise signing and notarization without shipping something, which is exactly the wrong trade when notarization is slow and opaque (FR-5.20).
+
+Run it with **`dry_run: true`**: checkout → gates → build → sign → notarize → `verify-signing.sh`, publishing nothing. `tag` is optional on that path.
+
+It is **three independent locks**, because a "dry run" that publishes is worse than no dry run at all:
+
+1. The dry-run build step carries **no `tagName` and no `releaseId`** — absent keys, not empty ones. Read from `tauri-action`'s source rather than assumed: with neither set it builds and skips all uploads, but **`tagName` set *without* `releaseId` calls `getOrCreateRelease` and publishes**. A dry run that only blanked `releaseId` would have shipped.
+2. **`GITHUB_TOKEN` is deliberately omitted** from that step. `create-release.ts` and `upload-release-assets.ts` both throw without it, so the step cannot touch a release even if the inputs above regressed.
+3. `create-release` is skipped, so `rename-assets` and `publish-release` skip with it — and both carry an explicit `if: ${{ !inputs.dry_run }}` as well, in case someone later adds `if: always()`.
+
+`build` lists `needs: [gates, create-release]` explicitly: it previously reached the gates only *through* `create-release`, which a dry run skips, so without it a dry run would build ungated. Its `if: ${{ !failure() && !cancelled() }}` is true when a need is **skipped** and false when one **failed**, so a broken gate still stops the build.
+
+The APPLE_* secrets are unchanged on the dry-run step — signing and notarizing is the whole point, and `verify-signing.sh` reads from the bundle directory, so the check that matters most runs exactly as it would on a real release.
+
 ##### The stable path runs its own gates (NEWS-224)
 
 A `gates` job — typecheck, lint, `build:client`, unit tests — which `create-release` needs, so a broken commit never even opens a draft. These are the three the old `release.yml` ran, for the reason it stated: *"so a release can't publish something that doesn't even compile."*

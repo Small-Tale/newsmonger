@@ -28,8 +28,17 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: 'Tag to release (e.g. v0.2.0)'
-        required: true
+        description: 'Tag to release (e.g. v0.2.0). Not needed for a dry run.'
+        required: false
+      # Restores the guarantee the old `release.yml` had structurally (NEWS-223):
+      # "a manual run is **always** a dry run, so there is no way to publish from
+      # a branch." That was the first line of defence against a credential
+      # problem, and it is exactly what you want when notarization is slow and
+      # opaque (NEWS-197) — exercise sign → notarize → verify, publish nothing.
+      dry_run:
+        description: 'Build, sign, notarize and verify — publish nothing'
+        type: boolean
+        default: false
 
 jobs:
   # Restored with NEWS-224. The old `release.yml` ran exactly these three before
@@ -73,6 +82,9 @@ jobs:
   # Create the GitHub Release first so build jobs don't race
   create-release:
     needs: [gates]
+    # No release shell on a dry run, which also skips rename-assets and
+    # publish-release by GitHub's default "skipped need skips the dependent" rule.
+    if: ${{ !inputs.dry_run }}
     runs-on: ubuntu-latest
     outputs:
       release_id: ${{ steps.create.outputs.result }}
@@ -173,7 +185,14 @@ jobs:
             return data.id;
 
   build:
-    needs: [create-release]
+    # `gates` is listed explicitly because it previously reached this job only
+    # *through* `create-release`, which a dry run skips — without it a dry run
+    # would build ungated (NEWS-224).
+    needs: [gates, create-release]
+    # The standard shape for "run even though an optional need was skipped".
+    # `!failure() && !cancelled()` is true when a need is skipped but false when
+    # one actually failed, so a broken gate still stops the build.
+    if: ${{ !failure() && !cancelled() }}
 
     strategy:
       fail-fast: false
@@ -254,7 +273,20 @@ jobs:
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         run: bash scripts/notary-watch.sh start
 
+      # Two mutually exclusive build steps rather than one with conditional
+      # inputs (NEWS-223). Read from `tauri-action`'s source rather than guessed:
+      #
+      #   - Neither `releaseId` nor `tagName` set -> it builds and skips all
+      #     uploads (`src/index.ts`: "No releaseId or tagName provided...").
+      #   - **`tagName` set WITHOUT `releaseId` CREATES A RELEASE** — it calls
+      #     `getOrCreateRelease`. That is the trap: a dry run that only blanked
+      #     `releaseId` while leaving `tagName` in place would publish.
+      #
+      # So the dry-run step carries no `tagName` key *at all* — not an empty one,
+      # an absent one. Empty-string coercion does work for these two inputs, but
+      # relying on it puts a publish one typo away.
       - name: Build Tauri app and upload to release
+        if: ${{ !inputs.dry_run }}
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -269,6 +301,34 @@ jobs:
         with:
           tagName: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
           releaseId: ${{ needs.create-release.outputs.release_id }}
+          args: --target ${{ matrix.target }}
+
+      # The same signing and notarization, publishing nothing. Three independent
+      # locks, so a regression in any one of them still cannot publish:
+      #   1. no `tagName` and no `releaseId` in `with:` (the documented
+      #      build-only mode, and what glassbox's validation gate already does);
+      #   2. **`GITHUB_TOKEN` deliberately omitted** — `create-release.ts` and
+      #      `upload-release-assets.ts` both throw without it, so this step is
+      #      structurally incapable of touching a release;
+      #   3. `create-release` is skipped, so the publish jobs downstream of it
+      #      are skipped too.
+      #
+      # The APPLE_* set is unchanged: signing and notarizing is the entire point
+      # of a dry run, and `verify-signing.sh` below reads from the bundle
+      # directory, so the check that matters most runs exactly as it would live.
+      - name: Build Tauri app (dry run — publishes nothing)
+        if: ${{ inputs.dry_run }}
+        uses: tauri-apps/tauri-action@v0
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        with:
           args: --target ${{ matrix.target }}
 
       # `always()`: a build that succeeded quickly is itself worth knowing about,
@@ -338,6 +398,10 @@ jobs:
   # are renamed; the updater's latest.json references the others by original name.
   rename-assets:
     needs: [create-release, build]
+    # Redundant with the skipped `create-release`, and kept anyway: if someone
+    # later adds `if: always()` here, this is what still stops a dry run
+    # publishing (NEWS-223).
+    if: ${{ !inputs.dry_run }}
     runs-on: ubuntu-latest
     steps:
       # The tag's copy of release-assets.mjs, so the names it computes match the
@@ -391,6 +455,9 @@ jobs:
   # checkbox — explicit so the flip can't be silently downgraded by repo settings.
   publish-release:
     needs: [create-release, build, rename-assets]
+    # Same belt-and-braces as rename-assets — this is the job that makes a
+    # release public, so it gets the explicit guard too (NEWS-223).
+    if: ${{ !inputs.dry_run }}
     runs-on: ubuntu-latest
     steps:
       - name: Flip release from draft → published
