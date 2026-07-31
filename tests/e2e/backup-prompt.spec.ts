@@ -130,6 +130,34 @@ test('"Not now" also holds across a reload (FR-27.4)', async ({ page }) => {
   expect(Date.parse(settings.settings.backupPromptSnoozedUntil)).toBeGreaterThan(Date.now());
 });
 
+test('a typed ~ path is resolved, not taken literally (NEWS-237)', async ({ page }) => {
+  await page.goto('/');
+  await addTopics(page, ['Tilde One', 'Tilde Two', 'Tilde Three']);
+  await expect(page.locator('.backup-offer')).toBeVisible();
+
+  // The most natural thing to type. Stored verbatim it would create a literal
+  // `~` directory beside the server and report success, which is the failure
+  // that only shows up when the backup is needed.
+  await page.fill('[data-action=backup-offer-input]', '~/nm-tilde-e2e');
+  await page.click('[data-action=backup-offer-save]');
+  await expect(page.locator('.backup-offer')).toHaveCount(0);
+
+  const settings = (await (await fetch(`${baseURL()}/api/state`)).json()) as {
+    settings: { backupDir: string };
+  };
+  expect(settings.settings.backupDir.startsWith('~')).toBe(false);
+  expect(settings.settings.backupDir).toContain('nm-tilde-e2e');
+  expect(path.isAbsolute(settings.settings.backupDir)).toBe(true);
+
+  // Clean up the folder the save actually created, and turn backups off again.
+  fs.rmSync(settings.settings.backupDir, { recursive: true, force: true });
+  await fetch(`${baseURL()}/api/settings`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ backupDir: '' }),
+  });
+});
+
 test('choosing a folder saves it and writes a backup (FR-27.2, FR-27.6)', async ({ page }) => {
   const dest = fs.mkdtempSync(path.join(os.tmpdir(), 'newsmonger-offer-e2e-'));
   await page.goto('/');

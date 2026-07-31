@@ -58,6 +58,12 @@ A setting names a **backup** directory. The app keeps running from `~/.newsmonge
 - **FR-27.5** *(Shipped)* Suggested locations are **OS-appropriate and probed, never assumed** (`src/backup-locations.ts`) — iCloud Drive, Google Drive, OneDrive and Dropbox on macOS; OneDrive, Google Drive and Dropbox on Windows; the third-party clients on Linux. A machine with none still gets the dialog, with a note and an empty field. Offering a path that does not exist is worse than offering none: it looks authoritative and then fails at the first write.
   - macOS needs a **prefix scan**, not a path list: modern mounts live under `~/Library/CloudStorage` with the account in the folder name (`GoogleDrive-someone@example.com`), so there is no fixed path to test. Several accounts of one product each get an entry.
   - The probe is a **separate route** (`GET /api/backup/locations`), not a field on `/api/state`. It touches the filesystem, and `/api/state` is polled every 4 seconds — probing directories fifteen times a minute to answer a question asked once is the wrong shape.
+- **FR-27.10** *(Shipped, NEWS-237)* A typed folder is **resolved server-side before it is stored**, so what Settings reads back is what will actually be written to. A leading `~` is expanded, whitespace-only means off, and a **relative path is refused** rather than resolved.
+
+  This was a real bug, not a nicety. Shells expand `~`; Node does not. Stored verbatim and handed to `fs.mkdirSync(dir, { recursive: true })`, `~/Library/...` creates a **literal directory named `~`** beside wherever the server started — and the backup *succeeds* into it. That is the worst available outcome here: the user believes their data is in iCloud Drive, the UI reads the path back to them, and the failure surfaces only the day they need it. A relative path is the same failure more quietly, resolving against the server's working directory. `~otheruser` is refused rather than guessed at.
+
+  Normalization lives in `src/backup-locations.ts` — a **node-only** module — and not in `src/api/schemas.ts`, which the client bundle imports and which therefore cannot use `node:os`.
+
 - Clicking a suggestion **fills the field rather than saving**: the path is a guess about where the user keeps things, and committing on one click would turn a misread suggestion into a decision.
 
 The copy is **"keep a backup here"**, never "move your data here" — the second is a promise this design deliberately does not make, and an E2E test asserts the dialog never says it.

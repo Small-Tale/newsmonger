@@ -18,7 +18,7 @@ import {
   UpdateSettingsReqSchema,
   UpdateTopicReqSchema,
 } from '../api/schemas.js';
-import { suggestedBackupLocations } from '../backup-locations.js';
+import { normalizeBackupDir, suggestedBackupLocations } from '../backup-locations.js';
 import { toAtom, toJson, toMarkdown } from '../export.js';
 import { cachedImagePath, isValidHash, liveImageHashes, pruneImageCache, sniffImageType } from '../images/index.js';
 import { isKeychainAvailable, keychainLabel } from '../keychain.js';
@@ -230,6 +230,15 @@ export function registerApi(app: Hono<AppEnv>): void {
   app.patch('/api/settings', async (c) => {
     const body = await parseBody(c, UpdateSettingsReqSchema);
     if (!body) return c.json({ error: 'invalid request: expected { checkIntervalMs >= 5 minutes }' }, 400);
+    // Resolve the backup folder here rather than storing what was typed
+    // (NEWS-237): `~` and relative paths both otherwise *succeed* into somewhere
+    // the user did not ask for. Normalizing at the boundary means Settings reads
+    // back the path that will actually be written to.
+    if (body.backupDir !== undefined) {
+      const resolved = normalizeBackupDir(body.backupDir);
+      if (!resolved.ok) return c.json({ error: resolved.error }, 400);
+      body.backupDir = resolved.dir;
+    }
     return c.json(c.get('store').updateSettings(body));
   });
 

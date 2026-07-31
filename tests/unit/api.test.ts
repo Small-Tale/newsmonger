@@ -618,3 +618,61 @@ describe('the backup prompt settings survive a round trip (NEWS-230)', () => {
     store.close();
   });
 });
+
+describe('PATCH /api/settings normalizes the backup folder (NEWS-237)', () => {
+  it('stores the resolved path, not what was typed', async () => {
+    const { app, store } = makeApp();
+    const res = await app.request('/api/settings', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ backupDir: '~/Documents/NmBackups' }),
+    });
+    expect(res.status).toBe(200);
+    const stored = store.getSettings().backupDir;
+    // The point of the fix: what comes back is what will actually be written
+    // to. Stored verbatim, `~/...` would create a literal `~` directory next to
+    // wherever the server started and report success.
+    expect(stored.startsWith('~')).toBe(false);
+    expect(path.isAbsolute(stored)).toBe(true);
+    expect(stored.endsWith(path.join('Documents', 'NmBackups'))).toBe(true);
+  });
+
+  it('rejects a relative path rather than resolving it against the CWD', async () => {
+    const { app, store } = makeApp();
+    const res = await app.request('/api/settings', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ backupDir: 'somewhere/relative' }),
+    });
+    expect(res.status).toBe(400);
+    const body = (await json(res)) as { error: string };
+    expect(body.error).toContain('absolute');
+    // And nothing was stored — a rejected request must not half-apply.
+    expect(store.getSettings().backupDir).toBe('');
+  });
+
+  it('treats whitespace as "off" rather than as a folder name', async () => {
+    const { app, store } = makeApp();
+    const res = await app.request('/api/settings', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ backupDir: '   ' }),
+    });
+    expect(res.status).toBe(200);
+    expect(store.getSettings().backupDir).toBe('');
+  });
+
+  it('leaves the rest of a settings patch alone when the folder is bad', async () => {
+    // A 400 on one field must not silently apply the others — that would make
+    // the failure partial and invisible.
+    const { app, store } = makeApp();
+    const before = store.getSettings().itemRetentionDays;
+    const res = await app.request('/api/settings', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ backupDir: 'nope/relative', itemRetentionDays: 7 }),
+    });
+    expect(res.status).toBe(400);
+    expect(store.getSettings().itemRetentionDays).toBe(before);
+  });
+});

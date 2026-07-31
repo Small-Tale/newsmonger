@@ -125,3 +125,54 @@ export function suggestedBackupLocations(
   }
   return found;
 }
+
+/**
+ * What a typed backup folder means, resolved once at the boundary (NEWS-237).
+ *
+ * The path is typed rather than picked (see `docs/27-data-location.md`), and the
+ * single most natural thing to type is `~/...`. **Shells expand `~`; Node does
+ * not.** Passed through to `fs.mkdirSync(dir, { recursive: true })` it creates a
+ * literal directory named `~` relative to the server's working directory — and
+ * then the backup *succeeds* into it. That is the worst available outcome for a
+ * backup: the user believes their data is in iCloud Drive, Settings reads back
+ * the path they typed, and the file is in a folder called `~` inside an install
+ * directory. It fails only when it is needed.
+ *
+ * A relative path is the same failure in a quieter costume: it resolves against
+ * whatever directory the server happened to start in — the repo root under
+ * `npm run dev`, something else entirely under the desktop shell — and also
+ * succeeds. Both are rejected or resolved here, before anything is stored, so
+ * what Settings shows back is what will actually be written to.
+ *
+ * Deliberately **not** in `src/api/schemas.ts`: the client bundle imports that
+ * file, and it cannot have `node:os` in it.
+ */
+export function normalizeBackupDir(
+  input: string,
+  home: string = os.homedir(),
+): { ok: true; dir: string } | { ok: false; error: string } {
+  const trimmed = input.trim();
+  // All-whitespace is "off", not a directory named with spaces.
+  if (trimmed === '') return { ok: true, dir: '' };
+
+  let dir = trimmed;
+  if (dir === '~') {
+    dir = home;
+  } else if (dir.startsWith('~/') || dir.startsWith('~\\')) {
+    dir = path.join(home, dir.slice(2));
+  } else if (dir.startsWith('~')) {
+    // `~otheruser/...` — a shell would resolve another account's home. Guessing
+    // is worse than declining, and nobody types this by accident.
+    return { ok: false, error: 'Only your own home directory is supported: use ~/ or an absolute path.' };
+  }
+
+  if (!path.isAbsolute(dir)) {
+    return {
+      ok: false,
+      error: `Use an absolute path (or ~/...): "${trimmed}" would be resolved against wherever the app happened to start.`,
+    };
+  }
+  // Collapses `..`, duplicate separators and a trailing slash, so two spellings
+  // of one folder do not read as two different settings.
+  return { ok: true, dir: path.normalize(dir) };
+}

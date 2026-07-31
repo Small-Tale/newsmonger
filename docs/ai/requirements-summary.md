@@ -19,6 +19,7 @@ Status markers: **Shipped** · **Partial** · **Design only** · **Deferred**. S
 - **Locations are probed, never assumed** (`src/backup-locations.ts`, `GET /api/backup/locations` — its own route because `/api/state` polls every 4 s and this touches the filesystem). macOS needs a **prefix scan** of `~/Library/CloudStorage` since mounts carry the account in the folder name. A machine with no sync client still gets the dialog, with an empty field.
 - **API keys are structurally absent** (keychain, not `Settings` — FR-7.x); asserted on the serialised bytes in unit *and* E2E tests, and the E2E suite also asserts the copy never says "move your data".
 - Why not A (relocate the live data dir): a **live WAL-mode SQLite database inside a directory a sync daemon rewrites** is a documented corruption route. `--data-dir` on a synced path is still possible; the UI just doesn't offer it.
+- **A typed path is normalized server-side before storing (FR-27.10, NEWS-237):** `~` expanded, whitespace = off, relative **refused**. Stored verbatim, `~/...` made `mkdirSync` create a literal `~` directory and the backup *succeeded* into it — success reported, data elsewhere, discovered only when needed.
 - **Still open:** the path is **typed, not picked** — the browser build cannot produce a filesystem path the Node server can open, and the desktop shell has no dialog plugin yet (NEWS-233).
 - **Testing note:** the offer fires on the third topic, so `resetTopics` suppresses it for every spec but `backup-prompt.spec.ts`. In the harness — the app has no test-only branch.
 

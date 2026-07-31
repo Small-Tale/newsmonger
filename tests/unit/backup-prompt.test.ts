@@ -3,7 +3,7 @@ import path from 'node:path';
 
 import { describe, expect, it } from 'vitest';
 
-import { BACKUP_SUBDIR, suggestedBackupLocations } from '../../src/backup-locations.js';
+import { BACKUP_SUBDIR, normalizeBackupDir, suggestedBackupLocations } from '../../src/backup-locations.js';
 import {
   OFFER_AFTER_TOPICS,
   shouldOfferBackup,
@@ -151,5 +151,62 @@ describe('suggestedBackupLocations (NEWS-230, FR-27.5)', () => {
     fs.writeFileSync(path.join(h, 'Library/CloudStorage/GoogleDrive-x@y.com'), 'not a directory');
     fs.writeFileSync(path.join(h, 'Dropbox'), 'also not a directory');
     expect(suggestedBackupLocations(h, 'darwin')).toEqual([]);
+  });
+});
+
+describe('normalizeBackupDir (NEWS-237)', () => {
+  const HOME = path.join(path.sep, 'Users', 'someone');
+  const norm = (input: string) => normalizeBackupDir(input, HOME);
+
+  /**
+   * The bug this exists for, and the reason it is worth a test rather than a
+   * glance: `~` is the single most natural thing to type, shells expand it,
+   * Node does not, and `mkdirSync(recursive)` then **succeeds** into a literal
+   * `~` directory. A backup that reports success while landing somewhere else
+   * fails only when it is needed.
+   */
+  it('expands a leading ~ instead of creating a directory called "~"', () => {
+    expect(norm('~/Documents/Backups')).toEqual({
+      ok: true,
+      dir: path.join(HOME, 'Documents', 'Backups'),
+    });
+    expect(norm('~')).toEqual({ ok: true, dir: HOME });
+  });
+
+  it('refuses another user\'s home rather than guessing', () => {
+    // A shell resolves `~alice` to alice's home. Guessing at that is worse than
+    // declining, and nobody types it by accident.
+    const r = norm('~alice/Backups');
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.error).toContain('your own home');
+  });
+
+  it('refuses a relative path instead of resolving it against the CWD', () => {
+    // This is the same failure as `~` in a quieter costume: it succeeds, into
+    // whatever directory the server happened to start in — the repo root under
+    // `npm run dev`, something else under the desktop shell.
+    const r = norm('backups/newsmonger');
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.error).toContain('absolute');
+  });
+
+  it('treats blank and whitespace-only as "off", not as a folder', () => {
+    expect(norm('')).toEqual({ ok: true, dir: '' });
+    expect(norm('   ')).toEqual({ ok: true, dir: '' });
+    expect(norm('\t\n ')).toEqual({ ok: true, dir: '' });
+  });
+
+  it('trims and normalizes, so one folder is not two settings', () => {
+    const target = path.join(path.sep, 'Volumes', 'Backup', 'nm');
+    expect(norm(`  ${target}  `)).toEqual({ ok: true, dir: target });
+    expect(norm(path.join(path.sep, 'Volumes', 'Backup', 'x', '..', 'nm'))).toEqual({
+      ok: true,
+      dir: target,
+    });
+  });
+
+  it('keeps an absolute path that is already fine', () => {
+    const target = path.join(path.sep, 'Volumes', 'Sync', 'Newsmonger');
+    expect(norm(target)).toEqual({ ok: true, dir: target });
   });
 });
