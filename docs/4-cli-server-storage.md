@@ -30,6 +30,9 @@
 - **FR-4.2** Unknown flags or bad values print the usage line **to stderr** and exit non-zero.
 - **FR-4.3** The server prints `newsmonger running at http://127.0.0.1:<port>` on stdout when ready — the Tauri shell watches for this exact `running at ` marker (KEEP IN SYNC with `src-tauri/src/lib.rs`).
 - **FR-4.4** SIGINT/SIGTERM stop the scheduler and server cleanly.
+- **FR-4.4a** *(Shipped, NEWS-238)* **`NEWSMONGER_SCHEDULER_TICK_MS` sets how often the scheduler sweeps** (default 60 000; anything unparseable or non-positive falls back to it rather than throwing, since a bad value in the environment should not leave an app that starts and then never checks anything). It changes only *how often due-ness is reconsidered* — the check **interval** is a user setting ([9 — Scheduling](9-scheduling.md)), and a topic that is not due is not checked however often the sweep runs.
+
+  It exists for the **E2E suite**, which sets it beyond the length of a run. Every spec shares one long-lived server, and a sweep there is an actor no test asked for: it checks any topic that has never been checked — most of what a spec creates — at a phase unrelated to the test in progress, writing stories, runs and failures into the state those tests assert on. Two failures have been traced to exactly that, one of them a test that says in its own comment that a new check is "the one thing that legitimately brings this banner back" and can only avoid *clicking* one. Nothing is given up by switching it off: no spec asserts on a scheduled check, so the sweeps were never coverage — `tests/unit/scheduler.test.ts` covers the scheduler with the clock in hand.
 
 ## Server
 

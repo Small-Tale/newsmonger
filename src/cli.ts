@@ -13,7 +13,7 @@ import { Store } from './db/store.js';
 import { DiscoveryService } from './discovery.js';
 import { createFaviconFetcher, createImageFetcher, liveImageHashes, pruneImageCache } from './images/index.js';
 import { openInBrowser } from './routes/api.js';
-import { startScheduler } from './scheduler.js';
+import { schedulerTickMs, startScheduler } from './scheduler.js';
 import { createApp, startServer } from './server.js';
 import { appVersion } from './version.js';
 
@@ -146,7 +146,7 @@ async function main(): Promise<void> {
   // NOTE: the Tauri shell watches stdout for this exact "running at" line.
   console.log(`newsmonger running at ${url}`);
 
-  const stopScheduler = startScheduler(runner);
+  const stopScheduler = startScheduler(runner, schedulerTickMs());
   if (options.open) openInBrowser(url);
 
   // Under E2E coverage collection the test runner may kill us without letting

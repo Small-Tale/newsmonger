@@ -94,6 +94,7 @@ import { icon } from './icons.js';
 import { menuStyle } from './menu-position.js';
 import { ensureNotificationPermission, syncTauriNotificationPermission } from './notifications.js';
 import { onboardingCountText } from './onboarding.js';
+import { browserPollDeps, startPolling as startStatePolling } from './poll.js';
 import { activeBehindWarnings } from './schedule.js';
 import { itemMatchesQuery } from './search.js';
 import { shareItem } from './share.js';
@@ -4115,10 +4116,12 @@ function trapTabInDialog(e: KeyboardEvent): boolean {
   return false;
 }
 
+/**
+ * The poll's *scheduling* lives in `poll.ts` so it can be unit-tested (NEWS-238)
+ * — this is only the wiring of what a refresh means here.
+ */
 function startPolling(): void {
-  setInterval(() => {
-    if (document.visibilityState === 'visible') void refreshState().then(maybeOfferBackup);
-  }, 4000);
+  startStatePolling(browserPollDeps(() => void refreshState().then(maybeOfferBackup)));
 }
 
 /** Is the app actually in front of the user right now? */

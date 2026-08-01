@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { CheckRunner } from '../../src/checks.js';
-import { startScheduler } from '../../src/scheduler.js';
+import { schedulerTickMs, startScheduler } from '../../src/scheduler.js';
 
 function fakeRunner(): { runner: CheckRunner; calls: () => number; resolveAll: () => void } {
   let calls = 0;
@@ -111,5 +111,31 @@ describe('startScheduler', () => {
     stop();
     await vi.advanceTimersByTimeAsync(600_000);
     expect(calls()).toBe(1);
+  });
+});
+
+describe('schedulerTickMs (NEWS-238)', () => {
+  // The E2E suite runs one server for every spec, and a background sweep checks
+  // never-checked topics — most of what a spec creates — at a phase unrelated to
+  // the test in progress. This knob lets the suite turn that off so every check
+  // a test sees is one it asked for.
+  it('defaults when unset or blank', () => {
+    expect(schedulerTickMs(undefined)).toBe(60_000);
+    expect(schedulerTickMs('')).toBe(60_000);
+    expect(schedulerTickMs('   ')).toBe(60_000);
+  });
+
+  it('takes a positive number of milliseconds', () => {
+    expect(schedulerTickMs('5000')).toBe(5000);
+    expect(schedulerTickMs(String(24 * 60 * 60 * 1000))).toBe(86_400_000);
+  });
+
+  it('falls back rather than throwing on nonsense', () => {
+    // A bad value in the environment must not stop the app checking news on its
+    // normal schedule — the failure mode of throwing here is a launcher that
+    // starts and then silently never checks anything.
+    for (const bad of ['abc', '0', '-1', 'NaN', 'Infinity']) {
+      expect(schedulerTickMs(bad), bad).toBe(60_000);
+    }
   });
 });

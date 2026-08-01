@@ -38,6 +38,13 @@ export default defineConfig({
       // keychain — but never the developer's own, which would leave entries
       // behind and can block on an OS authorization prompt.
       NEWSMONGER_FAKE_KEYCHAIN: '1',
+      // No background sweeps for the length of a run (NEWS-238). One server
+      // serves every spec, and a scheduled check is an actor no test asked for
+      // — it checks never-checked topics (most of what a spec creates) at a
+      // phase unrelated to the test in progress, and writes stories, runs and
+      // failures into the state those tests assert on. Every check a test sees
+      // should be one it triggered.
+      NEWSMONGER_SCHEDULER_TICK_MS: String(24 * 60 * 60 * 1000),
       // When E2E_COVERAGE=1 (scripts/test-all.sh), the server process writes V8
       // coverage on exit; scripts/merge-coverage.mjs converts it with c8.
       ...(process.env.E2E_COVERAGE === '1'

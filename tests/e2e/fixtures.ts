@@ -160,11 +160,51 @@ export const test = base.extend({
       consoleLines.push(`[${msg.type()}] ${msg.text()}`);
     });
 
+    // Poll timeline, attached on failure (NEWS-238).
+    //
+    // The open question about that failure family is *which half* is stuck: the
+    // client polls `/api/state` every 4 s and re-renders from the answer, so a
+    // UI that stays stale for 30 s is either not receiving polls or receiving
+    // them and not rendering them. Those have nothing in common, and the console
+    // capture added first came back empty — it can only speak if something
+    // throws, and nothing does.
+    //
+    // A timestamped list of every `/api/state` response separates them outright.
+    // A gap covering the stall means the poll stopped, and the suspect is the
+    // `document.visibilityState === 'visible'` guard in `startPolling` — which
+    // has no `visibilitychange` refresh behind it, so a page that goes hidden
+    // stops updating and does not catch up. Polls continuing across the stall
+    // means the data arrived and the render dropped it, which points at the
+    // store or the morph instead.
+    const polls: number[] = [];
+    const started = Date.now();
+    page.on('response', (res) => {
+      if (res.url().includes('/api/state')) polls.push(Date.now() - started);
+    });
+
     await use(page);
 
-    if (test.info().status !== test.info().expectedStatus && consoleLines.length > 0) {
+    const failed = test.info().status !== test.info().expectedStatus;
+    if (failed && consoleLines.length > 0) {
       await test.info().attach('console.log', {
         body: consoleLines.join('\n'),
+        contentType: 'text/plain',
+      });
+    }
+    if (failed) {
+      // Best-effort: the page may already be closing, and a diagnostic must
+      // never turn a real failure into a confusing one of its own.
+      const visibility = await page
+        .evaluate(() => ({ state: document.visibilityState, focused: document.hasFocus() }))
+        .catch(() => null);
+      const gaps = polls.slice(1).map((t, i) => t - (polls[i] ?? 0));
+      await test.info().attach('poll-timeline.txt', {
+        body: [
+          `visibility: ${JSON.stringify(visibility)}`,
+          `/api/state responses: ${String(polls.length)} over ${String(Date.now() - started)}ms`,
+          `largest gap: ${String(Math.max(0, ...gaps))}ms`,
+          `offsets: ${polls.join(', ')}`,
+        ].join('\n'),
         contentType: 'text/plain',
       });
     }
