@@ -73,13 +73,18 @@ The Settings model field is a **combobox** (NEWS-37): an editable text input bac
 
   **Checks only — and that is a correctness constraint, not a preference.** Discovery runs on `claude-haiku-4-5` (`DISCOVERY_MODELS`), and Haiku 4.5 does not ignore `output_config.effort`, it **rejects** it. Carrying the setting into discovery would turn a user's preference into a 400 on every suggestion request. So effort rides on `RunOptions` and is attached to `CHECK_RUN` alone; `messageParams()` additionally refuses to emit it on any legacy-shape model, the same guard that keeps `thinking` off them.
 
-  **Anthropic *and* Claude subscription** (corrected in NEWS-239). `claude --effort <level>` takes exactly the levels above, so a subscription user gets the same control an API-key user does — `providerTakesEffort` in `src/ai/types.ts` is the single list, replacing a hardcoded `provider === 'anthropic'` in the UI.
+  **Three providers take one: the Anthropic API and both CLI agents.** `providerTakesEffort` in `src/ai/types.ts` is the single list, replacing a hardcoded `provider === 'anthropic'` in the UI.
 
-  This documentation previously said "the CLI providers take no such parameter", and the note beside the control told the user so. **That was untrue and nobody had checked** — the flag is in `claude --help`. It cost subscription users a setting their own tool supports. Worth remembering as a class of error: the assumption was about someone else's tool, and verifying it was one command.
+  - **Claude subscription** (NEWS-239) — `claude --effort <level>`, exactly the levels above.
+  - **ChatGPT subscription** (NEWS-244) — `-c model_reasoning_effort=<level>`, not a flag. Every level above is in the set the server accepts (`none`, `minimal`, `low`, `medium`, `high`, `xhigh`, `max`), so the value passes straight through with no mapping to drift.
 
-  **Codex remains out**, deliberately rather than by oversight: `codex exec` has no `--effort`, and while a `-c key=value` override may exist its help documents no such key. Guessing one would be silently ignored or rejected, and a setting that appears to work while doing nothing is worse than one that says it does not apply.
+  This documentation said twice that the CLI providers "take no such parameter", and the note beside the control told users so. **Both times it was untrue, and both times the evidence was an absence.** For Claude the flag was sitting in `claude --help`. For Codex the help genuinely says nothing — because effort rides the generic `-c key=value` config override, so there is no flag to document. "The help doesn't mention it" was never evidence, and treating it as such cost subscription users on both platforms a setting their own tools support.
 
-  The control is **disabled** rather than hidden where it does not apply, and since NEWS-239 it both *looks* disabled and states the reason on the page — a `title` tooltip on a disabled control is close to unreachable. An OpenAI equivalent is still a reasonable follow-on.
+  The key name was **verified, not guessed**: with `--strict-config`, Codex accepts `model_reasoning_effort` and rejects an invented key as an "unknown configuration field". Worth knowing that **without `--strict-config` an unknown key is swallowed in silence** — the check that makes this verifiable is not the one a normal invocation performs.
+
+  **The OpenAI API provider is the one left out**, and that is a gap rather than a decision. It has `reasoning.effort`, we do not send it, and it is a smaller gap than it looks: effort applies only to reasoning models, so unlike the two CLIs it is not unconditionally safe to send.
+
+  The control is **disabled** rather than hidden where it does not apply, and since NEWS-239 it both *looks* disabled and states the reason on the page — a `title` tooltip on a disabled control is close to unreachable.
 
   Stored with `.catch('')` for the same reason `provider` has one: a level that stops being valid must degrade to "provider default", not reset the user's whole settings row.
 

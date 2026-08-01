@@ -255,18 +255,20 @@ describe('effort reaches the CLI (NEWS-239)', () => {
 });
 
 describe('providerTakesEffort (NEWS-239)', () => {
-  it('includes the providers that actually accept one', () => {
+  it('includes every provider that actually accepts one', () => {
     expect(providerTakesEffort('anthropic')).toBe(true);
     expect(providerTakesEffort('claude-cli')).toBe(true);
+    // Codex too (NEWS-244) — through `-c model_reasoning_effort`, not a flag,
+    // which is why its `--help` shows nothing and why this list once left it
+    // out. "The help doesn't mention it" was never evidence.
+    expect(providerTakesEffort('codex-cli')).toBe(true);
   });
 
-  it('excludes Codex, which documents no equivalent', () => {
-    // Deliberate, not an oversight: `codex exec` has no `--effort`, and while a
-    // `-c key=value` override may exist its help documents no such key.
-    // Guessing one would be silently ignored or rejected, and a setting that
-    // looks like it works and does nothing is worse than one that says it
-    // doesn't apply.
-    expect(providerTakesEffort('codex-cli')).toBe(false);
+  it('excludes the OpenAI API provider, which does not pass one yet', () => {
+    // A gap rather than a decision, and a smaller one than it looks: the
+    // Responses API's `reasoning.effort` applies only to reasoning models, so
+    // sending it is not unconditionally safe the way it is for the two CLIs.
     expect(providerTakesEffort('openai')).toBe(false);
+    expect(providerTakesEffort('mock')).toBe(false);
   });
 });

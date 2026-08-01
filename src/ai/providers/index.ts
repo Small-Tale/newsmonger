@@ -33,7 +33,7 @@ export type ProviderFactory = (cfg: ResolveConfig) => NewsProvider;
 /** How each concrete provider is constructed from resolved settings. */
 export const FACTORIES: Record<ConcreteProviderName, ProviderFactory> = {
   'claude-cli': (c) => createClaudeCliProvider({ model: c.model, effort: c.effort }),
-  'codex-cli': (c) => createCodexCliProvider({ model: c.model }),
+  'codex-cli': (c) => createCodexCliProvider({ model: c.model, effort: c.effort }),
   anthropic: (c) => createAnthropicProvider({ model: c.model !== '' ? c.model : undefined, effort: c.effort }),
   openai: (c) =>
     createOpenAIProvider({

@@ -8,6 +8,7 @@ import { buildSuggestPrompt, parseSuggestResult, SUGGEST_JSON_SCHEMA, suggestSys
 import type {
   CheckResult,
   ConcreteProviderName,
+  Effort,
   KnownItem,
   NewsProvider,
   SuggestRequest,
@@ -38,7 +39,7 @@ const CHECK_TIMEOUT_MS = 10 * 60 * 1000;
 /** Seam over the CLI so tests never spawn a real process. */
 export interface CodexCliRunner {
   /** `schema` is written to the file `--output-schema` reads — see `ClaudeCliRunner`. */
-  run(system: string, prompt: string, model: string | undefined, schema: object): Promise<string>;
+  run(system: string, prompt: string, model: string | undefined, schema: object, effort?: Effort): Promise<string>;
   available(): Promise<boolean>;
 }
 
@@ -88,7 +89,7 @@ function spawnRunner(name: string): CodexCliRunner {
     });
 
   return {
-    async run(system, prompt, model, schema) {
+    async run(system, prompt, model, schema, effort) {
       // Both the schema and the final message go through temp files: Codex
       // takes the schema as a path, and reading the answer from a file beats
       // scraping it out of the progress log on stdout.
@@ -111,6 +112,15 @@ function spawnRunner(name: string): CodexCliRunner {
           outFile,
         ];
         if (model !== undefined && model !== '') args.push('-m', model);
+        // Reasoning effort, verified rather than assumed (NEWS-244). Codex has
+        // no `--effort` flag — it goes through the generic config override —
+        // and the key name was confirmed against the CLI itself: with
+        // `--strict-config`, `model_reasoning_effort` is accepted while a made-up
+        // key is rejected as an "unknown configuration field". Every level this
+        // app offers is in the set the server accepts (`none`, `minimal`, `low`,
+        // `medium`, `high`, `xhigh`, `max`), so the value passes straight
+        // through with no mapping to drift.
+        if (effort !== undefined && effort !== '') args.push('-c', `model_reasoning_effort=${effort}`);
         args.push(combinePrompt(system, prompt));
 
         const { code, stderr } = await exec(args, CHECK_TIMEOUT_MS);
@@ -165,10 +175,11 @@ export function hasChatGptCredentials(): boolean {
  * app is foregrounded (`src/attendance.ts`).
  */
 export function createCodexCliProvider(
-  config: { model?: string; binary?: string; runner?: CodexCliRunner } = {},
+  config: { model?: string; effort?: Effort; binary?: string; runner?: CodexCliRunner } = {},
 ): NewsProvider {
   const runner = config.runner ?? spawnRunner(config.binary ?? 'codex');
   const model = config.model ?? '';
+  const effort = config.effort ?? '';
   // Discovery runs on a fast, cheap model unless the user chose one (NEWS-132).
   // As with `claude-cli`, the CLI owns the request shape; only `-m` changes.
   const discoveryModel = model !== '' ? model : DISCOVERY_MODELS['codex-cli'];
@@ -176,7 +187,7 @@ export function createCodexCliProvider(
   return {
     name: 'codex-cli' satisfies ConcreteProviderName,
     model: model !== '' ? model : 'codex default',
-    effort: '',
+    effort,
     attended: true,
     isAvailable: () => runner.available(),
     async checkTopic(
@@ -190,6 +201,7 @@ export function createCodexCliProvider(
         buildUserPrompt(topicName, known, sinceIso, context),
         model !== '' ? model : undefined,
         NEWS_JSON_SCHEMA,
+        effort,
       );
       // A subscription check spends plan quota, not metered dollars, and the
       // CLI reports no token counts — so usage is genuinely unknown, not zero.

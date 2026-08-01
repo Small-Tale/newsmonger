@@ -252,13 +252,20 @@ export const PROVIDER_INFO: Record<ProviderName, { label: string; endpointConfig
  * `provider === 'anthropic'` — and the note beside the control asserted that the
  * CLI providers "take no such parameter at all", which was simply untrue.
  *
- * Codex is absent on purpose rather than by oversight: it has no `--effort`
- * flag, and while a `-c key=value` override may exist its help documents no such
- * key. Guessing one would either be silently ignored or rejected, and a setting
- * that appears to work and does nothing is worse than one that says it doesn't
- * apply. Tracked separately.
+ * Codex takes one too (NEWS-244), though not as a flag — it goes through the
+ * generic `-c key=value` config override, which is why its `--help` shows
+ * nothing about effort and why this list originally left it out. The key name
+ * was **verified rather than guessed**: with `--strict-config`, Codex accepts
+ * `model_reasoning_effort` and rejects an invented key outright as an "unknown
+ * configuration field". The values need no mapping either — every level in
+ * `EFFORT_LEVELS` is in the set the server accepts.
+ *
+ * The one provider still absent is **`openai`**, which has `reasoning.effort`
+ * on the Responses API and does not pass it. That is a gap, not a decision, and
+ * a smaller one than it looks: effort applies only to reasoning models, so
+ * sending it is not unconditionally safe the way it is for the two CLIs.
  */
-export const EFFORT_PROVIDERS = ['anthropic', 'claude-cli'] as const;
+export const EFFORT_PROVIDERS = ['anthropic', 'claude-cli', 'codex-cli'] as const;
 
 /** Whether this provider does anything with the effort setting. */
 export function providerTakesEffort(name: ProviderName): boolean {

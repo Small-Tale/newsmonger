@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import type { CodexCliRunner } from '../../src/ai/providers/codex-cli.js';
 import { combinePrompt, createCodexCliProvider } from '../../src/ai/providers/codex-cli.js';
+import { EFFORT_LEVELS } from '../../src/ai/types.js';
 
 const NEWS = JSON.stringify({
   items: [
@@ -117,5 +118,84 @@ describe('createCodexCliProvider', () => {
     });
     const p = createCodexCliProvider({ runner: fakeRunner({ run: () => Promise.resolve(withCite) }) });
     expect((await p.checkTopic('t', [], null)).items[0]?.summary).toBe('Body. Cited bit.');
+  });
+});
+
+describe('effort reaches Codex (NEWS-244)', () => {
+  /**
+   * The claim this replaces was that Codex "documents no equivalent key", which
+   * was true of its `--help` and false of Codex. Effort rides the generic
+   * `-c key=value` override, so no flag appears in help — and I had treated that
+   * absence as an answer.
+   *
+   * The key is not a guess. With `--strict-config`, `codex exec` accepts
+   * `model_reasoning_effort` and rejects an invented key outright:
+   *
+   *   Error loading config.toml: unknown configuration field
+   *   `definitely_not_a_real_key_xyz` in -c/--config override
+   *
+   * **Without `--strict-config` an unknown key is swallowed in silence**, which
+   * is the part worth remembering: the check that made this verifiable is not
+   * the one a normal invocation performs.
+   */
+  function recordingRunner(calls: (string | undefined)[]): CodexCliRunner {
+    return fakeRunner({
+      run: (_s, _p, _m, _schema, effort) => {
+        calls.push(effort);
+        return Promise.resolve(NEWS);
+      },
+    });
+  }
+
+  it('passes the configured level on a check', async () => {
+    const calls: (string | undefined)[] = [];
+    await createCodexCliProvider({ runner: recordingRunner(calls), effort: 'high' }).checkTopic('fusion', [], null);
+    expect(calls).toEqual(['high']);
+  });
+
+  it('sends nothing when no level is set', async () => {
+    // '' is "provider default" — the flag must be absent rather than empty, or
+    // Codex would be told to reason at a level called "".
+    const calls: (string | undefined)[] = [];
+    await createCodexCliProvider({ runner: recordingRunner(calls) }).checkTopic('fusion', [], null);
+    expect(calls).toEqual(['']);
+  });
+
+  it('reports the level on the provider, so the run log records it', () => {
+    // `CheckRunner` stores `provider.effort` against the run (NEWS-226). Left
+    // hardcoded at '' — as it was — every Codex check logs as "no effort set"
+    // however hard it actually worked.
+    expect(createCodexCliProvider({ runner: fakeRunner(), effort: 'xhigh' }).effort).toBe('xhigh');
+    expect(createCodexCliProvider({ runner: fakeRunner() }).effort).toBe('');
+  });
+
+  it('does not spend effort on topic discovery', async () => {
+    // Same rule as the other providers: the setting is about how hard a *check*
+    // works, and discovery already runs on a cheap model because it produces a
+    // suggestion list rather than a news lookup.
+    const calls: (string | undefined)[] = [];
+    const runner = fakeRunner({
+      run: (_s, _p, _m, _schema, effort) => {
+        calls.push(effort);
+        return Promise.resolve(JSON.stringify({ suggestions: [] }));
+      },
+    });
+    await createCodexCliProvider({ runner, effort: 'max' }).suggestTopics({
+      scope: { kind: 'describe', query: '' },
+      exclude: [],
+    });
+    expect(calls).toEqual([undefined]);
+  });
+
+  it('offers only levels Codex accepts', () => {
+    // The server validates the value and names its set:
+    //   Invalid value: 'bogus'. Supported values are: 'none', 'minimal', 'low',
+    //   'medium', 'high', 'xhigh', and 'max'.
+    // Every level this app offers is in it, so the value passes through with no
+    // mapping — and this test fails if a future level is added that isn't.
+    const CODEX_ACCEPTS = ['none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max'];
+    for (const level of EFFORT_LEVELS.filter((l) => l !== '')) {
+      expect(CODEX_ACCEPTS, level).toContain(level);
+    }
   });
 });

@@ -224,9 +224,9 @@ test('the effort dropdown persists, and is disabled off the Anthropic provider (
   await page.goto('/');
   await openSettingsTab(page, 'Source');
 
-  // Anthropic is the only provider that takes an effort parameter today, so the
-  // control is disabled elsewhere rather than hidden — a control that vanishes
-  // reads as a bug.
+  // Three providers take an effort parameter — the Anthropic API and both CLI
+  // agents — so the control is disabled only on the OpenAI API provider, and
+  // disabled rather than hidden, because a control that vanishes reads as a bug.
   await page.selectOption('[data-action=provider]', 'anthropic');
   const effort = page.locator('[data-action=effort]');
   await expect(effort).toBeEnabled();
@@ -1462,21 +1462,28 @@ test('a subscription provider never asks for an API key it does not use (NEWS-24
   const status = page.locator('.source-status');
   await expect(status).not.toContainText('no API key');
 
-  // Effort is Anthropic-only, so the control is disabled here. Reported as
-  // "effort popup doesn't work — nothing pops up", which is exactly what a
-  // disabled select looks like when nothing on the page says why. A `title`
-  // tooltip was the only explanation and is unreachable on a disabled control.
   // Effort IS available on the Claude subscription — `claude --effort <level>`
-  // takes the same levels the API does (NEWS-239). This used to be disabled here
-  // on the false premise that the CLI providers accept no such parameter.
+  // takes the same levels the API does (NEWS-239). It was disabled here on the
+  // false premise that the CLI providers accept no such parameter, and reported
+  // as "effort popup doesn't work — nothing pops up", which is exactly what a
+  // disabled select looks like when nothing on the page says why.
   const effort = page.locator('[data-action=effort]');
   await expect(effort).toBeEnabled();
   await expect(page.locator('.effort-note')).toBeEmpty();
 
-  // Codex is the provider that genuinely takes none, so the disabled state and
-  // its explanation are asserted there instead.
+  // Codex takes one too (NEWS-244) — `-c model_reasoning_effort=<level>`, which
+  // its `--help` never mentions because it rides the generic config override.
+  // This spec asserted the opposite an hour ago, on the same reasoning that was
+  // already wrong about Claude Code.
   await page.locator('[data-action=provider]').selectOption('codex-cli');
   await expect(page.locator('[data-action=provider]')).toHaveValue('codex-cli', { timeout: 15_000 });
+  await expect(effort).toBeEnabled();
+  await expect(page.locator('.effort-note')).toBeEmpty();
+
+  // The OpenAI API provider is the one left, and it is a gap rather than a
+  // decision: `reasoning.effort` exists there and we do not send it. So the
+  // disabled state and its explanation are asserted here.
+  await page.locator('[data-action=provider]').selectOption('openai');
   await expect(effort).toBeDisabled();
   const note = page.locator('.effort-note');
   await expect(note).toContainText('Anthropic');
