@@ -197,40 +197,54 @@ describe('looksLikeEffortRejection (NEWS-245)', () => {
   });
 
   /**
-   * Two errors captured from the **real** OpenAI API, through the Codex CLI's
-   * ChatGPT-subscription path — this repo has no OpenAI key, so these are the
-   * only first-hand samples available.
+   * Errors captured from the **real OpenAI API**, through the SDK this provider
+   * actually uses — so these are the objects `looksLikeEffortRejection` will be
+   * handed in production, not an approximation of them.
    *
-   * They matter because the predicate was otherwise written from guesses about
-   * someone else's API, which is precisely the move that has been wrong twice
-   * this week (NEWS-239, NEWS-244).
-   *
-   * **Still unverified:** a genuine "this model does not do reasoning" refusal.
-   * A ChatGPT subscription rejects non-reasoning models *before* the parameter
-   * is evaluated (second case below), so that response cannot be reached from
-   * here at all. The evidence for the positive case is indirect: OpenAI names
-   * the offending parameter in the message, as the first case shows.
+   * They replace guesses. The predicate was originally written from an assumed
+   * error shape because there was no key on this machine, which is the same
+   * move that was wrong twice earlier in the week (NEWS-239, NEWS-244). A
+   * temporary key settled it: both branches are now pinned to verbatim
+   * responses, and the whole path was exercised end to end — a real
+   * `checkTopic` with `effort: 'high'` against `gpt-4o`, a model that cannot
+   * take it, returned two real stories in 7 seconds by falling back.
    */
   describe('against errors captured from the live API', () => {
-    it('matches a real complaint about reasoning.effort', () => {
-      // Verbatim, from `codex exec -c model_reasoning_effort=bogus`. An invalid
-      // *value* rather than an unsupported parameter — but it establishes the
-      // thing the predicate depends on: a reasoning-parameter error says so in
-      // the message, in a form a substring match finds.
+    it('matches the real refusal, as the SDK throws it', () => {
+      // Verbatim from `openai` SDK `BadRequestError`, `POST /v1/responses` with
+      // `model: gpt-4o, reasoning: { effort: 'high' }`. A control request
+      // without the parameter succeeded on the same key and model, so this is
+      // the parameter being refused and not the model being unavailable.
       const real = {
         status: 400,
+        param: 'reasoning.effort',
+        code: 'unsupported_parameter',
         type: 'invalid_request_error',
-        message:
-          "[ReasoningEffortParam] [reasoning.effort] [invalid_enum_value] Invalid value: 'bogus'. Supported values are: 'none', 'minimal', 'low', 'medium', 'high', 'xhigh', and 'max'.",
+        message: "400 Unsupported parameter: 'reasoning.effort' is not supported with this model.",
       };
       expect(looksLikeEffortRejection(real)).toBe(true);
     });
 
-    it('does not match a real 400 about the model itself', () => {
-      // Verbatim, from `codex exec -m gpt-4o`. A 400 that has nothing to do with
-      // reasoning, and the case the narrowness exists for: dropping effort would
-      // not make an unsupported model supported, so retrying would cost a second
-      // identical failure and bury the real message under it.
+    it('does not match a real 400 about something else', () => {
+      // Verbatim from the same endpoint and key with `max_output_tokens: 1`.
+      // A genuine 400 with a genuine `param`, and nothing to do with reasoning —
+      // the case the narrowness exists for. Retrying it would send the identical
+      // bad request again and bury the real message under a second copy.
+      const real = {
+        status: 400,
+        param: 'max_output_tokens',
+        code: 'integer_below_min_value',
+        type: 'invalid_request_error',
+        message: "400 Invalid 'max_output_tokens': integer below minimum value. Expected a value >= 16, but got 1 instead.",
+      };
+      expect(looksLikeEffortRejection(real)).toBe(false);
+    });
+
+    it('does not match the Codex account gate', () => {
+      // From `codex exec -m gpt-4o`. Reached while trying to produce the
+      // refusal above without a key — a ChatGPT subscription offers reasoning
+      // models only and rejects the rest *before* the parameter is evaluated,
+      // which is why that route could never answer the question.
       const real = {
         status: 400,
         type: 'invalid_request_error',

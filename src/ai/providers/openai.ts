@@ -44,27 +44,24 @@ export interface OpenAIRunner {
  * the inversion — see `usesLegacyRequestShape`, which enumerates exceptions so
  * anything newer gets the modern treatment by default.
  *
- * Here even the inversion would be a claim about someone else's API. There is
- * no OpenAI key on this machine, so two errors were captured through the Codex
- * CLI's ChatGPT-subscription path instead (pinned in `openai.test.ts`):
+ * Written first from a guess, because there was no OpenAI key here — and then
+ * **verified against the live API** with a temporary one. Both branches are
+ * pinned to verbatim responses in `openai.test.ts`, and the whole path was run
+ * end to end: a real `checkTopic` with `effort: 'high'` against `gpt-4o`, a
+ * model that cannot take it, returned two real stories in seven seconds by
+ * falling back.
  *
- *   400 "[ReasoningEffortParam] [reasoning.effort] [invalid_enum_value] …"
- *   400 "The 'gpt-4o' model is not supported when using Codex with a ChatGPT account."
+ * What the API actually sends, through the SDK this provider uses:
  *
- * The first shows that a reasoning-parameter error **names the parameter in the
- * message**, which is what this match relies on. The second is a real 400 with
- * nothing to do with reasoning, and confirms the narrowness earns its keep.
+ *   BadRequestError  status 400
+ *   param   "reasoning.effort"
+ *   code    "unsupported_parameter"
+ *   message "400 Unsupported parameter: 'reasoning.effort' is not supported
+ *            with this model."
  *
- * **What is still unverified is the case this exists for**: a genuine "this
- * model does not do reasoning" refusal. A ChatGPT subscription rejects a
- * non-reasoning model *before* the parameter is evaluated — confirmed against
- * `gpt-4o`, `gpt-4o-mini`, `gpt-4.1`, `gpt-5-chat-latest` and
- * `gpt-5.1-chat-latest`, all of which answer "not supported when using Codex
- * with a ChatGPT account". Codex offers reasoning models only, so this route
- * cannot produce the response at all; closing the gap needs an OpenAI API key. Hence asserting nothing about which models
- * qualify — ask the API, believe the answer, and if the guess about the
- * rejection shape is wrong the cost is one un-retried check with a clear error
- * rather than a silently wrong request forever.
+ * A control request without the parameter succeeded on the same key and model,
+ * so that is the parameter being refused rather than the model being
+ * unavailable.
  *
  * Deliberately narrow. A 400 that says nothing about reasoning is a real error
  * — a bad key, a bad model, a malformed prompt — and retrying those would
