@@ -98,6 +98,28 @@ const appBundle = path.join(projectRoot, 'dist/client/app.global.js');
 let covFileCounter = 0;
 
 /**
+ * Write a failure diagnostic into the test's own output directory (NEWS-238).
+ *
+ * **Not `testInfo.attach()`, which silently does nothing here.** Attaching from
+ * a fixture teardown reports success — the promise resolves, no error — and the
+ * attachment never reaches the report or `test-results/`. That is why the last
+ * round's console capture "came back empty": it was never written, and I read
+ * an absent file as an absent problem, which cost a whole CI cycle.
+ *
+ * A plain file in `outputPath()` has no such timing: `test-results/` is what CI
+ * uploads, so whatever lands here is in the artifact. Failures to write are
+ * swallowed for the same reason the `evaluate` above is — a diagnostic must
+ * never replace the failure it exists to explain.
+ */
+function writeDiagnostic(name: string, body: string): void {
+  try {
+    fs.writeFileSync(test.info().outputPath(name), body);
+  } catch {
+    // Nothing useful to do about it, and nothing worth failing the run over.
+  }
+}
+
+/**
  * Test fixture that collects browser V8 JS coverage for the app bundle when
  * E2E_COVERAGE=1 (set by scripts/test-all.sh). Entries are rewritten from the
  * served URL to the built bundle's file:// path and written in
@@ -144,7 +166,7 @@ export const test = base.extend({
     const pageErrors: Error[] = [];
     page.on('pageerror', (err) => pageErrors.push(err));
 
-    // Console output, attached to the report on failure (NEWS-238).
+    // Console output, written beside the failure (NEWS-238).
     //
     // Two CI failures were diagnosed from artifacts that contained no console
     // at all: the trace records network, DOM snapshots and steps, but Playwright
@@ -153,8 +175,10 @@ export const test = base.extend({
     // and nowhere else, so precisely the diagnostics built to explain a
     // misbehaving morph were the ones being thrown away.
     //
-    // Kept in memory and attached only when the test fails, so a green run pays
-    // nothing and a red one carries the evidence.
+    // Kept in memory and written only when the test fails, so a green run pays
+    // nothing and a red one carries the evidence. Written as a file rather than
+    // attached — see `writeDiagnostic`, and note that the *first* attempt at
+    // this used `attach()` and produced nothing at all.
     const consoleLines: string[] = [];
     page.on('console', (msg) => {
       consoleLines.push(`[${msg.type()}] ${msg.text()}`);
@@ -184,29 +208,24 @@ export const test = base.extend({
 
     await use(page);
 
-    const failed = test.info().status !== test.info().expectedStatus;
-    if (failed && consoleLines.length > 0) {
-      await test.info().attach('console.log', {
-        body: consoleLines.join('\n'),
-        contentType: 'text/plain',
-      });
-    }
-    if (failed) {
+    const info = test.info();
+    if (info.status !== info.expectedStatus) {
       // Best-effort: the page may already be closing, and a diagnostic must
       // never turn a real failure into a confusing one of its own.
       const visibility = await page
         .evaluate(() => ({ state: document.visibilityState, focused: document.hasFocus() }))
         .catch(() => null);
       const gaps = polls.slice(1).map((t, i) => t - (polls[i] ?? 0));
-      await test.info().attach('poll-timeline.txt', {
-        body: [
+      writeDiagnostic(
+        'poll-timeline.txt',
+        [
           `visibility: ${JSON.stringify(visibility)}`,
           `/api/state responses: ${String(polls.length)} over ${String(Date.now() - started)}ms`,
           `largest gap: ${String(Math.max(0, ...gaps))}ms`,
           `offsets: ${polls.join(', ')}`,
         ].join('\n'),
-        contentType: 'text/plain',
-      });
+      );
+      writeDiagnostic('console.log', consoleLines.join('\n') || '(the page logged nothing)');
     }
     expect(pageErrors.map((e) => e.message), 'uncaught errors in the page').toEqual([]);
     if (collect) {
