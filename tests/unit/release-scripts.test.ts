@@ -1126,6 +1126,53 @@ describe('the notarization safeguards are on the job that needs them (NEWS-234)'
   });
 });
 
+describe('the Windows diagnostic workflow stays a diagnostic (NEWS-238)', () => {
+  const read = (rel: string): string => fs.readFileSync(path.join(root, rel), 'utf8');
+  const FILE = '.github/workflows/windows-e2e-diagnostic.yml';
+
+  it('exists and runs only when asked', () => {
+    // On-demand only. A diagnostic that fires on push becomes a check people
+    // start ignoring, and this one is *expected* to go red — that is its job.
+    const src = read(FILE);
+    expect(src).toContain('workflow_dispatch:');
+    expect(src, 'must not run on push').not.toMatch(/^\s{2}push:/m);
+    expect(src, 'must not run on a schedule').not.toMatch(/^\s{2}schedule:/m);
+  });
+
+  it('is referenced by no other workflow', () => {
+    // Nothing may come to depend on it. The moment something does, a red
+    // diagnostic starts blocking real work, which is the opposite of the point.
+    for (const wf of fs.readdirSync(path.join(root, '.github/workflows'))) {
+      if (wf === path.basename(FILE)) continue;
+      const other = read(`.github/workflows/${wf}`);
+      expect(other, `${wf} should not reference the diagnostic`).not.toContain('windows-e2e-diagnostic');
+    }
+  });
+
+  it('defaults to no retries, so the first-attempt failure rate is visible', () => {
+    // Retries are what let this bug pass as "one flaky test" for two releases:
+    // a test that fails then passes reports the suite green. The diagnostic
+    // exists to count first attempts.
+    const src = read(FILE);
+    const retries = /description: 'Playwright retries[^']*'\s+type: choice\s+default: '(\d)'/.exec(src);
+    expect(retries?.[1], 'retries should default to 0').toBe('0');
+  });
+
+  it('keeps artifacts from passing runs too', () => {
+    // `always()`, not `failure()`. A green run's console is the baseline the red
+    // one is read against, and this failure only shows up by comparison.
+    const src = read(FILE);
+    const upload = src.slice(src.indexOf('Upload report, traces and console'));
+    expect(upload).toContain('if: always()');
+  });
+
+  it('does not stop early when one attempt fails', () => {
+    // The output is a *rate*. `fail-fast` would cancel the remaining samples the
+    // moment the first one failed, which is precisely the data being collected.
+    expect(read(FILE)).toContain('fail-fast: false');
+  });
+});
+
 describe('advisory jobs cannot silently stop gating a release (NEWS-234)', () => {
   const read = (rel: string): string => fs.readFileSync(path.join(root, rel), 'utf8');
   const WORKFLOWS = [

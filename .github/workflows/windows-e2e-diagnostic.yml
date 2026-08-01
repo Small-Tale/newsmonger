@@ -1,0 +1,99 @@
+name: Windows E2E (diagnostic)
+
+# Run the E2E suite on Windows on demand, several times over, to chase a failure
+# that only happens there (NEWS-238).
+#
+# **Why this exists.** Two tests fail on `windows-latest` and on nothing else —
+# not macOS, not a quiet Windows VM, where the whole suite passes 181/181 three
+# times running. Until now the only way to exercise that environment was to cut
+# a beta, which publishes to npm and creates a GitHub release. Using the release
+# channel as a debugger is slow, noisy, and makes every experiment a public act.
+#
+# This is deliberately **not** wired into any other workflow. It gates nothing,
+# nothing depends on it, and it only runs when someone asks. A red result here
+# is information, not a broken build.
+#
+#   gh workflow run windows-e2e-diagnostic.yml
+#   gh workflow run windows-e2e-diagnostic.yml -f attempts=5 -f grep='clamped to the default'
+#   gh workflow run windows-e2e-diagnostic.yml -f os=ubuntu-latest   # is it Windows at all?
+
+on:
+  workflow_dispatch:
+    inputs:
+      attempts:
+        description: 'Independent runners to launch (a failure *rate*, not a yes/no)'
+        type: choice
+        default: '3'
+        options: ['1', '2', '3', '5']
+      grep:
+        description: 'Playwright -g filter. Empty runs the whole suite, which is how the bug shows up.'
+        type: string
+        default: ''
+      os:
+        description: 'Runner. ubuntu/macos are controls — the bug should not appear there.'
+        type: choice
+        default: 'windows-latest'
+        options: ['windows-latest', 'ubuntu-latest', 'macos-latest']
+      retries:
+        description: 'Playwright retries. 0 shows the true first-attempt failure rate.'
+        type: choice
+        default: '0'
+        options: ['0', '1']
+
+concurrency:
+  # Diagnostics are cheap to re-request and there is no reason to queue them
+  # behind each other, but two dispatches of the *same* inputs racing would just
+  # muddy the sample.
+  group: windows-e2e-diagnostic-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  NODE_VERSION: '22'
+
+jobs:
+  # A matrix of *independent* runners rather than a loop on one, because the
+  # question is "how often does this fail", and repeated runs on a single
+  # machine share its load, its cache and its luck. Separate runners are
+  # separate samples.
+  attempt:
+    name: ${{ inputs.os }} attempt ${{ matrix.attempt }}
+    runs-on: ${{ inputs.os }}
+    # Never let one slow attempt cancel the others — a partial sample is worse
+    # than a slow one when the whole point is a rate.
+    strategy:
+      fail-fast: false
+      matrix:
+        attempt: ${{ fromJSON(inputs.attempts == '1' && '[1]' || inputs.attempts == '2' && '[1,2]' || inputs.attempts == '3' && '[1,2,3]' || '[1,2,3,4,5]') }}
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+      - run: npm ci
+      - run: npm run build:client
+      - run: npx playwright install chromium
+
+      # `--retries` from the input, defaulting to 0: with retries on, a test that
+      # fails and passes on the second go reports the suite green, which is
+      # exactly how this failure stayed invisible as "one flaky test".
+      - name: Run the suite
+        shell: bash
+        run: |
+          ARGS=(--retries="${{ inputs.retries }}")
+          if [ -n "${{ inputs.grep }}" ]; then ARGS+=(-g "${{ inputs.grep }}"); fi
+          echo "npx playwright test ${ARGS[*]}"
+          npx playwright test "${ARGS[@]}"
+
+      # `always()`, not `failure()`: a *passing* diagnostic run is evidence too,
+      # and its console output is the baseline the failing one is read against.
+      - name: Upload report, traces and console
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: diagnostic-${{ inputs.os }}-attempt-${{ matrix.attempt }}
+          path: |
+            playwright-report/
+            test-results/
+          retention-days: 14
