@@ -57,8 +57,11 @@ export interface OpenAIRunner {
  *
  * **What is still unverified is the case this exists for**: a genuine "this
  * model does not do reasoning" refusal. A ChatGPT subscription rejects a
- * non-reasoning model *before* the parameter is evaluated, so that response
- * cannot be reached from here. Hence asserting nothing about which models
+ * non-reasoning model *before* the parameter is evaluated — confirmed against
+ * `gpt-4o`, `gpt-4o-mini`, `gpt-4.1`, `gpt-5-chat-latest` and
+ * `gpt-5.1-chat-latest`, all of which answer "not supported when using Codex
+ * with a ChatGPT account". Codex offers reasoning models only, so this route
+ * cannot produce the response at all; closing the gap needs an OpenAI API key. Hence asserting nothing about which models
  * qualify — ask the API, believe the answer, and if the guess about the
  * rejection shape is wrong the cost is one un-retried check with a clear error
  * rather than a silently wrong request forever.
