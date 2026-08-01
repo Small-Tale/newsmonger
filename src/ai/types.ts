@@ -260,12 +260,25 @@ export const PROVIDER_INFO: Record<ProviderName, { label: string; endpointConfig
  * configuration field". The values need no mapping either — every level in
  * `EFFORT_LEVELS` is in the set the server accepts.
  *
- * The one provider still absent is **`openai`**, which has `reasoning.effort`
- * on the Responses API and does not pass it. That is a gap, not a decision, and
- * a smaller one than it looks: effort applies only to reasoning models, so
- * sending it is not unconditionally safe the way it is for the two CLIs.
+ * **All four now take one** (NEWS-245 closed the last gap). OpenAI is the awkward
+ * case: `reasoning.effort` on the Responses API applies only to *reasoning*
+ * models, and unlike the CLIs this provider accepts any model id and can point
+ * at a gateway via `OPENAI_BASE_URL` — so nothing here can know whether a given
+ * model qualifies. It sends the level and, if the API rejects the request *for
+ * that reason*, retries once without it and remembers. See
+ * `looksLikeEffortRejection`: guessing which models qualify would be a claim
+ * about someone else's API, which is what went wrong the first two times.
+ *
+ * **`auto` is here too, and only because every provider it can resolve to takes
+ * one** — `AUTO_ORDER` and this list now coincide. That is a fact about today
+ * rather than a principle, so `effort.test.ts` pins the relationship: add a
+ * provider to `AUTO_ORDER` that ignores effort and the test fails rather than
+ * the control quietly lying about what a check will do.
+ *
+ * That leaves `mock` as the only entry outside, which is right — it is the
+ * deterministic test provider and has no model to work harder.
  */
-export const EFFORT_PROVIDERS = ['anthropic', 'claude-cli', 'codex-cli'] as const;
+export const EFFORT_PROVIDERS = ['auto', 'anthropic', 'claude-cli', 'codex-cli', 'openai'] as const;
 
 /** Whether this provider does anything with the effort setting. */
 export function providerTakesEffort(name: ProviderName): boolean {

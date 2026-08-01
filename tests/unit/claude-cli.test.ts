@@ -264,11 +264,23 @@ describe('providerTakesEffort (NEWS-239)', () => {
     expect(providerTakesEffort('codex-cli')).toBe(true);
   });
 
-  it('excludes the OpenAI API provider, which does not pass one yet', () => {
-    // A gap rather than a decision, and a smaller one than it looks: the
-    // Responses API's `reasoning.effort` applies only to reasoning models, so
-    // sending it is not unconditionally safe the way it is for the two CLIs.
-    expect(providerTakesEffort('openai')).toBe(false);
+  it('includes the OpenAI API provider (NEWS-245)', () => {
+    // The last gap. It is the awkward one — `reasoning.effort` applies only to
+    // reasoning models, and this provider accepts any model id and can point at
+    // a gateway — so it sends the level and retries without it if the API says
+    // no, rather than carrying a list of which models qualify.
+    expect(providerTakesEffort('openai')).toBe(true);
+  });
+
+  it('includes `auto`, since every provider it resolves to takes one', () => {
+    // Not a principle — a fact about today. `effort.test.ts` pins it, so adding
+    // a provider to AUTO_ORDER that ignores effort fails a test rather than
+    // leaving the control quietly lying about what a check will do.
+    expect(providerTakesEffort('auto')).toBe(true);
+  });
+
+  it('excludes only the mock provider', () => {
+    // Test-only and deterministic: there is no model to work harder.
     expect(providerTakesEffort('mock')).toBe(false);
   });
 });

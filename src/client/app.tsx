@@ -1907,19 +1907,19 @@ function settingsPanelJsx(s: AppState): SafeHtml {
           </select>
         </label>
 
-        {/* Not every provider takes one, and which do is `providerTakesEffort`.
-            Only the OpenAI API provider is left out now: it has
-            `reasoning.effort`, we don't pass it, and effort applies only to
-            reasoning models — so unlike the two CLIs it isn't unconditionally
-            safe to send.
+        {/* Which providers take one is `providerTakesEffort`. **All of them do
+            now**, except the test-only `mock` — so the disabled state is nearly
+            unreachable, and that is the point: this comment used to claim the
+            CLI providers "take no such parameter at all", which was untrue three
+            times over. Claude Code has `--effort <level>` (NEWS-239); Codex takes
+            `-c model_reasoning_effort=<level>`, invisible in its `--help`
+            because it rides the generic config override (NEWS-244); and the
+            OpenAI Responses API has `reasoning.effort`, which we now send and
+            drop again if the model says no (NEWS-245).
 
-            Both CLI agents take one. This comment claimed they "take no such
-            parameter at all", which was untrue twice over: Claude Code has
-            `--effort <level>` with the very same levels (NEWS-239), and Codex
-            takes `-c model_reasoning_effort=<level>` (NEWS-244) — invisible in
-            its `--help` because it rides the generic config override, which is
-            exactly why "the help doesn't mention it" was never evidence. Check
-            the tool before writing that a tool can't.
+            Each time the evidence was an *absence* — a flag not in a help text,
+            a parameter we had not wired. Check the tool before writing that a
+            tool can't.
 
             Disabled rather than hidden — a control that vanishes reads as a bug
             (NEWS-189).
@@ -1957,9 +1957,8 @@ function settingsPanelJsx(s: AppState): SafeHtml {
             ''
           ) : (
             <p class="note">
-              {PROVIDER_INFO[s.settings.provider].label} takes no effort setting, so this is switched off. It applies
-              to the <strong>Anthropic API</strong>, <strong>Claude subscription</strong> and{' '}
-              <strong>ChatGPT subscription</strong> providers.
+              {PROVIDER_INFO[s.settings.provider].label} takes no effort setting, so this is switched off. Every other
+              provider accepts one.
             </p>
           )}
         </div>

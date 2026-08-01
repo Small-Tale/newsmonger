@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import type { RunOptions } from '../../src/ai/providers/anthropic.js';
 import { createAnthropicProvider, messageParams } from '../../src/ai/providers/anthropic.js';
+import { AUTO_ORDER, providerTakesEffort } from '../../src/ai/types.js';
 
 /**
  * The effort setting (NEWS-189).
@@ -116,5 +117,19 @@ describe('null and empty effort mean different things (NEWS-226)', () => {
     expect(CheckRunSchema.parse(base).effort).toBe(null);
     expect(CheckRunSchema.parse({ ...base, effort: '' }).effort).toBe('');
     expect(CheckRunSchema.parse({ ...base, effort: 'low' }).effort).toBe('low');
+  });
+});
+
+describe('the effort list and AUTO_ORDER agree (NEWS-245)', () => {
+  it('every provider `auto` can resolve to accepts an effort level', () => {
+    // `auto` enables the control, which is a promise that the setting reaches
+    // whatever actually runs. That holds today because AUTO_ORDER and
+    // EFFORT_PROVIDERS coincide — a coincidence, not a law. Adding a provider
+    // to AUTO_ORDER that ignores effort should fail here rather than leave the
+    // control lying about what a check will do.
+    for (const name of AUTO_ORDER) {
+      expect(providerTakesEffort(name), `${name} is in AUTO_ORDER`).toBe(true);
+    }
+    expect(providerTakesEffort('auto')).toBe(true);
   });
 });

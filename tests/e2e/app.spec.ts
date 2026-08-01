@@ -220,13 +220,13 @@ test('the provider picker persists a choice across reload', async ({ page }) => 
   await closeSettings(page);
 });
 
-test('the effort dropdown persists, and is disabled off the Anthropic provider (NEWS-189)', async ({ page }) => {
+test('the effort dropdown persists, and is disabled only where it does nothing (NEWS-189)', async ({ page }) => {
   await page.goto('/');
   await openSettingsTab(page, 'Source');
 
-  // Three providers take an effort parameter — the Anthropic API and both CLI
-  // agents — so the control is disabled only on the OpenAI API provider, and
-  // disabled rather than hidden, because a control that vanishes reads as a bug.
+  // Every real provider takes an effort parameter as of NEWS-245, so the only
+  // one left disabled is the test-only `mock`. Disabled rather than hidden,
+  // because a control that vanishes reads as a bug.
   await page.selectOption('[data-action=provider]', 'anthropic');
   const effort = page.locator('[data-action=effort]');
   await expect(effort).toBeEnabled();
@@ -237,7 +237,7 @@ test('the effort dropdown persists, and is disabled off the Anthropic provider (
   await openSettingsTab(page, 'Source');
   await expect(page.locator('[data-action=effort]')).toHaveValue('max');
 
-  await page.selectOption('[data-action=provider]', 'openai');
+  await page.selectOption('[data-action=provider]', 'mock');
   await expect(page.locator('[data-action=effort]')).toBeDisabled();
 
   // Reset for later tests, which build on this state.
@@ -1500,14 +1500,22 @@ test('a subscription provider never asks for an API key it does not use (NEWS-24
   await expect(effort).toBeEnabled();
   await expect(page.locator('.effort-note')).toBeEmpty();
 
-  // The OpenAI API provider is the one left, and it is a gap rather than a
-  // decision: `reasoning.effort` exists there and we do not send it. So the
-  // disabled state and its explanation are asserted here.
+  // OpenAI takes one as well now (NEWS-245) — `reasoning.effort` on the
+  // Responses API, sent and dropped again if the model turns out not to do
+  // reasoning. So all four real providers are enabled, and this spec has now
+  // asserted the opposite about three of them in turn.
   await page.locator('[data-action=provider]').selectOption('openai');
+  await expect(effort).toBeEnabled();
+  await expect(page.locator('.effort-note')).toBeEmpty();
+
+  // `mock` is the only provider left that takes none — deterministic and
+  // test-only, with no model to work harder — so the disabled state and its
+  // explanation are asserted there.
+  await page.locator('[data-action=provider]').selectOption('mock');
+  await expect(page.locator('[data-action=provider]')).toHaveValue('mock', { timeout: 15_000 });
   await expect(effort).toBeDisabled();
   const note = page.locator('.effort-note');
-  await expect(note).toContainText('Anthropic');
-  await expect(note).toContainText('ChatGPT subscription');
+  await expect(note).toContainText('takes no effort setting');
 
   // And it must *look* disabled (NEWS-239, reopened). Styling these controls
   // removes the browser's own greying, so `disabled` alone renders identically

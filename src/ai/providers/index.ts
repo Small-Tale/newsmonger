@@ -38,6 +38,7 @@ export const FACTORIES: Record<ConcreteProviderName, ProviderFactory> = {
   openai: (c) =>
     createOpenAIProvider({
       model: c.model !== '' ? c.model : undefined,
+      effort: c.effort,
       baseURL: c.endpoint !== '' ? c.endpoint : process.env['OPENAI_BASE_URL'],
     }),
   mock: () => createMockProvider(),
