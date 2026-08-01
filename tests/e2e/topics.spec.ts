@@ -362,6 +362,14 @@ test('the high-priority interval is clamped to the default (NEWS-56)', async ({ 
   // So the number is headroom for a starved runner, not cover for a bug: typical
   // is ~250 ms, and a real regression — a clamp that never arrives — fails at any
   // timeout, because the value simply never changes.
+  //
+  // **The window must stay below the test's own budget.** `playwright.config.ts`
+  // sets `timeout: 30_000` for the whole test, so a 30 s expect window can never
+  // be exhausted — the test dies first and reports "Test timeout exceeded"
+  // instead of naming the assertion that failed. That is what v0.2.0-beta.8's
+  // Windows run produced, and it cost real time to read. `test.slow()` triples
+  // the *test* budget, which is what makes a long expect window usable at all.
+  test.slow();
   const SETTLE = { timeout: 30_000 };
   const HOUR = 60 * 60 * 1000;
 
