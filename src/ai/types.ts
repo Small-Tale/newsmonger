@@ -212,7 +212,14 @@ export type ConcreteProviderName = Exclude<ProviderName, 'auto'>;
  */
 export const PROVIDER_MODELS: Record<ProviderName, readonly string[]> = {
   auto: [],
-  'claude-cli': ['claude-opus-4-8', 'claude-sonnet-5', 'claude-haiku-4-5'],
+  // Aliases, not full names (NEWS-243). `claude --model` documents them first —
+  // "an alias for the latest model (e.g. 'fable', 'opus', or 'sonnet') or a
+  // model's full name" — and an alias cannot go stale: `opus` follows whatever
+  // the newest Opus is, whereas the pinned `claude-opus-4-8` this used to offer
+  // had already been superseded and was suggesting an older model by name.
+  // The field stays free text, so a full name still works for anyone who wants
+  // to pin one.
+  'claude-cli': ['opus', 'sonnet', 'haiku', 'fable'],
   'codex-cli': ['gpt-5', 'gpt-5-mini', 'o3'],
   anthropic: ['claude-opus-4-8', 'claude-opus-4-7', 'claude-sonnet-5', 'claude-haiku-4-5'],
   openai: ['gpt-5', 'gpt-5-mini', 'o3', 'o4-mini'],
@@ -236,6 +243,28 @@ export const PROVIDER_INFO: Record<ProviderName, { label: string; endpointConfig
  * schemas reference it, and those are parsed by the browser client too — which
  * must not pull `node:child_process` into its bundle.
  */
+/**
+ * Providers that accept an effort level (NEWS-239).
+ *
+ * The Claude Code CLI takes `--effort <level>` with exactly the levels in
+ * `EFFORT_LEVELS`, so a subscription user gets the same control an API-key user
+ * does. This list was previously *implicit* — the UI hardcoded
+ * `provider === 'anthropic'` — and the note beside the control asserted that the
+ * CLI providers "take no such parameter at all", which was simply untrue.
+ *
+ * Codex is absent on purpose rather than by oversight: it has no `--effort`
+ * flag, and while a `-c key=value` override may exist its help documents no such
+ * key. Guessing one would either be silently ignored or rejected, and a setting
+ * that appears to work and does nothing is worse than one that says it doesn't
+ * apply. Tracked separately.
+ */
+export const EFFORT_PROVIDERS = ['anthropic', 'claude-cli'] as const;
+
+/** Whether this provider does anything with the effort setting. */
+export function providerTakesEffort(name: ProviderName): boolean {
+  return (EFFORT_PROVIDERS as readonly string[]).includes(name);
+}
+
 export const KEYED_PROVIDERS = ['anthropic', 'openai'] as const;
 export type KeyedProvider = (typeof KEYED_PROVIDERS)[number];
 

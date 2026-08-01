@@ -5,6 +5,7 @@ import { buildSuggestPrompt, parseSuggestResult, SUGGEST_JSON_SCHEMA, suggestSys
 import type {
   CheckResult,
   ConcreteProviderName,
+  Effort,
   KnownItem,
   NewsProvider,
   SuggestRequest,
@@ -42,7 +43,14 @@ export interface ClaudeCliRunner {
    * rather than a constant because checks and topic discovery (NEWS-116) return
    * different shapes through the same CLI.
    */
-  run(system: string, prompt: string, model: string | undefined, schema: object): Promise<string>;
+  run(
+    system: string,
+    prompt: string,
+    model: string | undefined,
+    schema: object,
+    /** Effort level for `--effort`; '' or omitted leaves the CLI's default. */
+    effort?: Effort,
+  ): Promise<string>;
   /** Whether the CLI is installed and holds usable credentials. */
   available(): Promise<boolean>;
 }
@@ -110,7 +118,7 @@ function spawnRunner(name: string): ClaudeCliRunner {
     });
 
   return {
-    async run(system, prompt, model, schema) {
+    async run(system, prompt, model, schema, effort) {
       const args = [
         '-p',
         prompt,
@@ -126,6 +134,10 @@ function spawnRunner(name: string): ClaudeCliRunner {
         JSON.stringify(schema),
       ];
       if (model !== undefined && model !== '') args.push('--model', model);
+      // `claude --effort <level>` takes the same levels as the API's
+      // `output_config.effort`, so the setting means the same thing on both
+      // (NEWS-239). Omitted when unset, leaving the CLI's own default.
+      if (effort !== undefined && effort !== '') args.push('--effort', effort);
 
       const { code, stdout, stderr } = await exec(args, CHECK_TIMEOUT_MS);
       if (code !== 0) {
@@ -182,10 +194,11 @@ export async function hasSubscriptionCredentials(): Promise<boolean> {
  * scheduled runs only happen while the app is foregrounded (`src/attendance.ts`).
  */
 export function createClaudeCliProvider(
-  config: { model?: string; binary?: string; runner?: ClaudeCliRunner } = {},
+  config: { model?: string; binary?: string; effort?: Effort; runner?: ClaudeCliRunner } = {},
 ): NewsProvider {
   const runner = config.runner ?? spawnRunner(config.binary ?? 'claude');
   const model = config.model ?? '';
+  const effort = config.effort ?? '';
   // Discovery runs on a fast, cheap model unless the user chose one (NEWS-132).
   // The CLI owns its own thinking and web-search configuration, so unlike the
   // API provider there is no request shape to vary — only `--model` changes.
@@ -194,7 +207,7 @@ export function createClaudeCliProvider(
   return {
     name: 'claude-cli' satisfies ConcreteProviderName,
     model: model !== '' ? model : 'claude-code default',
-    effort: '',
+    effort,
     attended: true,
     isAvailable: () => runner.available(),
     async checkTopic(
@@ -208,6 +221,7 @@ export function createClaudeCliProvider(
         buildUserPrompt(topicName, known, sinceIso, context),
         model !== '' ? model : undefined,
         NEWS_JSON_SCHEMA,
+        effort,
       );
       // A subscription check spends plan quota, not metered dollars, and the
       // CLI reports no token counts — so usage is genuinely unknown, not zero.
@@ -219,6 +233,9 @@ export function createClaudeCliProvider(
         buildSuggestPrompt(request),
         discoveryModel !== '' ? discoveryModel : undefined,
         SUGGEST_JSON_SCHEMA,
+        // No effort here, matching the API provider (NEWS-226): the setting is
+        // about how hard a *check* works, and discovery already runs on a
+        // cheap model because it is a suggestion list, not a news lookup.
       );
       return { suggestions: parseSuggestResult(text), usage: null };
     },

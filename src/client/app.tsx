@@ -9,6 +9,7 @@ import {
   PROVIDER_INFO,
   PROVIDER_MODELS,
   PROVIDER_NAMES,
+  providerTakesEffort,
 } from '../ai/types.js';
 import type { TopicSuggestion } from '../api/schemas.js';
 import { MAX_DISCOVER_QUERY_LENGTH, MAX_TUNE_ROUNDS } from '../api/schemas.js';
@@ -1904,10 +1905,17 @@ function settingsPanelJsx(s: AppState): SafeHtml {
           </select>
         </label>
 
-        {/* Anthropic-only for now: the OpenAI Responses API has `reasoning.effort`
-            but the provider does not pass one yet, and the CLI providers take no
-            such parameter at all. Disabled rather than hidden — a control that
-            vanishes reads as a bug (NEWS-189).
+        {/* Not every provider takes one, and which do is `providerTakesEffort`.
+            The OpenAI Responses API has `reasoning.effort` but our provider does
+            not pass one yet, and Codex documents no equivalent key.
+
+            **Claude Code does** — `--effort <level>`, the very same levels. This
+            comment claimed the CLI providers "take no such parameter at all",
+            which was untrue, and the note below repeated it to the user
+            (NEWS-239). Check the tool before writing that a tool can't.
+
+            Disabled rather than hidden — a control that vanishes reads as a bug
+            (NEWS-189).
 
             **A `title` was not enough** (NEWS-240/239). It was the only
             explanation, and a tooltip on a *disabled* control is close to
@@ -1921,11 +1929,11 @@ function settingsPanelJsx(s: AppState): SafeHtml {
           <span class="field-label">Effort</span>
           <select
             data-action="effort"
-            disabled={s.settings.provider === 'anthropic' ? undefined : true}
+            disabled={providerTakesEffort(s.settings.provider) ? undefined : true}
             title={
-              s.settings.provider === 'anthropic'
+              providerTakesEffort(s.settings.provider)
                 ? 'How hard the model works on a check. Higher is slower and costs more.'
-                : 'Only the Anthropic provider takes an effort setting today.'
+                : 'This provider takes no effort setting.'
             }
           >
             {EFFORT_LEVELS.map((level) => (
@@ -1938,12 +1946,12 @@ function settingsPanelJsx(s: AppState): SafeHtml {
         {/* Always-present container, so the note appearing doesn't restructure
             its siblings (docs/3-ui.md). */}
         <div class="effort-note">
-          {s.settings.provider === 'anthropic' ? (
+          {providerTakesEffort(s.settings.provider) ? (
             ''
           ) : (
             <p class="note">
-              Effort applies to the <strong>Anthropic API</strong> provider only —{' '}
-              {PROVIDER_INFO[s.settings.provider].label} takes no such setting, so this is switched off.
+              {PROVIDER_INFO[s.settings.provider].label} takes no effort setting, so this is switched off. It
+              applies to the <strong>Anthropic API</strong> and <strong>Claude subscription</strong> providers.
             </p>
           )}
         </div>

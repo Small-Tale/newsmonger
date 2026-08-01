@@ -1466,11 +1466,21 @@ test('a subscription provider never asks for an API key it does not use (NEWS-24
   // "effort popup doesn't work — nothing pops up", which is exactly what a
   // disabled select looks like when nothing on the page says why. A `title`
   // tooltip was the only explanation and is unreachable on a disabled control.
+  // Effort IS available on the Claude subscription — `claude --effort <level>`
+  // takes the same levels the API does (NEWS-239). This used to be disabled here
+  // on the false premise that the CLI providers accept no such parameter.
   const effort = page.locator('[data-action=effort]');
+  await expect(effort).toBeEnabled();
+  await expect(page.locator('.effort-note')).toBeEmpty();
+
+  // Codex is the provider that genuinely takes none, so the disabled state and
+  // its explanation are asserted there instead.
+  await page.locator('[data-action=provider]').selectOption('codex-cli');
+  await expect(page.locator('[data-action=provider]')).toHaveValue('codex-cli', { timeout: 15_000 });
   await expect(effort).toBeDisabled();
   const note = page.locator('.effort-note');
   await expect(note).toContainText('Anthropic');
-  await expect(note).toContainText('Claude subscription');
+  await expect(note).toContainText('ChatGPT subscription');
 
   // And it must *look* disabled (NEWS-239, reopened). Styling these controls
   // removes the browser's own greying, so `disabled` alone renders identically

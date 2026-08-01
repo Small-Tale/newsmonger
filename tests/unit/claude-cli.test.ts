@@ -6,6 +6,8 @@ import { describe, expect, it } from 'vitest';
 
 import type { ClaudeCliRunner } from '../../src/ai/providers/claude-cli.js';
 import { createClaudeCliProvider, parseCliEnvelope } from '../../src/ai/providers/claude-cli.js';
+import type { Effort } from '../../src/ai/types.js';
+import { providerTakesEffort } from '../../src/ai/types.js';
 
 const NEWS = JSON.stringify({
   items: [
@@ -186,5 +188,85 @@ describe('spawned CLI agents get a neutral working directory (NEWS-219)', () => 
       const src = fs.readFileSync(path.join(process.cwd(), rel), 'utf8');
       expect(src, `${rel} should spawn with an explicit cwd`).toContain('cwd: agentCwd()');
     }
+  });
+});
+
+describe('effort reaches the CLI (NEWS-239)', () => {
+  /** Capture what the provider asks the runner for. */
+  function recording(): { runner: ClaudeCliRunner; calls: (Effort | undefined)[] } {
+    const calls: (Effort | undefined)[] = [];
+    return {
+      calls,
+      runner: {
+        run: (_s, _p, _m, _schema, effort) => {
+          calls.push(effort);
+          return Promise.resolve(NEWS);
+        },
+        available: () => Promise.resolve(true),
+      },
+    };
+  }
+
+  /**
+   * The bug this pins: the UI disabled the effort control for every provider
+   * except `anthropic`, and told the user the CLI providers "take no such
+   * parameter at all". `claude --effort <level>` exists and takes exactly the
+   * levels in `EFFORT_LEVELS` — so a subscription user was denied a setting
+   * their tool supports, on the strength of an assumption nobody checked.
+   */
+  it('passes the chosen level through to a check', async () => {
+    const { runner, calls } = recording();
+    const provider = createClaudeCliProvider({ runner, effort: 'high' });
+    await provider.checkTopic('Fusion', [], null);
+    expect(calls).toEqual(['high']);
+  });
+
+  it('reports the level it will use, so a run can record it', () => {
+    // `CheckRunner` reads `provider.effort` to store on the run (NEWS-226).
+    // Left at '' this would log every subscription check as "no effort set".
+    expect(createClaudeCliProvider({ runner: fakeRunner(), effort: 'max' }).effort).toBe('max');
+    expect(createClaudeCliProvider({ runner: fakeRunner() }).effort).toBe('');
+  });
+
+  it('sends nothing when unset, leaving the CLI its own default', async () => {
+    const { runner, calls } = recording();
+    await createClaudeCliProvider({ runner }).checkTopic('Fusion', [], null);
+    expect(calls).toEqual(['']);
+  });
+
+  it('does not spend effort on topic discovery', async () => {
+    // Same call as the API provider (NEWS-226): the setting is about how hard a
+    // *check* works, and discovery already runs on a cheap model because it is a
+    // suggestion list rather than a news lookup.
+    const calls: (Effort | undefined)[] = [];
+    const runner: ClaudeCliRunner = {
+      run: (_s, _p, _m, _schema, effort) => {
+        calls.push(effort);
+        return Promise.resolve(JSON.stringify({ suggestions: [] }));
+      },
+      available: () => Promise.resolve(true),
+    };
+    await createClaudeCliProvider({ runner, effort: 'max' }).suggestTopics({
+      scope: { kind: 'describe', query: '' },
+      exclude: [],
+    });
+    expect(calls).toEqual([undefined]);
+  });
+});
+
+describe('providerTakesEffort (NEWS-239)', () => {
+  it('includes the providers that actually accept one', () => {
+    expect(providerTakesEffort('anthropic')).toBe(true);
+    expect(providerTakesEffort('claude-cli')).toBe(true);
+  });
+
+  it('excludes Codex, which documents no equivalent', () => {
+    // Deliberate, not an oversight: `codex exec` has no `--effort`, and while a
+    // `-c key=value` override may exist its help documents no such key.
+    // Guessing one would be silently ignored or rejected, and a setting that
+    // looks like it works and does nothing is worse than one that says it
+    // doesn't apply.
+    expect(providerTakesEffort('codex-cli')).toBe(false);
+    expect(providerTakesEffort('openai')).toBe(false);
   });
 });
