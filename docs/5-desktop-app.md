@@ -404,6 +404,18 @@ The banner's Install button sits inside an always-present `.update-actions` slot
 
 Covered by `tests/unit/update.test.ts` (store transitions, walked as sequences) and `tests/e2e/update.spec.ts` (the banner, install, retry, dismiss and both Settings outcomes, against a faked `window.__TAURI__`). Everything below the bridge — the Rust commands, the signed manifest, a real install — is in [docs/manual-test-plan.md](./manual-test-plan.md).
 
+### Capabilities must name the origin the window navigates to
+
+**FR-5.21** *(NEWS-40)* `src-tauri/capabilities/default.json` carries a `remote` block listing `http://127.0.0.1:*` and `http://localhost:*`. Without it **none of its permissions apply at runtime**, and nothing says so.
+
+The shape of this app is what makes it a trap. `frontendDist` is a static loading page, so the window starts on a local `tauri://` origin where capabilities do apply. Then `lib.rs` navigates to the `http://127.0.0.1:PORT` the sidecar printed — and from that moment the page is a **remote origin**. A capability with no `remote` block grants its permissions to local origins only; the schema says as much, defaulting it to unset "as our default use case is that the content is served from our local application". Ours is not.
+
+Everything then fails silently: the build succeeds, the app runs, the UI is fine, and every IPC call is refused. It cost a release. The visible symptom was notifications — the plugin's shim invokes `plugin:notification|request_permission`, that was rejected before reaching macOS, so the OS never prompted, never created a System Settings entry, and the app reported "blocked". The updater (`updater:default`) and relaunch (`process:default`) were inert for exactly the same reason and nobody had noticed.
+
+The port is deliberately a wildcard: the server falls forward when 4187 is taken, so the origin is only known at runtime, and a pinned port would work until someone else held that port and then fail the same silent way. The wildcard is scoped to loopback, which is the only host the sidecar binds — worth keeping that way, since these permissions include notifications, updates and process relaunch. `tests/unit/tauri-naming.test.ts` asserts all of it.
+
+**If you add a permission, check it is reachable from the navigated origin, not just that the build passes.**
+
 ### Windows Authenticode — deliberately not set up
 
 Untouched, and that is a decision rather than an omission — **reaffirmed by the owner after a Windows bundle started existing** (NEWS-236, deferred).

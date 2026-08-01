@@ -268,6 +268,18 @@ fn spawn_server(app: &AppHandle, mut cmd: Command, window: tauri::WebviewWindow)
             let Ok(line) = line else { break };
             eprintln!("[server] {}", line);
             if !navigated {
+                // NOTE: navigating here makes the page a **remote origin**
+                // (http://127.0.0.1:PORT), not the local tauri:// one. A Tauri
+                // capability without a `remote` block grants its permissions to
+                // local origins only, so this single call is what decides
+                // whether *any* IPC works at runtime.
+                //
+                // It silently didn't, until NEWS-40: notifications, the updater
+                // and relaunch were all refused before reaching the OS. The
+                // notification symptom was the visible one — macOS never got
+                // asked, so System Settings had no entry to find, and the app
+                // reported "blocked". `capabilities/default.json` now lists the
+                // loopback URLs; keep it in step with whatever this navigates to.
                 if let Some(idx) = line.find(READY_MARKER) {
                     let url = line[idx + READY_MARKER.len()..].trim().to_string();
                     match url.parse() {

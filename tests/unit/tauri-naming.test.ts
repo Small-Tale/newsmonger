@@ -118,3 +118,59 @@ describe('the window title is set but hidden on macOS (NEWS-185)', () => {
     expect(windowConfig().hiddenTitle).toBe(true);
   });
 });
+
+describe('the capability reaches the origin the window actually loads (NEWS-40)', () => {
+  const capability = (): Record<string, unknown> =>
+    JSON.parse(
+      fs.readFileSync(path.join(root, 'src-tauri/capabilities/default.json'), 'utf8'),
+    ) as Record<string, unknown>;
+
+  /**
+   * The bug this pins, which cost a release and a hunt through macOS System
+   * Settings for an entry that could not exist.
+   *
+   * `frontendDist` is a static loading page; `lib.rs` then navigates the webview
+   * to the `http://127.0.0.1:PORT` the sidecar prints. From that moment the page
+   * is a **remote origin**, and a Tauri capability with no `remote` block grants
+   * its permissions to *local* origins only. So every permission below was
+   * silently inert at runtime: the notification plugin's request was refused
+   * before it reached macOS — which is why the OS never prompted and never
+   * listed the app — and the updater and relaunch were dead the same way.
+   *
+   * Nothing fails loudly when this is wrong. The build succeeds, the app runs,
+   * and the features just don't work.
+   */
+  it('grants its permissions to the loopback origin, not only to tauri://', () => {
+    const remote = capability()['remote'] as { urls?: string[] } | undefined;
+    expect(remote, 'no `remote` block: every permission is inert once the window navigates').toBeDefined();
+    const urls = remote?.urls ?? [];
+    expect(urls.some((u) => u.includes('127.0.0.1'))).toBe(true);
+    // The server prints whichever host it bound; `localhost` and `127.0.0.1` are
+    // different origins to a URL matcher, so both have to be listed.
+    expect(urls.some((u) => u.includes('localhost'))).toBe(true);
+  });
+
+  it('does not pin a port, because the server falls forward when one is taken', () => {
+    // 4187 is a default, not a guarantee (FR-4.x). A pinned port would work
+    // until someone else held it, and then fail in the same silent way.
+    const urls = ((capability()['remote'] as { urls?: string[] } | undefined)?.urls ?? []).join(' ');
+    expect(urls).toMatch(/127\.0\.0\.1:\*/);
+    expect(urls, 'a fixed port would break on port fallback').not.toMatch(/127\.0\.0\.1:\d+/);
+  });
+
+  it('stays scoped to loopback', () => {
+    // These permissions include notifications, the updater and process relaunch.
+    // Granting them to a non-loopback origin would hand real system access to
+    // whatever answered — the sidecar only ever binds loopback.
+    for (const u of ((capability()['remote'] as { urls?: string[] } | undefined)?.urls ?? [])) {
+      expect(u, `${u} is not a loopback origin`).toMatch(/^http:\/\/(127\.0\.0\.1|localhost)/);
+    }
+  });
+
+  it('keeps the permissions the client actually calls', () => {
+    const perms = capability()['permissions'] as string[];
+    for (const p of ['core:default', 'notification:default', 'updater:default', 'process:default']) {
+      expect(perms).toContain(p);
+    }
+  });
+});
