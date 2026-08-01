@@ -201,12 +201,25 @@ jobs:
             test-results/
           retention-days: 7
 
-  # Windows E2E (NEWS-209). **Non-blocking** — `continue-on-error`, and absent
-  # from every downstream `needs` — because no Windows *bundle* has ever been
-  # built or run (NEWS-20), so this proves the web app works in a Windows
-  # browser and nothing more. A job nobody expects to pass is a job nobody
-  # reads; this one is expected to pass, and is advisory until it has a track
-  # record. Promote it into `publish-beta`'s `needs` once it has one.
+  # Windows E2E (NEWS-209). **Blocking since NEWS-235** — it gates `create-release`
+  # and `publish-beta` exactly as the Linux run does.
+  #
+  # It spent its advisory period earning that, and the delay was worth it: the
+  # flakes it kept reporting turned out to be a real product bug (a `<select>`
+  # the user had touched stopped following the server, NEWS-238) plus a suite
+  # that churned 457 sockets per run into `TIME_WAIT` and eventually exhausted a
+  # Windows runner's (NEWS-246). Promoting on the earlier "it's just a slow VM"
+  # reading would have gated releases on those instead of fixing them.
+  #
+  # The evidence for promoting: **10 consecutive clean first-attempt runs**, five
+  # on `windows-latest` and five on `ubuntu-latest`, with `--retries=0` so
+  # nothing was hidden behind a retry. That last part was the specific worry —
+  # a gate that intermittently needs its retry is a gate that will one day block
+  # a release for a reason unrelated to the release.
+  #
+  # What it still does not prove: that a Windows *bundle* works. None has ever
+  # been built or launched (NEWS-20). This gates the **web app in a Windows
+  # browser**, which is a real thing to gate and not the whole platform.
   #
   # The harness needed **no porting**, which was measured rather than assumed:
   # the whole suite was run on a real Windows 11 machine at ef10d5b and came back
@@ -222,7 +235,6 @@ jobs:
     name: E2E Tests (Windows)
     needs: [version-guard, lint, typecheck, test-unit, audit, rust]
     runs-on: windows-latest
-    continue-on-error: true
     # The suite is serial (`workers: 1`) and takes ~5 minutes on real hardware;
     # a cap well above that turns a hang into a failed job rather than a
     # 360-minute one.
@@ -360,7 +372,7 @@ jobs:
   create-release:
     name: Create Prerelease (Draft)
     if: contains(github.ref, '-beta.')
-    needs: [test-e2e, npm-pack, build-tauri]
+    needs: [test-e2e, test-e2e-windows, npm-pack, build-tauri]
     runs-on: ubuntu-latest
     outputs:
       beta_version: ${{ steps.version.outputs.beta_version }}
@@ -444,7 +456,7 @@ jobs:
 
   publish-beta:
     name: Publish npm Beta
-    needs: [test-e2e, npm-pack, build-tauri]
+    needs: [test-e2e, test-e2e-windows, npm-pack, build-tauri]
     runs-on: ubuntu-latest
     environment: npm-publish
     permissions:

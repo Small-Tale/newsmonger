@@ -1701,7 +1701,7 @@ describe('a dry run is structurally incapable of publishing (NEWS-223)', () => {
   });
 });
 
-describe('the Windows E2E job is advisory, not a gate (NEWS-209)', () => {
+describe('the Windows E2E job gates a release (NEWS-209, promoted in NEWS-235)', () => {
   const rc = (): string => fs.readFileSync(path.join(root, '.github/workflows/release-candidate.yml'), 'utf8');
 
   it('runs the suite on a Windows runner', () => {
@@ -1721,16 +1721,32 @@ describe('the Windows E2E job is advisory, not a gate (NEWS-209)', () => {
     expect(job).not.toContain('--with-deps');
   });
 
-  it('cannot block a release', () => {
-    // The whole point: a job nobody expects to pass is a job nobody reads, so
-    // this one is `continue-on-error` and absent from every `needs` until it has
-    // a track record. It also proves only that the *web app* works in a Windows
-    // browser — no Windows bundle has ever been built (NEWS-20).
+  it('blocks a release when it fails', () => {
+    // This asserted the exact opposite until NEWS-235. The job was advisory —
+    // `continue-on-error`, absent from every `needs` — on the reasoning that a
+    // job nobody expects to pass is a job nobody reads, and it had a different
+    // flaky test on each run.
+    //
+    // Those flakes were not the runner. They were a real product bug (NEWS-238,
+    // a `<select>` the user had touched no longer following the server) and a
+    // suite exhausting a Windows runner's sockets (NEWS-246). Promoting is what
+    // it earned by **10 consecutive clean first-attempt runs**, five per
+    // platform, at `--retries=0` so nothing hid behind a retry.
     const src = rc();
     const job = src.slice(src.indexOf('test-e2e-windows:'), src.indexOf('\n  npm-pack:'));
-    expect(job).toContain('continue-on-error: true');
-    for (const m of src.matchAll(/needs: \[([^\]]*)\]/g)) {
-      expect(m[1], 'no job may depend on the advisory Windows run').not.toContain('test-e2e-windows');
+    expect(job, 'a gate must not tolerate its own failure').not.toContain('continue-on-error');
+  });
+
+  it('gates the two jobs that actually publish', () => {
+    // Being red is worth nothing if nothing waits on it. `create-release` and
+    // `publish-beta` are the two that put something outside this repository, so
+    // they are the two that have to depend on it.
+    const src = rc();
+    for (const name of ['create-release:', 'publish-beta:']) {
+      const at = src.indexOf(`  ${name}`);
+      expect(at, name).toBeGreaterThan(-1);
+      const needs = /needs: \[([^\]]*)\]/.exec(src.slice(at))?.[1] ?? '';
+      expect(needs, `${name} must wait for the Windows run`).toContain('test-e2e-windows');
     }
   });
 

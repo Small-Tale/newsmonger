@@ -177,7 +177,7 @@ Clone onto the VM's own disk rather than running out of `\\Mac\Home`: `node_modu
 
 **Result at `ef10d5b`: 173 passed, 1 flaky, ~5 minutes.** The flake was `a11y.spec.ts` — the settings-dialog sweep, which walks every tab in both themes and runs axe — timing out at the 30 s default under full-suite load. It passes **3/3 in isolation**, so it is VM slowness rather than a Windows bug. Worth watching on the CI runner: if it recurs there, the fix is a longer timeout on that one test, not a harness change.
 
-Now covered by the advisory `test-e2e-windows` job in `release-candidate.yml`, so this stays a spot-check rather than a routine step.
+Now covered by the **blocking** `test-e2e-windows` job in `release-candidate.yml` (advisory until NEWS-235), so this stays a spot-check rather than a routine step. It gates the web app in a Windows browser only — no Windows *bundle* has ever been built or launched (NEWS-20), which is still manual.
 
 ## Tauri release bundle (needs Rust toolchain) — ✅ macOS verified 2026-07-24
 
