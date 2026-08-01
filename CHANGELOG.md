@@ -14,6 +14,18 @@ fields reject semver prerelease suffixes.
 
 <!-- Nothing released yet. The first `npm run release` inserts its entry below. -->
 
+## [0.2.0-beta.9] - 2026-08-01
+
+## Bug Fixes
+
+- The Claude and Codex CLI providers now find their binaries when the app is launched from Finder, instead of failing with "not installed" — the packaged app doesn't inherit your shell's `PATH`, so the app searches the usual install locations (`~/.local/bin`, Homebrew, npm's global dir on Windows) as a fallback. Subscription-based checks were unable to run at all in the beta release.
+- Settings → Source no longer reports "no API key" for subscription providers that don't use one; it now says "CLI not found", which is the actual problem.
+
+## UX
+
+- The notifications-blocked message now names where to fix it: in a browser it points at that page's site settings and shows the origin, and explicitly says macOS System Settings won't help; in the desktop app it points at System Settings → Notifications → Newsmonger.
+- The Effort setting now explains on the page why it's disabled for non-Anthropic providers, rather than hiding the reason in a tooltip on a disabled control.
+
 ## [0.2.0-beta.8] - 2026-08-01
 
 ## Bug Fixes
