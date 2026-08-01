@@ -1438,3 +1438,35 @@ test('backs up to a chosen folder, without the API keys (NEWS-192)', async ({ pa
   await page.locator('.dialog [data-action=close-settings]').click();
   fs.rmSync(dest, { recursive: true, force: true });
 });
+
+test('a subscription provider never asks for an API key it does not use (NEWS-240/239)', async ({ page }) => {
+  await page.goto('/');
+  await openSettingsTab(page, 'Source');
+  await page.locator('[data-action=provider]').selectOption('claude-cli');
+  await expect(page.locator('[data-action=provider]')).toHaveValue('claude-cli', { timeout: 15_000 });
+
+  // The status line must not say "no API key" for a provider that needs none —
+  // it sat directly above a sentence saying checks use the subscription, so the
+  // panel contradicted itself. What is actually wrong when a CLI provider is
+  // unavailable is that the binary could not be run.
+  const status = page.locator('.source-status');
+  await expect(status).not.toContainText('no API key');
+
+  // Effort is Anthropic-only, so the control is disabled here. Reported as
+  // "effort popup doesn't work — nothing pops up", which is exactly what a
+  // disabled select looks like when nothing on the page says why. A `title`
+  // tooltip was the only explanation and is unreachable on a disabled control.
+  await expect(page.locator('[data-action=effort]')).toBeDisabled();
+  const note = page.locator('.effort-note');
+  await expect(note).toContainText('Anthropic');
+  await expect(note).toContainText('Claude subscription');
+
+  // ...and it goes away when the setting does apply.
+  await page.locator('[data-action=provider]').selectOption('anthropic');
+  await expect(page.locator('[data-action=effort]')).toBeEnabled();
+  await expect(page.locator('.effort-note')).toBeEmpty();
+
+  // Leave the shared server on the mock provider for the specs that follow.
+  await page.locator('[data-action=provider]').selectOption('mock');
+  await expect(page.locator('[data-action=provider]')).toHaveValue('mock', { timeout: 15_000 });
+});

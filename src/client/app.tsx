@@ -2,7 +2,14 @@ import type { SafeHtml } from 'kerfjs';
 import { delegate, each, mount } from 'kerfjs';
 
 import type { Effort,ProviderName  } from '../ai/types.js';
-import { EFFORT_LABELS, EFFORT_LEVELS, PROVIDER_INFO, PROVIDER_MODELS, PROVIDER_NAMES } from '../ai/types.js';
+import {
+  EFFORT_LABELS,
+  EFFORT_LEVELS,
+  isKeyedProvider,
+  PROVIDER_INFO,
+  PROVIDER_MODELS,
+  PROVIDER_NAMES,
+} from '../ai/types.js';
 import type { TopicSuggestion } from '../api/schemas.js';
 import { MAX_DISCOVER_QUERY_LENGTH, MAX_TUNE_ROUNDS } from '../api/schemas.js';
 import type { BackupLocation } from '../backup-locations.js';
@@ -605,7 +612,20 @@ function sourceStatusJsx(): SafeHtml {
   return (
     <p class="source-status">
       <span class="source-state">
-        {availability === false ? <span class="state warn">{icon('warn', 12)} no API key</span> : ''}
+        {availability === false ? (
+          <span class="state warn">
+            {icon('warn', 12)}{' '}
+            {/* "no API key" is only true of the keyed providers. A subscription
+                provider needs none — saying it does contradicts the sentence
+                directly below, which tells the reader checks use their
+                subscription (NEWS-240). What is actually wrong there is that the
+                CLI could not be run: in a Finder-launched macOS app the shell's
+                PATH is not inherited, which is the bug the resolver now fixes. */}
+            {isKeyedProvider(s.settings.provider) ? 'no API key' : 'CLI not found'}
+          </span>
+        ) : (
+          ''
+        )}
         {availability === true ? <span class="state ok">{icon('ok', 12)} ready</span> : ''}
       </span>
       <span class="source-last">{lastProvider !== null ? `last check via ${lastProvider}` : ''}</span>
@@ -1870,7 +1890,16 @@ function settingsPanelJsx(s: AppState): SafeHtml {
         {/* Anthropic-only for now: the OpenAI Responses API has `reasoning.effort`
             but the provider does not pass one yet, and the CLI providers take no
             such parameter at all. Disabled rather than hidden — a control that
-            vanishes reads as a bug, and the title says why (NEWS-189). */}
+            vanishes reads as a bug (NEWS-189).
+
+            **A `title` was not enough** (NEWS-240/239). It was the only
+            explanation, and a tooltip on a *disabled* control is close to
+            unreachable: it needs a hover held over something the pointer already
+            treats as inert, it never appears on touch, and it is invisible to
+            anyone who clicks rather than hovers. The report was "effort popup
+            doesn't work — nothing pops up", which is exactly what a disabled
+            select looks like when nothing says why. The reason is now on the
+            page. */}
         <label class="field">
           <span class="field-label">Effort</span>
           <select
@@ -1889,6 +1918,18 @@ function settingsPanelJsx(s: AppState): SafeHtml {
             ))}
           </select>
         </label>
+        {/* Always-present container, so the note appearing doesn't restructure
+            its siblings (docs/3-ui.md). */}
+        <div class="effort-note">
+          {s.settings.provider === 'anthropic' ? (
+            ''
+          ) : (
+            <p class="note">
+              Effort applies to the <strong>Anthropic API</strong> provider only —{' '}
+              {PROVIDER_INFO[s.settings.provider].label} takes no such setting, so this is switched off.
+            </p>
+          )}
+        </div>
 
         {sourceStatusJsx()}
 

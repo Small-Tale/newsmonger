@@ -16,6 +16,7 @@ import type {
 } from '../types.js';
 import { DISCOVERY_MODELS } from '../types.js';
 import { agentCwd } from './agent-cwd.js';
+import { resolveCliBinary } from './cli-path.js';
 
 /**
  * Run checks against the user's **ChatGPT subscription** rather than an
@@ -49,7 +50,10 @@ export function combinePrompt(system: string, user: string): string {
   return `${system}\n\n---\n\n${user}`;
 }
 
-function spawnRunner(binary: string): CodexCliRunner {
+function spawnRunner(name: string): CodexCliRunner {
+  // Resolved to an absolute path, because a Finder-launched macOS app does not
+  // inherit the shell's PATH and these tools live in ~/.local/bin (NEWS-240).
+  const binary = resolveCliBinary(name);
   const exec = async (
     args: string[],
     timeoutMs: number,

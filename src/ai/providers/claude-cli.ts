@@ -13,6 +13,7 @@ import type {
 } from '../types.js';
 import { DISCOVERY_MODELS } from '../types.js';
 import { agentCwd } from './agent-cwd.js';
+import { resolveCliBinary } from './cli-path.js';
 
 /**
  * Run checks against the user's Claude Pro/Max **subscription** rather than an
@@ -74,7 +75,10 @@ export function parseCliEnvelope(stdout: string): string {
   throw new Error('Claude CLI returned no result');
 }
 
-function spawnRunner(binary: string): ClaudeCliRunner {
+function spawnRunner(name: string): ClaudeCliRunner {
+  // Resolved to an absolute path, because a Finder-launched macOS app does not
+  // inherit the shell's PATH and these tools live in ~/.local/bin (NEWS-240).
+  const binary = resolveCliBinary(name);
   const exec = async (args: string[], timeoutMs: number): Promise<{ code: number | null; stdout: string; stderr: string }> =>
     new Promise((resolve, reject) => {
       let child;
