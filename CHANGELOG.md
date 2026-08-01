@@ -14,6 +14,25 @@ fields reject semver prerelease suffixes.
 
 <!-- Nothing released yet. The first `npm run release` inserts its entry below. -->
 
+## [0.2.0-beta.8] - 2026-08-01
+
+## Bug Fixes
+
+- Backup folder paths typed into Settings are now resolved before being saved: a leading `~` is expanded, blank input turns backups off, and relative paths are rejected with an explanation. Previously a path like `~/Documents/Backups` created a literal directory named `~` next to wherever the app was started, and the backup reported success into it.
+- Another user's home directory (`~otheruser/...`) is refused rather than guessed at, and a rejected backup path no longer allows the rest of a settings update to apply.
+- Saved paths are trimmed and normalized, so two spellings of the same folder don't read as two different settings.
+
+## Documentation
+
+- The Windows desktop bundle is now documented as verified end to end from the published installer: it installs per-user to `%LOCALAPPDATA%\Newsmonger`, launches, spawns the sidecar, serves the UI, shows no console window, and leaves no orphaned process on quit. Linux install-and-launch remains unverified.
+- The Windows installer is unsigned by decision, and the docs now spell out the consequence: SmartScreen will warn on download, with "run anyway" behind a "More info" link.
+- Release pipeline docs record that all four platform bundles now build in CI, with the macOS pair notarized and stapled.
+
+## Tooling
+
+- New `scripts/verify-released-dmg.sh <tag> [aarch64|x64]` downloads a published macOS release, quarantines it as a browser would, and checks stapling, Gatekeeper's notarization verdict, quarantine inheritance after drag-out, and that the Node sidecar starts and JITs under the hardened runtime.
+- The screenshot capture script supports a per-scene "soak", letting the topics sidebar still show a next-check dial partway through its countdown instead of always full; the README screenshot and its alt text were updated to match.
+
 ## [0.2.0-beta.7] - 2026-08-01
 
 ## CI
