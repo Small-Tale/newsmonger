@@ -179,9 +179,26 @@ export const test = base.extend({
     // nothing and a red one carries the evidence. Written as a file rather than
     // attached — see `writeDiagnostic`, and note that the *first* attempt at
     // this used `attach()` and produced nothing at all.
+    //
+    // One warning is promoted to a *failure* — see `memoWarnings`.
     const consoleLines: string[] = [];
+    // kerf's duplicate-cacheKey warning, which is a bug report rather than
+    // advice (NEWS-238). Its own text says what it costs: "duplicate values
+    // cause some rows to return stale cached HTML when external state that
+    // affects their render changes" — which is this ticket's entire failure
+    // class, stated by the framework.
+    //
+    // It fired for months in CI and nobody read it, because a warning that only
+    // ever lands in a console nobody collects is indistinguishable from silence.
+    // Failing on it is the difference between a diagnostic and a guard.
+    //
+    // Matched on the phrase rather than the whole message so a reworded warning
+    // still trips it, and narrow enough that ordinary kerf advice does not.
+    const memoWarnings: string[] = [];
     page.on('console', (msg) => {
-      consoleLines.push(`[${msg.type()}] ${msg.text()}`);
+      const text = msg.text();
+      consoleLines.push(`[${msg.type()}] ${text}`);
+      if (text.includes('duplicate cacheKey')) memoWarnings.push(text);
     });
 
     // Poll timeline, attached on failure (NEWS-238).
@@ -228,6 +245,9 @@ export const test = base.extend({
       writeDiagnostic('console.log', consoleLines.join('\n') || '(the page logged nothing)');
     }
     expect(pageErrors.map((e) => e.message), 'uncaught errors in the page').toEqual([]);
+    expect(memoWarnings, 'kerf reported colliding each() cacheKeys — rows will serve each other stale HTML').toEqual(
+      [],
+    );
     if (collect) {
       const entries = await page.coverage.stopJSCoverage();
       const result = entries

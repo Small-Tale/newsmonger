@@ -130,3 +130,53 @@ export function topicRows(
   }
   return rows;
 }
+
+/** The external, per-row state a sidebar row renders but does not own. */
+export interface RowRenderState {
+  selected: ReadonlySet<string>;
+  solo: ReadonlySet<string>;
+  checking: readonly string[];
+  todayByTopic: Record<string, number | undefined>;
+}
+
+/**
+ * The memo key for a sidebar row's `each()` (NEWS-238).
+ *
+ * `each()` memoizes a row's HTML, and the cache is keyed by **this string** —
+ * so it has two jobs, and the original only did one. It has to *change* when
+ * anything the row renders changes, and it has to be *unique per row*.
+ *
+ * It was built entirely from state — category, selection, solo, checking,
+ * priority, guidance, today's count — and named no row. Two topics in the same
+ * category with the same flags therefore produced the **same key**, and one of
+ * them was served the other's cached HTML: wrong name, wrong dial, wrong badge,
+ * and unresponsive to its own state changes until something happened to tell
+ * them apart. kerf's own diagnostic caught it in CI, naming the colliding value:
+ *
+ *   kerf: each() list 'k:topics' has duplicate cacheKey values
+ *   (duplicate: world|null|false|0|false|0|false|false||2)
+ *
+ * `id` leads now, which makes collisions impossible without weakening the memo:
+ * a constant-per-row prefix cannot mask a change in the state that follows it.
+ *
+ * Extracted from `app.tsx` so the uniqueness property is a unit test rather
+ * than a warning nobody was reading — the same move as `poll.ts`, for the same
+ * reason. A heading's HTML is its label, and labels are distinct per section.
+ */
+export function topicRowCacheKey(row: TopicRow, state: RowRenderState): string {
+  if (isHeading(row)) return row.label;
+  const { selected, solo, checking, todayByTopic } = state;
+  return [
+    row.id, // identity first — without it, same-state rows collide
+    String(row.category),
+    String(row.subcategory),
+    String(selected.has(row.id)),
+    String(selected.size), // the "sole selection" affordance depends on the count
+    String(solo.has(row.id)),
+    String(solo.size), // …and dimming depends on whether anything is soloed
+    String(checking.includes(row.id)),
+    String(row.highPriority), // the star, and which interval the dial counts down
+    row.guidance,
+    String(todayByTopic[row.id] ?? 0),
+  ].join('|');
+}

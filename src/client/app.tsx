@@ -112,7 +112,7 @@ import {
 } from './stores.js';
 import { getTauriInvoke, isTauri, openExternalUrl } from './tauri.js';
 import type { TopicRow } from './topic-sort.js';
-import { isHeading, sortTopics, topicRows } from './topic-sort.js';
+import { isHeading, sortTopics, topicRowCacheKey, topicRows } from './topic-sort.js';
 
 const INTERVAL_OPTIONS: { label: string; ms: number }[] = [
   { label: 'Every hour', ms: 60 * 60 * 1000 },
@@ -2663,27 +2663,19 @@ function appJsx(): SafeHtml {
                 )
               ),
             {
-              // `each()` memoizes per row on object identity, and selection/solo
-              // live outside the topic object — so without this comparator a row
-              // keeps its cached HTML and selecting it appears to do nothing until
-              // the next poll happens to replace `topics` with fresh objects.
-              // `highPriority` is in the key too so toggling it re-renders the
-              // star and the dial's interval without waiting for the next poll.
-              // The category is part of the row, so it belongs in the memo key —
-              // a topic classified by a background check would otherwise keep
-              // its stale row until something else changed. A heading's HTML is
-              // its label, so its key is just that.
-              //
-              // Today's count is in the key for exactly that reason (NEWS-242):
-              // it lives in `todayByTopic`, not on the topic object, so a badge
-              // going 2 → 3 changes nothing `each()` can see and the row would
-              // keep its cached HTML until some unrelated field happened to move.
+              // `each()` memoizes per row, and everything a row renders that
+              // does not live on the topic object has to be in this key —
+              // selection, solo, checking, today's count. So does the row's own
+              // identity, which is the half that was missing (NEWS-238): see
+              // `topicRowCacheKey`, where the rule and the bug are written down
+              // and the uniqueness property is a unit test.
               cacheKey: (row: TopicRow) =>
-                isHeading(row)
-                  ? row.label
-                  : `${String(row.category)}|${String(row.subcategory)}|${String(selected.has(row.id))}|${String(selected.size)}|${String(solo.has(row.id))}|${String(solo.size)}|${String(
-                      s.checking.includes(row.id),
-                    )}|${String(row.highPriority)}|${row.guidance}|${String(s.todayByTopic[row.id] ?? 0)}`,
+                topicRowCacheKey(row, {
+                  selected,
+                  solo,
+                  checking: s.checking,
+                  todayByTopic: s.todayByTopic,
+                }),
               // A stable list identity (kerf 3.x). Unkeyed lists are identified by
               // their position among a render's `each()` calls, so a conditional
               // list appearing above this one would rebuild it and cost the rows

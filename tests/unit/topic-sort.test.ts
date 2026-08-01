@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 
 import type { StateResp } from '../../src/api/schemas.js';
-import { isHeading, sortTopics, topicRows } from '../../src/client/topic-sort.js';
+import type { RowRenderState } from '../../src/client/topic-sort.js';
+import { isHeading, sortTopics, topicRowCacheKey, topicRows } from '../../src/client/topic-sort.js';
 
 type Topic = StateResp['topics'][number];
 
@@ -201,5 +202,100 @@ describe('sortTopics: recent (NEWS-241)', () => {
   it('adds no headings, the way every non-category sort does not', () => {
     const rows = topicRows([topic('A'), topic('B')], 'recent', {});
     expect(rows.some((r) => isHeading(r))).toBe(false);
+  });
+});
+
+describe('topicRowCacheKey (NEWS-238)', () => {
+  /**
+   * The bug: the key was built entirely from *state* and named no row, so two
+   * topics in the same category with the same flags produced the same key — and
+   * `each()`, whose memo cache is keyed by this string, served one of them the
+   * other's cached HTML. kerf's own diagnostic caught it in CI and printed the
+   * colliding value:
+   *
+   *   duplicate cacheKey values (duplicate: world|null|false|0|false|0|false|false||2)
+   *
+   * Every test below states a property rather than an exact string, so the key's
+   * format stays free to change and its two obligations do not.
+   */
+  const EMPTY: RowRenderState = {
+    selected: new Set(),
+    solo: new Set(),
+    checking: [],
+    todayByTopic: {},
+  };
+  const topic = (over: Partial<Topic> = {}): Topic => ({
+    id: 'a',
+    name: 'Alpha',
+    paused: false,
+    highPriority: false,
+    guidance: '',
+    category: 'world',
+    subcategory: null,
+    categorySource: 'auto',
+    createdAt: '2026-07-01T00:00:00.000Z',
+    lastCheckedAt: null,
+    coveredThroughAt: null,
+    consecutiveFailures: 0,
+    retryAfter: null,
+    ...over,
+  });
+
+  it('is unique for two topics that differ only by identity', () => {
+    // The exact collision from CI: same category, same everything, two rows.
+    const a = topic({ id: 'a', name: 'World news' });
+    const b = topic({ id: 'b', name: 'World affairs' });
+    expect(topicRowCacheKey(a, EMPTY)).not.toBe(topicRowCacheKey(b, EMPTY));
+  });
+
+  it('is unique across a realistic sidebar', () => {
+    // A stronger form of the same property: no pair anywhere in a list may
+    // collide, however alike two topics are.
+    const rows = topicRows(
+      [
+        topic({ id: '1', name: 'World news' }),
+        topic({ id: '2', name: 'World affairs' }),
+        topic({ id: '3', name: 'Markets', category: 'business' }),
+        topic({ id: '4', name: 'Rates', category: 'business' }),
+      ],
+      'category',
+    );
+    const keys = rows.map((r) => topicRowCacheKey(r, EMPTY));
+    expect(new Set(keys).size).toBe(keys.length);
+  });
+
+  it('still changes when state outside the topic object changes', () => {
+    // The other half of the job, and the reason a bare `row.id` would be wrong:
+    // identity must not mask a change in what the row renders.
+    const t = topic();
+    const base = topicRowCacheKey(t, EMPTY);
+    const variants: RowRenderState[] = [
+      { ...EMPTY, selected: new Set(['a']) },
+      { ...EMPTY, selected: new Set(['z']) }, // selection count drives "sole selection"
+      { ...EMPTY, solo: new Set(['a']) },
+      { ...EMPTY, solo: new Set(['z']) }, // …and dimming depends on anything being soloed
+      { ...EMPTY, checking: ['a'] },
+      { ...EMPTY, todayByTopic: { a: 3 } },
+    ];
+    for (const [i, state] of variants.entries()) {
+      expect(topicRowCacheKey(t, state), `variant ${String(i)}`).not.toBe(base);
+    }
+  });
+
+  it('still changes when the topic itself changes', () => {
+    const base = topicRowCacheKey(topic(), EMPTY);
+    expect(topicRowCacheKey(topic({ highPriority: true }), EMPTY)).not.toBe(base);
+    expect(topicRowCacheKey(topic({ guidance: 'focus on policy' }), EMPTY)).not.toBe(base);
+    expect(topicRowCacheKey(topic({ category: 'science' }), EMPTY)).not.toBe(base);
+    expect(topicRowCacheKey(topic({ subcategory: 'space' }), EMPTY)).not.toBe(base);
+  });
+
+  it('keys a heading by its label', () => {
+    // A heading renders nothing but its label, and section labels are distinct
+    // within a list — so the label is both sufficient and unique.
+    const rows = topicRows([topic({ id: '1' }), topic({ id: '2', category: 'science' })], 'category');
+    const headings = rows.filter(isHeading);
+    expect(headings.length).toBeGreaterThan(1);
+    for (const h of headings) expect(topicRowCacheKey(h, EMPTY)).toBe(h.label);
   });
 });
