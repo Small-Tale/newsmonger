@@ -1,4 +1,5 @@
 import fs from 'node:fs';
+import { Server as HttpServer } from 'node:http';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -20,6 +21,37 @@ import { ClearUndoBuffer } from './undo.js';
 
 export const DEFAULT_PORT = 4187;
 const PORT_FALLBACK_ATTEMPTS = 20;
+
+/**
+ * How long an idle connection is held open for reuse (NEWS-246).
+ *
+ * Node's default is **5 seconds**, and the client polls `/api/state` every
+ * **4** (`POLL_INTERVAL_MS`). One second of headroom between "we will keep this
+ * socket" and "we will ask again" is not headroom at all: any jitter — a busy
+ * machine, a GC pause, an interval drifting late — and the server has already
+ * closed the connection, so the next poll opens a fresh TCP connection and
+ * leaves the old one in `TIME_WAIT`.
+ *
+ * A page polling forever therefore churns a socket every 4 seconds instead of
+ * reusing one, on exactly the machines least able to afford it. Measured on the
+ * E2E suite: **457 sockets in `TIME_WAIT`** at peak against 14 established, on
+ * macOS, whose `TIME_WAIT` is 30 s. Windows holds them for **120 s** by default,
+ * four times as long from the same rate — which is how a Windows runner reaches
+ * `ERR_NO_BUFFER_SPACE` on a `page.goto` while every other platform is fine.
+ *
+ * 30 seconds is not tuning to the current interval, it is clearing it by a
+ * margin no plausible jitter closes. It costs an idle socket per open tab on a
+ * localhost-only server, which is nothing; the timeout exists to stop *remote*
+ * clients holding connections open, and there are none here.
+ *
+ * `headersTimeout` must stay above it — Node destroys a socket whose headers
+ * have not arrived in time, and setting the two the other way round makes a
+ * kept-alive connection abort mid-request. Node's default is 60 s, comfortably
+ * clear, but it is set explicitly so the ordering is visible rather than
+ * inherited.
+ */
+const KEEP_ALIVE_TIMEOUT_MS = 30_000;
+const HEADERS_TIMEOUT_MS = 35_000;
 
 const STATIC_TYPES: Record<string, string> = {
   '.js': 'text/javascript',
@@ -104,6 +136,11 @@ export function createApp(deps: {
 export interface StartedServer {
   port: number;
   close(): void;
+  /**
+   * Idle keep-alive window actually applied, so a test can assert it rather
+   * than trusting the assignment above (NEWS-246).
+   */
+  keepAliveTimeoutMs: number;
 }
 
 /**
@@ -124,13 +161,28 @@ export async function startServer(
         const s = serve({ fetch: app.fetch, port, hostname: '127.0.0.1' }, () => {
           resolve(s);
         });
+        // Narrowed rather than cast: `serve()` returns a union that includes an
+        // HTTP/2 server, which has neither property. We never ask for HTTP/2 —
+        // no `createServer` override is passed — so this branch is always the
+        // one taken, and if that ever changes the timeouts are skipped instead
+        // of a cast lying about the shape.
+        if (s instanceof HttpServer) {
+          s.keepAliveTimeout = KEEP_ALIVE_TIMEOUT_MS;
+          s.headersTimeout = HEADERS_TIMEOUT_MS;
+        }
         s.on('error', reject);
       });
+      // The port the OS actually bound, not the one asked for. They differ only
+      // when the caller passes 0 ("any free port"), which is what a test wants
+      // so it can never collide with a dev server or another test — and
+      // reporting the request rather than the result would hand it a 0.
+      const bound = server.address();
       return {
-        port,
+        port: typeof bound === 'object' && bound !== null ? bound.port : port,
         close: () => {
           server.close();
         },
+        keepAliveTimeoutMs: server instanceof HttpServer ? server.keepAliveTimeout : 0,
       };
     } catch (err) {
       lastError = err;

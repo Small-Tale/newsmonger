@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import type { Locator, Page } from '@playwright/test';
+import type { BrowserContext, Locator, Page } from '@playwright/test';
 import { expect, request as playwrightRequest, test as base } from '@playwright/test';
 
 export { expect } from '@playwright/test';
@@ -119,6 +119,12 @@ function writeDiagnostic(name: string, body: string): void {
   }
 }
 
+/** This suite adds no test-scoped fixtures of its own — only the worker one. */
+type TestFixtures = Record<never, never>;
+interface WorkerFixtures {
+  sharedContext: BrowserContext;
+}
+
 /**
  * Test fixture that collects browser V8 JS coverage for the app bundle when
  * E2E_COVERAGE=1 (set by scripts/test-all.sh). Entries are rewritten from the
@@ -126,32 +132,75 @@ function writeDiagnostic(name: string, body: string): void {
  * NODE_V8_COVERAGE format, so `c8 report` can source-map them back to
  * `src/client/*`. Chromium-only (the only browser we run).
  */
-export const test = base.extend({
-  page: async ({ page }, use) => {
-    // Suppress the first-run wizard's *auto*-open (NEWS-193).
-    //
-    // `maybeOpenOnboarding()` opens it when there are no topics AND no usable
-    // provider AND it hasn't been seen on this device. Every test starts with a
-    // fresh context (empty localStorage) and specs reset topics, so the only
-    // term that varied was "usable provider" — and that is decided by whether
-    // the *host* has a signed-in `claude` or `codex` CLI.
-    //
-    // So the suite passed on a dev machine and could never pass on a CI runner:
-    // there, onboarding opened and `.onboarding-backdrop` intercepted pointer
-    // events for the rest of the run. The tell was that read-only a11y scans
-    // passed and the first test that *clicked* timed out.
-    //
-    // Seeding the flag costs no coverage. No test asserts the auto-open, and the
-    // specs that exercise onboarding open it explicitly via Settings →
-    // `[data-action=rerun-onboarding]`. Deliberately not "give CI an API key":
-    // that would paper over it and assert a state no first-run user is in.
-    await page.addInitScript(() => {
-      try {
-        localStorage.setItem('news:onboarding-seen', '1');
-      } catch {
-        // Storage disabled — the wizard reappears, which is the pre-fix state.
-      }
-    });
+export const test = base.extend<TestFixtures, WorkerFixtures>({
+  /**
+   * **One browser context for the whole run** (NEWS-246).
+   *
+   * Playwright's default is a fresh context per test, and a context owns its own
+   * connection pool — so closing one drops every socket it held and 183 tests
+   * churn through them. Measured against this server, ten navigations cost:
+   *
+   *   fresh context each time  → 39 connections
+   *   one shared context       →  0
+   *
+   * They land in `TIME_WAIT`, which macOS releases after 30 s and **Windows
+   * after 120**, four times the backlog from the same rate. That is the leading
+   * explanation for a Windows runner failing `page.goto` with
+   * `ERR_NO_BUFFER_SPACE` while every other platform is fine.
+   *
+   * Pages stay **per-test** — a new one each time, closed after — so per-test
+   * listeners, coverage and page state are unchanged. Only the pool is shared,
+   * and a page closing does not disturb it (measured: still 0).
+   *
+   * The isolation a fresh context gave is restored explicitly in teardown:
+   * `localStorage` cleared and permissions revoked. Doing it there rather than
+   * in `addInitScript` matters — an init script runs on *every* navigation, so
+   * clearing there would wipe state mid-test and break the specs that assert a
+   * dismissal survives a reload.
+   */
+  sharedContext: [
+    async ({ browser }, use) => {
+      const context = await browser.newContext();
+      // Suppress the first-run wizard's *auto*-open (NEWS-193).
+      //
+      // `maybeOpenOnboarding()` opens it when there are no topics AND no usable
+      // provider AND it hasn't been seen on this device. Every test starts with
+      // empty storage and specs reset topics, so the only term that varied was
+      // "usable provider" — and that is decided by whether the *host* has a
+      // signed-in `claude` or `codex` CLI.
+      //
+      // So the suite passed on a dev machine and could never pass on a CI
+      // runner: there, onboarding opened and `.onboarding-backdrop` intercepted
+      // pointer events for the rest of the run. The tell was that read-only a11y
+      // scans passed and the first test that *clicked* timed out.
+      //
+      // Seeding the flag costs no coverage. No test asserts the auto-open, and
+      // the specs that exercise onboarding open it explicitly via Settings →
+      // `[data-action=rerun-onboarding]`. Deliberately not "give CI an API key":
+      // that would paper over it and assert a state no first-run user is in.
+      //
+      // On the context, so it applies to every page it makes.
+      await context.addInitScript(() => {
+        try {
+          localStorage.setItem('news:onboarding-seen', '1');
+        } catch {
+          // Storage disabled — the wizard reappears, which is the pre-fix state.
+        }
+      });
+      await use(context);
+      await context.close();
+    },
+    { scope: 'worker' },
+  ],
+
+  context: async ({ sharedContext }, use) => {
+    // Specs that ask for `context` (permission grants) get the shared one, so a
+    // grant and the page it affects are the same context.
+    await use(sharedContext);
+  },
+
+  page: async ({ sharedContext }, use) => {
+    const page = await sharedContext.newPage();
 
     const collect = process.env['E2E_COVERAGE'] === '1';
     if (collect) await page.coverage.startJSCoverage({ resetOnNavigation: false });
@@ -243,6 +292,36 @@ export const test = base.extend({
         ].join('\n'),
       );
       writeDiagnostic('console.log', consoleLines.join('\n') || '(the page logged nothing)');
+
+      // Store versus DOM, for the failures where the poll timeline shows the
+      // data arriving and the UI not moving (NEWS-238). The timeline answers
+      // "did it arrive"; this answers "then who dropped it".
+      //
+      // For every <select> on the page it records the live `value` — the
+      // property a user sees — beside the option carrying the `selected`
+      // *attribute*, which is what a morph writes. Those two disagreeing is the
+      // signature of the HTML dirty-select rule, and agreeing rules it out and
+      // points at the store instead. `settings` comes from the app's own store,
+      // so a stale render can be told apart from stale state.
+      const selects = await page
+        .evaluate(() =>
+          [...document.querySelectorAll('select')].map((el) => ({
+            action: el.getAttribute('data-action'),
+            value: el.value,
+            selectedIndex: el.selectedIndex,
+            attrOn: [...el.options].find((o) => o.hasAttribute('selected'))?.value ?? null,
+          })),
+        )
+        .catch(() => null);
+      // What the server says right now, fetched rather than scraped from the
+      // page — so "the server clamped and the UI didn't" and "the server never
+      // clamped" cannot be confused for each other.
+      const serverSettings = await page
+        .request.get('/api/state')
+        .then((r) => r.json())
+        .then((b: unknown) => (b as { settings?: unknown }).settings ?? null)
+        .catch(() => null);
+      writeDiagnostic('dom-state.json', JSON.stringify({ serverSettings, selects }, null, 2));
     }
     expect(pageErrors.map((e) => e.message), 'uncaught errors in the page').toEqual([]);
     expect(memoWarnings, 'kerf reported colliding each() cacheKeys — rows will serve each other stale HTML').toEqual(
@@ -259,6 +338,13 @@ export const test = base.extend({
         fs.writeFileSync(file, JSON.stringify({ result }));
       }
     }
+
+    // Put back the isolation a fresh context used to give (NEWS-246). Both are
+    // best-effort: a test that already failed must not be reported as failing
+    // here instead, and the next test's own `goto` re-seeds what it needs.
+    await page.evaluate(() => { localStorage.clear(); }).catch(() => undefined);
+    await sharedContext.clearPermissions().catch(() => undefined);
+    await page.close().catch(() => undefined);
   },
 });
 
