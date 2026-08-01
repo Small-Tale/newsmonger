@@ -63,8 +63,14 @@ export async function syncTauriNotificationPermission(): Promise<void> {
  * without a prompt.
  *
  * In the Tauri desktop shell (NEWS-66) this routes through the notification
- * plugin, whose `requestPermission()` raises the real OS dialog — the web
- * Notification API's request is a silent "denied" inside the WKWebView.
+ * plugin, which reaches the real OS dialog. Worth being precise about how,
+ * because the plugin's own `requestPermission()` looks like it does nothing:
+ * `api-iife.js` defines it as `window.Notification.requestPermission()`. That
+ * works only because the plugin's `init-iife.js` has already **replaced
+ * `window.Notification`** in the webview with a shim that invokes
+ * `plugin:notification|request_permission` on the Rust side. Take the plugin
+ * away and the same call is the raw WKWebView API, which answers "denied"
+ * without ever asking macOS.
  */
 export async function ensureNotificationPermission(): Promise<boolean> {
   const n = tauriNotification();

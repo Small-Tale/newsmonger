@@ -396,6 +396,18 @@ test('a refused notification permission shows a note and leaves the toggle off (
   await expect(page.locator('.notify-note .note')).toBeVisible();
   await expect(page.locator('[data-action=notify-toggle]')).not.toBeChecked();
 
+  // The note has to say *where* to fix it, and in a browser that is the browser
+  // (NEWS-40). The old wording — "your browser or system settings" — named both
+  // and committed to neither, and cost a real search through macOS System
+  // Settings for a "Newsmonger" entry that cannot exist there, because in a
+  // browser the permission belongs to the browser.
+  const note = page.locator('.notify-note .note');
+  await expect(note).toContainText('browser');
+  await expect(note).toContainText(new URL(page.url()).origin);
+  await expect(note, 'must not send a browser user to macOS System Settings').toContainText(
+    "won’t help",
+  );
+
   // And nothing was persisted.
   const persisted = await page.evaluate(async () => {
     const r = await fetch('/api/state');

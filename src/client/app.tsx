@@ -1299,6 +1299,39 @@ function backupOfferJsx(locations: BackupLocation[]): SafeHtml {
 }
 
 /**
+ * Why notifications are blocked, and where to actually fix it (NEWS-40).
+ *
+ * This used to say "blocked for this app in your browser or system settings",
+ * which is true and useless: it names two places without saying which, and in a
+ * browser it sends people to the wrong one. That is not hypothetical — it cost
+ * a real search through macOS System Settings looking for a "Newsmonger" entry
+ * that **cannot exist there**, because in a browser the notification permission
+ * belongs to the *browser*, per site. macOS lists Chrome or Safari; it has
+ * never heard of this app.
+ *
+ * So the note branches on where it is running, and names the origin, because
+ * "this site" is ambiguous when the address is a bare loopback IP.
+ */
+function notifyBlockedNoteJsx(): SafeHtml {
+  if (isTauri()) {
+    return (
+      <p class="note warn">
+        Your system is blocking notifications for Newsmonger. Open <strong>System Settings → Notifications →
+        Newsmonger</strong> and allow them, then switch this back on.
+      </p>
+    );
+  }
+  return (
+    <p class="note warn">
+      Your browser is blocking notifications for <code>{location.origin}</code>. Fix it in the browser&rsquo;s own
+      site settings for this page — the padlock or icon beside the address bar. <strong>Looking in macOS System
+      Settings won&rsquo;t help</strong>: in a browser the permission belongs to the browser, so it lists Chrome or
+      Safari and never Newsmonger.
+    </p>
+  );
+}
+
+/**
  * First-run flow (NEWS-78).
  *
  * Four steps, because a new user has four things to learn or decide and no
@@ -2026,14 +2059,7 @@ function settingsPanelJsx(s: AppState): SafeHtml {
         </label>
         {/* Always-present slot for the permission note (KF-377). */}
         <div class="notify-note">
-          {s.notifyPermissionDenied ? (
-            <p class="note warn">
-              Notifications are blocked for this app in your browser or system settings. Enable them there to turn
-              this on.
-            </p>
-          ) : (
-            ''
-          )}
+          {s.notifyPermissionDenied ? notifyBlockedNoteJsx() : ''}
         </div>
         <p class="note">
           <button class="btn subtle" type="button" data-action="rerun-onboarding">
