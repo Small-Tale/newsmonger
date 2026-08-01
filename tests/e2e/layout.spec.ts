@@ -217,7 +217,13 @@ test('the flag slot leaves the layout when it is empty (NEWS-152)', async ({ pag
   // 320 for a star most topics don't have — 7% of the rail, taken from the topic
   // name, which is the one thing in the row that needs the width.
   await page.goto('/');
-  await page.fill('.add-topic input', 'Width Reclaimed');
+  // "empty" makes the mock provider return no stories (see the fixtures), which
+  // this test needs as of NEWS-242: a topic that finds news today gets a count
+  // badge, and a badge is something in the slot. A freshly added topic is
+  // checked almost immediately, so without this the assertion below is a race
+  // against that first check — it passed on a fast machine and failed on a
+  // loaded one, which reads exactly like flake and is not.
+  await page.fill('.add-topic input', 'Width Reclaimed empty');
   await page.press('.add-topic input', 'Enter');
   const row = page.locator('.topic', { hasText: 'Width Reclaimed' });
   await expect(row).toBeVisible();
