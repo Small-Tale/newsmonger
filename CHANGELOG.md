@@ -14,6 +14,24 @@ fields reject semver prerelease suffixes.
 
 <!-- Nothing released yet. The first `npm run release` inserts its entry below. -->
 
+## [0.2.0-beta.10] - 2026-08-01
+
+## Features
+
+- New **Newest stories** sidebar sort orders topics by their most recent story, with topics that have never produced one sinking to the bottom in A→Z order.
+- Each topic row now shows a badge counting the stories found today, in the left gutter beside the priority star; topics with nothing today show no badge at all.
+- The **Effort** setting now applies to the Claude subscription provider as well as the Anthropic API — the Claude CLI accepts the same effort levels, and checks now pass the chosen level through.
+
+## Bug Fixes
+
+- Desktop app: notifications, automatic updates and app relaunch now work. The window's capabilities didn't cover the localhost origin it navigates to, so every one of those requests was silently refused — macOS was never even asked for notification permission.
+
+## UX
+
+- Disabled form controls in Settings now look disabled — dimmed, with a "not-allowed" cursor — instead of rendering identically to live fields.
+- The Effort note now names both providers the setting applies to, and no longer claims the Claude subscription takes no effort setting.
+- Claude subscription model suggestions are now aliases (`opus`, `sonnet`, `haiku`, `fable`) that track the latest model, replacing a pinned name that had already been superseded. The field remains free text if you want to pin a specific model.
+
 ## [0.2.0-beta.9] - 2026-08-01
 
 ## Bug Fixes
