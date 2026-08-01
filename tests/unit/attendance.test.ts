@@ -319,3 +319,78 @@ describe('gate does not swallow provider-resolution failures', () => {
     expect(runs[0]?.error).toMatch(/no ai provider/i);
   });
 });
+
+describe('a deferred sweep is recorded, so the banner can tell why (NEWS-247)', () => {
+  /**
+   * The "falling behind" banner reads lateness off `lastCheckedAt`, and the
+   * wall clock cannot tell *we cannot keep up* from *we were not permitted to
+   * try*. Leaving the app in the background with a subscription provider was
+   * enough to make every topic look badly overdue — and the banner then advised
+   * fewer topics, a longer interval, or a faster provider, none of which was
+   * the problem.
+   *
+   * The gate that turns a sweep away is the one place that knows, so it says so.
+   */
+  it('moves the watermark when work was waiting and was not allowed to run', async () => {
+    const { store, runner } = attendedSetup();
+    store.addTopic('fusion energy');
+    const before = runner.checksPossibleSince();
+    const now = before + 60_000;
+
+    await runner.checkDue(new Date(now));
+
+    expect(runner.checksPossibleSince()).toBe(now);
+  });
+
+  it('never reports a moment before the process was running', async () => {
+    // The watermark is the later of process start and the last deferral, so a
+    // deferral timestamped in the past cannot drag it backwards. It answers
+    // "since when could we have checked", and before startup the answer is
+    // never — this is what keeps a reopened app from being judged on the days
+    // it spent closed.
+    const { store, runner } = attendedSetup();
+    store.addTopic('fusion energy');
+    const start = runner.checksPossibleSince();
+
+    await runner.checkDue(new Date(T0)); // T0 is long before this process began
+
+    expect(runner.checksPossibleSince()).toBe(start);
+  });
+
+  it('leaves it alone when there was simply nothing due', async () => {
+    // An idle sweep is not a deferral. Counting one would push the watermark
+    // forward every single minute and silence the banner permanently — the
+    // failure mode that turns a fix into a mute button.
+    const { runner } = attendedSetup();
+    const before = runner.checksPossibleSince();
+
+    await runner.checkDue(new Date(T0));
+
+    expect(runner.checksPossibleSince()).toBe(before);
+  });
+
+  it('leaves it alone when the sweep actually ran', async () => {
+    const { store, runner, attendance } = attendedSetup();
+    store.addTopic('fusion energy');
+    attendance.record(T0);
+    const before = runner.checksPossibleSince();
+
+    await runner.checkDue(new Date(T0));
+
+    expect(runner.checksPossibleSince()).toBe(before);
+  });
+
+  it('tracks the most recent deferral, not the first', async () => {
+    // The watermark answers "since when has checking been possible", so a later
+    // deferral has to move it forward. Keeping the first would let a single
+    // early background stretch excuse every lateness thereafter.
+    const { store, runner } = attendedSetup();
+    store.addTopic('fusion energy');
+    const base = runner.checksPossibleSince();
+
+    await runner.checkDue(new Date(base + 60_000));
+    await runner.checkDue(new Date(base + 120_000));
+
+    expect(runner.checksPossibleSince()).toBe(base + 120_000);
+  });
+});

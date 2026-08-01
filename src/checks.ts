@@ -142,6 +142,35 @@ export class CheckRunner {
    */
   private rateLimitedUntil = 0;
 
+  /**
+   * When a scheduled sweep last found work and was not allowed to do it
+   * (NEWS-247), or 0 if that has not happened this session.
+   *
+   * The "falling behind" banner needs this. It reads lateness off wall-clock
+   * `lastCheckedAt`, and wall-clock does not distinguish *we cannot keep up*
+   * from *we were not permitted to try*. Subscription providers only run
+   * scheduled checks while the app is attended (FR-6.5–6.8), so leaving the app
+   * in the background is enough to make every topic look overdue — and the
+   * banner then tells the user to pick fewer topics or a longer interval, which
+   * would not have helped and is not what happened.
+   *
+   * Recorded at the one place that knows: the gate that turned a sweep away.
+   * A rate-limit pause counts too, and deliberately — during one, "try fewer
+   * topics" is advice about a thing that is not currently the problem either.
+   */
+  private deferredAt = 0;
+
+  /**
+   * When scheduled checking last became possible again — the later of process
+   * start and the last deferral. Lateness accrued before this was not the
+   * app failing to keep up (NEWS-247).
+   */
+  checksPossibleSince(): number {
+    return Math.max(this.startedAt, this.deferredAt);
+  }
+
+  private readonly startedAt = Date.now();
+
   /** Ask the provider for news, retrying transient failures (NEWS-109). */
   private async checkWithRetry(
     provider: NewsProvider,
@@ -548,7 +577,14 @@ export class CheckRunner {
       .filter((topic) => isDueUnderSchedule(topic, settings, now))
       .sort(byCheckOrder);
     if (due.length === 0) return 0;
-    if (!(await this.mayRunScheduled(now))) return 0;
+    if (!(await this.mayRunScheduled(now))) {
+      // Work was waiting and we were not allowed to do it. Recorded only in
+      // that order: no due topics is not a deferral, it is an idle sweep, and
+      // counting it would reset the clock every minute and silence the banner
+      // for good.
+      this.deferredAt = now.getTime();
+      return 0;
+    }
     return this.runPool(due, settings.checkConcurrency, false);
   }
 

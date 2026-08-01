@@ -65,6 +65,7 @@ function state(over: Partial<StateResp> = {}): StateResp {
     ],
     checking: [],
     appVersion: '0.1.0',
+    checksPossibleSince: '1970-01-01T00:00:00.000Z',
     // The shipped defaults, so cost assertions exercise a real rate.
     ...over,
   };

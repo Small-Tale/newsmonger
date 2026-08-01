@@ -242,6 +242,16 @@ export const StateRespSchema = z.object({
   checking: z.array(z.string()),
   /** App version, for diagnostics bundles (NEWS-88). '' if it can't be read. */
   appVersion: z.string().default(''),
+  /**
+   * When scheduled checking last became possible — the later of server start
+   * and the last sweep that was turned away (NEWS-247).
+   *
+   * The "falling behind" banner measures lateness from here rather than from
+   * `lastCheckedAt` alone, because wall-clock cannot tell *we cannot keep up*
+   * from *we were not permitted to try*. Defaults to epoch 0 so an old client
+   * or a fixture without it behaves exactly as before.
+   */
+  checksPossibleSince: z.string().default('1970-01-01T00:00:00.000Z'),
 });
 export type StateResp = z.infer<typeof StateRespSchema>;
 

@@ -154,6 +154,13 @@ export interface AppState {
   checking: string[];
   /** App version, for the diagnostics bundle (NEWS-88). */
   appVersion: string;
+  /**
+   * When scheduled checking last became possible (NEWS-247). The falling-behind
+   * banner measures lateness from here, so time the app was not permitted to
+   * check — backgrounded with a subscription provider, or rate-limited — is not
+   * counted against it.
+   */
+  checksPossibleSince: string;
   /** Whether a copied diagnostics bundle includes topic names (NEWS-88). */
   diagIncludeTopics: boolean;
   /** Provider list + availability (fetched on demand, not every poll). */
@@ -482,6 +489,10 @@ export const appStore = defineStore({
     runs: [],
     checking: [],
     appVersion: '',
+    // Epoch until the first poll answers: "checking has always been possible",
+    // which is the pre-NEWS-247 behaviour and the right thing to assume before
+    // the server has said otherwise.
+    checksPossibleSince: '1970-01-01T00:00:00.000Z',
     diagIncludeTopics: false,
     providers: [],
     settingsTab: 'schedule',

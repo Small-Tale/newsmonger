@@ -97,3 +97,72 @@ describe('topicsBehindSchedule (NEWS-59)', () => {
     expect(topicsBehindSchedule(topics, SETTINGS, NOW).map((t) => t.id)).toEqual(['behind']);
   });
 });
+
+describe('time the app was not allowed to check does not count (NEWS-247)', () => {
+  /**
+   * The reported bug, in the reporter's words: *"because the app only checks
+   * when the user has foregrounded the app within a reasonably tight time
+   * period, the warning shows incorrectly because it thinks not scheduling due
+   * to being in the background is the same problem as not running due to
+   * requests being too time consuming."*
+   *
+   * Exactly right, and the advice made it worse — "try fewer topics, a longer
+   * interval, or a faster provider" is three suggestions about a problem the
+   * user did not have. Nothing was slow. Nothing was permitted to run.
+   */
+  const HOUR = 60 * 60 * 1000;
+  const stale = topic({ lastCheckedAt: new Date(NOW - 25 * HOUR).toISOString() });
+
+  it('warned about a day in the background — the bug', () => {
+    // With no notion of what was possible, a day away is indistinguishable from
+    // a day of failing to keep up. This is the old behaviour, kept as the
+    // contrast the fix is measured against.
+    expect(isBehindSchedule(stale, SETTINGS, NOW)).toBe(true);
+  });
+
+  it('says nothing when checking only just became possible again', () => {
+    // The user came back a minute ago. The topic is genuinely 25 hours stale
+    // and there is genuinely nothing wrong: the app has had one minute in which
+    // it was allowed to do anything about it.
+    expect(isBehindSchedule(stale, SETTINGS, NOW, NOW - 60_000)).toBe(false);
+  });
+
+  it('still warns once checking has been possible long enough', () => {
+    // The fix must not be a mute button. Three hours attended on a one-hour
+    // interval with no check is the real failure this banner exists for, and it
+    // still reports — the same topic, the same staleness, a different reason.
+    expect(isBehindSchedule(stale, SETTINGS, NOW, NOW - 3 * HOUR)).toBe(true);
+  });
+
+  it('never counts time before the topic was last checked', () => {
+    // A topic checked ten minutes ago is not behind, however long ago checking
+    // became possible. The clock starts at the *later* of the two.
+    const fresh = topic({ lastCheckedAt: new Date(NOW - 10 * 60_000).toISOString() });
+    expect(isBehindSchedule(fresh, SETTINGS, NOW, NOW - 10 * HOUR)).toBe(false);
+  });
+
+  it('defaults to the old behaviour when the server says nothing', () => {
+    // Absent `checksPossibleSince` — an older server, or a fixture — means
+    // "checking has always been possible", so nothing changes for a caller that
+    // does not pass it. A default that silenced the banner would hide real
+    // problems on exactly the deployments that cannot report the new field.
+    expect(isBehindSchedule(stale, SETTINGS, NOW)).toBe(isBehindSchedule(stale, SETTINGS, NOW, 0));
+  });
+
+  it('applies through the list and grace-window wrappers', () => {
+    // The banner reads `activeBehindWarnings`, so the fix has to survive both
+    // layers — a filter that dropped the argument would leave the bug in place
+    // while every unit test above still passed.
+    const topics = [stale, topic({ id: 'j', lastCheckedAt: new Date(NOW - 30 * HOUR).toISOString() })];
+    expect(topicsBehindSchedule(topics, SETTINGS, NOW, NOW - 60_000)).toEqual([]);
+    expect(topicsBehindSchedule(topics, SETTINGS, NOW, NOW - 3 * HOUR)).toHaveLength(2);
+    expect(activeBehindWarnings(topics, SETTINGS, NOW, NOW - 1, NOW - 60_000)).toEqual([]);
+    expect(activeBehindWarnings(topics, SETTINGS, NOW, NOW - 1, NOW - 3 * HOUR)).toHaveLength(2);
+  });
+
+  it('keeps the grace window winning over everything', () => {
+    // Grace answers a different question (the interval just changed, NEWS-67).
+    // Inside it, nothing is reported regardless of what was possible.
+    expect(activeBehindWarnings([stale], SETTINGS, NOW, NOW + 1, NOW - 10 * HOUR)).toEqual([]);
+  });
+});

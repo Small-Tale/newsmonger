@@ -662,6 +662,32 @@ test('warns when checks fall behind the chosen interval (NEWS-59)', async ({ pag
   await page.locator('.dialog [data-action=close-settings]').click();
 });
 
+test('the server reports when checking last became possible (NEWS-247)', async ({ page }) => {
+  // The falling-behind banner measures lateness from this rather than from
+  // `lastCheckedAt` alone, because the wall clock cannot tell "we cannot keep
+  // up" from "we were not permitted to try" — a subscription provider only runs
+  // scheduled checks while the app is attended, so a day in the background used
+  // to make every topic look badly overdue and produce advice about a problem
+  // the user did not have.
+  //
+  // This asserts the plumbing: the field exists, parses, and describes *this*
+  // server session. The behaviour it drives is unit-tested on both sides —
+  // `schedule.test.ts` for the banner and `attendance.test.ts` for the deferral
+  // watermark — because producing a real deferral needs an *attended* provider
+  // and the `--ai-test` mock is deliberately unattended.
+  await page.goto('/');
+  const body = (await (await page.request.get('/api/state')).json()) as { checksPossibleSince?: string };
+  expect(body.checksPossibleSince, 'the field must be served').toBeDefined();
+  const since = Date.parse(body.checksPossibleSince ?? '');
+  expect(Number.isNaN(since), 'must be a parseable timestamp').toBe(false);
+
+  // Not the epoch default, and not the future: it should name a moment in this
+  // server's lifetime. A wiring break — the field dropped, defaulted, or
+  // serialised wrong — lands outside this window rather than passing silently.
+  expect(since).toBeGreaterThan(Date.now() - 6 * 60 * 60 * 1000);
+  expect(since).toBeLessThanOrEqual(Date.now() + 1000);
+});
+
 test('shortening the interval does not immediately warn (NEWS-67)', async ({ page }) => {
   const HOUR = 60 * 60 * 1000;
   await page.clock.install({ time: Date.now() });

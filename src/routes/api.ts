@@ -61,6 +61,7 @@ export function registerApi(app: Hono<AppEnv>): void {
       runs: store.listRuns(20),
       checking: runner.checking(),
       appVersion: appVersion(),
+      checksPossibleSince: new Date(runner.checksPossibleSince()).toISOString(),
     };
     return c.json(state);
   });

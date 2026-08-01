@@ -2372,7 +2372,13 @@ function appJsx(): SafeHtml {
   // Topics whose real cadence has fallen well behind the interval the user set
   // (NEWS-59). Informational only — the scheduler already cycles as fast as it
   // can; this just explains why freshness may lag.
-  const behind = activeBehindWarnings(s.topics, s.settings, Date.now(), s.behindGraceUntil);
+  const behind = activeBehindWarnings(
+    s.topics,
+    s.settings,
+    Date.now(),
+    s.behindGraceUntil,
+    Date.parse(s.checksPossibleSince),
+  );
 
   return (
     <div class={`shell${s.sidebarCollapsed ? ' sidebar-collapsed' : ''}`}>
