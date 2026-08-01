@@ -426,6 +426,52 @@ test('the high-priority interval is clamped to the default (NEWS-56)', async ({ 
   await page.locator('.dialog [data-action=close-settings]').click();
 });
 
+test('a select the user has touched still follows the server (NEWS-238)', async ({ page }) => {
+  // The longest-running symptom in NEWS-238, pinned as a regression test now
+  // that its mechanism is known.
+  //
+  // A `<select>` whose selectedness the user has set is **dirty**, and per HTML
+  // stops following the `selected` content attribute — which is what a morph
+  // writes. kerf bypasses that by setting the property too, but only when the
+  // attribute *changes*. When the rendered choice stays put there is nothing to
+  // diff, no property write, and the drift is permanent: every later render
+  // agrees with the DOM and corrects nothing.
+  //
+  // Captured from a CI failure on one element — attribute on 1 hour, control
+  // showing 3:
+  //
+  //     "action": "hp-interval", "value": "10800000", "attrOn": "3600000"
+  //
+  // For a user: shorten the default interval below high-priority and the
+  // high-priority dropdown keeps showing the old value even though the server
+  // has clamped it. The setting is right; the control lies about it.
+  const HOUR = 60 * 60 * 1000;
+  await page.goto('/');
+  await page.request.patch('/api/settings', { data: { checkIntervalMs: HOUR, highPriorityIntervalMs: HOUR } });
+  await openSettingsTab(page, 'Schedule');
+  const hp = page.locator('[data-action=hp-interval]');
+  await expect(hp).toHaveValue(String(HOUR), { timeout: 15_000 });
+
+  // Set the *property* directly — the same dirtiness flag a real click sets,
+  // without depending on an interleaving a test cannot schedule. The server
+  // value deliberately does **not** change afterwards, so the rendered
+  // attribute stays exactly where it is and kerf has nothing to sync from.
+  await hp.evaluate((el: HTMLSelectElement) => {
+    for (const o of el.options) o.selected = o.value === String(3 * 60 * 60 * 1000);
+  });
+
+  // The next render puts it back, and says so on both counts: the control the
+  // user sees, and the attribute the render chose.
+  await expect(hp).toHaveValue(String(HOUR), { timeout: 15_000 });
+  expect(
+    await hp.evaluate((el: HTMLSelectElement) => [...el.options].find((o) => o.hasAttribute('selected'))?.value ?? null),
+  ).toBe(String(HOUR));
+
+  // Leave the shared server on the default the later specs expect.
+  await page.request.patch('/api/settings', { data: { checkIntervalMs: 24 * HOUR } });
+  await page.locator('.dialog [data-action=close-settings]').click();
+});
+
 test('add, edit and clear a topic\u2019s guidance (NEWS-80)', async ({ page }) => {
   await page.goto('/');
   const target = row(page, 'Bravo Topic');

@@ -1,5 +1,5 @@
 import type { SafeHtml } from 'kerfjs';
-import { delegate, each, mount } from 'kerfjs';
+import { delegate, each, effect, mount } from 'kerfjs';
 
 import type { Effort,ProviderName  } from '../ai/types.js';
 import {
@@ -97,6 +97,7 @@ import { onboardingCountText } from './onboarding.js';
 import { browserPollDeps, startPolling as startStatePolling } from './poll.js';
 import { activeBehindWarnings } from './schedule.js';
 import { itemMatchesQuery } from './search.js';
+import { syncSelects } from './select-sync.js';
 import { shareItem } from './share.js';
 import { isAllSoloed, toggleSolo } from './solo.js';
 import type { AppState, DiscoverSource, DiscoverState, OnboardingStep, ToastState } from './stores.js';
@@ -4254,6 +4255,16 @@ async function installPendingUpdate(): Promise<void> {
 const root = document.getElementById('app');
 if (root) {
   mount(root, () => appJsx());
+  // A `<select>` the user has touched stops following the `selected` attribute
+  // a morph writes (NEWS-238) — and kerf can only re-sync the property when
+  // that attribute *changes*, so a control whose rendered choice stays put
+  // never comes back. Registered after `mount` and deferred a microtask so it
+  // runs once the morph for this change has finished, whatever order the
+  // effects were queued in. See `select-sync.ts`.
+  effect(() => {
+    void appStore.state.value;
+    queueMicrotask(() => syncSelects(root));
+  });
   wireEvents(root);
   wireGlobalKeysAndDismiss();
   void refreshState().then(maybeOpenOnboarding).then(maybeOfferBackup);
