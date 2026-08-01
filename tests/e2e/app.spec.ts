@@ -456,8 +456,18 @@ test('the failure warning can be dismissed and stays dismissed, but a new failur
   const row = page.locator('.topic', { hasText: 'fail banner probe' });
   await expect(row).toBeVisible();
 
-  await topicAction(page, row, 'check');
-  await expect(page.locator('.banner.warn')).toBeVisible();
+  // **No explicit check here** (NEWS-238). `POST /api/topics` already fires one
+  // in the background — the user just added the topic and is watching for
+  // results — so clicking Check now runs a *second* one. Two failing runs, and
+  // the banner's dismiss button carries the run id that was rendered when it was
+  // clicked: dismiss the first run's banner and the second run's banner replaces
+  // it, which is correct behaviour and a failed assertion.
+  //
+  // It only shows under load, because on a fast machine the second run finishes
+  // before the poll that first paints the banner, so the id being dismissed is
+  // already the final one. That is the whole reason this read as flake for weeks.
+  // Waiting for the automatic check is also closer to what a user actually does.
+  await expect(page.locator('.banner.warn')).toBeVisible({ timeout: 15_000 });
 
   await page.locator('.banner.warn [data-action=dismiss-warn]').click();
   await expect(page.locator('.banner.warn')).toHaveCount(0);
@@ -490,8 +500,18 @@ test('a dismissed failure warning stays dismissed after an app relaunch (NEWS-41
   const row = page.locator('.topic', { hasText: 'relaunch fail probe' });
   await expect(row).toBeVisible();
 
-  await topicAction(page, row, 'check');
-  await expect(page.locator('.banner.warn')).toBeVisible();
+  // **No explicit check here** (NEWS-238). `POST /api/topics` already fires one
+  // in the background — the user just added the topic and is watching for
+  // results — so clicking Check now runs a *second* one. Two failing runs, and
+  // the banner's dismiss button carries the run id that was rendered when it was
+  // clicked: dismiss the first run's banner and the second run's banner replaces
+  // it, which is correct behaviour and a failed assertion.
+  //
+  // It only shows under load, because on a fast machine the second run finishes
+  // before the poll that first paints the banner, so the id being dismissed is
+  // already the final one. That is the whole reason this read as flake for weeks.
+  // Waiting for the automatic check is also closer to what a user actually does.
+  await expect(page.locator('.banner.warn')).toBeVisible({ timeout: 15_000 });
   await page.locator('.banner.warn [data-action=dismiss-warn]').click();
   await expect(page.locator('.banner.warn')).toHaveCount(0);
 

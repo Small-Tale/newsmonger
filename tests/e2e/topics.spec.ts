@@ -180,8 +180,15 @@ test('solo filters the feed to the chosen topics', async ({ page }) => {
   // rather than comparing item counts before and after. Counts race the 4 s
   // poll: snapshot the "before" total a beat too early and the two are equal.
   await expect(page.locator('.item')).not.toHaveCount(0);
-  const shown = await page.locator('.item .item-topic').allTextContents();
-  expect(new Set(shown.map((t) => t.trim()))).toEqual(new Set(['Alpha Topic']));
+  // `expect.poll`, not a bare `allTextContents()` (NEWS-238). Solo is filtered
+  // **server-side** since NEWS-76, so the banner going up proves only that the
+  // *store* knows — the feed arrives on a separate `/api/items` round trip a
+  // moment later. A one-shot read samples the window in between and sees the
+  // unfiltered feed, which is what failed here on loaded runners while passing
+  // everywhere quiet: the assertion was right and had no way to wait for it.
+  const shownTopics = async (): Promise<string[]> =>
+    [...new Set((await page.locator('.item .item-topic').allTextContents()).map((t) => t.trim()))].sort();
+  await expect.poll(shownTopics, { timeout: 15_000 }).toEqual(['Alpha Topic']);
 
   await expect(page.locator('.topic.soloed')).toHaveCount(1);
   await expect(page.locator('.topic.solo-dimmed')).toHaveCount(totalTopics - 1);
