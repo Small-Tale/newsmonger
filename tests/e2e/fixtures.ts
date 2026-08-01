@@ -144,7 +144,30 @@ export const test = base.extend({
     const pageErrors: Error[] = [];
     page.on('pageerror', (err) => pageErrors.push(err));
 
+    // Console output, attached to the report on failure (NEWS-238).
+    //
+    // Two CI failures were diagnosed from artifacts that contained no console
+    // at all: the trace records network, DOM snapshots and steps, but Playwright
+    // does not capture `console` unless something asks it to. kerf's dev
+    // warnings — stale binding, list rebind, narrowed set — go to the console
+    // and nowhere else, so precisely the diagnostics built to explain a
+    // misbehaving morph were the ones being thrown away.
+    //
+    // Kept in memory and attached only when the test fails, so a green run pays
+    // nothing and a red one carries the evidence.
+    const consoleLines: string[] = [];
+    page.on('console', (msg) => {
+      consoleLines.push(`[${msg.type()}] ${msg.text()}`);
+    });
+
     await use(page);
+
+    if (test.info().status !== test.info().expectedStatus && consoleLines.length > 0) {
+      await test.info().attach('console.log', {
+        body: consoleLines.join('\n'),
+        contentType: 'text/plain',
+      });
+    }
     expect(pageErrors.map((e) => e.message), 'uncaught errors in the page').toEqual([]);
     if (collect) {
       const entries = await page.coverage.stopJSCoverage();

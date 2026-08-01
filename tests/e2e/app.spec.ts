@@ -156,6 +156,16 @@ test('changing the check interval persists across reload', async ({ page }) => {
   await page.reload();
   await openSettings(page);
   await expect(page.locator('[data-action=interval]')).toHaveValue('3600000');
+
+  // Put it back. The suite is serial against one shared server, so this used to
+  // leave **every later test running on a 1-hour interval** instead of the
+  // 1-day default — which changes when the scheduler decides a topic is due,
+  // and so changes how much background checking happens under the tests that
+  // follow. That is invisible on a fast machine and not the sort of thing a
+  // loaded runner should have to absorb.
+  await page.selectOption('[data-action=interval]', { label: 'Every day' });
+  await expect(page.locator('[data-action=interval]')).toHaveValue(String(24 * 60 * 60 * 1000));
+  await page.locator('.dialog [data-action=close-settings]').click();
 });
 
 test('pausing a topic marks it paused', async ({ page }) => {
