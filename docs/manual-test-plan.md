@@ -156,7 +156,11 @@ Two things about driving this from macOS that cost time and are worth not redisc
 - **`prlctl exec` blocks until the process it started exits.** `Start-Process` on a GUI app therefore hangs the session forever. Launch detached with `Invoke-CimMethod Win32_Process Create` and poll from separate `exec` calls.
 - **Quote everything through `-EncodedCommand`** (UTF-16LE base64). Plain `-Command` strings lose their quoting somewhere between bash and prlctl, and `-File` over `\\Mac\Home` did not resolve. PowerShell's progress stream also needs `$ProgressPreference = "SilentlyContinue"`, or a 25 MB download serialises a megabyte of CLIXML into the output.
 
-## E2E suite on Windows — ✅ verified 2026-07-31 (NEWS-209)
+## E2E suite on Windows — ✅ verified 2026-07-31 (NEWS-209), re-run clean 2026-08-01 (NEWS-235)
+
+**Three consecutive clean runs on 2026-08-01** at `5980f46`: **181/181, zero flaky**, 4.7–5.7 minutes each. The previously-flaky `topics.spec.ts:367` (fixed in `291401a`) did not recur, and neither did the `a11y.spec.ts` sweep that flaked in the original run.
+
+One caveat that matters for promoting the CI job to blocking (NEWS-235): these are **VM** runs. The flake being guarded against happened on a *loaded* GitHub `windows-latest` runner, and a quiet VM is the easier environment. The CI job has had **no** run since the fix.
 
 The harness needed **no porting**. That was measured, not assumed, and it contradicts what NEWS-209 expected: glassbox's Windows port had to fix an `npx.cmd` spawn, add Node `mkdir`s in the config and `build:client`, return a favicon 204 and patch the keychain. None of it applied here — newsmonger already resolves paths through Node APIs and creates its directories with `fs.mkdirSync`, so the suite ran as-is.
 
