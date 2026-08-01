@@ -44,12 +44,24 @@ export interface OpenAIRunner {
  * the inversion — see `usesLegacyRequestShape`, which enumerates exceptions so
  * anything newer gets the modern treatment by default.
  *
- * Here even the inversion would be a claim about someone else's API that I
- * cannot check: there is no OpenAI key on this machine, so the rejection shape
- * is unverified. Twice today an unverified claim about another tool turned out
- * to be wrong (NEWS-239, NEWS-244), both times because an *absence* was read as
- * evidence. So this asserts nothing about which models qualify — it asks the
- * API, and believes the answer.
+ * Here even the inversion would be a claim about someone else's API. There is
+ * no OpenAI key on this machine, so two errors were captured through the Codex
+ * CLI's ChatGPT-subscription path instead (pinned in `openai.test.ts`):
+ *
+ *   400 "[ReasoningEffortParam] [reasoning.effort] [invalid_enum_value] …"
+ *   400 "The 'gpt-4o' model is not supported when using Codex with a ChatGPT account."
+ *
+ * The first shows that a reasoning-parameter error **names the parameter in the
+ * message**, which is what this match relies on. The second is a real 400 with
+ * nothing to do with reasoning, and confirms the narrowness earns its keep.
+ *
+ * **What is still unverified is the case this exists for**: a genuine "this
+ * model does not do reasoning" refusal. A ChatGPT subscription rejects a
+ * non-reasoning model *before* the parameter is evaluated, so that response
+ * cannot be reached from here. Hence asserting nothing about which models
+ * qualify — ask the API, believe the answer, and if the guess about the
+ * rejection shape is wrong the cost is one un-retried check with a clear error
+ * rather than a silently wrong request forever.
  *
  * Deliberately narrow. A 400 that says nothing about reasoning is a real error
  * — a bad key, a bad model, a malformed prompt — and retrying those would

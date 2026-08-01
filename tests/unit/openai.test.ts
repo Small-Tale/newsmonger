@@ -195,4 +195,48 @@ describe('looksLikeEffortRejection (NEWS-245)', () => {
     expect(looksLikeEffortRejection(null)).toBe(false);
     expect(looksLikeEffortRejection('reasoning')).toBe(false);
   });
+
+  /**
+   * Two errors captured from the **real** OpenAI API, through the Codex CLI's
+   * ChatGPT-subscription path — this repo has no OpenAI key, so these are the
+   * only first-hand samples available.
+   *
+   * They matter because the predicate was otherwise written from guesses about
+   * someone else's API, which is precisely the move that has been wrong twice
+   * this week (NEWS-239, NEWS-244).
+   *
+   * **Still unverified:** a genuine "this model does not do reasoning" refusal.
+   * A ChatGPT subscription rejects non-reasoning models *before* the parameter
+   * is evaluated (second case below), so that response cannot be reached from
+   * here at all. The evidence for the positive case is indirect: OpenAI names
+   * the offending parameter in the message, as the first case shows.
+   */
+  describe('against errors captured from the live API', () => {
+    it('matches a real complaint about reasoning.effort', () => {
+      // Verbatim, from `codex exec -c model_reasoning_effort=bogus`. An invalid
+      // *value* rather than an unsupported parameter — but it establishes the
+      // thing the predicate depends on: a reasoning-parameter error says so in
+      // the message, in a form a substring match finds.
+      const real = {
+        status: 400,
+        type: 'invalid_request_error',
+        message:
+          "[ReasoningEffortParam] [reasoning.effort] [invalid_enum_value] Invalid value: 'bogus'. Supported values are: 'none', 'minimal', 'low', 'medium', 'high', 'xhigh', and 'max'.",
+      };
+      expect(looksLikeEffortRejection(real)).toBe(true);
+    });
+
+    it('does not match a real 400 about the model itself', () => {
+      // Verbatim, from `codex exec -m gpt-4o`. A 400 that has nothing to do with
+      // reasoning, and the case the narrowness exists for: dropping effort would
+      // not make an unsupported model supported, so retrying would cost a second
+      // identical failure and bury the real message under it.
+      const real = {
+        status: 400,
+        type: 'invalid_request_error',
+        message: "The 'gpt-4o' model is not supported when using Codex with a ChatGPT account.",
+      };
+      expect(looksLikeEffortRejection(real)).toBe(false);
+    });
+  });
 });
