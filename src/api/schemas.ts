@@ -233,6 +233,10 @@ export const StateRespSchema = z.object({
   latestItemIds: z.array(z.string()).default([]),
   /** Off-topic story count per topic, for the "Review Flagged (N)" badge (NEWS-76). */
   flaggedByTopic: z.record(z.string(), z.number().int()).default({}),
+  /** Stories found today per topic, for the sidebar count badge (NEWS-242). Absent = none. */
+  todayByTopic: z.record(z.string(), z.number().int()).default({}),
+  /** Newest story's `foundAt` per topic, for the most-recent sort (NEWS-241). */
+  newestItemAtByTopic: z.record(z.string(), z.string()).default({}),
   settings: SettingsSchema,
   runs: z.array(CheckRunSchema),
   checking: z.array(z.string()),

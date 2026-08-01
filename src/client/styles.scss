@@ -818,6 +818,27 @@ h2.eyebrow {
     display: inline-flex;
   }
 
+  // Today's count (NEWS-242). A number, not a glyph, so it needs a shape of its
+  // own — the other flags are icons and inherit their meaning from the drawing.
+  // A pill in the accent colour reads as a quantity at a glance and does not
+  // compete with the star, which is a *state*.
+  .flag.today-count {
+    align-items: center;
+    justify-content: center;
+    min-width: 17px;
+    height: 17px;
+    padding: 0 4px;
+    border-radius: 9px;
+    background: var(--pine);
+    color: var(--panel);
+    // Tabular figures so 1 and 11 line up in the gutter instead of shifting the
+    // column by a digit's width.
+    font-variant-numeric: tabular-nums;
+    font-size: 10.5px;
+    font-weight: 600;
+    line-height: 1;
+  }
+
   // Guidance is a quieter signal than priority — it says "this topic is
   // narrowed", not "this topic is urgent", so it stays unfilled and muted.
   // The high-priority star is filled to read as a "starred" state at a glance.

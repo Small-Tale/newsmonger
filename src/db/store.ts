@@ -745,6 +745,51 @@ export class Store {
   }
 
   /**
+   * How many stories each topic turned up **today**, for the sidebar badge
+   * (NEWS-242), plus the newest story's timestamp per topic, for the
+   * most-recent sort (NEWS-241).
+   *
+   * One query for both, because both are read by the same `/api/state` poll
+   * every four seconds and a second scan of `items` would buy nothing.
+   *
+   * Three decisions worth stating, since none is forced:
+   *
+   * - **`found_at`, not the published date.** The feed's day headings already
+   *   group on `found_at`, so a badge counting anything else would disagree with
+   *   the list it sits beside — "3 today" over two visible rows.
+   * - **Off-topic stories are excluded**, exactly as the feed excludes them
+   *   (FR-3.x). A badge is a promise about what you will see if you click.
+   * - **The day boundary is the caller's.** `startOfDayIso` is passed in rather
+   *   than computed here so "today" means the *local* day, and so tests can
+   *   pick a boundary instead of waiting for midnight.
+   */
+  itemStatsByTopic(startOfDayIso: string): {
+    today: Record<string, number>;
+    newestAt: Record<string, string>;
+  } {
+    const rows = this.db
+      .prepare(
+        `SELECT topic_id AS t,
+                sum(CASE WHEN found_at >= ? THEN 1 ELSE 0 END) AS today,
+                max(found_at) AS newest
+           FROM items
+          WHERE off_topic = 0
+          GROUP BY topic_id`,
+      )
+      .all(startOfDayIso) as { t: string; today: unknown; newest: unknown }[];
+    const today: Record<string, number> = {};
+    const newestAt: Record<string, string> = {};
+    for (const row of rows) {
+      const count = asCount(row.today);
+      // Only carry a topic that actually has stories today. A zero would render
+      // as a badge saying nothing happened, on every quiet topic, forever.
+      if (count > 0) today[row.t] = count;
+      if (typeof row.newest === 'string') newestAt[row.t] = row.newest;
+    }
+    return { today, newestAt };
+  }
+
+  /**
    * Titles of a topic's off-topic stories, most recent first, for the prompt's
    * negative-example list (NEWS-61). Capped by `limit` to keep the prompt bounded.
    */

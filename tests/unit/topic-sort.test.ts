@@ -137,3 +137,69 @@ describe('topicRows', () => {
     expect(topicRows([], 'category')).toEqual([]);
   });
 });
+
+describe('sortTopics: recent (NEWS-241)', () => {
+  it('puts the topic with the newest story first', () => {
+    const old = topic('Old', { id: 'a' });
+    const fresh = topic('Fresh', { id: 'b' });
+    const middling = topic('Middling', { id: 'c' });
+    const newest = {
+      a: '2026-07-01T10:00:00Z',
+      b: '2026-07-30T10:00:00Z',
+      c: '2026-07-15T10:00:00Z',
+    };
+    expect(sortTopics([old, fresh, middling], 'recent', newest).map((t) => t.name)).toEqual([
+      'Fresh',
+      'Middling',
+      'Old',
+    ]);
+  });
+
+  /**
+   * The trap: a topic with no stories is simply absent from the map. Treating a
+   * missing timestamp as an empty string would sort it **first** under a
+   * descending compare — so "newest stories" would lead with the topics that
+   * have none, which is the exact opposite of the promise.
+   */
+  it('sinks topics that have never produced a story, rather than floating them', () => {
+    const never = topic('Never', { id: 'a' });
+    const alsoNever = topic('Also never', { id: 'b' });
+    const has = topic('Has stories', { id: 'c' });
+    const order = sortTopics([never, alsoNever, has], 'recent', { c: '2026-07-01T00:00:00Z' }).map(
+      (t) => t.name,
+    );
+    expect(order[0]).toBe('Has stories');
+    // The empty ones keep a stable order among themselves — A→Z, not input order.
+    expect(order.slice(1)).toEqual(['Also never', 'Never']);
+  });
+
+  it('falls back to A→Z when two topics share a timestamp', () => {
+    const same = '2026-07-20T12:00:00Z';
+    const zebra = topic('Zebra', { id: 'a' });
+    const apple = topic('Apple', { id: 'b' });
+    expect(sortTopics([zebra, apple], 'recent', { a: same, b: same }).map((t) => t.name)).toEqual([
+      'Apple',
+      'Zebra',
+    ]);
+  });
+
+  it('never mutates the array it was given', () => {
+    const a = topic('A', { id: 'a' });
+    const b = topic('B', { id: 'b' });
+    const input = [a, b];
+    sortTopics(input, 'recent', { b: '2026-07-30T00:00:00Z' });
+    expect(input).toEqual([a, b]);
+  });
+
+  it('degrades to A→Z with no timestamps at all', () => {
+    // The map is optional, and an older client or a first paint has none.
+    const zebra = topic('Zebra');
+    const apple = topic('Apple');
+    expect(sortTopics([zebra, apple], 'recent').map((t) => t.name)).toEqual(['Apple', 'Zebra']);
+  });
+
+  it('adds no headings, the way every non-category sort does not', () => {
+    const rows = topicRows([topic('A'), topic('B')], 'recent', {});
+    expect(rows.some((r) => isHeading(r))).toBe(false);
+  });
+});

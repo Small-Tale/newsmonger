@@ -25,10 +25,26 @@ export function categoryHeading(topic: Topic): string {
  *
  * - `alpha`: A→Z by name (the default; the most predictable place to find one).
  * - `added`: most recently added first.
+ * - `recent`: the topic with the newest story first (NEWS-241). Topics with no
+ *   stories sink to the bottom rather than floating on an empty timestamp —
+ *   "newest stories" that leads with a topic having none would be a lie. Ties,
+ *   including the whole empty group, fall back to A→Z so the order is stable.
  * - `priority`: high-priority topics on top, then A→Z within each group.
  * - `category`: taxonomy order, then A→Z within each section; unclassified last.
  */
-export function sortTopics(topics: Topic[], sort: TopicSort): Topic[] {
+export function sortTopics(
+  topics: Topic[],
+  sort: TopicSort,
+  /**
+   * Newest story `foundAt` per topic id; only `recent` reads it.
+   *
+   * Typed with `| undefined` deliberately: a topic that has never produced a
+   * story is simply absent from the map, and `Record<string, string>` would
+   * claim otherwise — which makes the "no stories yet" branch below look like
+   * dead code to both the reader and the linter.
+   */
+  newestByTopic: Record<string, string | undefined> = {},
+): Topic[] {
   const byName = (a: Topic, b: Topic): number => a.name.localeCompare(b.name);
   const copy = [...topics];
   switch (sort) {
@@ -36,6 +52,19 @@ export function sortTopics(topics: Topic[], sort: TopicSort): Topic[] {
       return copy.sort(byName);
     case 'added':
       return copy.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+    case 'recent':
+      return copy.sort((a, b) => {
+        const an = newestByTopic[a.id];
+        const bn = newestByTopic[b.id];
+        // An absent timestamp means the topic has never produced a story. Sorting
+        // it as an empty string would put it *first* under a descending compare,
+        // which is the opposite of what "newest stories" promises.
+        if (an === undefined && bn === undefined) return byName(a, b);
+        if (an === undefined) return 1;
+        if (bn === undefined) return -1;
+        const cmp = bn.localeCompare(an);
+        return cmp === 0 ? byName(a, b) : cmp;
+      });
     case 'priority':
       return copy.sort((a, b) => (a.highPriority === b.highPriority ? byName(a, b) : a.highPriority ? -1 : 1));
     case 'category':
@@ -81,8 +110,12 @@ export function isHeading(row: TopicRow): row is TopicHeading {
  * The sidebar's rows in display order, with section headings interleaved when
  * sorting by section and none at all otherwise.
  */
-export function topicRows(topics: Topic[], sort: TopicSort): TopicRow[] {
-  const sorted = sortTopics(topics, sort);
+export function topicRows(
+  topics: Topic[],
+  sort: TopicSort,
+  newestByTopic: Record<string, string | undefined> = {},
+): TopicRow[] {
+  const sorted = sortTopics(topics, sort, newestByTopic);
   if (sort !== 'category') return sorted;
 
   const rows: TopicRow[] = [];

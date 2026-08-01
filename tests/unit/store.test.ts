@@ -280,3 +280,71 @@ describe('Store', () => {
     }).not.toThrow();
   });
 });
+
+describe('itemStatsByTopic (NEWS-242, NEWS-241)', () => {
+  const MIDNIGHT = '2026-07-30T00:00:00.000Z';
+
+  function seeded() {
+    const store = new Store(tmpDataDir());
+    const a = store.addTopic('Alpha');
+    const b = store.addTopic('Beta');
+    store.addItems([
+      // Two today for Alpha, one yesterday.
+      { topicId: a.id, title: 'a1', summary: 's', sources: [], dedupeKey: 'a1', foundAt: '2026-07-30T09:00:00Z' },
+      { topicId: a.id, title: 'a2', summary: 's', sources: [], dedupeKey: 'a2', foundAt: '2026-07-30T11:00:00Z' },
+      { topicId: a.id, title: 'a0', summary: 's', sources: [], dedupeKey: 'a0', foundAt: '2026-07-29T23:00:00Z' },
+      // Beta has only an older one.
+      { topicId: b.id, title: 'b0', summary: 's', sources: [], dedupeKey: 'b0', foundAt: '2026-07-28T08:00:00Z' },
+    ]);
+    return { store, a, b };
+  }
+
+  it('counts only today, and reports the newest overall', () => {
+    const { store, a, b } = seeded();
+    const stats = store.itemStatsByTopic(MIDNIGHT);
+    expect(stats.today[a.id]).toBe(2);
+    // Beta has stories, but none today — so it must be absent, not 0.
+    expect(stats.today[b.id]).toBeUndefined();
+    expect(stats.newestAt[a.id]).toBe('2026-07-30T11:00:00Z');
+    expect(stats.newestAt[b.id]).toBe('2026-07-28T08:00:00Z');
+    store.close();
+  });
+
+  it('omits a topic with no stories entirely, from both maps', () => {
+    // The sort relies on this: an absent timestamp is how it knows to sink a
+    // topic rather than float it on an empty string.
+    const { store } = seeded();
+    const empty = store.addTopic('Empty');
+    const stats = store.itemStatsByTopic(MIDNIGHT);
+    expect(stats.today[empty.id]).toBeUndefined();
+    expect(stats.newestAt[empty.id]).toBeUndefined();
+    store.close();
+  });
+
+  /**
+   * The badge is a promise about what the feed will show. The feed hides
+   * off-topic stories, so counting them would advertise stories that aren't
+   * there — "3 today" over a list of one.
+   */
+  it('excludes off-topic stories, as the feed does', () => {
+    const { store, a } = seeded();
+    const [today] = store.listItems(a.id).filter((i) => i.foundAt === '2026-07-30T11:00:00Z');
+    expect(today).toBeDefined();
+    store.setItemOffTopic(today.id, true);
+    const stats = store.itemStatsByTopic(MIDNIGHT);
+    expect(stats.today[a.id]).toBe(1);
+    // ...and the newest timestamp follows the same rule, or the sort would rank
+    // a topic by a story nobody can see.
+    expect(stats.newestAt[a.id]).toBe('2026-07-30T09:00:00Z');
+    store.close();
+  });
+
+  it('moves with the boundary it is given', () => {
+    // "Today" is the caller's local day, not UTC and not the database's idea of
+    // one — passing it in is what makes that possible, and testable.
+    const { store, a } = seeded();
+    expect(store.itemStatsByTopic('2026-07-29T00:00:00.000Z').today[a.id]).toBe(3);
+    expect(store.itemStatsByTopic('2026-07-31T00:00:00.000Z').today[a.id]).toBeUndefined();
+    store.close();
+  });
+});

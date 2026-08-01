@@ -24,6 +24,8 @@ function state(over: Partial<StateResp> = {}): StateResp {
     ],
     latestItemIds: [],
     flaggedByTopic: {},
+    todayByTopic: {},
+    newestItemAtByTopic: {},
     settings: {
       checkIntervalMs: 3_600_000,
       highPriorityIntervalMs: 3_600_000,

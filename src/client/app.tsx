@@ -268,6 +268,8 @@ function topicRowJsx(
   dimmed: boolean,
   /** This row is the *only* one selected — see the guidance clamp (NEWS-143). */
   soleSelection: boolean,
+  /** Stories found today for this topic; 0 renders nothing (NEWS-242). */
+  todayCount: number,
 ): SafeHtml {
   const classes = [
     'topic',
@@ -307,6 +309,21 @@ function topicRowJsx(
             ''
           )}
           {soloed ? <span class="flag">{icon('solo', 13)}</span> : ''}
+          {/* Stories found today (NEWS-242). Hidden at zero rather than shown as
+              "0": a column of zeros down a quiet sidebar is noise that trains
+              you to stop reading the badge, which costs the one day it matters.
+              The count excludes off-topic stories, matching what the feed will
+              actually show if you click. */}
+          {todayCount > 0 ? (
+            <span
+              class="flag today-count"
+              title={`${String(todayCount)} ${todayCount === 1 ? 'story' : 'stories'} found today`}
+            >
+              {String(todayCount)}
+            </span>
+          ) : (
+            ''
+          )}
         </span>
       </span>
       <div class="topic-main">
@@ -2421,7 +2438,7 @@ function appJsx(): SafeHtml {
         {renameTarget === undefined ? '' : renameDialogJsx(renameTarget, s.renameItemCount)}
       </div>
       <div id="privacy-slot">{s.privacyOpen ? privacyDialogJsx(s) : ''}</div>
-      <div id="export-slot">{s.export !== null ? exportDialogJsx(s.export, sortTopics(s.topics, s.topicSort)) : ''}</div>
+      <div id="export-slot">{s.export !== null ? exportDialogJsx(s.export, sortTopics(s.topics, s.topicSort, s.newestItemAtByTopic)) : ''}</div>
       <div id="discover-slot">{s.discover !== null ? discoverDialogJsx(s.discover) : ''}</div>
       {/* Always present because it is a **live region**: assistive technology
           announces mutations to a region it is already observing, so a slot
@@ -2609,7 +2626,7 @@ function appJsx(): SafeHtml {
             announces selection state and roving focus works (NEWS-90). */}
         <ul class="topics" role="listbox" aria-multiselectable="true" aria-label="Topics">
           {each(
-            topicRows(s.topics, s.topicSort),
+            topicRows(s.topics, s.topicSort, s.newestItemAtByTopic),
             (row) =>
               isHeading(row) ? (
                 // `role="presentation"` because a listbox may only contain
@@ -2627,6 +2644,7 @@ function appJsx(): SafeHtml {
                   solo.has(row.id),
                   solo.size > 0 && !solo.has(row.id),
                   selected.size === 1 && selected.has(row.id),
+                  s.todayByTopic[row.id] ?? 0,
                 )
               ),
             {
@@ -2640,12 +2658,17 @@ function appJsx(): SafeHtml {
               // a topic classified by a background check would otherwise keep
               // its stale row until something else changed. A heading's HTML is
               // its label, so its key is just that.
+              //
+              // Today's count is in the key for exactly that reason (NEWS-242):
+              // it lives in `todayByTopic`, not on the topic object, so a badge
+              // going 2 → 3 changes nothing `each()` can see and the row would
+              // keep its cached HTML until some unrelated field happened to move.
               cacheKey: (row: TopicRow) =>
                 isHeading(row)
                   ? row.label
                   : `${String(row.category)}|${String(row.subcategory)}|${String(selected.has(row.id))}|${String(selected.size)}|${String(solo.has(row.id))}|${String(solo.size)}|${String(
                       s.checking.includes(row.id),
-                    )}|${String(row.highPriority)}|${row.guidance}`,
+                    )}|${String(row.highPriority)}|${row.guidance}|${String(s.todayByTopic[row.id] ?? 0)}`,
               // A stable list identity (kerf 3.x). Unkeyed lists are identified by
               // their position among a render's `each()` calls, so a conditional
               // list appearing above this one would rebuild it and cost the rows
@@ -2752,7 +2775,7 @@ function selectTopic(id: string, mods: { toggle: boolean; range: boolean }): voi
   const { topics, selectedTopicIds, topicSort } = appStore.state.value;
   if (mods.range && anchorId !== null) {
     // Range is over the *displayed* order, which the sort determines (NEWS-63).
-    const ids = sortTopics(topics, topicSort).map((t) => t.id);
+    const ids = sortTopics(topics, topicSort, appStore.state.value.newestItemAtByTopic).map((t) => t.id);
     const from = ids.indexOf(anchorId);
     const to = ids.indexOf(id);
     if (from !== -1 && to !== -1) {

@@ -786,3 +786,46 @@ test('guidance shows as text, and expands for a sole selection (NEWS-143)', asyn
   await page.keyboard.press('Escape');
   await topicAction(page, row, 'delete');
 });
+
+test('the sidebar shows today\'s story count and can sort by newest (NEWS-242, NEWS-241)', async ({
+  page,
+}) => {
+  await page.goto('/');
+  await page.fill('.add-topic input', 'Badge Probe');
+  await page.press('.add-topic input', 'Enter');
+  const row = page.locator('.topic', { hasText: 'Badge Probe' });
+  await expect(row).toBeVisible();
+
+  // Adding a topic fires an immediate check (FR-1.12) and the mock returns two
+  // stories, so a badge should appear on its own without a manual check.
+  await expect(row.locator('.today-count')).toHaveText('2', { timeout: 20_000 });
+  await expect(row.locator('.today-count')).toHaveAttribute('title', /2 stories found today/);
+
+  // A topic with nothing today shows no badge at all — not a zero. The "empty"
+  // topic never checks successfully, so it never has stories.
+  // Name deliberately shares no substring with the one above — `hasText` is a
+  // case-insensitive substring match, so "empty badge probe" would also match
+  // the "Badge Probe" locator and both would resolve to two elements.
+  // "empty" is what makes the mock provider return no stories.
+  await page.fill('.add-topic input', 'Quiet empty subject');
+  await page.press('.add-topic input', 'Enter');
+  const quiet = page.locator('.topic', { hasText: 'Quiet empty subject' });
+  await expect(quiet).toBeVisible();
+  await expect(quiet.locator('.today-count')).toHaveCount(0);
+
+  // The new sort option exists and is selectable.
+  const sort = page.locator('[data-action=topic-sort]');
+  await sort.selectOption('recent');
+  await expect(sort).toHaveValue('recent');
+  // The topic with stories sorts above the one without — an absent timestamp
+  // must sink, not float.
+  await expect(page.locator('.topic-name').first()).toHaveText('Badge Probe');
+
+  // It persists across a reload, like the other sort choices (NEWS-63).
+  await page.reload();
+  await expect(page.locator('[data-action=topic-sort]')).toHaveValue('recent');
+
+  await sort.selectOption('alpha');
+  await topicAction(page, row, 'delete');
+  await topicAction(page, quiet, 'delete');
+});

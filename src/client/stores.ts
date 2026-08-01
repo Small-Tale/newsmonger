@@ -11,11 +11,12 @@ type NewsItem = ItemsResp['items'][number];
 export const FEED_PAGE = 100;
 
 /** Sidebar ordering options (NEWS-63). */
-export type TopicSort = 'alpha' | 'added' | 'priority' | 'category';
-export const TOPIC_SORTS: readonly TopicSort[] = ['alpha', 'added', 'priority', 'category'];
+export type TopicSort = 'alpha' | 'added' | 'recent' | 'priority' | 'category';
+export const TOPIC_SORTS: readonly TopicSort[] = ['alpha', 'added', 'recent', 'priority', 'category'];
 export const TOPIC_SORT_LABELS: Record<TopicSort, string> = {
   alpha: 'A → Z',
   added: 'Recently added',
+  recent: 'Newest stories',
   priority: 'Priority first',
   category: 'By section',
 };
@@ -144,6 +145,10 @@ export interface AppState {
   feedTotal: number;
   /** Off-topic count per topic, for the "Review Flagged (N)" badge (NEWS-76). */
   flaggedByTopic: Record<string, number>;
+  /** Stories found today per topic, for the sidebar badge (NEWS-242). */
+  todayByTopic: Record<string, number>;
+  /** Newest story's `foundAt` per topic, for the most-recent sort (NEWS-241). */
+  newestItemAtByTopic: Record<string, string>;
   settings: StateResp['settings'];
   runs: StateResp['runs'];
   checking: string[];
@@ -456,6 +461,8 @@ export const appStore = defineStore({
     feedItems: [],
     feedTotal: 0,
     flaggedByTopic: {},
+    todayByTopic: {},
+    newestItemAtByTopic: {},
     settings: {
       checkIntervalMs: 24 * 60 * 60 * 1000,
       highPriorityIntervalMs: 24 * 60 * 60 * 1000,

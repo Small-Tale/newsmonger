@@ -46,10 +46,17 @@ export function registerApi(app: Hono<AppEnv>): void {
     const store = c.get('store');
     const runner = c.get('runner');
     const settings = store.getSettings();
+    // "Today" is the *server's* local midnight, which is the user's: this app
+    // runs on their machine and is reached over loopback (NEWS-242).
+    const midnight = new Date();
+    midnight.setHours(0, 0, 0, 0);
+    const itemStats = store.itemStatsByTopic(midnight.toISOString());
     const state: StateResp = {
       topics: store.listTopics(),
       latestItemIds: store.latestItemIds(50),
       flaggedByTopic: store.flaggedCountsByTopic(),
+      todayByTopic: itemStats.today,
+      newestItemAtByTopic: itemStats.newestAt,
       settings,
       runs: store.listRuns(20),
       checking: runner.checking(),

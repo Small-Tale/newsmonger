@@ -16,7 +16,7 @@ Two deliberate choices in the wording. Durations **round down** (`23h59m` → "i
 - **FR-3.1a** Source block (top of the Watching rail): an AI-provider picker (Auto / Anthropic / OpenAI / Mock), a model field (shown for non-auto/mock), and an endpoint field (shown for OpenAI), persisted via `PATCH /api/settings`. A status line shows the selected provider's availability (from `GET /api/providers`, probed on demand) and the provider that ran the last check. See [6 — AI Providers](6-providers.md).
 - **FR-3.2c** *(NEWS-142, NEWS-143)* A topic **name wraps rather than truncating** — it is the question the app asks, so an ellipsis hides the part that tells two similar topics apart ("3D chip stacking and advanced…" vs "3D chip stacking in memory…"). Its **guidance shows as text** below the name, clamped to two lines, and to ten when that row is the *only* one selected — a sole selection is the one moment the user is asking about that topic in particular. This replaced an icon that conveyed only *that* a topic was steered, which is the less useful half of the fact.
 - **FR-3.2** Watching rail: a list of topics — dial, name, status line (checking… / paused / checked \<relative time\> / not checked yet), and per-topic Check / Pause–Resume / Delete actions (revealed on hover/focus on the desktop layout, always shown on touch/narrow). Delete asks for confirmation. Below the list: the add-topic form (submit via button or Enter).
-- **FR-3.2a** *(NEWS-63, NEWS-140)* A **sort dropdown** sits on the "Watching" header line (right side, shown once there's more than one topic): **A → Z** (default), **Recently added** (newest first), **Priority first** (high-priority topics on top, then A→Z), and **By section** — taxonomy order (not alphabetical, so it matches the filter bar), A→Z within each section, unclassified last, with a heading opening each group.
+- **FR-3.2a** *(NEWS-63, NEWS-140)* A **sort dropdown** sits on the "Watching" header line (right side, shown once there's more than one topic): **A → Z** (default), **Recently added** (newest first), **Newest stories** (FR-3.60), **Priority first** (high-priority topics on top, then A→Z), and **By section** — taxonomy order (not alphabetical, so it matches the filter bar), A→Z within each section, unclassified last, with a heading opening each group.
 
   **FR-3.54** *(Shipped, NEWS-154)* Those headings are **larger than the "Watching" eyebrow above them, and carry no rule.** At `0.68rem` a heading was a hair *smaller* than the label for the list itself, which is backwards — they are the structure the eye scans to find a topic. The underline went with the row rules (FR-3.52): once whitespace does the separating, an underlined heading is the one thing left fenced in. The E2E sizes the heading *against the eyebrow* rather than against a magic number, because that comparison is the complaint.
 
@@ -303,6 +303,22 @@ Settings (check interval, provider, model, endpoint, API keys) live in a modal o
 - The dialog is a conditional sibling, so it renders inside an always-present `#settings-slot` container (the KF-377 rule below).
 - The backdrop and the close button use **different** actions. Delegation matches against the target's ancestors, and the backdrop wraps the dialog — so a shared `close-settings` action made every in-dialog click (including Save) match a closing ancestor and dismiss the dialog mid-submit. Backdrop click-away fires only when the click landed on the backdrop element itself.
 
+
+## Sidebar: what each topic has produced
+
+- **FR-3.60** *(Shipped, NEWS-241)* A **Newest stories** sort orders topics by the timestamp of their most recent story, newest first. **Topics that have never produced one sink to the bottom**, in A→Z order among themselves — a missing timestamp is *absent*, not empty, and treating it as an empty string would sort those topics **first** under a descending compare, which is the exact opposite of what the option promises. Ties fall back to A→Z so the order is stable between polls.
+
+- **FR-3.61** *(Shipped, NEWS-242)* Each topic row carries a **count of the stories found today**, in the left gutter under the dial beside the priority star.
+
+  Three decisions, none of them forced:
+
+  - It counts on **`foundAt`**, not the published date, because the feed's day headings already group on `foundAt` — a badge counting anything else would disagree with the list it sits next to, reading "3 today" above two visible rows.
+  - It **excludes off-topic stories**, exactly as the feed does. The badge is a promise about what you will see if you click it.
+  - **Zero renders nothing**, rather than a `0`. A column of zeros down a quiet sidebar is noise that teaches you to stop reading the badge, which costs you the one day it matters.
+
+  "Today" is the **server's local midnight**, which is the user's: the app runs on their machine and is reached over loopback. Both this and FR-3.60's timestamps ride the existing `/api/state` poll as `todayByTopic` and `newestItemAtByTopic`, computed in one query (`store.itemStatsByTopic`) rather than two scans of `items`.
+
+  The count is part of the topic rows' `each()` **memo key**. It lives in `todayByTopic`, not on the topic object, so a badge going 2 → 3 changes nothing `each()` can see by identity and the row would keep its cached HTML until some unrelated field happened to move (the same hazard the category field has).
 
 See also: [1 — Topics and Scheduling](1-topics-and-scheduling.md), [5 — Desktop App](5-desktop-app.md).
 

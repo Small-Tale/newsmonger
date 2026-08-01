@@ -50,7 +50,7 @@ src/
   api/
     schemas.ts        zod request schemas + StateResp (shared client/server)
   routes/
-    api.ts            /api/discover + /api/discover/usage (NEWS-125), /api/state (topics/settings/runs/checking + latestItemIds + flaggedByTopic; NO items), /api/items (paginated feed: filter+sort+cursor), /api/providers, /api/topics, /api/items/:id (save/flag), /api/settings, /api/backup + /api/backup/locations (NEWS-192, NEWS-230), /api/keys, /api/foreground, /api/check, /api/open-external, /api/export.md, /api/export.json, /feed.xml, /healthz
+    api.ts            /api/discover + /api/discover/usage (NEWS-125), /api/state (topics/settings/runs/checking + latestItemIds + flaggedByTopic + todayByTopic/newestItemAtByTopic for the sidebar badge + newest sort, NEWS-242/241; NO items), /api/items (paginated feed: filter+sort+cursor), /api/providers, /api/topics, /api/items/:id (save/flag), /api/settings, /api/backup + /api/backup/locations (NEWS-192, NEWS-230), /api/keys, /api/foreground, /api/check, /api/open-external, /api/export.md, /api/export.json, /feed.xml, /healthz
     pages.tsx         GET / — SSR shell
   components/
     layout.tsx        HTML shell
@@ -125,6 +125,7 @@ Data dir: `--data-dir` flag → `NEWSMONGER_DATA_DIR` → `~/.newsmonger`. Also 
 | Export dialog | `exportDialogJsx` + the `open-export`/`close-export`/`data-export-scope`/`data-export-format` delegates in `client/app.tsx`, `export` in `client/stores.ts`, `.export-option` in `styles.scss`. Tauri routing via `data-export` → `/api/open-external`. See `docs/21-export-and-feed.md` FR-21.8/21.9 |
 | API key auto-save | `commitKey` + the `submit`/`change` delegates in `client/app.tsx`, `savingKey` in `client/stores.ts`, `.key-saving` in `styles.scss`. See `docs/7-api-keys.md` FR-7.10a |
 | Undoing a clear | `src/undo.ts` (`ClearUndoBuffer`), `Store.clearItemsForTopic`/`restoreClearedItems`, `POST /api/topics/:id/restore-cleared`, `showUndoToast` + `[data-undo-clear]` in `client/app.tsx`. See `docs/26-undo.md` |
+| Sidebar today-count badge / newest sort | `store.itemStatsByTopic(startOfDayIso)` — one query for both, excludes off-topic, omits topics with none (absence is what makes the sort sink them). Surfaced on `/api/state`; badge in `topicRowJsx` **and in the `each()` memo key** (it lives outside the topic object); `'recent'` case in `src/client/topic-sort.ts`. See `docs/3-ui.md` FR-3.60/3.61 |
 | Dedup behavior | `src/ai/dedupe.ts` (keys), `src/checks.ts` (application) |
 | Dead / hallucinated source links | `src/ai/verify-links.ts`, called from `CheckRunner.verifyLinks` **before** dedup. Reuses `images/safety.ts` SSRF vetting; null probe under `--ai-test`. See `docs/2-news-checks-and-dedup.md` FR-2.6–2.10 |
 | Scheduling rules | `src/checks.ts` (`isDueUnderSchedule` picks interval vs daily — NEWS-84; `isDue`, `effectiveInterval`, `byCheckOrder`), `src/scheduler.ts` (tick + overrun drain). **Adding a topic checks it immediately** — `POST /api/topics` fires `checkTopic({manual:true})` in the background (NEWS-54, FR-1.12) |

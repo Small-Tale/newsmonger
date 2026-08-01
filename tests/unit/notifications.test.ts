@@ -33,6 +33,8 @@ function state(itemIds: string[]): StateResp {
     // noteState reads latestItemIds (NEWS-75); the feed lives on /api/items now.
     latestItemIds: itemIds,
     flaggedByTopic: {},
+    todayByTopic: {},
+    newestItemAtByTopic: {},
     settings: BASE_SETTINGS,
     runs: [],
     checking: [],
