@@ -1264,6 +1264,25 @@ h2.eyebrow {
       outline: 2px solid var(--pine);
       outline-offset: 1px;
     }
+
+    // Styling these controls at all is what makes this necessary (NEWS-239).
+    // A browser greys out a disabled `<select>` for free — but the moment we set
+    // our own `background`, `color` and `border`, that default is gone and a
+    // disabled control renders identically to a live one. It then invites the
+    // click it cannot answer, which is exactly how the effort dropdown was
+    // reported as "doesn't work": it looked available, so it looked broken.
+    &:disabled {
+      // `--paper` is the page behind the panel, so a disabled control sinks
+      // into the dialog rather than sitting proud of it like a live field.
+      background: var(--paper);
+      color: var(--ink-soft);
+      border-color: var(--line);
+      cursor: not-allowed;
+      // The arrow is drawn by the platform, so fading the whole control is what
+      // dims it too — otherwise a crisp arrow sits on muted text and still reads
+      // as clickable.
+      opacity: 0.6;
+    }
   }
 
   input::placeholder {
@@ -1377,6 +1396,16 @@ h2.eyebrow {
   &:focus-visible {
     outline: 2px solid var(--pine);
     outline-offset: 1px;
+  }
+  // Same reasoning as the disabled `.field` controls (NEWS-239): this field sets
+  // its own colours, so the browser's disabled rendering is gone. It *is*
+  // disabled whenever no keychain is available, and without this it looks
+  // perfectly typeable — the placeholder says to set an env var instead, which
+  // reads as advice rather than as "you cannot use this box".
+  &:disabled {
+    color: var(--ink-soft);
+    cursor: not-allowed;
+    opacity: 0.6;
   }
 }
 

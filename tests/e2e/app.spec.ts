@@ -1466,15 +1466,31 @@ test('a subscription provider never asks for an API key it does not use (NEWS-24
   // "effort popup doesn't work — nothing pops up", which is exactly what a
   // disabled select looks like when nothing on the page says why. A `title`
   // tooltip was the only explanation and is unreachable on a disabled control.
-  await expect(page.locator('[data-action=effort]')).toBeDisabled();
+  const effort = page.locator('[data-action=effort]');
+  await expect(effort).toBeDisabled();
   const note = page.locator('.effort-note');
   await expect(note).toContainText('Anthropic');
   await expect(note).toContainText('Claude subscription');
 
+  // And it must *look* disabled (NEWS-239, reopened). Styling these controls
+  // removes the browser's own greying, so `disabled` alone renders identically
+  // to a live field — which invites the click it cannot answer. Reported as
+  // "still doesn't work and also doesn't look disabled" on a build that already
+  // carried the explanatory note: the note was there, the control just didn't
+  // look inert, so it read as broken rather than as switched off.
+  const off = await effort.evaluate((el) => {
+    const c = getComputedStyle(el);
+    return { opacity: Number(c.opacity), cursor: c.cursor };
+  });
+  expect(off.opacity, 'a disabled control must be visibly dimmed').toBeLessThan(1);
+  expect(off.cursor).toBe('not-allowed');
+
   // ...and it goes away when the setting does apply.
   await page.locator('[data-action=provider]').selectOption('anthropic');
-  await expect(page.locator('[data-action=effort]')).toBeEnabled();
+  await expect(effort).toBeEnabled();
   await expect(page.locator('.effort-note')).toBeEmpty();
+  // Full opacity when it works — otherwise "dimmed" would mean nothing.
+  expect(await effort.evaluate((el) => Number(getComputedStyle(el).opacity))).toBe(1);
 
   // Leave the shared server on the mock provider for the specs that follow.
   await page.locator('[data-action=provider]').selectOption('mock');
