@@ -58,7 +58,11 @@ The **Responses API** with the hosted `web_search` tool (`client.responses.creat
 
   **Fetched on demand** — when the Source tab opens, or the provider or endpoint changes — never on the 4-second poll, since it costs a vendor round trip to answer a question only someone looking at the picker is asking. **Never an error**: a provider that cannot enumerate, a missing key and a vendor outage all answer `[]` and the picker falls back. A dropdown is not worth a red banner.
 
-  Not covered: **Codex**, whose catalogue is its own (it serves `gpt-5.3-codex-spark`, which `/v1/models` never lists, and refuses every non-reasoning model the API happily serves) and which exposes no enumeration command found so far — NEWS-249. The **Anthropic** provider could use the same seam in about five lines; it was left out only because there is no Anthropic key here to verify it against.
+  **Codex enumerates too, from the machine rather than the network** (NEWS-249). Its catalogue is not OpenAI's — it serves `gpt-5.3-codex-spark`, which `/v1/models` never lists, and refuses every non-reasoning model the API serves happily — and no CLI command prints it (`--help`, `doctor`, `features` all silent; an invalid `-m` names no alternatives). But `~/.codex/models_cache.json` is what the TUI's own picker reads, refreshed against the user's account, so `readCodexModels` reads that: `visibility: hide` entries are skipped (`codex-auto-review` is internal and would otherwise sort third), and Codex's own `priority` decides the order so the app agrees with the tool instead of holding a second opinion. `CODEX_HOME` is honoured. Any unexpected shape yields no models rather than an error — it is another tool's file and may change without notice.
+
+  **The Claude CLI keeps its aliases**, and that is not an omission. There is no machine-local catalogue: no `models` command, nothing under `~/.claude`, `doctor` silent, and an invalid `--model` reports only that the model is unknown. Aliases (`opus`, `sonnet`, `haiku`, `fable`) reach the same goal by another route — the vendor resolves them, so they cannot go stale (NEWS-243).
+
+  The **Anthropic** API provider could use the same seam in about five lines; left out only because there is no Anthropic key here to verify it against.
 
 ## Attended providers and the foreground gate
 

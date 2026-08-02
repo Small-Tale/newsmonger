@@ -232,10 +232,17 @@ export const PROVIDER_MODELS: Record<ProviderName, readonly string[]> = {
   // had already been superseded and was suggesting an older model by name.
   // The field stays free text, so a full name still works for anyone who wants
   // to pin one.
+  // Still hand-written, and deliberately: these are **aliases**, so they cannot
+  // go stale — `opus` follows whatever the newest Opus is. Checked for a
+  // machine-local catalogue like Codex's (NEWS-249) and there is none: no
+  // `models` command, nothing under `~/.claude`, `doctor` says nothing, and an
+  // invalid `--model` reports only that the model is unknown. Aliases reach the
+  // same goal by a different route — the vendor resolves them.
   'claude-cli': ['opus', 'sonnet', 'haiku', 'fable'],
-  // Codex's own catalogue differs from the API's — it carries models like
-  // `gpt-5.3-codex-spark` that `/v1/models` never lists — and it exposes no way
-  // to enumerate it, so these stay hand-written. NEWS-249 tracks finding one.
+  // **Fallback only** since NEWS-249: the real list comes from
+  // `~/.codex/models_cache.json`, the catalogue Codex's own picker reads, so
+  // the app offers exactly what that machine's Codex offers. These are what
+  // shows if Codex has never run here.
   'codex-cli': ['gpt-5.6-sol', 'gpt-5.5', 'gpt-5.4', 'gpt-5.4-mini'],
   anthropic: ['claude-opus-4-8', 'claude-opus-4-7', 'claude-sonnet-5', 'claude-haiku-4-5'],
   // **Fallback only** since NEWS-248 — the picker asks the provider first, and

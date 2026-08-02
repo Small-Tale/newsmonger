@@ -18,6 +18,7 @@ import type {
 import { DISCOVERY_MODELS } from '../types.js';
 import { agentCwd } from './agent-cwd.js';
 import { resolveCliBinary } from './cli-path.js';
+import { readCodexModels } from './codex-models.js';
 
 /**
  * Run checks against the user's **ChatGPT subscription** rather than an
@@ -190,6 +191,10 @@ export function createCodexCliProvider(
     effort,
     attended: true,
     isAvailable: () => runner.available(),
+    // What *this machine's* Codex offers, from the catalogue its own picker
+    // reads (NEWS-249). Not the OpenAI API's list — Codex serves models that
+    // one never lists and refuses ones it serves.
+    listModels: () => Promise.resolve(readCodexModels()),
     async checkTopic(
       topicName: string,
       known: KnownItem[],
