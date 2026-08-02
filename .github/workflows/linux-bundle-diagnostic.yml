@@ -118,20 +118,39 @@ jobs:
           WEBKIT_DISABLE_COMPOSITING_MODE: '1'
           WEBKIT_DISABLE_DMABUF_RENDERER: '1'
         run: |
-          set -euo pipefail
-          Xvfb :99 -screen 0 1280x900x24 &
+          set -uo pipefail
+          Xvfb :99 -screen 0 1280x900x24 > xvfb.log 2>&1 &
           echo "DISPLAY=:99" >> "$GITHUB_ENV"
           export DISPLAY=:99
-          sleep 2
-          "$APP" > app.log 2>&1 &
-          PID=$!
-          echo "APP_PID=$PID" >> "$GITHUB_ENV"
-          sleep 5
+          # Wait for the display rather than sleeping at it: a GTK app that
+          # starts first dies with nothing to say, which is exactly the empty
+          # log the first attempt produced.
+          for i in $(seq 1 20); do xdpyinfo -display :99 > /dev/null 2>&1 && break; sleep 1; done
+          xdpyinfo -display :99 | head -3
+
+          # Everything a silent exit could be, gathered in one run rather than
+          # one CI round trip per hypothesis.
+          echo "--- file/ldd"
+          file "$APP"
+          ldd "$APP" | grep -i "not found" && echo "MISSING LIBRARIES ABOVE" || echo "all libraries resolve"
+
+          echo "--- foreground attempt (10s)"
+          set +e
+          timeout 10 "$APP" > app.log 2>&1
+          CODE=$?
+          set -e
+          echo "exit code: $CODE  (124 = still running when the timeout fired, which is success here)"
+          echo "--- app.log"
           cat app.log || true
-          # An app that has already exited is a different failure from one whose
-          # server never answers, and saying so here costs 80 seconds of waiting
-          # on a port that will never open.
-          kill -0 "$PID" 2>/dev/null || { echo "the app exited during startup"; exit 1; }
+          if [ "$CODE" != "124" ]; then
+            echo "the app exited on its own during startup"
+            exit 1
+          fi
+
+          # It survives, so start it for real.
+          "$APP" > app.log 2>&1 &
+          echo "APP_PID=$!" >> "$GITHUB_ENV"
+          sleep 5
 
       # The readiness line the Tauri shell itself waits for. If this never
       # appears, the sidecar did not spawn — which is the failure this whole
