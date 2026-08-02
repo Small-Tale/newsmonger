@@ -1756,3 +1756,50 @@ describe('the Windows E2E job gates a release (NEWS-209, promoted in NEWS-235)',
     expect(job).toMatch(/timeout-minutes: \d+/);
   });
 });
+
+describe('the Linux bundle diagnostic stays a diagnostic (NEWS-20)', () => {
+  const read = (rel: string): string => fs.readFileSync(path.join(root, rel), 'utf8');
+  const FILE = '.github/workflows/linux-bundle-diagnostic.yml';
+
+  it('exists and runs only when asked', () => {
+    // Same rule as the Windows one: a diagnostic that fires on push becomes a
+    // check people learn to ignore, and this one installs a *published* bundle,
+    // so it has nothing useful to say about an unreleased commit.
+    const src = read(FILE);
+    expect(src).toContain('workflow_dispatch:');
+    expect(src, 'must not run on push').not.toMatch(/^\s{2}push:/m);
+    expect(src, 'must not run on a schedule').not.toMatch(/^\s{2}schedule:/m);
+  });
+
+  it('is referenced by no other workflow', () => {
+    for (const wf of fs.readdirSync(path.join(root, '.github/workflows'))) {
+      if (wf === path.basename(FILE)) continue;
+      expect(read(`.github/workflows/${wf}`), wf).not.toContain('linux-bundle-diagnostic');
+    }
+  });
+
+  it('installs the package rather than running the binary in place', () => {
+    // The point of the ticket's step 4: resource resolution has to be exercised
+    // from a real install location. Running the built binary would skip exactly
+    // the thing that has never been tested.
+    const src = read(FILE);
+    expect(src).toContain('gh release download');
+    expect(src).toMatch(/apt-get install -y \.\/bundle/);
+  });
+
+  it('quits by closing the window, not by killing the process', () => {
+    // Killing it would prove nothing about whether the app cleans up after
+    // itself — and the orphaned sidecar is one of the four things this ticket
+    // asks about. Same trap noted for Windows in the manual test plan.
+    const src = read(FILE);
+    expect(src).toContain('windowclose');
+    expect(src, 'a kill would void the orphan check').not.toMatch(/\bpkill -9|kill -9\b/);
+    expect(src).toContain('pgrep -a newsmonger-node');
+  });
+
+  it('asserts the window is not blank, not merely that it exists', () => {
+    // A dead webview still opens a window. "It launched" is the assertion that
+    // would pass while the app was unusable.
+    expect(read(FILE)).toMatch(/distinct colours|identify -format '%k'/);
+  });
+});

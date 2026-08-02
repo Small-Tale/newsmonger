@@ -1,0 +1,179 @@
+name: Linux bundle (diagnostic)
+
+# Install and launch a *published* Linux bundle on demand (NEWS-20).
+#
+# **Why this exists.** Every other platform's bundle has been installed and run
+# from the real installer: macOS locally, Windows in a Parallels VM driven by
+# `prlctl`. Linux is the last one that has only ever been *built*. The sidecar
+# is separately verified in a container with a real isolated boot
+# (`scripts/verify-sidecar-linux.sh`), but that proves the Node half — not that
+# the packaged app installs, spawns its sidecar, opens a window and cleans up.
+#
+# Docker was ruled out for this before on the grounds that it has no GTK/WebKit
+# stack and no display. Both are fixable — `apt` provides the first and Xvfb the
+# second — and a GitHub runner is simply a Linux box that already has apt, which
+# makes it the cheaper answer than either a container or another local VM.
+#
+# **What a headless run can and cannot prove.** It can prove the package
+# installs, the binary starts, the sidecar spawns, the server answers from a
+# real install location, a window is created, something is painted into it, and
+# nothing is left running afterwards. It cannot prove the window *looks right* —
+# so it captures a screenshot as an artifact for one human look, and asserts the
+# frame is not uniformly blank, which is the failure a headless launch actually
+# produces when the webview dies.
+#
+#   gh workflow run linux-bundle-diagnostic.yml
+#   gh workflow run linux-bundle-diagnostic.yml -f version=v0.2.0-beta.12 -f format=appimage
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Release tag to install. Empty takes the newest prerelease.'
+        type: string
+        default: ''
+      format:
+        description: 'Which package. They resolve resources differently, so both are worth running.'
+        type: choice
+        default: 'deb'
+        options: ['deb', 'appimage']
+
+concurrency:
+  group: linux-bundle-diagnostic-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  launch:
+    name: Install and launch (${{ inputs.format }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+
+      # `libwebkit2gtk-4.1-0` is the runtime half of the `-dev` package the
+      # release build already installs. xvfb gives a display; xdotool finds and
+      # closes the window the way a person would; imagemagick takes the picture.
+      - name: Runtime dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-0 libayatana-appindicator3-1 librsvg2-2 \
+            xvfb xdotool imagemagick x11-utils
+
+      - name: Download the published bundle
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          TAG='${{ inputs.version }}'
+          if [ -z "$TAG" ]; then
+            TAG=$(gh release list --limit 20 --json tagName,isPrerelease \
+                  -q '[.[]|select(.isPrerelease)][0].tagName')
+          fi
+          echo "Installing $TAG"
+          echo "TAG=$TAG" >> "$GITHUB_ENV"
+          PATTERN='*_amd64.deb'
+          [ '${{ inputs.format }}' = 'appimage' ] && PATTERN='*_amd64.AppImage'
+          gh release download "$TAG" --pattern "$PATTERN" --dir bundle
+          ls -la bundle
+
+      # `apt install ./file.deb` resolves the package's own declared
+      # dependencies, which is itself part of what this checks: a bundle that
+      # names the wrong ones fails here rather than on a user's machine.
+      - name: Install
+        run: |
+          set -euo pipefail
+          if [ '${{ inputs.format }}' = 'deb' ]; then
+            sudo apt-get install -y ./bundle/*_amd64.deb
+            echo "APP=/usr/bin/newsmonger" >> "$GITHUB_ENV"
+            dpkg -L newsmonger | head -30
+          else
+            chmod +x bundle/*.AppImage
+            # AppImages need FUSE, which runners lack; extracting exercises the
+            # same resource layout without it.
+            (cd bundle && ./*.AppImage --appimage-extract > /dev/null)
+            echo "APP=$PWD/bundle/squashfs-root/AppRun" >> "$GITHUB_ENV"
+          fi
+
+      - name: Launch it
+        env:
+          # WebKitGTK's compositing and DMABUF paths assume a GPU that a
+          # headless runner does not have; without these the webview process
+          # dies on startup and the window comes up blank. This is a property of
+          # the environment, not of the app — the same binary needs neither on a
+          # real desktop.
+          WEBKIT_DISABLE_COMPOSITING_MODE: '1'
+          WEBKIT_DISABLE_DMABUF_RENDERER: '1'
+        run: |
+          set -euo pipefail
+          Xvfb :99 -screen 0 1280x900x24 &
+          echo "DISPLAY=:99" >> "$GITHUB_ENV"
+          export DISPLAY=:99
+          sleep 2
+          "$APP" > app.log 2>&1 &
+          echo "APP_PID=$!" >> "$GITHUB_ENV"
+          sleep 5
+          cat app.log || true
+
+      # The readiness line the Tauri shell itself waits for. If this never
+      # appears, the sidecar did not spawn — which is the failure this whole
+      # ticket is about, and it is worth naming separately from "the UI is
+      # blank".
+      - name: The sidecar spawned and the server answers
+        run: |
+          set -euo pipefail
+          for i in $(seq 1 40); do
+            if curl -fsS http://127.0.0.1:4187/healthz > /dev/null 2>&1; then break; fi
+            sleep 2
+          done
+          curl -fsS http://127.0.0.1:4187/healthz
+          echo
+          grep -q 'running at ' app.log && echo "readiness line present"
+          # Served from the *installed* location, not a build tree — the point of
+          # installing rather than running the binary in place.
+          curl -fsS http://127.0.0.1:4187/ | grep -qi '<title' && echo "shell HTML served"
+          curl -fsS -o /dev/null -w 'app.js %{http_code}\n' http://127.0.0.1:4187/static/app.js
+          curl -fsS -o /dev/null -w 'styles.css %{http_code}\n' http://127.0.0.1:4187/static/styles.css
+
+      - name: A window exists, and something is painted in it
+        run: |
+          set -euo pipefail
+          export DISPLAY=:99
+          for i in $(seq 1 20); do
+            if xdotool search --name 'Newsmonger' > /dev/null 2>&1; then break; fi
+            sleep 2
+          done
+          xdotool search --name 'Newsmonger' getwindowname %@ || (echo "no window"; exit 1)
+          import -window root screenshot.png
+          # A blank frame is exactly what a dead webview produces, so "it opened
+          # a window" is not enough on its own. More than a handful of distinct
+          # colours means something rendered.
+          COLOURS=$(identify -format '%k' screenshot.png)
+          echo "distinct colours: $COLOURS"
+          [ "$COLOURS" -gt 8 ] || (echo "window is blank — the webview did not paint"; exit 1)
+
+      # Closing the window, not killing the process: killing it would prove
+      # nothing about whether the app cleans up after itself, which is the
+      # orphaned-sidecar check this ticket asks for.
+      - name: Quit cleanly, leaving no sidecar behind
+        run: |
+          set -euo pipefail
+          export DISPLAY=:99
+          xdotool search --name 'Newsmonger' windowclose %@ || true
+          sleep 6
+          if pgrep -a newsmonger-node; then
+            echo "ORPHANED SIDECAR"; exit 1
+          fi
+          echo "no orphaned sidecar"
+
+      - name: Upload the screenshot and log
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: linux-bundle-${{ inputs.format }}
+          path: |
+            screenshot.png
+            app.log
+          retention-days: 14
