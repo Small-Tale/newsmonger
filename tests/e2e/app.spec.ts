@@ -1533,6 +1533,67 @@ test('backs up to a chosen folder, without the API keys (NEWS-192)', async ({ pa
   fs.rmSync(dest, { recursive: true, force: true });
 });
 
+test('back up, then restore from that folder without moving files (NEWS-252)', async ({ page }) => {
+  // The workflow this replaces was: find the backup file, rename it to
+  // `data.json`, put it in a data directory you have never seen, and only if
+  // you have not opened the app yet. The user's verdict was "we shouldn't have
+  // to move data around", and they were right — so this drives the whole thing
+  // through the UI, which is the only way to know the workflow exists.
+  const dest = fs.mkdtempSync(path.join(os.tmpdir(), 'newsmonger-restore-e2e-'));
+  await page.goto('/');
+
+  // A topic worth losing, so "did it restore" has a visible answer.
+  await page.fill('.add-topic input', 'Restore Probe empty');
+  await page.press('.add-topic input', 'Enter');
+  await expect(page.locator('.topic', { hasText: 'Restore Probe' })).toBeVisible();
+
+  await openSettingsTab(page, 'Data');
+  // Nothing to restore from a folder that has no backup: the control is absent
+  // rather than present-and-disabled, which would raise a question it can't
+  // answer.
+  await expect(page.locator('[data-action=restore-backup]')).toHaveCount(0);
+
+  await page.fill('[data-action=backup-dir]', dest);
+  await page.locator('[data-action=backup-dir]').blur();
+  await page.locator('[data-action=backup-now]').click();
+  await expect(page.locator('.toast')).toContainText('Backed up to');
+
+  // The folder now has a backup, so the restore path appears in place — no
+  // reopening the dialog — and says what is in it, which is what makes the
+  // confirmation a decision rather than a leap.
+  const found = page.locator('.restore-found');
+  await expect(found).toContainText('Backup found', { timeout: 15_000 });
+  await expect(found).toContainText('topic');
+
+  // Now diverge from the snapshot, so a successful restore is provable rather
+  // than merely plausible.
+  await page.locator('.dialog [data-action=close-settings]').click();
+  await page.fill('.add-topic input', 'Added After Backup empty');
+  await page.press('.add-topic input', 'Enter');
+  await expect(page.locator('.topic', { hasText: 'Added After Backup' })).toBeVisible();
+
+  await openSettingsTab(page, 'Data');
+  await page.locator('[data-action=restore-backup]').click();
+  // Destructive, so it confirms — and the message names what replaces what.
+  await expect(page.locator('.dialog.confirm')).toContainText('Replace everything');
+  await page.locator('[data-action=confirm-ok]').click();
+
+  await expect(page.locator('.toast')).toContainText('Restored', { timeout: 15_000 });
+  // The snapshot's topic is back and the later one is gone — a restore, not a
+  // merge.
+  await expect(page.locator('.topic', { hasText: 'Restore Probe' })).toBeVisible();
+  await expect(page.locator('.topic', { hasText: 'Added After Backup' })).toHaveCount(0);
+
+  // Clean up. Backups off first, while the dialog is already open — the topic
+  // delete needs the settings backdrop gone or it swallows the right-click.
+  await page.fill('[data-action=backup-dir]', '');
+  await page.locator('[data-action=backup-dir]').blur();
+  await page.locator('.dialog [data-action=close-settings]').click();
+  await expect(page.locator('.dialog')).toHaveCount(0);
+  await topicAction(page, page.locator('.topic', { hasText: 'Restore Probe' }), 'delete');
+  fs.rmSync(dest, { recursive: true, force: true });
+});
+
 test('a subscription provider never asks for an API key it does not use (NEWS-240/239)', async ({ page }) => {
   await page.goto('/');
   await openSettingsTab(page, 'Source');

@@ -1,7 +1,7 @@
 import { defineStore } from 'kerfjs';
 
 import type { Effort } from '../ai/types.js';
-import type { ItemsResp, KeysResp, ProviderInfo, StateResp, TopicSuggestion } from '../api/schemas.js';
+import type { BackupPreview, ItemsResp, KeysResp, ProviderInfo, StateResp, TopicSuggestion } from '../api/schemas.js';
 import type { BackupLocation } from '../backup-locations.js';
 import type { TunerState } from './discover.js';
 import type { ExportChoice } from './export-url.js';
@@ -179,6 +179,12 @@ export interface AppState {
    * is broken.
    */
   liveEffortLevels: Effort[];
+  /**
+   * What the configured backup folder holds (NEWS-252). Null means nothing to
+   * restore — no folder, or no backup in it — which is a normal state, not an
+   * error, so the restore control simply isn't offered.
+   */
+  backupPreview: BackupPreview | null;
   /** Which settings tab is showing (NEWS-118). Resets to the first on reopen. */
   settingsTab: 'schedule' | 'source' | 'data' | 'app';
   /** Whether the privacy dialog is open (NEWS-121). Ephemeral, like every dialog. */
@@ -511,6 +517,7 @@ export const appStore = defineStore({
     providers: [],
     liveModels: [],
     liveEffortLevels: [],
+    backupPreview: null,
     settingsTab: 'schedule',
     privacyOpen: false,
     export: null,
@@ -796,6 +803,9 @@ export const appStore = defineStore({
     },
     setProviders: (providers: ProviderInfo[]) => {
       set({ ...get(), providers });
+    },
+    setBackupPreview: (backupPreview: BackupPreview | null) => {
+      set({ ...get(), backupPreview });
     },
     setLiveModels: (liveModels: string[], liveEffortLevels: Effort[]) => {
       set({ ...get(), liveModels, liveEffortLevels });

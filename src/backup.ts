@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 import type { DataFile } from './db/schemas.js';
+import { DataFileSchema } from './db/schemas.js';
 import type { Store } from './db/store.js';
 
 /**
@@ -15,9 +16,13 @@ import type { Store } from './db/store.js';
  * risk.
  *
  * **The shape is deliberately `DataFile`,** the same one the legacy `data.json`
- * import parses (FR-4.8a). That makes restore need no new code at all: drop the
- * backup into an empty data directory as `data.json` and the existing one-time
- * import reads it, migrations and all. A bespoke backup format would have meant
+ * import parses (FR-4.8a) — so `restoreBackup` below reuses that schema and
+ * gets every migration it performs for free. That reuse was originally sold as
+ * "restore needs no code at all: rename the file into the data directory". It
+ * did need code (NEWS-252): the importer reads a different filename in a
+ * different folder and only into an *empty* database, so anyone who had opened
+ * the app once on a new machine was locked out of their own backup with no
+ * error to explain it. A bespoke backup format would have meant
  * writing — and maintaining, and testing — a bespoke restore.
  *
  * **API keys are not in here**, and cannot be: they live in the OS keychain, not
@@ -66,6 +71,70 @@ export function writeBackup(store: Store, dir: string): string {
   fs.writeFileSync(temp, `${JSON.stringify(buildBackup(store), null, 2)}\n`);
   fs.renameSync(temp, target);
   return target;
+}
+
+/**
+ * What a backup folder holds, without committing to restoring it (NEWS-252).
+ *
+ * The preview exists so the confirmation step can say *what* is about to
+ * replace *what* — "restore 12 topics and 340 stories saved 3 hours ago" is a
+ * decision a person can make; "restore?" is not. It is also the honest place to
+ * report a folder that has no backup, or one this version cannot read, since
+ * both are things the user needs to know **before** agreeing to overwrite.
+ */
+export interface BackupPreview {
+  /** Absolute path of the file that was inspected. */
+  path: string;
+  topics: number;
+  items: number;
+  /** When the snapshot was written, from the file's mtime. */
+  savedAt: string;
+}
+
+/** Read a backup folder. Throws with a reason a person can act on. */
+export function readBackup(dir: string): { data: DataFile; preview: BackupPreview } {
+  const file = path.join(dir, BACKUP_FILE);
+  let raw: string;
+  try {
+    raw = fs.readFileSync(file, 'utf8');
+  } catch {
+    // Named precisely: "no backup found in that folder" sends someone to look
+    // at the folder, where the answer is. "Restore failed" sends them nowhere.
+    throw new Error(`no ${BACKUP_FILE} in ${dir}`);
+  }
+  let data: DataFile;
+  try {
+    data = DataFileSchema.parse(JSON.parse(raw));
+  } catch {
+    throw new Error(`${file} is not a readable Newsmonger backup`);
+  }
+  return {
+    data,
+    preview: {
+      path: file,
+      topics: data.topics.length,
+      items: data.items.length,
+      savedAt: fs.statSync(file).mtime.toISOString(),
+    },
+  };
+}
+
+/**
+ * Replace everything with the snapshot in `dir`, after saving what is there.
+ *
+ * **The safety copy is not optional.** This is the one action in the app that
+ * destroys data the user did not ask to delete, and "I clicked restore and lost
+ * the topics I had added since" is a complaint with no answer unless the old
+ * state is still somewhere. It is written into the data directory rather than
+ * the backup folder, so it cannot be picked up as a backup to restore *from*
+ * and cannot be clobbered by the sync client that owns that folder.
+ */
+export function restoreBackup(store: Store, dir: string): { preview: BackupPreview; safetyCopy: string } {
+  const { data, preview } = readBackup(dir);
+  const safetyCopy = path.join(store.dataDir, `pre-restore-${String(Date.now())}.json`);
+  fs.writeFileSync(safetyCopy, `${JSON.stringify(buildBackup(store), null, 2)}\n`);
+  store.replaceAll(data);
+  return { preview, safetyCopy };
 }
 
 /**

@@ -43,7 +43,22 @@ A setting names a **backup** directory. The app keeps running from `~/.newsmonge
 
 - **FR-27.6** *(Shipped)* A **`backupDir`** setting names a folder; `''` (the default) means backups are off. Settings → Data.
 - **FR-27.7** *(Shipped)* The snapshot is a single file, **`newsmonger-backup.json`**, holding **topics, stories, settings and run history**. It is written to a temp file and renamed into place, so a sync client watching the folder never uploads a half-written one.
-  - **The format is `DataFileSchema`** — the very shape the legacy `data.json` importer reads (FR-4.8a). So **restore needs no restore code**: drop the file into an empty data directory as `data.json` and start the app. A bespoke format would have meant a bespoke restore path to write, maintain and test.
+  - **The format is `DataFileSchema`** — the very shape the legacy `data.json` importer reads (FR-4.8a), so restore reuses that schema and gets every migration it performs for free. A bespoke format would have meant a bespoke parser to write, maintain and test.
+
+- **FR-27.10** *(Shipped, NEWS-252)* **Restore is a workflow in the app, not a file-moving ritual.** Settings → Data shows what the configured backup folder holds — *"Backup found — 12 topics and 340 stories, saved 3 hours ago"* — and a **Restore from backup** button beside it.
+
+  This existed on paper before it existed in the app. The claim was that `DataFileSchema` meant "restore needs no restore code: drop the file into an empty data directory as `data.json`". Every clause of that was a trap. The importer reads a **different filename** (`data.json`, not `newsmonger-backup.json`) in a **different directory** (the data dir, not the backup folder), and **only into an empty database** — so anyone who had opened the app once on their new machine, which is what anyone would do, was locked out of their own backup with no error to explain it. The user's verdict: *"we shouldn't have to move data around."*
+
+  Four properties the workflow has to have, each for a reason:
+
+  - **It says what it will do before it does it.** The confirmation names the snapshot's date and contents, because "restore?" is not a decision anyone can make. The button is `danger`-styled and set apart from the backup controls: it is the one control in Settings that destroys data.
+  - **What was there is saved first**, to `pre-restore-<timestamp>.json` in the **data directory** — not the backup folder, where it could be mistaken for a backup to restore *from* or clobbered by the sync client that owns it. "I clicked restore and lost the topics I'd added since" has no answer otherwise.
+  - **It replaces rather than merges, in one transaction.** A merge would make the result depend on what happened to be there; a half-applied restore would be worse than either state. Any error rolls back.
+  - **It is refused while a check is running** (`409`). A check finishing mid-restore would write stories belonging to the old data into the new — neither snapshot, and it would look like it worked.
+
+  Two things deliberately do *not* come across. **`backupDir` keeps this machine's value**: the path in a snapshot is where the *old* machine wrote, usually a folder that doesn't exist here, and since backup failures are best-effort and swallowed it would quietly stop backups on the machine that just proved it needs them. And **API keys were never in the backup** (FR-27.7) — the note under the button says so, because a restored app reporting "no API key" should read as expected rather than as a failed restore.
+
+  An empty folder shows no restore control at all rather than a disabled one: a disabled button raises a question it cannot answer. A folder holding a file this version cannot read is reported distinctly (`422` vs `404`) — different problems with different fixes.
   - **API keys are never in it.** They live in the OS keychain, not in `Settings` (FR-7.x), so this is structural rather than a filter that could be forgotten. A unit test and an E2E test both assert on the serialised bytes anyway, because a future settings field could change that quietly.
 - **FR-27.8** *(Shipped)* Backups are written **at startup and after a successful check**, at most **once an hour**. The throttle reads the existing file's mtime, not just an in-memory timestamp, so an app quit and reopened several times an hour does not rewrite the snapshot on each launch.
 - **FR-27.9** *(Shipped)* **"Back up now"** in Settings → Data writes immediately, ignoring the throttle — "nothing happened, try again in an hour" is not an acceptable answer to a button press. Disabled until a folder is named.

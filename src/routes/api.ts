@@ -18,6 +18,7 @@ import {
   UpdateSettingsReqSchema,
   UpdateTopicReqSchema,
 } from '../api/schemas.js';
+import { readBackup, restoreBackup } from '../backup.js';
 import { normalizeBackupDir, suggestedBackupLocations } from '../backup-locations.js';
 import { toAtom, toJson, toMarkdown } from '../export.js';
 import { cachedImagePath, isValidHash, liveImageHashes, pruneImageCache, sniffImageType } from '../images/index.js';
@@ -295,6 +296,53 @@ export function registerApi(app: Hono<AppEnv>): void {
     const at = backups.write();
     if (at === null) return c.json({ error: 'backup failed; see the server log' }, 500);
     return c.json({ ok: true, path: at });
+  });
+
+  /**
+   * What is in the configured backup folder (NEWS-252).
+   *
+   * Read-only, and the input to the confirmation step: a person deciding
+   * whether to overwrite everything they have should be told what they are
+   * overwriting it *with*. `404` for an empty folder and `422` for a file this
+   * version cannot read are different problems with different fixes, so they
+   * are different answers rather than one "restore unavailable".
+   */
+  app.get('/api/backup/preview', (c) => {
+    // Already absolute: `PATCH /api/settings` normalises the folder on the way
+    // in, so what is stored is what `Backups.write()` writes to.
+    const dir = c.get('store').getSettings().backupDir;
+    if (dir === '') return c.json({ error: 'no backup folder chosen' }, 400);
+    try {
+      return c.json({ preview: readBackup(dir).preview });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      return c.json({ error: message }, message.startsWith('no ') ? 404 : 422);
+    }
+  });
+
+  /**
+   * Replace everything with the snapshot in the backup folder (NEWS-252).
+   *
+   * **Refused while a check is running.** A check that finishes mid-restore
+   * would write stories belonging to the old data into the new, and the result
+   * would be neither snapshot — a corruption that looks like a successful
+   * restore, which is the worst kind. Asking someone to wait a few seconds is a
+   * far better trade.
+   */
+  app.post('/api/backup/restore', (c) => {
+    const store = c.get('store');
+    const dir = store.getSettings().backupDir;
+    if (dir === '') return c.json({ error: 'no backup folder chosen' }, 400);
+    if (c.get('runner').checking().length > 0) {
+      return c.json({ error: 'a check is running — wait for it to finish, then restore' }, 409);
+    }
+    try {
+      const { preview, safetyCopy } = restoreBackup(store, dir);
+      return c.json({ ok: true, preview, safetyCopy });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      return c.json({ error: message }, message.startsWith('no ') ? 404 : 422);
+    }
   });
 
   app.post('/api/check', async (c) => {

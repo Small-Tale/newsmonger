@@ -37,6 +37,7 @@ import {
   dismissBackupPrompt,
   fetchBackupLocations,
   fetchDiscoveryUsage,
+  refreshBackupPreview,
   refreshFeed,
   refreshKeys,
   refreshModels,
@@ -44,6 +45,7 @@ import {
   refreshState,
   renameTopic,
   reportForeground,
+  restoreBackup,
   restoreClearedItems,
   saveKey,
   setItemOffTopic,
@@ -2113,6 +2115,31 @@ function settingsPanelJsx(s: AppState): SafeHtml {
           your topics, settings and stories — after a check, at most once an hour. Leave it empty to turn backups
           off. <strong>Your API keys are never included</strong>; they stay in your {s.keychainLabel}.
         </p>
+        {/* Restore (NEWS-252). Always-present container so the panel doesn't
+            restructure when a backup is found (docs/3-ui.md). Offered only when
+            there is something to restore — an empty folder needs no button, and
+            a disabled one would raise a question it can't answer. */}
+        <div class="restore-slot">
+          {s.backupPreview !== null ? (
+            <div class="restore-row">
+              <div class="restore-found">
+                <strong>Backup found</strong> — {s.backupPreview.topics} topic
+                {s.backupPreview.topics === 1 ? '' : 's'} and {s.backupPreview.items} stor
+                {s.backupPreview.items === 1 ? 'y' : 'ies'}, saved {relativeTime(s.backupPreview.savedAt)}.
+              </div>
+              <button class="btn danger" type="button" data-action="restore-backup">
+                {icon('database', 15)} Restore from backup
+              </button>
+              <p class="note">
+                Replaces everything on this device with that snapshot. What you have now is saved to your data folder
+                first. <strong>API keys aren’t in a backup</strong>, so you’ll re-enter them after — that’s expected,
+                not a failed restore.
+              </p>
+            </div>
+          ) : (
+            ''
+          )}
+        </div>
         <p class="note">
           The database itself stays on this machine on purpose: a live SQLite file inside a folder a sync client
           rewrites is a known way to corrupt it. To restore, put <code>newsmonger-backup.json</code> in an empty
@@ -3398,6 +3425,9 @@ function wireEvents(root: HTMLElement): void {
     // someone actually opens the tab that shows it (NEWS-248) rather than on
     // the 4-second poll.
     if (tab === 'source') void refreshModels();
+    // The backup folder's contents can change under us — another device syncing,
+    // or a backup written since the dialog last opened (NEWS-252).
+    if (tab === 'data') void refreshBackupPreview();
   });
 
   // Arrow keys move between tabs, which the WAI-ARIA tabs pattern requires:
@@ -3531,13 +3561,43 @@ function wireEvents(root: HTMLElement): void {
   // `change`, not `input`: a PATCH per keystroke would write a dozen invalid
   // half-typed paths on the way to a good one.
   void delegate(root, 'change', '[data-action=backup-dir]', (_e, el) => {
-    if (el instanceof HTMLInputElement) void updateBackupDir(el.value.trim());
+    if (el instanceof HTMLInputElement) void updateBackupDir(el.value.trim()).then(refreshBackupPreview);
+  });
+
+  void delegate(root, 'click', '[data-action=restore-backup]', () => {
+    void (async () => {
+      const preview = appStore.state.value.backupPreview;
+      if (preview === null) return;
+      // Named quantities, not "are you sure?" — the decision is only makeable
+      // if you can see what replaces what.
+      const ok = await confirm(
+        `Replace everything on this device with the backup from ${relativeTime(preview.savedAt)}? ` +
+          `That snapshot has ${String(preview.topics)} topic${preview.topics === 1 ? '' : 's'} and ` +
+          `${String(preview.items)} stor${preview.items === 1 ? 'y' : 'ies'}. ` +
+          `Your current data is saved to the data folder first.`,
+        { confirmLabel: 'Restore', danger: true },
+      );
+      if (!ok) return;
+      try {
+        const { preview: done, safetyCopy } = await restoreBackup();
+        // The whole UI is now showing restored data, so refresh the things the
+        // 4-second poll doesn't cover: the provider probe reflects restored
+        // settings, and the backup folder is unchanged but its contents aren't.
+        await Promise.all([refreshProviders(), refreshKeys(), refreshBackupPreview()]);
+        showToast(`Restored ${String(done.topics)} topics. Previous data saved to ${safetyCopy}`);
+      } catch (err) {
+        showToast(`Restore failed: ${err instanceof Error ? err.message : String(err)}`);
+      }
+    })();
   });
 
   void delegate(root, 'click', '[data-action=backup-now]', () => {
     void backupNow().then(
       (at) => {
         showToast(`Backed up to ${at}`);
+        // The folder now has something to restore from, so the panel below
+        // should say so without waiting for the dialog to be reopened.
+        void refreshBackupPreview();
       },
       (err: unknown) => {
         showToast(`Backup failed: ${err instanceof Error ? err.message : String(err)}`);

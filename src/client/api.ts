@@ -1,7 +1,8 @@
 import type { Effort,ProviderName} from '../ai/types.js';
-import type { DiscoverReq, DiscoverResp, DiscoverUsageResp, TopicSuggestion } from '../api/schemas.js';
+import type { BackupPreview, DiscoverReq, DiscoverResp, DiscoverUsageResp, TopicSuggestion } from '../api/schemas.js';
 import {
   BackupLocationsRespSchema,
+  BackupPreviewRespSchema,
   BackupRespSchema,
   DiscoverRespSchema,
   DiscoverUsageRespSchema,
@@ -9,6 +10,7 @@ import {
   KeysRespSchema,
   ModelsRespSchema,
   ProvidersRespSchema,
+  RestoreRespSchema,
   StateRespSchema,
 } from '../api/schemas.js';
 import type { BackupLocation } from '../backup-locations.js';
@@ -346,6 +348,49 @@ export function dismissBackupPrompt(patch: {
 export async function backupNow(): Promise<string> {
   const body = await request('/api/backup', { method: 'POST' });
   return BackupRespSchema.parse(body).path;
+}
+
+/**
+ * What is in the backup folder, or null when there is nothing to restore
+ * (NEWS-252).
+ *
+ * Null rather than throwing for the ordinary cases — no folder chosen, no
+ * backup in it — because "you have no backup here" is the answer to a question,
+ * not a failure. A folder that holds a file this version cannot read *does*
+ * throw, since that one is worth saying out loud.
+ */
+export async function fetchBackupPreview(): Promise<BackupPreview | null> {
+  const res = await fetch('/api/backup/preview', { headers: { 'Content-Type': 'application/json' } });
+  if (res.status === 400 || res.status === 404) return null;
+  const body: unknown = await res.json().catch(() => null);
+  if (!res.ok) {
+    const message =
+      typeof body === 'object' && body !== null && 'error' in body && typeof body.error === 'string'
+        ? body.error
+        : `request failed (${String(res.status)})`;
+    throw new Error(message);
+  }
+  return BackupPreviewRespSchema.parse(body).preview;
+}
+
+/** Load the preview into the store; a failure leaves the control hidden. */
+export async function refreshBackupPreview(): Promise<void> {
+  try {
+    appStore.actions.setBackupPreview(await fetchBackupPreview());
+  } catch {
+    // An unreadable file is reported when someone actually tries to restore;
+    // failing here would put an error on screen for merely opening a tab.
+    appStore.actions.setBackupPreview(null);
+  }
+}
+
+/** Replace everything with the backup in the configured folder (NEWS-252). */
+export async function restoreBackup(): Promise<{ preview: BackupPreview; safetyCopy: string }> {
+  const body = await request('/api/backup/restore', { method: 'POST' });
+  const parsed = RestoreRespSchema.parse(body);
+  // Everything on screen is now the *old* data — topics, stories, settings.
+  await refreshState();
+  return { preview: parsed.preview, safetyCopy: parsed.safetyCopy };
 }
 
 /** Fetch the provider list + availability (probes providers; call on demand). */

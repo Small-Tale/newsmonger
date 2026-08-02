@@ -290,6 +290,25 @@ export const ProvidersRespSchema = z.object({ providers: z.array(ProviderInfoSch
  * themselves and expose no catalogue, `mock` has no models, and a missing key
  * or a vendor outage lands here too. The client falls back to `PROVIDER_MODELS`.
  */
+/**
+ * What a backup folder holds (NEWS-252), so the confirmation can say what is
+ * about to replace what rather than asking "restore?" and hoping.
+ */
+export const BackupPreviewSchema = z.object({
+  path: z.string(),
+  topics: z.number().int(),
+  items: z.number().int(),
+  savedAt: z.string(),
+});
+export const BackupPreviewRespSchema = z.object({ preview: BackupPreviewSchema });
+export const RestoreRespSchema = z.object({
+  ok: z.literal(true),
+  preview: BackupPreviewSchema,
+  /** Where the pre-restore state was saved, so the toast can say so. */
+  safetyCopy: z.string(),
+});
+export type BackupPreview = z.infer<typeof BackupPreviewSchema>;
+
 export const ModelsRespSchema = z.object({
   models: z.array(z.string()).default([]),
   /**

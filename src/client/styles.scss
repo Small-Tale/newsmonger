@@ -1803,6 +1803,37 @@ h2.eyebrow {
   }
 }
 
+// Restore (NEWS-252). Set apart from the backup controls above it rather than
+// blending in: this is the one control in Settings that destroys data, and it
+// should not read as another row of the same kind.
+//
+// Its own rule, *not* added to the selector list above — those two share a
+// layout, and this one deliberately does not. Splicing it in there gave the
+// export button this box's padding and shifted its icon off the label's centre
+// line, which the NEWS-161 test caught.
+.restore-row {
+  margin: 14px 0 0;
+  padding: 12px;
+  border: 1px solid var(--rule);
+  border-radius: 8px;
+  background: var(--paper);
+
+  .restore-found {
+    margin: 0 0 10px;
+    font-size: 13px;
+  }
+
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+  }
+
+  .note {
+    margin: 10px 0 0;
+  }
+}
+
 // An <a> styled as a button, wherever it appears. Scoped to `.export-row` until
 // NEWS-158 moved the export link into a dialog, where it promptly turned up
 // underlined — the rule was never about that row, it was about anchors.

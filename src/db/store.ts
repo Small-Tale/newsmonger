@@ -5,7 +5,7 @@ import type { DatabaseSync } from 'node:sqlite';
 
 import type { TokenUsage } from '../ai/types.js';
 import { NO_SUBCATEGORY_FILTER, UNCATEGORIZED_FILTER } from '../categories.js';
-import type { CheckRun, NewsItem, Settings, Topic } from './schemas.js';
+import type { CheckRun, DataFile, NewsItem, Settings, Topic } from './schemas.js';
 import {
   CheckRunSchema,
   DataFileSchema,
@@ -199,6 +199,45 @@ export class Store {
       throw err;
     }
     fs.renameSync(jsonFile, `${jsonFile}.imported-${String(Date.now())}`);
+  }
+
+  /**
+   * Replace every topic, story, run and setting with a snapshot (NEWS-252).
+   *
+   * The restore half of backups. Until now the only way back in was the legacy
+   * `data.json` importer — which reads a *different filename*, in a *different
+   * directory*, and only into an empty database, so a user who had opened the
+   * app once on their new machine was silently locked out of their own backup.
+   *
+   * **One transaction, and it deletes first.** A restore that merged would
+   * leave the result depending on what happened to be there, which is not a
+   * restore; and a half-applied one — topics replaced, stories not — would be
+   * worse than either state on its own. Rolling back on any error means a
+   * failure leaves the database exactly as it was found.
+   *
+   * `settings.backupDir` is **not** taken from the snapshot: it is deliberately
+   * left as configured. The path in a backup is where the *old* machine wrote,
+   * which on a new one is usually a folder that does not exist — and since
+   * backup failures are best-effort and swallowed by design, adopting it would
+   * quietly stop backups on exactly the machine that just proved it needs them.
+   */
+  replaceAll(data: DataFile): void {
+    this.db.exec('BEGIN');
+    try {
+      // Children first: `items` and `runs` reference topics.
+      this.db.exec('DELETE FROM items');
+      this.db.exec('DELETE FROM runs');
+      this.db.exec('DELETE FROM topics');
+      for (const topic of data.topics) this.insertTopic(topic);
+      for (const item of data.items) this.insertItem(item);
+      for (const run of data.runs) this.insertRun(run);
+      this.writeSettings({ ...data.settings, backupDir: this.getSettings().backupDir });
+      this.db.exec('COMMIT');
+    } catch (err) {
+      this.db.exec('ROLLBACK');
+      throw err;
+    }
+    this.settingsCache = this.loadSettings();
   }
 
   /** Release the database handle. Tests open many stores; servers hold one. */
