@@ -1778,6 +1778,17 @@ describe('the Linux bundle diagnostic stays a diagnostic (NEWS-20)', () => {
     }
   });
 
+  it('finds the app through the desktop entry, not by guessing a path', () => {
+    // Twice the wrong binary: a hardcoded lowercase path, then the first
+    // `/usr/bin/` entry — which is the *sidecar*, a Node binary that exits 0 in
+    // silence and is indistinguishable from an app crashing. `Exec=` is how a
+    // Linux desktop itself launches this, so it cannot disagree with reality.
+    const src = read(FILE);
+    expect(src).toMatch(/\.desktop\$/);
+    expect(src).toContain("grep -m1 '^Exec='");
+    expect(src, 'must not hardcode a binary path').not.toMatch(/APP=\/usr\/bin\/\w/);
+  });
+
   it('installs the package rather than running the binary in place', () => {
     // The point of the ticket's step 4: resource resolution has to be exercised
     // from a real install location. Running the built binary would skip exactly

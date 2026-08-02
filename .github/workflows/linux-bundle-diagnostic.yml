@@ -86,17 +86,29 @@ jobs:
         run: |
           set -euo pipefail
           if [ '${{ inputs.format }}' = 'deb' ]; then
-            # Both the package name and the binary path are *derived from the
-            # package*, never assumed. The first attempt at this hardcoded
-            # `/usr/bin/newsmonger` and failed on the capital N in `Newsmonger`
-            # — a guess about our own build output, which is no more reliable
-            # than a guess about someone else's.
+            # Both the package name and the binary are *derived from the
+            # package*, never assumed — and derived from the right field.
+            #
+            # Two wrong turns worth leaving written down, because they are the
+            # same mistake twice. First this hardcoded `/usr/bin/newsmonger` and
+            # missed the capital N in `Newsmonger`. Then it took the first
+            # `/usr/bin/` entry, which is the **sidecar** (`newsmonger-node`) —
+            # a Node binary that, run with no script, exits 0 in silence and
+            # looks exactly like an app crashing on startup.
+            #
+            # The `.desktop` entry's `Exec` is the authority: it is how a Linux
+            # desktop itself launches this, so it cannot disagree with reality
+            # the way a guess about file ordering can.
             PKG=$(dpkg-deb -f ./bundle/*_amd64.deb Package)
             echo "package: $PKG"
             sudo apt-get install -y ./bundle/*_amd64.deb
             dpkg -L "$PKG"
-            BIN=$(dpkg -L "$PKG" | grep -E '^/usr/bin/' | head -1)
-            [ -x "$BIN" ] || { echo "no executable in /usr/bin from $PKG"; exit 1; }
+            DESKTOP=$(dpkg -L "$PKG" | grep -E '\.desktop$' | head -1)
+            [ -n "$DESKTOP" ] || { echo "$PKG installs no .desktop entry"; exit 1; }
+            echo "desktop entry: $DESKTOP"
+            cat "$DESKTOP"
+            BIN=$(grep -m1 '^Exec=' "$DESKTOP" | sed 's/^Exec=//; s/ *%[a-zA-Z].*$//')
+            command -v "$BIN" > /dev/null || [ -x "$BIN" ] || { echo "Exec=$BIN is not runnable"; exit 1; }
             echo "APP=$BIN" >> "$GITHUB_ENV"
           else
             chmod +x bundle/*.AppImage
