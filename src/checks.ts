@@ -217,14 +217,36 @@ export class CheckRunner {
    * which provider is current. Empty when the provider cannot enumerate or the
    * call fails; a dropdown falling back to a static list is not worth an error.
    */
-  async listModels(): Promise<string[]> {
+  /**
+   * What the Settings picker may offer: the provider's models, and the effort
+   * levels its configured model accepts (NEWS-248/250/251).
+   *
+   * **One resolution for both halves**, deliberately. They are asked together
+   * by `/api/models`, and the Anthropic provider answers both from a single
+   * catalogue fetch it memoises per instance — resolving twice would build two
+   * providers and pay for that catalogue twice for one Settings tab.
+   *
+   * Never throws. A provider that cannot enumerate, a missing key and a vendor
+   * outage all land on the static fallbacks; a dropdown is not worth an error.
+   */
+  async modelOptions(): Promise<{ models: string[]; effortLevels: Effort[] }> {
     try {
       const provider = await this.resolveProvider();
-      return (await provider.listModels?.()) ?? [];
+      const model = this.store.getSettings().model;
+      const [models, levels] = await Promise.all([
+        provider.listModels?.() ?? Promise.resolve([]),
+        provider.effortLevelsFor?.(model) ?? Promise.resolve([]),
+      ]);
+      return {
+        models,
+        effortLevels: levels.length > 0 ? levels : [...PROVIDER_EFFORT_LEVELS[provider.name]],
+      };
     } catch {
-      return [];
+      return { models: [], effortLevels: EFFORT_LEVELS.filter((l) => l !== '') };
     }
   }
+
+
 
   /**
    * The effort levels the configured provider **and model** accept (NEWS-250).
@@ -235,16 +257,7 @@ export class CheckRunner {
    * whole vocabulary — a control offering too much is recoverable, one offering
    * nothing is broken.
    */
-  async effortLevels(): Promise<Effort[]> {
-    try {
-      const provider = await this.resolveProvider();
-      const model = this.store.getSettings().model;
-      const levels = provider.effortLevelsFor?.(model) ?? [];
-      return levels.length > 0 ? levels : [...PROVIDER_EFFORT_LEVELS[provider.name]];
-    } catch {
-      return EFFORT_LEVELS.filter((l) => l !== '');
-    }
-  }
+
 
   /** Topic ids currently being checked. */
   checking(): string[] {

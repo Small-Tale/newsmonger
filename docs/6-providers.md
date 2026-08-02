@@ -62,7 +62,9 @@ The **Responses API** with the hosted `web_search` tool (`client.responses.creat
 
   **The Claude CLI keeps its aliases**, and that is not an omission. There is no machine-local catalogue: no `models` command, nothing under `~/.claude`, `doctor` silent, and an invalid `--model` reports only that the model is unknown. Aliases (`opus`, `sonnet`, `haiku`, `fable`) reach the same goal by another route — the vendor resolves them, so they cannot go stale (NEWS-243).
 
-  The **Anthropic** API provider could use the same seam in about five lines; left out only because there is no Anthropic key here to verify it against.
+  **Anthropic enumerates too** (NEWS-251), through the same seam: `client.models.list()`, with two differences worth naming. Its `created_at` is an RFC 3339 **string** where OpenAI uses epoch seconds, so it is converted at the edge rather than teaching `rankModels` about two formats — the ranking stays vendor-agnostic, which is the property that makes it immune to model naming. And each entry carries **`capabilities.effort`**, so the per-model effort narrowing of FR-6.13a is answered from the catalogue here as it is from the cache on Codex: `claude-haiku-4-5` reports `effort.supported: false`, which is the same fact FR-6.12 already relies on. Both questions share one memoised fetch per provider instance, since `/api/models` asks them together.
+
+  Its fixture is **derived from the SDK's type declarations rather than captured**, because there is no Anthropic key on the development machine — a better source than memory, and weaker than a real payload. The tests say which, so nobody reads them as proof the wire matches the spec.
 
 ## Attended providers and the foreground gate
 

@@ -1,6 +1,7 @@
 import Anthropic from '@anthropic-ai/sdk';
 
 import { resolveApiKey } from '../api-keys.js';
+import { rankModels } from '../model-list.js';
 import { buildUserPrompt, parseNewsResult, searchingSystemPrompt } from '../prompt.js';
 import { buildSuggestPrompt, parseSuggestResult, suggestSystemPrompt } from '../suggest-prompt.js';
 import type {
@@ -14,6 +15,7 @@ import type {
   TopicContext,
 } from '../types.js';
 import { DISCOVERY_MODELS, PROVIDER_EFFORT_LEVELS, usesLegacyRequestShape } from '../types.js';
+import { parseAnthropicEfforts, parseAnthropicModels } from './anthropic-models.js';
 
 export const DEFAULT_ANTHROPIC_MODEL = 'claude-opus-4-8';
 
@@ -42,6 +44,11 @@ export interface RunOptions {
 
 /** Minimal seam over the Anthropic SDK so tests can inject a fake. */
 export interface AnthropicRunner {
+  /**
+   * The raw model catalogue page (NEWS-251). Optional on the seam so the many
+   * fake runners in tests need not grow a method they don't use.
+   */
+  listCatalogue?(): Promise<unknown>;
   run(
     system: string,
     prompt: string,
@@ -157,6 +164,18 @@ function sdkRunner(getApiKey: () => Promise<string | null>): AnthropicRunner {
         .join('\n');
       return { text, usage: readUsage(message.usage) };
     },
+
+    async listCatalogue() {
+      const apiKey = await getApiKey();
+      if (apiKey === null) throw new Error('No Anthropic API key is configured');
+      if (client === undefined || builtWith !== apiKey) {
+        client = new Anthropic({ apiKey });
+        builtWith = apiKey;
+      }
+      // One page: the catalogue is short, and the picker shows 20. Paginating
+      // would spend requests to rank models nobody scrolls to.
+      return client.models.list();
+    },
   };
 }
 
@@ -186,6 +205,20 @@ export function createAnthropicProvider(config: {
   // (NEWS-132) — an explicit setting is an explicit setting, and silently
   // ignoring it would be the more surprising behaviour.
   const discoveryModel = config.model === undefined || config.model === '' ? DISCOVERY_MODELS.anthropic : model;
+  /**
+   * The catalogue, fetched at most once per provider instance (NEWS-251).
+   *
+   * `listModels` and `effortLevelsFor` both need it and are asked together by
+   * `/api/models`, so without this a single Settings tab costs two identical
+   * round trips. A failure is memoised as "no catalogue" rather than retried on
+   * every call: the picker degrades to the static list, and a provider that
+   * cannot enumerate should not keep paying for the discovery.
+   */
+  let catalogueOnce: Promise<unknown> | undefined;
+  const catalogue = (): Promise<unknown> => {
+    catalogueOnce ??= (runner.listCatalogue?.() ?? Promise.resolve(null)).catch(() => null);
+    return catalogueOnce;
+  };
 
   return {
     name: 'anthropic',
@@ -196,7 +229,14 @@ export function createAnthropicProvider(config: {
     // Metered and billed per token — safe to run on a schedule unattended.
     attended: false,
     isAvailable: async () => (await getApiKey()) !== null,
-    effortLevelsFor: () => [...PROVIDER_EFFORT_LEVELS.anthropic],
+    listModels: async () => rankModels(parseAnthropicModels(await catalogue())),
+    // Per model, from the model's own declared capabilities (NEWS-251) — the
+    // same per-model fact Codex keeps in its cache. Falls back to the
+    // provider's union when the catalogue cannot be fetched or says nothing.
+    effortLevelsFor: async (m: string) => {
+      const levels = parseAnthropicEfforts(await catalogue(), m !== '' ? m : model);
+      return levels.length > 0 ? levels : [...PROVIDER_EFFORT_LEVELS.anthropic];
+    },
     async checkTopic(
       topicName: string,
       known: KnownItem[],

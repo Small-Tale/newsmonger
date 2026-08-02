@@ -120,11 +120,10 @@ export function registerApi(app: Hono<AppEnv>): void {
    * to the static list. A dropdown is not worth a red banner.
    */
   app.get('/api/models', async (c) => {
-    const runner = c.get('runner');
-    // Both halves of "what can I choose here" in one round trip, since the UI
-    // needs them together and they answer to the same resolved provider.
-    const [models, effortLevels] = await Promise.all([runner.listModels(), runner.effortLevels()]);
-    return c.json({ models, effortLevels });
+    // Both halves of "what can I choose here" from one provider resolution,
+    // since the UI needs them together and a provider that fetches a catalogue
+    // should pay for it once.
+    return c.json(await c.get('runner').modelOptions());
   });
 
   app.post('/api/topics', async (c) => {

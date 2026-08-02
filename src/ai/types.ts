@@ -216,7 +216,11 @@ export interface ModelLister {
  * provider's union, since which model runs is not yet known.
  */
 export interface EffortLister {
-  effortLevelsFor(model: string): Effort[];
+  /**
+   * Sync or async: Codex answers from a file on disk, Anthropic from its
+   * catalogue over the network. Callers `await` either way.
+   */
+  effortLevelsFor(model: string): Effort[] | Promise<Effort[]>;
 }
 
 /**
@@ -260,7 +264,9 @@ export const PROVIDER_MODELS: Record<ProviderName, readonly string[]> = {
   // the app offers exactly what that machine's Codex offers. These are what
   // shows if Codex has never run here.
   'codex-cli': ['gpt-5.6-sol', 'gpt-5.5', 'gpt-5.4', 'gpt-5.4-mini'],
-  anthropic: ['claude-opus-4-8', 'claude-opus-4-7', 'claude-sonnet-5', 'claude-haiku-4-5'],
+  // **Fallback only** since NEWS-251 — the picker asks `client.models.list()`
+  // first, and this is what shows when there is no key to ask with.
+  anthropic: ['claude-opus-4-8', 'claude-sonnet-5', 'claude-haiku-4-5'],
   // **Fallback only** since NEWS-248 — the picker asks the provider first, and
   // this is what it shows when there is no key to ask with. Kept short and
   // current rather than exhaustive: a long hand-written list is a longer lie.
