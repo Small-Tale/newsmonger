@@ -220,6 +220,45 @@ test('the provider picker persists a choice across reload', async ({ page }) => 
   await closeSettings(page);
 });
 
+test('the Source panel reads provider, model, effort, then the notes (NEWS-256)', async ({ page }) => {
+  // The order the settings are decided in — and, since NEWS-253/254, the order
+  // they *depend* on each other: the provider decides which models are offered,
+  // and the model decides which effort levels are. Asserted by position in the
+  // document rather than by eye, since a reorder is exactly the kind of change
+  // a later edit undoes without noticing.
+  await page.goto('/');
+  await openSettingsTab(page, 'Source');
+  // A provider with a model field and an endpoint field, so the whole run is
+  // present at once.
+  await page.selectOption('[data-action=provider]', 'openai');
+  await expect(page.locator('[data-action=model]')).toBeVisible();
+
+  const order = await page.evaluate(() => {
+    const panel = document.querySelector('#settings-panel');
+    const at = (sel: string) => {
+      const el = panel?.querySelector(sel);
+      return el ? [...(panel?.querySelectorAll('*') ?? [])].indexOf(el) : -1;
+    };
+    return {
+      provider: at('[data-action=provider]'),
+      model: at('[data-action=model]'),
+      effort: at('[data-action=effort]'),
+      note: at('.effort-note'),
+      status: at('.source-status'),
+    };
+  });
+
+  expect(order.provider).toBeGreaterThan(-1);
+  expect(order.model, 'model comes after provider').toBeGreaterThan(order.provider);
+  expect(order.effort, 'effort comes after model').toBeGreaterThan(order.model);
+  // Every explanation sits below the three controls, rather than interleaved.
+  expect(order.note, 'the effort note is below the controls').toBeGreaterThan(order.effort);
+  expect(order.status, 'the source status is below the controls').toBeGreaterThan(order.effort);
+
+  await page.selectOption('[data-action=provider]', 'auto');
+  await closeSettings(page);
+});
+
 test('the effort dropdown persists, and is disabled only where it does nothing (NEWS-189)', async ({ page }) => {
   await page.goto('/');
   await openSettingsTab(page, 'Source');

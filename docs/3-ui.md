@@ -301,6 +301,12 @@ Dialogs keep their own max-widths; only the app shell became full-bleed.
 
 ## Settings dialog
 
+- **FR-3.62** *(Shipped, NEWS-256)* **The Source panel reads provider → model → effort, with every note and status line below them.** That is the order the settings are decided in and, since NEWS-253/254, the order they *depend* on each other: the provider decides which models are offered, and the model decides which effort levels are — and whether the control is usable at all. The old layout put effort between the provider and the model, asking a reader to hold a dependency the page was contradicting.
+
+  A **reorder, not a flatten**: every conditional keeps its always-present wrapper. Those containers outlived the kerf bug that prompted them (NEWS-99) — `#banners`/`#toast-slot` are ARIA live regions that must exist before their content, and removing an `aria-controls` target fails the axe suite — so moving a block means moving its wrapper with it.
+
+  Pinned by document position in the E2E rather than by eye, since a reorder is exactly the kind of change a later edit undoes without anyone noticing.
+
 Settings (check interval, provider, model, endpoint, API keys) live in a modal opened from the header gear. The **source status** — whether the chosen provider can actually run, and which provider last ran a check — sits under the provider picker here rather than in the sidebar: the provider is chosen here, so this is where knowing whether it works is useful, and it doesn't repeat the provider's name because the picker directly above states it. A provider that can't run still surfaces on the page through the failed-check warning banner, so nothing is lost by not duplicating it in the sidebar — see [7 — API Keys and Settings Dialog](7-api-keys.md). Two structural points belong here:
 
 - The dialog is a conditional sibling, so it renders inside an always-present `#settings-slot` container (the KF-377 rule below).

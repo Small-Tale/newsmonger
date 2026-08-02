@@ -1917,6 +1917,64 @@ function settingsPanelJsx(s: AppState): SafeHtml {
           </select>
         </label>
 
+        {/* Order is provider → model → effort, with every note and status
+            line gathered below them (NEWS-256). That is the order the
+            settings are decided in and, since NEWS-253/254, the order they
+            *depend* on each other: the provider decides which models are
+            offered, and the model decides which effort levels are. Reading
+            provider, then effort, then model asked someone to hold a
+            dependency the layout was contradicting.
+
+            Every conditional keeps its always-present wrapper — this is a
+            reorder, not a flatten (docs/3-ui.md). */}
+        {/* Always-present container: conditional fields must not appear and
+            disappear as siblings (kerf KF-377 — see docs/3-ui.md). */}
+        <div class="source-fields">
+          {provider !== 'auto' && provider !== 'mock' ? (
+            <label class="field">
+              <span class="field-label">Model</span>
+              {/* A `<select>`, not a combobox (NEWS-253). It offers what the
+                  provider says it has — live from its catalogue (NEWS-248/249/
+                  251) — so a model left over from a different provider can no
+                  longer sit there waiting to fail on the next check.
+
+                  This does take something away. The field was free text on
+                  purpose (FR-6.14), because an OpenAI-compatible gateway may
+                  serve models this app cannot enumerate. `modelOptions` keeps
+                  a stored value the catalogue doesn't list, so such a setting
+                  survives being looked at — but once changed away from, it
+                  cannot be typed back. */}
+              <select class="source-field" data-action="model">
+                {modelOptions(s.liveModels.length > 0 ? s.liveModels : PROVIDER_MODELS[provider], s.settings.model).map(
+                  (m) => (
+                    <option value={m} selected={m === s.settings.model ? true : undefined} data-key={m}>
+                      {m}
+                    </option>
+                  ),
+                )}
+              </select>
+            </label>
+          ) : (
+            ''
+          )}
+          {info.endpointConfigurable ? (
+            <label class="field">
+              <span class="field-label">Endpoint</span>
+              <input
+                type="text"
+                class="source-field"
+                name="endpoint"
+                value={s.settings.endpoint}
+                placeholder="default"
+                autocomplete="off"
+                data-action="endpoint"
+                data-morph-skip-children
+              />
+            </label>
+          ) : (
+            ''
+          )}
+        </div>
         {/* Which providers take one is `providerTakesEffort`. **All of them do
             now**, except the test-only `mock` — so the disabled state is nearly
             unreachable, and that is the point: this comment used to claim the
@@ -1993,54 +2051,6 @@ function settingsPanelJsx(s: AppState): SafeHtml {
           )}
         </div>
 
-        {/* Always-present container: conditional fields must not appear and
-            disappear as siblings (kerf KF-377 — see docs/3-ui.md). */}
-        <div class="source-fields">
-          {provider !== 'auto' && provider !== 'mock' ? (
-            <label class="field">
-              <span class="field-label">Model</span>
-              {/* A `<select>`, not a combobox (NEWS-253). It offers what the
-                  provider says it has — live from its catalogue (NEWS-248/249/
-                  251) — so a model left over from a different provider can no
-                  longer sit there waiting to fail on the next check.
-
-                  This does take something away. The field was free text on
-                  purpose (FR-6.14), because an OpenAI-compatible gateway may
-                  serve models this app cannot enumerate. `modelOptions` keeps
-                  a stored value the catalogue doesn't list, so such a setting
-                  survives being looked at — but once changed away from, it
-                  cannot be typed back. */}
-              <select class="source-field" data-action="model">
-                {modelOptions(s.liveModels.length > 0 ? s.liveModels : PROVIDER_MODELS[provider], s.settings.model).map(
-                  (m) => (
-                    <option value={m} selected={m === s.settings.model ? true : undefined} data-key={m}>
-                      {m}
-                    </option>
-                  ),
-                )}
-              </select>
-            </label>
-          ) : (
-            ''
-          )}
-          {info.endpointConfigurable ? (
-            <label class="field">
-              <span class="field-label">Endpoint</span>
-              <input
-                type="text"
-                class="source-field"
-                name="endpoint"
-                value={s.settings.endpoint}
-                placeholder="default"
-                autocomplete="off"
-                data-action="endpoint"
-                data-morph-skip-children
-              />
-            </label>
-          ) : (
-            ''
-          )}
-        </div>
         <h3 class="eyebrow">API keys</h3>
         <div class="keys">{s.keys.map((k) => keyRowJsx(k, s.keychainLabel, s.keychainAvailable, s.savingKey === k.provider))}</div>
 
