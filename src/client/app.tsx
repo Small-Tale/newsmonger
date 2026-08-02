@@ -95,6 +95,7 @@ import { exportHref } from './export-url.js';
 import { currentFailure } from './failure.js';
 import { icon } from './icons.js';
 import { menuStyle } from './menu-position.js';
+import { correctedModel, modelOptions } from './model-choice.js';
 import { ensureNotificationPermission, syncTauriNotificationPermission } from './notifications.js';
 import { onboardingCountText } from './onboarding.js';
 import { browserPollDeps, startPolling as startStatePolling } from './poll.js';
@@ -1988,31 +1989,26 @@ function settingsPanelJsx(s: AppState): SafeHtml {
           {provider !== 'auto' && provider !== 'mock' ? (
             <label class="field">
               <span class="field-label">Model</span>
-              <input
-                type="text"
-                class="source-field"
-                name="model"
-                value={s.settings.model}
-                placeholder="default"
-                autocomplete="off"
-                list="model-suggestions"
-                data-action="model"
-                data-morph-skip-children
-              />
-              {/* Suggestions only — the field stays free-text for custom
-                  gateways and anything the catalogue doesn't list (NEWS-37).
+              {/* A `<select>`, not a combobox (NEWS-253). It offers what the
+                  provider says it has — live from its catalogue (NEWS-248/249/
+                  251) — so a model left over from a different provider can no
+                  longer sit there waiting to fail on the next check.
 
-                  Live from the provider when it can say (NEWS-248), which is
-                  the point: the static list offered `gpt-5` and `o3` while the
-                  current frontier was `gpt-5.6-sol`, and any hand-maintained
-                  list drifts the same way. `PROVIDER_MODELS` survives as the
-                  fallback for providers that expose no catalogue — the CLI
-                  agents resolve aliases themselves — and for a missing key. */}
-              <datalist id="model-suggestions">
-                {(s.liveModels.length > 0 ? s.liveModels : PROVIDER_MODELS[provider]).map((m) => (
-                  <option value={m} data-key={m} />
-                ))}
-              </datalist>
+                  This does take something away. The field was free text on
+                  purpose (FR-6.14), because an OpenAI-compatible gateway may
+                  serve models this app cannot enumerate. `modelOptions` keeps
+                  a stored value the catalogue doesn't list, so such a setting
+                  survives being looked at — but once changed away from, it
+                  cannot be typed back. */}
+              <select class="source-field" data-action="model">
+                {modelOptions(s.liveModels.length > 0 ? s.liveModels : PROVIDER_MODELS[provider], s.settings.model).map(
+                  (m) => (
+                    <option value={m} selected={m === s.settings.model ? true : undefined} data-key={m}>
+                      {m}
+                    </option>
+                  ),
+                )}
+              </select>
             </label>
           ) : (
             ''
@@ -3376,12 +3372,17 @@ function wireEvents(root: HTMLElement): void {
   });
 
   void delegate(root, 'change', '[data-action=provider]', (_e, el) => {
-    void updateProviderSettings({ provider: (el as HTMLSelectElement).value as ProviderName });
+    // The stored model may belong to the provider being left, so the new
+    // provider's catalogue is fetched and the model corrected if it no longer
+    // fits (NEWS-253). `updateProviderSettings` refreshes the catalogue itself,
+    // so by the time it resolves the store holds the right list to judge by.
+    void updateProviderSettings({ provider: (el as HTMLSelectElement).value as ProviderName }).then(
+      applyModelCorrection,
+    );
   });
 
-  // Persist model / endpoint on change (blur or Enter), not every keystroke.
   void delegate(root, 'change', '[data-action=model]', (_e, el) => {
-    void updateProviderSettings({ model: (el as HTMLInputElement).value.trim() });
+    void updateProviderSettings({ model: (el as HTMLSelectElement).value });
   });
   void delegate(root, 'change', '[data-action=endpoint]', (_e, el) => {
     void updateProviderSettings({ endpoint: (el as HTMLInputElement).value.trim() });
@@ -3424,7 +3425,7 @@ function wireEvents(root: HTMLElement): void {
     // The model catalogue costs a vendor round trip, so it is fetched when
     // someone actually opens the tab that shows it (NEWS-248) rather than on
     // the 4-second poll.
-    if (tab === 'source') void refreshModels();
+    if (tab === 'source') void refreshModels().then(applyModelCorrection);
     // The backup folder's contents can change under us — another device syncing,
     // or a backup written since the dialog last opened (NEWS-252).
     if (tab === 'data') void refreshBackupPreview();
@@ -4198,6 +4199,27 @@ function trapTabInDialog(e: KeyboardEvent): boolean {
  * The poll's *scheduling* lives in `poll.ts` so it can be unit-tested (NEWS-238)
  * — this is only the wiring of what a refresh means here.
  */
+/**
+ * Move the model onto something the current provider actually offers (NEWS-253).
+ *
+ * Deliberately only called where a person can see it happen — after a provider
+ * change, and when the Source tab opens. A correction applied silently in the
+ * background would change which model someone's checks run on without them
+ * having touched anything, which is a bigger liberty than fixing a setting they
+ * are looking at.
+ */
+async function applyModelCorrection(): Promise<void> {
+  const s = appStore.state.value;
+  const next = correctedModel(
+    s.settings.provider,
+    s.settings.model,
+    s.liveModels,
+    PROVIDER_MODELS[s.settings.provider],
+  );
+  if (next === null) return;
+  await updateProviderSettings({ model: next });
+}
+
 function startPolling(): void {
   startStatePolling(browserPollDeps(() => void refreshState().then(maybeOfferBackup)));
 }

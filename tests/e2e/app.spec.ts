@@ -335,41 +335,69 @@ test('every icon is Lucide artwork, never a text glyph', async ({ page }) => {
   await expect(page.locator('[data-action=toggle-sidebar] svg.icon')).toHaveCount(1);
 });
 
-test('the model field is a combobox with per-provider suggestions (NEWS-37)', async ({ page }) => {
+test('the model field is a dropdown of models the provider actually has (NEWS-37, NEWS-253)', async ({ page }) => {
   await page.goto('/');
   await openSettingsTab(page, 'Source');
   await page.selectOption('[data-action=provider]', 'anthropic');
 
+  // A `<select>` since NEWS-253, not the free-text combobox NEWS-37 shipped.
+  // The suggestions were never the problem; a value the provider would reject
+  // sitting in the field until the next check was.
   const model = page.locator('[data-action=model]');
-  // Still a free-text input, just backed by a datalist — custom gateways and
-  // models newer than the list must remain typeable.
-  await expect(model).toHaveAttribute('type', 'text');
-  await expect(model).toHaveAttribute('list', 'model-suggestions');
+  await expect(model).toHaveJSProperty('tagName', 'SELECT');
+  await expect(page.locator('#model-suggestions')).toHaveCount(0);
 
-  // Suggestions track the provider — asserted as *change*, not as a model id.
-  // This used to pin `claude-opus-4-8` and `gpt-5`, which made the test a second
-  // copy of the hardcoded list it was checking: both went stale together, and
-  // the test's job became defending the staleness (NEWS-248). What matters is
-  // that switching provider changes the suggestions and never empties them.
-  const first = page.locator('#model-suggestions option').first();
-  const anthropicFirst = await first.getAttribute('value');
-  expect(anthropicFirst, 'a provider must offer at least one suggestion').toBeTruthy();
+  // Options track the provider — asserted as *change*, not as a model id. This
+  // used to pin `claude-opus-4-8` and `gpt-5`, which made the test a second
+  // copy of the hardcoded list it was checking: both went stale together and
+  // the test's job became defending the staleness (NEWS-248).
+  const options = page.locator('[data-action=model] option');
+  await expect(options.first()).toHaveCount(1);
+  const anthropicFirst = await options.first().getAttribute('value');
+  expect(anthropicFirst, 'a provider must offer at least one model').toBeTruthy();
 
   await page.selectOption('[data-action=provider]', 'openai');
-  await expect(first).not.toHaveAttribute('value', anthropicFirst ?? '');
-  expect(await first.getAttribute('value')).toBeTruthy();
+  await expect(options.first()).not.toHaveAttribute('value', anthropicFirst ?? '');
+  expect(await options.first().getAttribute('value')).toBeTruthy();
 
-  // A value not in the list is still accepted and persists.
-  await model.fill('my-custom-model');
-  await model.blur();
-  await page.reload();
-  await openSettingsTab(page, 'Source');
-  await expect(page.locator('[data-action=model]')).toHaveValue('my-custom-model');
+  // Whatever is selected is one of the options — the property the dropdown
+  // exists to guarantee, and the one the old field could not.
+  const chosen = await model.inputValue();
+  expect(await options.allTextContents()).toContain(chosen);
 
   // Reset so later tests see a clean provider config.
-  await page.locator('[data-action=model]').fill('');
-  await page.locator('[data-action=model]').blur();
   await page.selectOption('[data-action=provider]', 'auto');
+  await closeSettings(page);
+});
+
+test('whatever model is selected is one the provider offers (NEWS-253)', async ({ page }) => {
+  // The guarantee the dropdown exists to make, and the one the old free-text
+  // field could not: a model belonging to the provider you just left can no
+  // longer sit in the control waiting to fail on the next check.
+  //
+  // The *correction* — rewriting a stored model that belongs elsewhere — needs
+  // a live catalogue to judge against, and `--ai-test` forces the mock
+  // provider, so `/api/models` answers empty here and the picker falls back to
+  // the static list. That path is unit-tested in `model-choice.test.ts`, where
+  // the catalogue can be chosen. What is assertable here is the invariant that
+  // holds either way, on every provider.
+  await page.goto('/');
+  await openSettingsTab(page, 'Source');
+
+  for (const provider of ['anthropic', 'openai', 'claude-cli', 'codex-cli']) {
+    await page.selectOption('[data-action=provider]', provider);
+    await expect(page.locator('[data-action=provider]')).toHaveValue(provider, { timeout: 15_000 });
+
+    const model = page.locator('[data-action=model]');
+    await expect(model).toHaveJSProperty('tagName', 'SELECT');
+    const options = await page.locator('[data-action=model] option').allTextContents();
+    expect(options.length, `${provider} must offer at least one model`).toBeGreaterThan(0);
+    expect(options, `${provider}'s selection must be one of its own options`).toContain(await model.inputValue());
+  }
+
+  // Leave the shared server as later specs expect.
+  await page.selectOption('[data-action=provider]', 'auto');
+  await closeSettings(page);
 });
 
 test('notification toggle persists when permission is granted (NEWS-38)', async ({ page, context }) => {
@@ -689,8 +717,11 @@ test('the model picker asks the provider rather than a hardcoded list (NEWS-248)
 
   await openSettingsTab(page, 'Source');
   await page.selectOption('[data-action=provider]', 'openai');
-  // A provider that cannot enumerate must still leave suggestions on screen.
-  const options = page.locator('#model-suggestions option');
+  // A provider that cannot enumerate must still leave a usable dropdown — it
+  // falls back to the static list rather than showing nothing, which is why
+  // `PROVIDER_MODELS` survives (NEWS-248) and matters more now that the field
+  // is a `<select>` with no free text behind it (NEWS-253).
+  const options = page.locator('[data-action=model] option');
   await expect(options.first()).toHaveCount(1);
   expect(await options.count()).toBeGreaterThan(0);
 

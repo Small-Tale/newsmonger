@@ -66,6 +66,21 @@ The **Responses API** with the hosted `web_search` tool (`client.responses.creat
 
   Its fixture is **derived from the SDK's type declarations rather than captured**, because there is no Anthropic key on the development machine — a better source than memory, and weaker than a real payload. The tests say which, so nobody reads them as proof the wire matches the spec.
 
+- **FR-6.15** *(Shipped, NEWS-253)* **The model field is a `<select>`, and what it holds is always something the provider has.** It offers the live catalogue (FR-6.14), falling back to `PROVIDER_MODELS` when there is no key to ask with, and it **corrects itself**: switching provider replaces a model that belongs to the one being left.
+
+  `src/client/model-choice.ts` holds the rules, pure and unit-tested:
+
+  - **Nothing chosen gets filled in**, from the live catalogue or the static fallback. `''` ("provider default") is storable but *not representable* in a dropdown — leaving it would make the control display its first option while the setting said something else, which is a control lying about what is stored and precisely what NEWS-238 turned out to be.
+  - **A real choice is only overruled against a *live* catalogue.** The fallback is four entries and could never contain a gateway's own model id, so correcting against it would clobber exactly the setting free text existed for. No live list means no opinion.
+  - **A valid choice is never touched.** Switching provider is not consent to change a model that still works.
+  - Correction runs only where a person can see it — after a provider change, and when the Source tab opens. Applying it in the background would change which model someone's checks use without them touching anything.
+
+  **The default is the small model**: the most recent Haiku on the Claude paths, the mini on the OpenAI ones. Matched on a *family* token rather than a version, so unlike the hardcoded `claude-opus-4-8` of NEWS-243 it cannot go stale — `haiku` follows whatever the newest Haiku is — and it falls back to the newest model when nothing matches, so an unfamiliar catalogue still yields a usable answer. This deliberately reintroduces name matching that NEWS-243/248 removed; the difference is that *"the Haiku one"* has no definition other than its name, where *"the newest model"* had one.
+
+  **Two consequences worth stating rather than discovering.** Checks now default to the small model, where `DISCOVERY_MODELS` previously routed only *discovery* there — a real quality and cost trade, in that direction on purpose. And `claude-haiku-4-5` reports `effort.supported: false`, so defaulting Anthropic to Haiku means **effort is off by default on Claude**.
+
+  **What this takes away:** free text. FR-6.14's escape hatch for OpenAI-compatible gateways is gone. A stored model the catalogue does not list stays selectable and selected, so no existing setting is destroyed by opening Settings — but once changed away from, it cannot be typed back.
+
 ## Attended providers and the foreground gate
 
 Some providers authenticate with a **personal subscription** (Claude Pro/Max, ChatGPT) rather than an API key. A check on one of those spends the user's plan quota, and a scheduler firing at 3am against someone's subscription is an unattended background agent. So those providers only run **scheduled** checks while the app is actually in front of someone.
