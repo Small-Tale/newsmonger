@@ -86,15 +86,26 @@ jobs:
         run: |
           set -euo pipefail
           if [ '${{ inputs.format }}' = 'deb' ]; then
+            # Both the package name and the binary path are *derived from the
+            # package*, never assumed. The first attempt at this hardcoded
+            # `/usr/bin/newsmonger` and failed on the capital N in `Newsmonger`
+            # — a guess about our own build output, which is no more reliable
+            # than a guess about someone else's.
+            PKG=$(dpkg-deb -f ./bundle/*_amd64.deb Package)
+            echo "package: $PKG"
             sudo apt-get install -y ./bundle/*_amd64.deb
-            echo "APP=/usr/bin/newsmonger" >> "$GITHUB_ENV"
-            dpkg -L newsmonger | head -30
+            dpkg -L "$PKG"
+            BIN=$(dpkg -L "$PKG" | grep -E '^/usr/bin/' | head -1)
+            [ -x "$BIN" ] || { echo "no executable in /usr/bin from $PKG"; exit 1; }
+            echo "APP=$BIN" >> "$GITHUB_ENV"
           else
             chmod +x bundle/*.AppImage
             # AppImages need FUSE, which runners lack; extracting exercises the
             # same resource layout without it.
             (cd bundle && ./*.AppImage --appimage-extract > /dev/null)
-            echo "APP=$PWD/bundle/squashfs-root/AppRun" >> "$GITHUB_ENV"
+            APP_RUN="$PWD/bundle/squashfs-root/AppRun"
+            [ -x "$APP_RUN" ] || { echo "no AppRun in the extracted AppImage"; exit 1; }
+            echo "APP=$APP_RUN" >> "$GITHUB_ENV"
           fi
 
       - name: Launch it
@@ -113,9 +124,14 @@ jobs:
           export DISPLAY=:99
           sleep 2
           "$APP" > app.log 2>&1 &
-          echo "APP_PID=$!" >> "$GITHUB_ENV"
+          PID=$!
+          echo "APP_PID=$PID" >> "$GITHUB_ENV"
           sleep 5
           cat app.log || true
+          # An app that has already exited is a different failure from one whose
+          # server never answers, and saying so here costs 80 seconds of waiting
+          # on a port that will never open.
+          kill -0 "$PID" 2>/dev/null || { echo "the app exited during startup"; exit 1; }
 
       # The readiness line the Tauri shell itself waits for. If this never
       # appears, the sidecar did not spawn — which is the failure this whole
