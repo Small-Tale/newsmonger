@@ -202,4 +202,20 @@ describe('GET /api/models (NEWS-248)', () => {
     const res = await app.request('/api/models');
     expect(await res.json()).toMatchObject({ effortLevels: ['low', 'high', 'ultra'] });
   });
+
+  it('passes through "this model takes no effort" as an empty list (NEWS-254)', async () => {
+    // Distinct from `null`. `claude-haiku-4-5` reports `effort.supported:
+    // false`, and the control must switch *off* rather than offer everything —
+    // which is what happened while the two shared one value.
+    const app = appWith({ effortLevelsFor: () => [] });
+    const res = await app.request('/api/models');
+    expect(await res.json()).toMatchObject({ effortLevels: [] });
+  });
+
+  it('answers null when it could not ask at all (NEWS-254)', async () => {
+    const store = new Store(tmpDataDir());
+    const runner = new CheckRunner(store, () => Promise.reject(new Error('nothing configured')));
+    const res = await createApp({ store, runner }).request('/api/models');
+    expect(await res.json()).toMatchObject({ effortLevels: null });
+  });
 });

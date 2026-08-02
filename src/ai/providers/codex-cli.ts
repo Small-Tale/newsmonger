@@ -15,7 +15,7 @@ import type {
   SuggestResult,
   TopicContext,
 } from '../types.js';
-import { DISCOVERY_MODELS, PROVIDER_EFFORT_LEVELS, toEffortLevels } from '../types.js';
+import { DISCOVERY_MODELS, toEffortLevels } from '../types.js';
 import { agentCwd } from './agent-cwd.js';
 import { resolveCliBinary } from './cli-path.js';
 import { readCodexEfforts, readCodexModels } from './codex-models.js';
@@ -198,8 +198,12 @@ export function createCodexCliProvider(
     // Per model, because they differ: `gpt-5.6-sol` takes `ultra`, `gpt-5.4`
     // does not, and asking for one a model refuses fails the check (NEWS-250).
     effortLevelsFor: (m: string) => {
+      // Empty here means the cache has nothing to say — it is absent, or lists
+      // no levels for this model — not that the model refuses effort. Codex has
+      // no equivalent of Anthropic's `supported: false`, so `null` is the
+      // honest answer and the caller falls back to the union (NEWS-254).
       const found = toEffortLevels(readCodexEfforts(m !== '' ? m : model));
-      return found.length > 0 ? found : [...PROVIDER_EFFORT_LEVELS['codex-cli']];
+      return found.length > 0 ? found : null;
     },
     async checkTopic(
       topicName: string,

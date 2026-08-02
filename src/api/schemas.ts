@@ -315,11 +315,16 @@ export const ClearItemsRespSchema = z.object({ cleared: z.number().int() });
 export const ModelsRespSchema = z.object({
   models: z.array(z.string()).default([]),
   /**
-   * Effort levels the configured provider *and model* accept (NEWS-250) —
-   * `EFFORT_LEVELS` minus what this combination refuses. Empty means "could not
-   * ask", and the UI offers the full vocabulary rather than nothing.
+   * Effort levels the configured provider *and model* accept.
+   *
+   * **Three states** (NEWS-254). A list is what to offer. `null` is "could not
+   * ask" — no key, nothing resolvable — and the UI offers the whole vocabulary
+   * rather than greying out over a lookup failure. An **empty array** says this
+   * model accepts no effort at all, and switches the control off. Collapsing
+   * the last two is what made the control offer every level on a model that
+   * takes none.
    */
-  effortLevels: z.array(z.enum(EFFORT_LEVELS)).default([]),
+  effortLevels: z.array(z.enum(EFFORT_LEVELS)).nullable().default(null),
 });
 export type ModelsResp = z.infer<typeof ModelsRespSchema>;
 export type ProvidersResp = z.infer<typeof ProvidersRespSchema>;

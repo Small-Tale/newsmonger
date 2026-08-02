@@ -3,7 +3,6 @@ import { describe, expect, it } from 'vitest';
 import { rankModels } from '../../src/ai/model-list.js';
 import { createAnthropicProvider } from '../../src/ai/providers/anthropic.js';
 import { parseAnthropicEfforts, parseAnthropicModels } from '../../src/ai/providers/anthropic-models.js';
-import { PROVIDER_EFFORT_LEVELS } from '../../src/ai/types.js';
 
 /**
  * Anthropic's catalogue (NEWS-251).
@@ -103,15 +102,20 @@ describe('parseAnthropicEfforts (NEWS-251)', () => {
     expect(parseAnthropicEfforts(CATALOGUE, 'claude-sonnet-5')).toEqual(['low', 'medium', 'high']);
   });
 
-  it('answers empty for a model that does no effort at all', () => {
-    // Haiku 4.5 rejects `output_config.effort`; the caller then falls back to
-    // the provider union rather than offering an empty menu.
+  it('answers **empty** for a model that does no effort at all', () => {
+    // Not `null`. Haiku 4.5 says `effort.supported: false` and rejects
+    // `output_config.effort` outright, so this is an answer — and NEWS-254
+    // makes the caller switch the control *off* on it. Returning `null` would
+    // fall back to the provider union and open the menu up on exactly the model
+    // that cannot use it.
     expect(parseAnthropicEfforts(CATALOGUE, 'claude-haiku-4-5')).toEqual([]);
   });
 
-  it('answers empty for an unknown model or a payload without capabilities', () => {
-    expect(parseAnthropicEfforts(CATALOGUE, 'no-such-model')).toEqual([]);
-    expect(parseAnthropicEfforts({ data: [{ id: 'x' }] }, 'x')).toEqual([]);
+  it('answers **null** for an unknown model or a payload without capabilities', () => {
+    // "I cannot say", which is a different thing from "takes none" — the caller
+    // falls back to the provider union here rather than disabling the control.
+    expect(parseAnthropicEfforts(CATALOGUE, 'no-such-model')).toBeNull();
+    expect(parseAnthropicEfforts({ data: [{ id: 'x' }] }, 'x')).toBeNull();
   });
 });
 
@@ -124,7 +128,9 @@ describe('a catalogue we cannot fetch degrades quietly', () => {
     ['entries without an id', { data: [{ display_name: 'Claude' }] }],
   ])('%s yields no models', (_label, body) => {
     expect(parseAnthropicModels(body)).toEqual([]);
-    expect(parseAnthropicEfforts(body, 'anything')).toEqual([]);
+    // `null` — a payload we cannot read tells us nothing about effort, which is
+    // not the same as telling us there is none (NEWS-254).
+    expect(parseAnthropicEfforts(body, 'anything')).toBeNull();
   });
 });
 
@@ -164,7 +170,9 @@ describe('the provider wiring (NEWS-251)', () => {
       runner: runner({ listCatalogue: () => Promise.reject(new Error('401 authentication_error')) }),
     });
     expect(await p.listModels?.()).toEqual([]);
-    expect(await p.effortLevelsFor?.('claude-opus-4-8')).toEqual([...PROVIDER_EFFORT_LEVELS.anthropic]);
+    // `null`, and `CheckRunner.modelOptions` is what turns that into the
+    // provider union (NEWS-254) — the provider itself does not guess.
+    expect(await p.effortLevelsFor?.('claude-opus-4-8')).toBeNull();
   });
 
   it('falls back for a runner that cannot enumerate at all', async () => {
@@ -172,6 +180,6 @@ describe('the provider wiring (NEWS-251)', () => {
     // become a required method.
     const p = createAnthropicProvider({ runner: runner() });
     expect(await p.listModels?.()).toEqual([]);
-    expect(await p.effortLevelsFor?.('x')).toEqual([...PROVIDER_EFFORT_LEVELS.anthropic]);
+    expect(await p.effortLevelsFor?.('x')).toBeNull();
   });
 });

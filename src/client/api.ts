@@ -432,7 +432,7 @@ export async function refreshModels(): Promise<void> {
     appStore.actions.setLiveModels(parsed.models, parsed.effortLevels);
   } catch {
     // Non-fatal by design — the picker falls back to the static suggestions.
-    appStore.actions.setLiveModels([], []);
+    appStore.actions.setLiveModels([], null);
   }
 }
 

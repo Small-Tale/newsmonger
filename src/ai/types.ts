@@ -219,8 +219,16 @@ export interface EffortLister {
   /**
    * Sync or async: Codex answers from a file on disk, Anthropic from its
    * catalogue over the network. Callers `await` either way.
+   *
+   * **Three answers, not two** (NEWS-254). `null` is *"I cannot say"* — an
+   * unknown model, a catalogue that would not load — and the caller falls back
+   * to the provider's union. An **empty array** is a different statement:
+   * *"this model accepts no effort at all"*, which `claude-haiku-4-5` reports
+   * and which must switch the control off rather than open it up. Collapsing
+   * the two into "empty" is what made the old behaviour offer every level on a
+   * model that takes none.
    */
-  effortLevelsFor(model: string): Effort[] | Promise<Effort[]>;
+  effortLevelsFor(model: string): Effort[] | null | Promise<Effort[] | null>;
 }
 
 /**

@@ -91,7 +91,7 @@ import {
   readDurations,
   recordDuration,
 } from './discover-progress.js';
-import { effortOptions, effortSupported } from './effort-options.js';
+import { correctedEffort, effortAvailable, effortOptions } from './effort-options.js';
 import { exportHref } from './export-url.js';
 import { currentFailure } from './failure.js';
 import { icon } from './icons.js';
@@ -1818,6 +1818,11 @@ function settingsTabsJsx(active: SettingsTab): SafeHtml {
 }
 
 function settingsPanelJsx(s: AppState): SafeHtml {
+  // Effort narrows with the *model*, not just the provider (NEWS-254), and the
+  // control, its title and its note all need the same answer.
+  const effortChoice = { liveEffortLevels: s.liveEffortLevels, chosen: s.settings.effort };
+  const effortUsable = providerTakesEffort(s.settings.provider) && effortAvailable(effortChoice);
+
   const provider = s.settings.provider;
   const info = PROVIDER_INFO[provider];
   switch (s.settingsTab) {
@@ -1941,17 +1946,20 @@ function settingsPanelJsx(s: AppState): SafeHtml {
           <span class="field-label">Effort</span>
           <select
             data-action="effort"
-            disabled={providerTakesEffort(s.settings.provider) ? undefined : true}
+            disabled={effortUsable ? undefined : true}
             title={
-              providerTakesEffort(s.settings.provider)
+              effortUsable
                 ? 'How hard the model works on a check. Higher is slower and costs more.'
-                : 'This provider takes no effort setting.'
+                : 'This provider and model take no effort setting.'
             }
           >
-            {effortOptions({ liveEffortLevels: s.liveEffortLevels, chosen: s.settings.effort }).map((level) => (
-              <option value={level} selected={level === s.settings.effort ? true : undefined}>
+            {/* Only levels this provider *and model* accept (NEWS-254). An
+                unsupported one used to be listed and labelled; it is now
+                corrected away instead, so the control never shows a choice a
+                check would fail on. */}
+            {effortOptions(effortChoice).map((level) => (
+              <option value={level} selected={level === s.settings.effort ? true : undefined} data-key={level}>
                 {EFFORT_LABELS[level]}
-                {level !== '' && !effortSupported({ liveEffortLevels: s.liveEffortLevels, chosen: s.settings.effort }, level) ? ' — not supported by this model' : ''}
               </option>
             ))}
           </select>
@@ -1959,12 +1967,13 @@ function settingsPanelJsx(s: AppState): SafeHtml {
         {/* Always-present container, so the note appearing doesn't restructure
             its siblings (docs/3-ui.md). */}
         <div class="effort-note">
-          {providerTakesEffort(s.settings.provider) ? (
+          {effortUsable ? (
             ''
           ) : (
             <p class="note">
-              {PROVIDER_INFO[s.settings.provider].label} takes no effort setting, so this is switched off. Every other
-              provider accepts one.
+              {s.settings.model !== '' && providerTakesEffort(s.settings.provider)
+                ? `${s.settings.model} takes no effort setting, so this is switched off. Choosing a different model above may re-enable it.`
+                : `${PROVIDER_INFO[s.settings.provider].label} takes no effort setting, so this is switched off.`}
             </p>
           )}
         </div>
@@ -4250,8 +4259,15 @@ async function applyModelCorrection(): Promise<void> {
     s.liveModels,
     PROVIDER_MODELS[s.settings.provider],
   );
-  if (next === null) return;
-  await updateProviderSettings({ model: next });
+  if (next !== null) await updateProviderSettings({ model: next });
+
+  // Effort has to follow, and *actually* follow (NEWS-254). Narrowing the menu
+  // while settings still held an unsupported level would hide the problem, not
+  // fix it: the next check would send it and fail. Read fresh, since the model
+  // change above refetched the levels for the new model.
+  const after = appStore.state.value;
+  const level = correctedEffort({ liveEffortLevels: after.liveEffortLevels, chosen: after.settings.effort });
+  if (level !== null) await updateProviderSettings({ effort: level });
 }
 
 function startPolling(): void {

@@ -234,8 +234,10 @@ export function createAnthropicProvider(config: {
     // same per-model fact Codex keeps in its cache. Falls back to the
     // provider's union when the catalogue cannot be fetched or says nothing.
     effortLevelsFor: async (m: string) => {
-      const levels = parseAnthropicEfforts(await catalogue(), m !== '' ? m : model);
-      return levels.length > 0 ? levels : [...PROVIDER_EFFORT_LEVELS.anthropic];
+      // Passed straight through: `[]` ("this model takes none") and `null`
+      // ("could not say") mean different things to the caller (NEWS-254), and
+      // the old `length > 0 ? … : union` collapsed them.
+      return parseAnthropicEfforts(await catalogue(), m !== '' ? m : model);
     },
     async checkTopic(
       topicName: string,

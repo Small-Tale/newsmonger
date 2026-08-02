@@ -173,12 +173,14 @@ export interface AppState {
    */
   liveModels: string[];
   /**
-   * Effort levels the configured provider *and model* accept (NEWS-250). Empty
-   * means "not fetched, or could not ask" — the control then offers the whole
-   * vocabulary, since a menu with too much is recoverable and one with nothing
-   * is broken.
+   * Effort levels the configured provider *and model* accept.
+   *
+   * Three states (NEWS-254): a list is what to offer, `null` is "not fetched,
+   * or could not ask" — offer the whole vocabulary, since a menu with too much
+   * is recoverable and one with nothing is broken — and `[]` says this model
+   * takes no effort at all, which switches the control off.
    */
-  liveEffortLevels: Effort[];
+  liveEffortLevels: Effort[] | null;
   /**
    * What the configured backup folder holds (NEWS-252). Null means nothing to
    * restore — no folder, or no backup in it — which is a normal state, not an
@@ -516,7 +518,7 @@ export const appStore = defineStore({
     diagIncludeTopics: false,
     providers: [],
     liveModels: [],
-    liveEffortLevels: [],
+    liveEffortLevels: null,
     backupPreview: null,
     settingsTab: 'schedule',
     privacyOpen: false,
@@ -807,7 +809,7 @@ export const appStore = defineStore({
     setBackupPreview: (backupPreview: BackupPreview | null) => {
       set({ ...get(), backupPreview });
     },
-    setLiveModels: (liveModels: string[], liveEffortLevels: Effort[]) => {
+    setLiveModels: (liveModels: string[], liveEffortLevels: Effort[] | null) => {
       set({ ...get(), liveModels, liveEffortLevels });
     },
     setError: (error: string | null) => {

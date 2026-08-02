@@ -11,7 +11,7 @@ import type {
   TopicClassification,
   TopicContext,
 } from './ai/types.js';
-import { EFFORT_LEVELS, PROVIDER_EFFORT_LEVELS } from './ai/types.js';
+import { PROVIDER_EFFORT_LEVELS } from './ai/types.js';
 import type { LinkProbe } from './ai/verify-links.js';
 import { verifyItemLinks } from './ai/verify-links.js';
 import { Attendance } from './attendance.js';
@@ -229,20 +229,32 @@ export class CheckRunner {
    * Never throws. A provider that cannot enumerate, a missing key and a vendor
    * outage all land on the static fallbacks; a dropdown is not worth an error.
    */
-  async modelOptions(): Promise<{ models: string[]; effortLevels: Effort[] }> {
+  async modelOptions(): Promise<{ models: string[]; effortLevels: Effort[] | null }> {
     try {
       const provider = await this.resolveProvider();
       const model = this.store.getSettings().model;
       const [models, levels] = await Promise.all([
         provider.listModels?.() ?? Promise.resolve([]),
-        provider.effortLevelsFor?.(model) ?? Promise.resolve([]),
+        provider.effortLevelsFor?.(model) ?? Promise.resolve(null),
       ]);
-      return {
-        models,
-        effortLevels: levels.length > 0 ? levels : [...PROVIDER_EFFORT_LEVELS[provider.name]],
-      };
+      // `null` from the provider means it has no opinion on this model, so the
+      // provider's own union stands. `[]` is an answer — *this model takes no
+      // effort* — and is passed through so the control switches off (NEWS-254).
+      //
+      // An empty *union* is not that answer, though. `PROVIDER_EFFORT_LEVELS`
+      // is a static per-provider table, and `mock`'s entry is empty because the
+      // table has nothing to say about it — not because a model refused. Only a
+      // live per-model reply can mean "takes none", so an empty fallback stays
+      // `null`. Without this, `--ai-test` (which resolves to `mock` while the
+      // settings still name a real provider) would switch the control off for a
+      // reason the user cannot see.
+      const union = PROVIDER_EFFORT_LEVELS[provider.name];
+      return { models, effortLevels: levels ?? (union.length > 0 ? [...union] : null) };
     } catch {
-      return { models: [], effortLevels: EFFORT_LEVELS.filter((l) => l !== '') };
+      // Nothing resolvable, so nothing to say. `null`, not the whole
+      // vocabulary: the client treats "could not ask" as "offer everything",
+      // and saying it here rather than guessing keeps the two apart.
+      return { models: [], effortLevels: null };
     }
   }
 

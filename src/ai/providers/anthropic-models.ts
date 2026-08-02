@@ -61,16 +61,21 @@ export function parseAnthropicModels(page: unknown): CatalogueModel[] {
 /**
  * The effort levels one model accepts, from its declared capabilities.
  *
- * `[]` means "no answer" — the model is unknown, the payload has no
- * capabilities, or `effort.supported` is false — and the caller falls back to
- * the provider's union rather than offering nothing.
+ * `null` means "no answer" — the model is unknown, or the payload carries no
+ * capabilities — and the caller falls back to the provider's union. `[]` is a
+ * *different* statement: this model accepts no effort at all.
  */
-export function parseAnthropicEfforts(page: unknown, model: string): Effort[] {
+export function parseAnthropicEfforts(page: unknown, model: string): Effort[] | null {
   const found = entries(page).find((m) => m['id'] === model);
   const caps = found?.['capabilities'];
-  if (!isRecord(caps)) return [];
+  if (!isRecord(caps)) return null;
   const effort = caps['effort'];
-  if (!isRecord(effort) || effort['supported'] === false) return [];
+  if (!isRecord(effort)) return null;
+  // `supported: false` is an *answer*, not a missing one — `claude-haiku-4-5`
+  // says it and rejects `output_config.effort` outright (FR-6.12). Returning
+  // `[]` switches the control off; returning `null` here would open it up on
+  // exactly the model that cannot use it (NEWS-254).
+  if (effort['supported'] === false) return [];
   const supported = Object.entries(effort)
     .filter(([, v]) => isRecord(v) && v['supported'] === true)
     .map(([k]) => k);

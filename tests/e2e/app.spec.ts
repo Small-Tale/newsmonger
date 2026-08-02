@@ -712,8 +712,11 @@ test('the model picker asks the provider rather than a hardcoded list (NEWS-248)
   const res = await page.request.get('/api/models');
   expect(res.status()).toBe(200);
   // `effortLevels` rides along since NEWS-250 — the UI needs both to render one
-  // control honestly, and they answer to the same resolved provider.
-  expect(await res.json()).toEqual({ models: [], effortLevels: [] });
+  // control honestly, and they answer to the same resolved provider. `null`
+  // rather than `[]` since NEWS-254: the mock provider has no opinion on effort,
+  // which is a different statement from "this model refuses it", and only the
+  // latter switches the control off.
+  expect(await res.json()).toEqual({ models: [], effortLevels: null });
 
   await openSettingsTab(page, 'Source');
   await page.selectOption('[data-action=provider]', 'openai');

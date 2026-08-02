@@ -137,6 +137,14 @@ The Settings model field is a **combobox** (NEWS-37): an editable text input bac
 
   When the server cannot ask — no key, or a provider that cannot say — **every** level is offered. A control greying out all its options because a lookup failed is worse than one offering too much.
 
+  **Tightened in NEWS-254.** The menu now contains **only levels the chosen model accepts**, and the control is **disabled when the model accepts none** — `claude-haiku-4-5` reports `capabilities.effort.supported: false` and rejects the parameter outright (FR-6.12), which enablement keyed off the *provider* could not express.
+
+  That reverses a deliberate NEWS-250 decision — an unsupported *saved* level used to stay listed and labelled, on the grounds that hiding it would leave the `<select>` showing a value absent from its own options. The tension dissolves because the value no longer *stays* invalid: `correctedEffort` moves it to "provider default" as soon as the model changes. **The correction is the point, not the hiding** — narrowing the menu while settings still held an unsupported level would trade a visible oddity for an invisible failure, since the next check would send it and get a `400`.
+
+  It falls back to `''` rather than a guessed equivalent: there is no honest mapping from `ultra` on Codex to anything on Anthropic, and silently substituting a *different* amount of thinking is a worse liberty than declining to choose.
+
+  **`effortLevels` on `/api/models` has three states**, and keeping them apart is most of the work. A list is what to offer; `null` is *could not ask*, so everything is offered rather than greying out over a lookup failure; `[]` is *this model takes none*. They were one value before, which is exactly how the menu came to offer every level on a model that takes none. An empty entry in the static `PROVIDER_EFFORT_LEVELS` table is **not** the third case — that table has nothing to say about `mock`, rather than reporting a refusal — so an empty union stays `null`.
+
   Stored with `.catch('')` for the same reason `provider` has one: a level that stops being valid must degrade to "provider default", not reset the user's whole settings row.
 
   **Each run records the level it ran at** (NEWS-226) — `runs.effort`, beside the provider, model and token usage already there, and shown in the diagnostics bundle. It is read off the **provider object**, not off settings: a provider is constructed for the check with the settings as they were then, so that is the level the request actually carried. Reading settings at record time would report a level the run never used if someone changed the dropdown mid-sweep, which is worse than recording nothing.

@@ -10,7 +10,12 @@ import { readCodexEfforts } from '../../src/ai/providers/codex-models.js';
 import { createOpenAIProvider } from '../../src/ai/providers/openai.js';
 import type { Effort } from '../../src/ai/types.js';
 import { EFFORT_LABELS, EFFORT_LEVELS, PROVIDER_EFFORT_LEVELS, toEffortLevels } from '../../src/ai/types.js';
-import { effortOptions, effortSupported } from '../../src/client/effort-options.js';
+import {
+  correctedEffort,
+  effortAvailable,
+  effortOptions,
+  effortSupported,
+} from '../../src/client/effort-options.js';
 
 const CACHE = path.join(path.dirname(fileURLToPath(import.meta.url)), '../fixtures/codex-models-cache.json');
 
@@ -78,11 +83,13 @@ describe('Codex answers per model, from its own cache (NEWS-250)', () => {
     expect(readCodexEfforts('', CACHE)).toContain('ultra');
   });
 
-  it('falls back to the provider union for an unknown model', () => {
-    // A model typed by hand, or one newer than the cache. Offering the union
-    // beats offering nothing; the vendor still refuses anything truly invalid.
-    const levels = createCodexCliProvider({}).effortLevelsFor?.('some-future-model');
-    expect(levels).toEqual([...PROVIDER_EFFORT_LEVELS['codex-cli']]);
+  it('says "cannot say" for an unknown model rather than guessing', () => {
+    // A model newer than the cache. The provider returns `null` — *no opinion* —
+    // and `CheckRunner.modelOptions` applies the provider union (NEWS-254).
+    // Returning the union from here would be indistinguishable from "this model
+    // takes exactly these six", which is the conflation that let the control
+    // offer every level on a model that takes none.
+    expect(createCodexCliProvider({}).effortLevelsFor?.('some-future-model')).toBeNull();
   });
 
   it('falls back when Codex has never run here', () => {
@@ -122,8 +129,8 @@ describe('a level a provider cannot take is dropped, not sent (NEWS-250)', () =>
   });
 });
 
-describe('what the Settings control offers (NEWS-250)', () => {
-  const state = (liveEffortLevels: Effort[], chosen: Effort = '') => ({ liveEffortLevels, chosen });
+describe('what the Settings control offers (NEWS-250, NEWS-254)', () => {
+  const state = (liveEffortLevels: Effort[] | null, chosen: Effort = '') => ({ liveEffortLevels, chosen });
 
   it('offers only what the model takes', () => {
     const opts = effortOptions(state(['low', 'medium', 'high', 'xhigh']));
@@ -136,29 +143,66 @@ describe('what the Settings control offers (NEWS-250)', () => {
   });
 
   it('offers everything when the server could not ask', () => {
-    // No key, or a provider that cannot say. A control that greys out every
-    // option because a lookup failed is worse than one offering too much.
-    expect(effortOptions(state([]))).toEqual([...EFFORT_LEVELS]);
-    expect(effortSupported(state([]), 'ultra')).toBe(true);
+    // `null`, not `[]`. No key, or a provider that cannot say. A control that
+    // greys out every option because a lookup failed is worse than one offering
+    // too much.
+    expect(effortOptions(state(null))).toEqual([...EFFORT_LEVELS]);
+    expect(effortSupported(state(null), 'ultra')).toBe(true);
+    expect(effortAvailable(state(null))).toBe(true);
   });
 
-  it('keeps a saved level visible even when the model refuses it', () => {
-    // Dropping it would leave the <select> showing a value absent from its own
-    // options — the control misreporting what is stored, which is exactly the
-    // class of bug NEWS-238 was.
-    const opts = effortOptions(state(['low', 'medium'], 'ultra'));
-    expect(opts).toContain('ultra');
-    expect(effortSupported(state(['low', 'medium'], 'ultra'), 'ultra')).toBe(false);
+  it('switches off when the model takes no effort at all', () => {
+    // `[]` is a *statement*, not a missing answer — `claude-haiku-4-5` reports
+    // `effort.supported: false` and rejects the parameter outright. Until
+    // NEWS-254 this was the same value as "could not ask", which is how the
+    // menu came to offer every level on a model that takes none.
+    expect(effortAvailable(state([]))).toBe(false);
+    expect(effortOptions(state([]))).toEqual(['']);
+  });
+
+  it('drops an unsupported saved level from the menu', () => {
+    // NEWS-250 listed it, labelled "not supported". NEWS-254 removes it,
+    // because `correctedEffort` moves the setting rather than the UI having to
+    // render an invalid state.
+    expect(effortOptions(state(['low', 'medium'], 'ultra'))).toEqual(['', 'low', 'medium']);
   });
 
   it('never treats "provider default" as unsupported', () => {
-    // '' means "send nothing", which every provider accepts by construction.
+    // `''` means "send nothing", which every provider accepts by construction —
+    // and it is the only option left when a model takes none, so the control
+    // still has something honest to show while disabled.
     expect(effortSupported(state(['low']), '')).toBe(true);
+    expect(effortSupported(state([]), '')).toBe(true);
     expect(effortOptions(state(['low']))[0]).toBe('');
   });
+});
 
-  it('does not duplicate the saved level when it is supported', () => {
-    expect(effortOptions(state(['low', 'medium'], 'low'))).toEqual(['', 'low', 'medium']);
+describe('correctedEffort (NEWS-254)', () => {
+  const state = (liveEffortLevels: Effort[] | null, chosen: Effort) => ({ liveEffortLevels, chosen });
+
+  it('falls back to "provider default" when the level is refused', () => {
+    // Always `''`, never a guessed equivalent: there is no honest mapping from
+    // `ultra` on Codex to anything on Anthropic, and silently substituting a
+    // *different* amount of thinking is a worse liberty than declining to pick.
+    expect(correctedEffort(state(['low', 'medium'], 'ultra'))).toBe('');
+    expect(correctedEffort(state([], 'high'))).toBe('');
+  });
+
+  it('leaves a supported level alone', () => {
+    expect(correctedEffort(state(['low', 'medium'], 'low'))).toBeNull();
+  });
+
+  it('leaves "provider default" alone', () => {
+    // Correcting `''` to `''` would PATCH settings on every refresh, and each
+    // PATCH triggers another refresh.
+    expect(correctedEffort(state([], ''))).toBeNull();
+    expect(correctedEffort(state(['low'], ''))).toBeNull();
+  });
+
+  it('corrects nothing when the answer is unknown', () => {
+    // Same rule as `correctedModel`: a lookup failure must not clobber a
+    // working setting.
+    expect(correctedEffort(state(null, 'ultra'))).toBeNull();
   });
 });
 
