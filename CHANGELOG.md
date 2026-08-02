@@ -14,6 +14,31 @@ fields reject semver prerelease suffixes.
 
 <!-- Nothing released yet. The first `npm run release` inserts its entry below. -->
 
+## [0.2.0-beta.11] - 2026-08-02
+
+## Bug Fixes
+
+- The "falling behind schedule" banner no longer fires for time the app was never permitted to check — backgrounding the app with a subscription provider, or a rate-limit pause, no longer counts against a topic's cadence.
+- A `<select>` you've touched now keeps following the server: settings dropdowns (e.g. the high-priority interval after it's clamped) no longer keep showing a stale value the app has already changed.
+- Sidebar topic rows now render their own state — two topics in the same category with the same flags could previously be served each other's cached row, showing the wrong name, badge or controls.
+- The app now refreshes as soon as it becomes visible again, instead of showing whatever was true when you left it until the next 4-second poll.
+
+## Features
+
+- Model suggestions now come from the provider instead of a hardcoded list: OpenAI and Anthropic catalogues are fetched over the API (newest first, non-text families filtered out) and Codex reads the model list its own CLI keeps on disk, including Codex-only models like `gpt-5.3-codex-spark`.
+- Reasoning effort now works on every real provider. Codex (via `model_reasoning_effort`) and the OpenAI API provider join Anthropic and the Claude CLI; the effort control is now disabled only for the test-only `mock` provider.
+- The effort menu offers what the chosen **model** actually accepts, not one global list — asking for an unsupported level previously failed the check outright. A saved level the model doesn't take stays visible rather than silently disappearing from the control.
+- The OpenAI provider retries without `reasoning.effort` when the API rejects the parameter, so a non-reasoning model still works instead of failing the check.
+
+## Performance
+
+- The server now holds idle connections for 30 seconds instead of Node's 5, so a page polling every 4 seconds reuses one socket instead of churning a new one each poll (measured: 457 sockets in `TIME_WAIT` at peak, down to 46).
+
+## Reliability
+
+- Windows E2E tests are now a blocking release gate rather than advisory, after 10 consecutive clean first-attempt runs.
+- `NEWSMONGER_SCHEDULER_TICK_MS` sets the scheduler's sweep interval; a bad value falls back to the 60-second default rather than leaving the app running without ever checking.
+
 ## [0.2.0-beta.10] - 2026-08-01
 
 ## Features
