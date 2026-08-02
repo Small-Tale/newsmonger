@@ -50,6 +50,8 @@ export interface ClaudeCliRunner {
     schema: object,
     /** Effort level for `--effort`; '' or omitted leaves the CLI's default. */
     effort?: Effort,
+    /** Kills the child process when fired (NEWS-257). */
+    signal?: AbortSignal,
   ): Promise<string>;
   /** Whether the CLI is installed and holds usable credentials. */
   available(): Promise<boolean>;
@@ -87,7 +89,11 @@ function spawnRunner(name: string): ClaudeCliRunner {
   // Resolved to an absolute path, because a Finder-launched macOS app does not
   // inherit the shell's PATH and these tools live in ~/.local/bin (NEWS-240).
   const binary = resolveCliBinary(name);
-  const exec = async (args: string[], timeoutMs: number): Promise<{ code: number | null; stdout: string; stderr: string }> =>
+  const exec = async (
+    args: string[],
+    timeoutMs: number,
+    signal?: AbortSignal,
+  ): Promise<{ code: number | null; stdout: string; stderr: string }> =>
     new Promise((resolve, reject) => {
       let child;
       try {
@@ -103,6 +109,14 @@ function spawnRunner(name: string): ClaudeCliRunner {
       const timer = setTimeout(() => {
         child.kill('SIGTERM');
       }, timeoutMs);
+      // Same kill the timeout uses (NEWS-257): a CLI agent is a child process,
+      // so "cancel" means ending it rather than ignoring its answer — it would
+      // otherwise keep spending a subscription's quota on a question the user
+      // has already changed.
+      const onAbort = (): void => {
+        child.kill('SIGTERM');
+      };
+      signal?.addEventListener('abort', onAbort, { once: true });
       child.stdout.setEncoding('utf-8');
       child.stderr.setEncoding('utf-8');
       child.stdout.on('data', (d: string) => (stdout += d));
@@ -113,12 +127,13 @@ function spawnRunner(name: string): ClaudeCliRunner {
       });
       child.on('close', (code) => {
         clearTimeout(timer);
+        signal?.removeEventListener('abort', onAbort);
         resolve({ code, stdout, stderr });
       });
     });
 
   return {
-    async run(system, prompt, model, schema, effort) {
+    async run(system, prompt, model, schema, effort, signal) {
       const args = [
         '-p',
         prompt,
@@ -139,7 +154,7 @@ function spawnRunner(name: string): ClaudeCliRunner {
       // (NEWS-239). Omitted when unset, leaving the CLI's own default.
       if (effort !== undefined && effort !== '') args.push('--effort', effort);
 
-      const { code, stdout, stderr } = await exec(args, CHECK_TIMEOUT_MS);
+      const { code, stdout, stderr } = await exec(args, CHECK_TIMEOUT_MS, signal);
       if (code !== 0) {
         // stderr is noisy on success for some installs, so it's only surfaced
         // when the exit code already says something went wrong.
@@ -216,6 +231,7 @@ export function createClaudeCliProvider(
       known: KnownItem[],
       sinceIso: string | null,
       context: TopicContext = {},
+      signal?: AbortSignal,
     ): Promise<CheckResult> {
       const text = await runner.run(
         searchingSystemPrompt(),
@@ -223,6 +239,7 @@ export function createClaudeCliProvider(
         model !== '' ? model : undefined,
         NEWS_JSON_SCHEMA,
         effort,
+        signal,
       );
       // A subscription check spends plan quota, not metered dollars, and the
       // CLI reports no token counts — so usage is genuinely unknown, not zero.

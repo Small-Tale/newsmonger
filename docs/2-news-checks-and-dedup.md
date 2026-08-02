@@ -77,6 +77,20 @@ Source URLs come from the model. The live-API check on 2026-07-24 found every ci
 
   The probe is injected (`CheckRunner`'s 5th argument); `--ai-test` passes null, since the mock's URLs are fictional and every story would otherwise be dropped.
 
+## Cancelling a check the settings have outrun (NEWS-257)
+
+- **FR-2.11** *(Shipped, NEWS-257)* **Changing provider, model or effort cancels any check already in flight.** Those requests were issued under settings the user has since changed, so the answer would be to a question they had already changed — and on a subscription it spends plan quota to produce it. `PATCH /api/settings` calls `CheckRunner.cancelStaleChecks()` when one of those three fields moves; an interval or retention edit does not cancel anything, because it does not make an in-flight answer wrong.
+
+  Each in-flight check records the `provider|model|effort` it went out under, so "stale" is a comparison rather than a guess — a check already running under the *new* settings is left alone.
+
+  **It is a real abort, not a discarded result.** An `AbortSignal` reaches both SDKs (`messages.stream(…, { signal })`, `responses.create(…, { signal })`), and for the CLI agents it kills the child process — the same `SIGTERM` the ten-minute timeout already used, because a subscription agent left running keeps spending quota on the abandoned question. The retry loop checks the signal at the top of every attempt as well as after the request, so an abort landing during a backoff sleep is not answered by trying again.
+
+  **A cancelled check records nothing.** Its run row is deleted rather than marked failed: `runs` feeds the failure banner and the falling-behind detector (FR-13.3a), and neither should fire over something the user chose to stop. No `cancelled` status was added — that would widen an enum older builds validate on read, and a check that produced nothing may as well leave nothing.
+
+- **FR-2.12** *(Shipped, NEWS-257)* **Only *manual* checks are reissued.** `lastCheckedAt` is untouched by a cancellation, so a cancelled scheduled check leaves its topic due and the next tick picks it up under the new settings unaided. Reissuing those here would re-spend quota every time someone browsed the dropdowns — which is precisely the interaction this feature invites.
+
+  Reissues are **coalesced** over a short window (750 ms; tests pass 0). Changing provider is never one settings write: the client then corrects the model to something the new provider offers, and the effort to something that model accepts (FR-6.15, FR-6.13a). Reissuing per write would start and kill the same check three times.
+
 ## Steering what a check looks for
 
 Beyond the topic name, two user signals reach the prompt through `TopicContext`:

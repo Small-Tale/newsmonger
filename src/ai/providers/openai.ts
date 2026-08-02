@@ -30,6 +30,7 @@ export interface OpenAIRunner {
     prompt: string,
     model: string,
     effort?: Effort,
+    signal?: AbortSignal,
   ): Promise<{ text: string; usage: TokenUsage | null }>;
 }
 
@@ -116,7 +117,7 @@ function sdkRunner(getApiKey: () => Promise<string | null>, baseURL: string | un
   let builtWith: string | null = null;
 
   return {
-    async run(system, prompt, model, effort) {
+    async run(system, prompt, model, effort, signal) {
       const apiKey = await getApiKey();
       if (apiKey === null) throw new Error('No OpenAI API key is configured');
       if (client === undefined || builtWith !== apiKey) {
@@ -143,7 +144,7 @@ function sdkRunner(getApiKey: () => Promise<string | null>, baseURL: string | un
         // means a Codex user who picked `ultra` and switched to this provider
         // gets the model's default instead of a failed check.
         ...(isOpenAIEffort(effort) ? { reasoning: { effort } } : {}),
-      });
+      }, { signal });
       return { text: response.output_text, usage: readUsage(response.usage) };
     },
 
@@ -204,13 +205,14 @@ export function createOpenAIProvider(config: {
       known: KnownItem[],
       sinceIso: string | null,
       context: TopicContext = {},
+      signal?: AbortSignal,
     ): Promise<CheckResult> {
       const system = searchingSystemPrompt();
       const prompt = buildUserPrompt(topicName, known, sinceIso, context);
       const wanted = rejectsEffort.has(model) ? '' : effort;
       let result;
       try {
-        result = await runner.run(system, prompt, model, wanted);
+        result = await runner.run(system, prompt, model, wanted, signal);
       } catch (err) {
         // Asked for reasoning and this model does not do reasoning. Rather than
         // deciding in advance which models qualify — a claim about someone
@@ -218,7 +220,7 @@ export function createOpenAIProvider(config: {
         // and take the answer. Remembered so it costs one request, not every one.
         if (wanted === '' || !looksLikeEffortRejection(err)) throw err;
         rejectsEffort.add(model);
-        result = await runner.run(system, prompt, model, '');
+        result = await runner.run(system, prompt, model, '', signal);
       }
       return { ...parseNewsResult(result.text), usage: result.usage };
     },

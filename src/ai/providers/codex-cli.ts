@@ -40,7 +40,14 @@ const CHECK_TIMEOUT_MS = 10 * 60 * 1000;
 /** Seam over the CLI so tests never spawn a real process. */
 export interface CodexCliRunner {
   /** `schema` is written to the file `--output-schema` reads — see `ClaudeCliRunner`. */
-  run(system: string, prompt: string, model: string | undefined, schema: object, effort?: Effort): Promise<string>;
+  run(
+    system: string,
+    prompt: string,
+    model: string | undefined,
+    schema: object,
+    effort?: Effort,
+    signal?: AbortSignal,
+  ): Promise<string>;
   available(): Promise<boolean>;
 }
 
@@ -59,6 +66,7 @@ function spawnRunner(name: string): CodexCliRunner {
   const exec = async (
     args: string[],
     timeoutMs: number,
+    signal?: AbortSignal,
   ): Promise<{ code: number | null; stdout: string; stderr: string }> =>
     new Promise((resolve, reject) => {
       let child;
@@ -75,6 +83,14 @@ function spawnRunner(name: string): CodexCliRunner {
       const timer = setTimeout(() => {
         child.kill('SIGTERM');
       }, timeoutMs);
+      // Same kill the timeout uses (NEWS-257): a CLI agent is a child process,
+      // so "cancel" means ending it rather than ignoring its answer — it would
+      // otherwise keep spending a subscription's quota on a question the user
+      // has already changed.
+      const onAbort = (): void => {
+        child.kill('SIGTERM');
+      };
+      signal?.addEventListener('abort', onAbort, { once: true });
       child.stdout.setEncoding('utf-8');
       child.stderr.setEncoding('utf-8');
       child.stdout.on('data', (d: string) => (stdout += d));
@@ -85,12 +101,13 @@ function spawnRunner(name: string): CodexCliRunner {
       });
       child.on('close', (code) => {
         clearTimeout(timer);
+        signal?.removeEventListener('abort', onAbort);
         resolve({ code, stdout, stderr });
       });
     });
 
   return {
-    async run(system, prompt, model, schema, effort) {
+    async run(system, prompt, model, schema, effort, signal) {
       // Both the schema and the final message go through temp files: Codex
       // takes the schema as a path, and reading the answer from a file beats
       // scraping it out of the progress log on stdout.
@@ -124,7 +141,7 @@ function spawnRunner(name: string): CodexCliRunner {
         if (effort !== undefined && effort !== '') args.push('-c', `model_reasoning_effort=${effort}`);
         args.push(combinePrompt(system, prompt));
 
-        const { code, stderr } = await exec(args, CHECK_TIMEOUT_MS);
+        const { code, stderr } = await exec(args, CHECK_TIMEOUT_MS, signal);
         if (code !== 0) {
           // stderr carries a benign PATH-alias warning on some installs, so it
           // is only surfaced once the exit code already indicates failure.
@@ -210,6 +227,7 @@ export function createCodexCliProvider(
       known: KnownItem[],
       sinceIso: string | null,
       context: TopicContext = {},
+      signal?: AbortSignal,
     ): Promise<CheckResult> {
       const text = await runner.run(
         searchingSystemPrompt(),
@@ -217,6 +235,7 @@ export function createCodexCliProvider(
         model !== '' ? model : undefined,
         NEWS_JSON_SCHEMA,
         effort,
+        signal,
       );
       // A subscription check spends plan quota, not metered dollars, and the
       // CLI reports no token counts — so usage is genuinely unknown, not zero.

@@ -267,7 +267,21 @@ export function registerApi(app: Hono<AppEnv>): void {
       if (!resolved.ok) return c.json({ error: resolved.error }, 400);
       body.backupDir = resolved.dir;
     }
-    return c.json(c.get('store').updateSettings(body));
+    const updated = c.get('store').updateSettings(body);
+
+    // A check already in flight was issued under the *old* provider, model and
+    // effort, so its answer is to a question the user has just changed — and on
+    // a subscription it is spending quota to produce it (NEWS-257).
+    //
+    // Only these three fields. An interval or retention edit does not make an
+    // in-flight answer wrong, and cancelling on every settings write would throw
+    // away work for changes that have nothing to do with it.
+    if (body.provider !== undefined || body.model !== undefined || body.effort !== undefined) {
+      // The runner owns the reissue as well as the cancel: it has to coalesce a
+      // burst of writes, and a route cannot see the burst it is part of.
+      c.get('runner').cancelStaleChecks();
+    }
+    return c.json(updated);
   });
 
   /**

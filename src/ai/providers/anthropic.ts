@@ -54,6 +54,7 @@ export interface AnthropicRunner {
     prompt: string,
     model: string,
     options?: RunOptions,
+    signal?: AbortSignal,
   ): Promise<{ text: string; usage: TokenUsage | null }>;
 }
 
@@ -146,14 +147,15 @@ function sdkRunner(getApiKey: () => Promise<string | null>): AnthropicRunner {
   let builtWith: string | null = null;
 
   return {
-    async run(system, prompt, model, options = CHECK_RUN) {
+    async run(system, prompt, model, options = CHECK_RUN, signal) {
       const apiKey = await getApiKey();
       if (apiKey === null) throw new Error('No Anthropic API key is configured');
       if (client === undefined || builtWith !== apiKey) {
         client = new Anthropic({ apiKey });
         builtWith = apiKey;
       }
-      const stream = client.messages.stream(messageParams(system, prompt, model, options));
+      // The SDK aborts the underlying request when this fires (NEWS-257).
+      const stream = client.messages.stream(messageParams(system, prompt, model, options), { signal });
       const message = await stream.finalMessage();
       if (message.stop_reason === 'refusal') {
         throw new Error('Claude declined to research this topic');
@@ -244,12 +246,14 @@ export function createAnthropicProvider(config: {
       known: KnownItem[],
       sinceIso: string | null,
       context: TopicContext = {},
+      signal?: AbortSignal,
     ): Promise<CheckResult> {
       const { text, usage } = await runner.run(
         searchingSystemPrompt(),
         buildUserPrompt(topicName, known, sinceIso, context),
         model,
         checkRun,
+        signal,
       );
       return { ...parseNewsResult(text), usage };
     },

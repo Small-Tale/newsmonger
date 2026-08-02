@@ -70,8 +70,23 @@ export type ProviderResolver = () => Promise<NewsProvider>;
  * A topic is never checked concurrently with itself: while a check for a topic
  * is in flight, further requests for that topic are ignored.
  */
+/**
+ * A check that was stopped because the user changed provider, model or effort
+ * (NEWS-257). Distinct from `CheckFailure`: nothing went wrong.
+ */
+class CancelledCheck extends Error {}
+
+/** What a check was issued under, so a settings change can tell if it is stale. */
+interface InFlightCheck {
+  controller: AbortController;
+  /** `provider|model|effort` at the moment the request went out. */
+  signature: string;
+  /** Manual checks are reissued after a cancellation; scheduled ones are not. */
+  manual: boolean;
+}
+
 export class CheckRunner {
-  private readonly inFlight = new Set<string>();
+  private readonly inFlight = new Map<string, InFlightCheck>();
 
   constructor(
     private readonly store: Store,
@@ -118,15 +133,30 @@ export class CheckRunner {
        * fail a check.
        */
       backups?: Backups | null;
+      /**
+       * How long to wait before reissuing a cancelled manual check (NEWS-257).
+       *
+       * Changing provider produces a *burst* of settings writes, not one: the
+       * client corrects the model to something the new provider has, and then
+       * the effort level to something that model accepts. Reissuing on each
+       * would start and kill the same check three times, which on a
+       * subscription is quota spent on nothing. Tests pass 0.
+       */
+      reissueDelayMs?: number;
     } = {},
   ) {
     this.sleep = opts.sleep ?? ((ms) => new Promise((resolve) => setTimeout(resolve, ms)));
+    this.reissueDelayMs = opts.reissueDelayMs ?? 750;
     this.fetchFavicon = opts.fetchFavicon ?? null;
     this.backoff = opts.backoff ?? DEFAULT_BACKOFF;
     this.backups = opts.backups ?? null;
   }
 
   private readonly sleep: (ms: number) => Promise<void>;
+  private readonly reissueDelayMs: number;
+  /** Topics whose manual check was cancelled and is waiting to be reissued. */
+  private readonly pendingReissue = new Set<string>();
+  private reissueTimer: ReturnType<typeof setTimeout> | null = null;
   private readonly backups: Backups | null;
   private readonly fetchFavicon: FaviconFetcher | null;
   private readonly backoff: BackoffConfig;
@@ -179,14 +209,27 @@ export class CheckRunner {
     topicName: string,
     known: KnownItem[],
     sinceIso: string | null,
+    signal: AbortSignal,
     context: TopicContext,
   ): Promise<{ result: CheckResult; kind: null } | { result: null; kind: FailureKind; error: unknown }> {
     let lastError: unknown;
     let lastKind: FailureKind = 'retryable';
+    // Read through a call rather than the property: `signal.aborted` changes
+    // under us, and TypeScript would otherwise narrow it to `false` for the
+    // rest of an iteration after the first check and flag the second as dead.
+    const aborted = (): boolean => signal.aborted;
     for (let attempt = 1; attempt <= this.backoff.maxAttempts; attempt++) {
+      // Checked at the top of every attempt as well as after the request: an
+      // abort landing during a backoff sleep must not be answered by trying
+      // again (NEWS-257).
+      if (aborted()) throw new CancelledCheck('check cancelled');
       try {
-        return { result: await provider.checkTopic(topicName, known, sinceIso, context), kind: null };
+        return { result: await provider.checkTopic(topicName, known, sinceIso, context, signal), kind: null };
       } catch (err) {
+        // The provider's own error is whatever aborting produced — a DOM
+        // AbortError from an SDK, a dead child process from a CLI. What settles
+        // it is the signal, not the shape of the error.
+        if (aborted()) throw new CancelledCheck('check cancelled');
         lastError = err;
         lastKind = classifyFailure(err);
         // A fatal error fails identically however many times it is asked, so
@@ -271,9 +314,68 @@ export class CheckRunner {
    */
 
 
+  /**
+   * What the current settings mean for a request: provider, model, effort.
+   *
+   * Only these three (NEWS-257). An interval or a retention change does not
+   * make an in-flight answer wrong, and cancelling on every settings write
+   * would throw away work for edits that have nothing to do with it.
+   */
+  private settingsSignature(): string {
+    const { provider, model, effort } = this.store.getSettings();
+    return `${provider}|${model}|${effort}`;
+  }
+
+  /**
+   * Stop any check that was issued under different settings, and say which
+   * *manual* ones should be reissued (NEWS-257).
+   *
+   * Called when the user changes provider, model or effort: whatever is in
+   * flight is answering a question they have already changed, and on a
+   * subscription it is spending quota to do it.
+   *
+   * **Only manual checks are reissued.** A scheduled sweep needs no help — a
+   * cancelled check leaves `lastCheckedAt` untouched, so the topic is still due
+   * and the next tick picks it up under the new settings on its own. Reissuing
+   * those here would re-spend quota every time someone browsed the dropdowns,
+   * which is exactly the interaction this feature invites.
+   */
+  cancelStaleChecks(): string[] {
+    const current = this.settingsSignature();
+    const cancelled: string[] = [];
+    for (const [topicId, entry] of this.inFlight) {
+      if (entry.signature === current) continue;
+      entry.controller.abort();
+      if (entry.manual) {
+        cancelled.push(topicId);
+        this.pendingReissue.add(topicId);
+      }
+    }
+    // Coalesced, because a provider change is a *burst* of settings writes —
+    // the client then corrects the model, then the effort. Reissuing on each
+    // would start and kill the same check three times over.
+    if (this.pendingReissue.size > 0) {
+      if (this.reissueTimer !== null) clearTimeout(this.reissueTimer);
+      this.reissueTimer = setTimeout(() => {
+        this.reissueTimer = null;
+        const topics = [...this.pendingReissue];
+        this.pendingReissue.clear();
+        for (const topicId of topics) {
+          void this.checkTopic(topicId, { manual: true }).catch((err: unknown) => {
+            console.error('newsmonger: reissued check failed:', err);
+          });
+        }
+      }, this.reissueDelayMs);
+      // Never hold the process open for a reissue: a CLI that is shutting down
+      // should not wait on one.
+      this.reissueTimer.unref();
+    }
+    return cancelled;
+  }
+
   /** Topic ids currently being checked. */
   checking(): string[] {
-    return [...this.inFlight];
+    return [...this.inFlight.keys()];
   }
 
   /**
@@ -290,7 +392,15 @@ export class CheckRunner {
     const topic = this.store.getTopic(topicId);
     if (!topic) return null;
     if (this.inFlight.has(topicId)) return null;
-    this.inFlight.add(topicId);
+    const controller = new AbortController();
+    // Captured *before* the request goes out, so a settings change arriving
+    // mid-check can tell whether this one is answering the old question
+    // (NEWS-257).
+    this.inFlight.set(topicId, {
+      controller,
+      signature: this.settingsSignature(),
+      manual: opts.manual === true,
+    });
     const run = this.store.startRun(topicId);
     let providerName: string | null = null;
     let modelName: string | null = null;
@@ -311,7 +421,7 @@ export class CheckRunner {
       const offTopicTitles = this.store.offTopicTitlesForTopic(topicId);
       // Ask from what we've actually *covered*, not the last attempt: a run
       // that failed with news pending must not shrink the next window.
-      const attempt = await this.checkWithRetry(provider, topic.name, known, topic.coveredThroughAt, {
+      const attempt = await this.checkWithRetry(provider, topic.name, known, topic.coveredThroughAt, controller.signal, {
         guidance: topic.guidance,
         offTopicTitles,
         // Only asked for while the topic still needs it (NEWS-97): a labelled
@@ -419,6 +529,15 @@ export class CheckRunner {
         // every tick.
         const streak = (this.store.getTopic(topicId)?.consecutiveFailures ?? 0) + 1;
         this.store.recordCheckFailure(topicId, new Date(Date.now() + backoffDelayMs(streak, FAILURE_COOLDOWN)));
+      }
+      if (err instanceof CancelledCheck) {
+        // Neither a success nor a failure: the user changed their mind. Recording
+        // it as failed would raise the failure banner and feed the
+        // falling-behind detector over something they chose to stop, and
+        // `lastCheckedAt` is untouched so the topic stays due — which is what
+        // makes a cancelled *scheduled* check need no reissuing (NEWS-257).
+        this.store.deleteRun(run.id);
+        return null;
       }
       this.store.finishRun(run.id, {
         status: 'failed',

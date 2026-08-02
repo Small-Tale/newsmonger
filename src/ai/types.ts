@@ -179,6 +179,15 @@ export interface NewsService {
     known: KnownItem[],
     sinceIso: string | null,
     context?: TopicContext,
+    /**
+     * Abort the request in flight (NEWS-257). Fired when the user changes
+     * provider, model or effort — the answer coming back would be to a question
+     * they have already changed.
+     *
+     * Optional so a provider that cannot abort simply ignores it, and so the
+     * many fake runners in the tests need not grow a parameter they never use.
+     */
+    signal?: AbortSignal,
   ): Promise<CheckResult>;
   /**
    * Suggest topics the user might want to follow (NEWS-116).

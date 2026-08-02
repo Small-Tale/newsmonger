@@ -1073,6 +1073,20 @@ export class Store {
    * See the constants above for why this is a date window with a count backstop
    * rather than either alone.
    */
+  /**
+   * Remove a run outright (NEWS-257).
+   *
+   * For a check that was **cancelled** — the user changed provider, model or
+   * effort while it was in flight — which is neither a success nor a failure.
+   * Recording it as `failed` would raise the failure banner and feed the
+   * falling-behind detector over something the user chose to stop; adding a
+   * `cancelled` status would widen an enum that older builds validate on read.
+   * A check that produced nothing leaves nothing.
+   */
+  deleteRun(id: string): void {
+    this.db.prepare('DELETE FROM runs WHERE id = ?').run(id);
+  }
+
   pruneOldRuns(now: Date): number {
     const cutoff = new Date(now.getTime() - RUN_RETENTION_DAYS * 24 * 60 * 60 * 1000).toISOString();
     const aged = this.db.prepare('DELETE FROM runs WHERE started_at < ?').run(cutoff);
