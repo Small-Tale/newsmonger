@@ -282,6 +282,16 @@ export const BackupLocationsRespSchema = z.object({
 export const BackupRespSchema = z.object({ ok: z.literal(true), path: z.string() });
 
 export const ProvidersRespSchema = z.object({ providers: z.array(ProviderInfoSchema) });
+
+/**
+ * Models the configured provider can use, newest first (NEWS-248).
+ *
+ * Empty is a normal answer, not a failure: the CLI agents resolve aliases
+ * themselves and expose no catalogue, `mock` has no models, and a missing key
+ * or a vendor outage lands here too. The client falls back to `PROVIDER_MODELS`.
+ */
+export const ModelsRespSchema = z.object({ models: z.array(z.string()).default([]) });
+export type ModelsResp = z.infer<typeof ModelsRespSchema>;
 export type ProvidersResp = z.infer<typeof ProvidersRespSchema>;
 
 /**

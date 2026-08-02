@@ -107,6 +107,22 @@ export function registerApi(app: Hono<AppEnv>): void {
     return c.json(resp);
   });
 
+  /**
+   * Models the configured provider can actually use, newest first (NEWS-248).
+   *
+   * Its own route rather than part of `/api/providers`, which probes *every*
+   * provider on every call: a catalogue fetch per provider would turn a page
+   * load into several vendor round trips to fill one dropdown nobody may open.
+   *
+   * Never an error. A provider that cannot enumerate — the CLI agents resolve
+   * aliases themselves, `mock` has no models — and one that can but fails, an
+   * absent key or a vendor outage, both answer `[]`, and the client falls back
+   * to the static list. A dropdown is not worth a red banner.
+   */
+  app.get('/api/models', async (c) => {
+    return c.json({ models: await c.get('runner').listModels() });
+  });
+
   app.post('/api/topics', async (c) => {
     const body = await parseBody(c, CreateTopicReqSchema);
     if (!body) return c.json({ error: 'invalid request: expected { name }' }, 400);

@@ -7,6 +7,7 @@ import {
   DiscoverUsageRespSchema,
   ItemsRespSchema,
   KeysRespSchema,
+  ModelsRespSchema,
   ProvidersRespSchema,
   StateRespSchema,
 } from '../api/schemas.js';
@@ -357,6 +358,23 @@ export async function refreshProviders(): Promise<void> {
   }
 }
 
+/**
+ * Ask the server which models the configured provider offers (NEWS-248).
+ *
+ * On demand — when the Source tab opens or the provider changes — rather than
+ * on the 4-second poll: it costs a vendor round trip and answers a question
+ * only someone looking at the picker is asking.
+ */
+export async function refreshModels(): Promise<void> {
+  try {
+    const body = await request('/api/models');
+    appStore.actions.setLiveModels(ModelsRespSchema.parse(body).models);
+  } catch {
+    // Non-fatal by design — the picker falls back to the static suggestions.
+    appStore.actions.setLiveModels([]);
+  }
+}
+
 export async function updateProviderSettings(patch: {
   provider?: ProviderName;
   model?: string;
@@ -365,6 +383,9 @@ export async function updateProviderSettings(patch: {
 }): Promise<void> {
   await withRefresh(() => request('/api/settings', { method: 'PATCH', body: JSON.stringify(patch) }));
   await refreshProviders();
+  // The catalogue is per provider and per key, so a provider or endpoint change
+  // invalidates it.
+  await refreshModels();
 }
 
 /** Fetch per-provider key status. Carries no key values — see `KeyStatusSchema`. */

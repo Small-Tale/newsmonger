@@ -207,6 +207,23 @@ export class CheckRunner {
     return { result: null, kind: lastKind, error: lastError };
   }
 
+  /**
+   * The models the configured provider can offer, newest first (NEWS-248).
+   *
+   * On the runner because it already owns provider resolution — the alternative
+   * was handing the route its own resolver and having two things that decide
+   * which provider is current. Empty when the provider cannot enumerate or the
+   * call fails; a dropdown falling back to a static list is not worth an error.
+   */
+  async listModels(): Promise<string[]> {
+    try {
+      const provider = await this.resolveProvider();
+      return (await provider.listModels?.()) ?? [];
+    } catch {
+      return [];
+    }
+  }
+
   /** Topic ids currently being checked. */
   checking(): string[] {
     return [...this.inFlight];

@@ -191,6 +191,19 @@ export interface NewsService {
 }
 
 /**
+ * Ask a provider which models it can actually use (NEWS-248).
+ *
+ * Optional because not every provider can answer: the CLI agents resolve
+ * aliases themselves and expose no catalogue, and `mock` has no models at all.
+ * A provider that cannot answer simply doesn't implement it, and the UI falls
+ * back to `PROVIDER_MODELS` — which is why that list survives as a fallback
+ * rather than being deleted.
+ */
+export interface ModelLister {
+  listModels(): Promise<string[]>;
+}
+
+/**
  * The set of provider ids the user can select. `auto` picks the best available.
  *
  * Only platforms that perform their own web search are supported — finding
@@ -220,9 +233,15 @@ export const PROVIDER_MODELS: Record<ProviderName, readonly string[]> = {
   // The field stays free text, so a full name still works for anyone who wants
   // to pin one.
   'claude-cli': ['opus', 'sonnet', 'haiku', 'fable'],
-  'codex-cli': ['gpt-5', 'gpt-5-mini', 'o3'],
+  // Codex's own catalogue differs from the API's — it carries models like
+  // `gpt-5.3-codex-spark` that `/v1/models` never lists — and it exposes no way
+  // to enumerate it, so these stay hand-written. NEWS-249 tracks finding one.
+  'codex-cli': ['gpt-5.6-sol', 'gpt-5.5', 'gpt-5.4', 'gpt-5.4-mini'],
   anthropic: ['claude-opus-4-8', 'claude-opus-4-7', 'claude-sonnet-5', 'claude-haiku-4-5'],
-  openai: ['gpt-5', 'gpt-5-mini', 'o3', 'o4-mini'],
+  // **Fallback only** since NEWS-248 — the picker asks the provider first, and
+  // this is what it shows when there is no key to ask with. Kept short and
+  // current rather than exhaustive: a long hand-written list is a longer lie.
+  openai: ['gpt-5.6-sol', 'gpt-5.5', 'gpt-5.4', 'gpt-5.4-mini'],
   mock: [],
 };
 
@@ -380,7 +399,7 @@ export function isKeyedProvider(name: string): name is KeyedProvider {
 }
 
 /** A selectable news backend. Every real provider searches the web itself. */
-export interface NewsProvider extends NewsService {
+export interface NewsProvider extends NewsService, Partial<ModelLister> {
   /**
    * Whether this provider may only run *scheduled* checks while the app is
    * foregrounded (see `src/attendance.ts`).

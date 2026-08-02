@@ -4,7 +4,11 @@ import { createAnthropicProvider } from '../../src/ai/providers/anthropic.js';
 import { AUTO_ORDER, resolveProvider } from '../../src/ai/providers/index.js';
 import { createMockProvider } from '../../src/ai/providers/mock.js';
 import type { ConcreteProviderName, NewsProvider } from '../../src/ai/types.js';
-import { fakeProvider, noUsage } from '../helpers/provider.js';
+import { CheckRunner } from '../../src/checks.js';
+import { Store } from '../../src/db/store.js';
+import { createApp } from '../../src/server.js';
+import { asResolver, fakeProvider, noUsage  } from '../helpers/provider.js';
+import { tmpDataDir } from '../helpers/tmp.js';
 
 function factoriesWith(available: Partial<Record<ConcreteProviderName, boolean>>) {
   const make = (name: ConcreteProviderName): NewsProvider => fakeProvider(() => Promise.resolve(noUsage([])), { name });
@@ -141,5 +145,53 @@ describe('createAnthropicProvider', () => {
     };
     const p = createAnthropicProvider({ runner, getApiKey: () => Promise.resolve('test-key') });
     await expect(p.checkTopic('X', [], null)).rejects.toThrow(/declined/);
+  });
+});
+
+describe('GET /api/models (NEWS-248)', () => {
+  /**
+   * Model suggestions used to be a hardcoded array that drifted two and a half
+   * generations behind — offering `gpt-5` and `o3` while the frontier was
+   * `gpt-5.6-sol`. The picker now asks the provider.
+   */
+  function appWith(provider: Partial<NewsProvider>) {
+    const store = new Store(tmpDataDir());
+    const base = createMockProvider();
+    const runner = new CheckRunner(store, asResolver({ ...base, ...provider }));
+    return createApp({ store, runner });
+  }
+
+  it('returns what the provider offers', async () => {
+    const app = appWith({ listModels: () => Promise.resolve(['gpt-5.6-sol', 'gpt-5.5']) });
+    const res = await app.request('/api/models');
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ models: ['gpt-5.6-sol', 'gpt-5.5'] });
+  });
+
+  it('answers empty for a provider that cannot enumerate', async () => {
+    // The CLI agents resolve aliases themselves and expose no catalogue, and
+    // `mock` has no models. Empty is a normal answer here, not a failure — the
+    // client falls back to the static suggestions.
+    const res = await appWith({}).request('/api/models');
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ models: [] });
+  });
+
+  it('answers empty rather than erroring when the vendor call fails', async () => {
+    // A missing key, an outage, a rate limit. A dropdown that cannot be filled
+    // is not worth a red banner, and 500ing here would make Settings look
+    // broken over a list of suggestions.
+    const app = appWith({ listModels: () => Promise.reject(new Error('401 Incorrect API key provided')) });
+    const res = await app.request('/api/models');
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ models: [] });
+  });
+
+  it('answers empty when no provider can even be resolved', async () => {
+    const store = new Store(tmpDataDir());
+    const runner = new CheckRunner(store, () => Promise.reject(new Error('nothing configured')));
+    const res = await createApp({ store, runner }).request('/api/models');
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ models: [] });
   });
 });

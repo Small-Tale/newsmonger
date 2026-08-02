@@ -40,6 +40,7 @@ import {
   fetchDiscoveryUsage,
   refreshFeed,
   refreshKeys,
+  refreshModels,
   refreshProviders,
   refreshState,
   renameTopic,
@@ -1996,9 +1997,16 @@ function settingsPanelJsx(s: AppState): SafeHtml {
                 data-morph-skip-children
               />
               {/* Suggestions only — the field stays free-text for custom
-                  gateways and models newer than this list (NEWS-37). */}
+                  gateways and anything the catalogue doesn't list (NEWS-37).
+
+                  Live from the provider when it can say (NEWS-248), which is
+                  the point: the static list offered `gpt-5` and `o3` while the
+                  current frontier was `gpt-5.6-sol`, and any hand-maintained
+                  list drifts the same way. `PROVIDER_MODELS` survives as the
+                  fallback for providers that expose no catalogue — the CLI
+                  agents resolve aliases themselves — and for a missing key. */}
               <datalist id="model-suggestions">
-                {PROVIDER_MODELS[provider].map((m) => (
+                {(s.liveModels.length > 0 ? s.liveModels : PROVIDER_MODELS[provider]).map((m) => (
                   <option value={m} data-key={m} />
                 ))}
               </datalist>
@@ -3383,7 +3391,12 @@ function wireEvents(root: HTMLElement): void {
 
   void delegate(root, 'click', '[data-settings-tab]', (_e, el) => {
     const tab = el.getAttribute('data-settings-tab');
-    if (tab !== null) appStore.actions.setSettingsTab(tab as AppState['settingsTab']);
+    if (tab === null) return;
+    appStore.actions.setSettingsTab(tab as AppState['settingsTab']);
+    // The model catalogue costs a vendor round trip, so it is fetched when
+    // someone actually opens the tab that shows it (NEWS-248) rather than on
+    // the 4-second poll.
+    if (tab === 'source') void refreshModels();
   });
 
   // Arrow keys move between tabs, which the WAI-ARIA tabs pattern requires:

@@ -345,11 +345,19 @@ test('the model field is a combobox with per-provider suggestions (NEWS-37)', as
   // models newer than the list must remain typeable.
   await expect(model).toHaveAttribute('type', 'text');
   await expect(model).toHaveAttribute('list', 'model-suggestions');
-  await expect(page.locator('#model-suggestions option').first()).toHaveAttribute('value', 'claude-opus-4-8');
 
-  // Suggestions track the provider.
+  // Suggestions track the provider — asserted as *change*, not as a model id.
+  // This used to pin `claude-opus-4-8` and `gpt-5`, which made the test a second
+  // copy of the hardcoded list it was checking: both went stale together, and
+  // the test's job became defending the staleness (NEWS-248). What matters is
+  // that switching provider changes the suggestions and never empties them.
+  const first = page.locator('#model-suggestions option').first();
+  const anthropicFirst = await first.getAttribute('value');
+  expect(anthropicFirst, 'a provider must offer at least one suggestion').toBeTruthy();
+
   await page.selectOption('[data-action=provider]', 'openai');
-  await expect(page.locator('#model-suggestions option').first()).toHaveAttribute('value', 'gpt-5');
+  await expect(first).not.toHaveAttribute('value', anthropicFirst ?? '');
+  expect(await first.getAttribute('value')).toBeTruthy();
 
   // A value not in the list is still accepted and persists.
   await model.fill('my-custom-model');
@@ -660,6 +668,34 @@ test('warns when checks fall behind the chosen interval (NEWS-59)', async ({ pag
   await page.click('[data-action=open-settings]');
   await page.selectOption('[data-action=interval]', String(24 * HOUR));
   await page.locator('.dialog [data-action=close-settings]').click();
+});
+
+test('the model picker asks the provider rather than a hardcoded list (NEWS-248)', async ({ page }) => {
+  // The suggestions were a hand-written array that drifted two and a half
+  // generations behind — offering `gpt-5` and `o3` while the current frontier
+  // was `gpt-5.6-sol`. The picker now asks the configured provider.
+  //
+  // Under `--ai-test` the mock provider exposes no catalogue, so this asserts
+  // the half that matters here: the route exists, answers 200 with a
+  // well-formed body, and an empty answer degrades to the static suggestions
+  // instead of an empty dropdown. The ranking itself is unit-tested against a
+  // 131-entry catalogue captured from the live API.
+  await page.goto('/');
+  const res = await page.request.get('/api/models');
+  expect(res.status()).toBe(200);
+  expect(await res.json()).toEqual({ models: [] });
+
+  await openSettingsTab(page, 'Source');
+  await page.selectOption('[data-action=provider]', 'openai');
+  // A provider that cannot enumerate must still leave suggestions on screen.
+  const options = page.locator('#model-suggestions option');
+  await expect(options.first()).toHaveCount(1);
+  expect(await options.count()).toBeGreaterThan(0);
+
+  // Leave the shared server on the mock provider for the specs that follow.
+  await page.selectOption('[data-action=provider]', 'mock');
+  await expect(page.locator('[data-action=provider]')).toHaveValue('mock', { timeout: 15_000 });
+  await closeSettings(page);
 });
 
 test('the server reports when checking last became possible (NEWS-247)', async ({ page }) => {

@@ -1,6 +1,7 @@
 import OpenAI from 'openai';
 
 import { resolveApiKey } from '../api-keys.js';
+import { rankModels } from '../model-list.js';
 import { buildUserPrompt, parseNewsResult, searchingSystemPrompt } from '../prompt.js';
 import { buildSuggestPrompt, parseSuggestResult, suggestSystemPrompt } from '../suggest-prompt.js';
 import type {
@@ -19,6 +20,11 @@ export const DEFAULT_OPENAI_MODEL = 'gpt-5';
 
 /** Minimal seam over the OpenAI SDK so tests can inject a fake. */
 export interface OpenAIRunner {
+  /**
+   * The models this key can use, newest first (NEWS-248). Optional on the seam
+   * so existing fake runners in tests need not grow a method they don't use.
+   */
+  listModels?(): Promise<string[]>;
   run(
     system: string,
     prompt: string,
@@ -126,6 +132,16 @@ function sdkRunner(getApiKey: () => Promise<string | null>, baseURL: string | un
       });
       return { text: response.output_text, usage: readUsage(response.usage) };
     },
+
+    async listModels() {
+      const apiKey = await getApiKey();
+      if (apiKey === null) throw new Error('No OpenAI API key is configured');
+      const c = new OpenAI({ apiKey, ...(baseURL !== undefined && baseURL !== '' ? { baseURL } : {}) });
+      // One page is plenty — the catalogue is ~130 entries and the picker shows
+      // 20. Auto-paginating would spend requests to rank models nobody scrolls to.
+      const page = await c.models.list();
+      return rankModels(page.data.map((m) => ({ id: m.id, created: m.created })));
+    },
   };
 }
 
@@ -167,6 +183,7 @@ export function createOpenAIProvider(config: {
     // Metered and billed per token — safe to run on a schedule unattended.
     attended: false,
     isAvailable: async () => (await getApiKey()) !== null,
+    listModels: runner.listModels?.bind(runner),
     async checkTopic(
       topicName: string,
       known: KnownItem[],

@@ -48,6 +48,18 @@ Claude with adaptive thinking and the `web_search_20260209` server tool (max 8 s
 
 The **Responses API** with the hosted `web_search` tool (`client.responses.create({ model, instructions, input, tools: [{type:'web_search'}] })`, reading `output_text`) — the OpenAI analog of Anthropic's server tool. Result parsing reuses the shared fenced-JSON `parseNewsResult`; a strict `json_schema` output was left as a possible enhancement to avoid schema-vs-hosted-tool friction. `OPENAI_BASE_URL` (or `--endpoint`) targets an OpenAI-compatible gateway. **The live request path needs a real key to verify** — see `manual-test-plan.md`.
 
+## Model suggestions
+
+- **FR-6.14** *(Shipped, NEWS-248)* **The model picker asks the provider.** `GET /api/models` → `CheckRunner.listModels()` → the provider's optional `listModels()`, which for OpenAI is `client.models.list()`. The Settings datalist shows the answer; `PROVIDER_MODELS` in `src/ai/types.ts` survives as the **fallback** for providers that expose no catalogue and for when there is no key to ask with.
+
+  It replaces a hardcoded array that had drifted two and a half generations: it offered `gpt-5`, `gpt-5-mini`, `o3`, `o4-mini` while the live catalogue led with `gpt-5.6-sol`, `gpt-5.6-terra`, `gpt-5.6-luna`. This is the third time the same staleness has surfaced — NEWS-243 solved it for the Claude CLI with **aliases**, which cannot go stale because the vendor resolves them, and OpenAI has none.
+
+  **Ranked without parsing a single model name** (`rankModels` in `src/ai/model-list.ts`). The catalogue carries a `created` timestamp per model, so newest-first is a sort on a field the vendor maintains. Every previous attempt at this problem failed by encoding knowledge of *which* models exist; this encodes none. Two filters sit in front of it: non-text families are dropped by an **exception list** (an allow-list would go stale exactly like the array it replaces, and its failure mode — a missing frontier model — is the one nobody notices, where a stray image model in a dropdown is visible and harmless), and `-YYYY-MM-DD` snapshots are dropped because the undated id already tracks the newest. Models with no timestamp sort last rather than being dropped: absent metadata is not evidence a model is bad.
+
+  **Fetched on demand** — when the Source tab opens, or the provider or endpoint changes — never on the 4-second poll, since it costs a vendor round trip to answer a question only someone looking at the picker is asking. **Never an error**: a provider that cannot enumerate, a missing key and a vendor outage all answer `[]` and the picker falls back. A dropdown is not worth a red banner.
+
+  Not covered: **Codex**, whose catalogue is its own (it serves `gpt-5.3-codex-spark`, which `/v1/models` never lists, and refuses every non-reasoning model the API happily serves) and which exposes no enumeration command found so far — NEWS-249. The **Anthropic** provider could use the same seam in about five lines; it was left out only because there is no Anthropic key here to verify it against.
+
 ## Attended providers and the foreground gate
 
 Some providers authenticate with a **personal subscription** (Claude Pro/Max, ChatGPT) rather than an API key. A check on one of those spends the user's plan quota, and a scheduler firing at 3am against someone's subscription is an unattended background agent. So those providers only run **scheduled** checks while the app is actually in front of someone.

@@ -165,6 +165,12 @@ export interface AppState {
   diagIncludeTopics: boolean;
   /** Provider list + availability (fetched on demand, not every poll). */
   providers: ProviderInfo[];
+  /**
+   * Models the configured provider actually offers, newest first (NEWS-248).
+   * Empty means "not fetched, or the provider cannot say" — the picker falls
+   * back to the static `PROVIDER_MODELS` suggestions.
+   */
+  liveModels: string[];
   /** Which settings tab is showing (NEWS-118). Resets to the first on reopen. */
   settingsTab: 'schedule' | 'source' | 'data' | 'app';
   /** Whether the privacy dialog is open (NEWS-121). Ephemeral, like every dialog. */
@@ -495,6 +501,7 @@ export const appStore = defineStore({
     checksPossibleSince: '1970-01-01T00:00:00.000Z',
     diagIncludeTopics: false,
     providers: [],
+    liveModels: [],
     settingsTab: 'schedule',
     privacyOpen: false,
     export: null,
@@ -780,6 +787,9 @@ export const appStore = defineStore({
     },
     setProviders: (providers: ProviderInfo[]) => {
       set({ ...get(), providers });
+    },
+    setLiveModels: (liveModels: string[]) => {
+      set({ ...get(), liveModels });
     },
     setError: (error: string | null) => {
       set({ ...get(), error });
