@@ -14,6 +14,23 @@ fields reject semver prerelease suffixes.
 
 <!-- Nothing released yet. The first `npm run release` inserts its entry below. -->
 
+## [0.2.0-beta.12] - 2026-08-02
+
+## Features
+
+- **Restore from a backup, in the app.** Settings → Data now shows what your configured backup folder holds — *"Backup found — 12 topics and 340 stories, saved 3 hours ago"* — with a **Restore from backup** button beside it. No more renaming files by hand into a data directory you've never seen.
+- Restoring replaces everything in one transaction rather than merging, and any error rolls back, so a failed restore leaves your data exactly as it was.
+- Your current data is saved to a `pre-restore-<timestamp>.json` file in the data folder before anything is replaced.
+- The confirmation names the snapshot's date and contents before you commit to overwriting, and the button is styled as destructive.
+- The restore panel refreshes when you open the Data tab, after "Back up now", and after changing the backup folder — so it reflects the folder's real contents without reopening Settings.
+
+## Behavior
+
+- Your machine's backup folder setting is kept after a restore instead of adopting the path from the snapshot, which would usually point at a folder that doesn't exist and silently stop backups.
+- Restore is refused while a check is running, so a check finishing mid-restore can't mix old stories into the new data.
+- A folder with no backup shows no restore control at all; a file this version can't read is reported as unreadable rather than as "no backup".
+- API keys are still never included in a backup — the panel says so, so a restored app asking for your key reads as expected rather than as a failed restore.
+
 ## [0.2.0-beta.11] - 2026-08-02
 
 ## Bug Fixes
