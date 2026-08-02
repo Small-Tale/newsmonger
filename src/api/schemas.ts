@@ -309,6 +309,9 @@ export const RestoreRespSchema = z.object({
 });
 export type BackupPreview = z.infer<typeof BackupPreviewSchema>;
 
+/** How many stories `POST /api/items/clear` removed (NEWS-255). */
+export const ClearItemsRespSchema = z.object({ cleared: z.number().int() });
+
 export const ModelsRespSchema = z.object({
   models: z.array(z.string()).default([]),
   /**

@@ -4,6 +4,7 @@ import {
   BackupLocationsRespSchema,
   BackupPreviewRespSchema,
   BackupRespSchema,
+  ClearItemsRespSchema,
   DiscoverRespSchema,
   DiscoverUsageRespSchema,
   ItemsRespSchema,
@@ -371,6 +372,20 @@ export async function fetchBackupPreview(): Promise<BackupPreview | null> {
     throw new Error(message);
   }
   return BackupPreviewRespSchema.parse(body).preview;
+}
+
+/**
+ * Delete every story, keeping topics and settings (NEWS-255).
+ *
+ * Refreshes afterwards because the feed and every sidebar count are now wrong —
+ * the 4-second poll would fix it eventually, and "eventually" after a
+ * destructive action reads as the action not having worked.
+ */
+export async function clearAllStories(): Promise<number> {
+  const body = await request('/api/items/clear', { method: 'POST' });
+  const { cleared } = ClearItemsRespSchema.parse(body);
+  await refreshState();
+  return cleared;
 }
 
 /** Load the preview into the store; a failure leaves the control hidden. */

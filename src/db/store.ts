@@ -487,6 +487,40 @@ export class Store {
     }
   }
 
+  /**
+   * Delete every story, for every topic, keeping the topics themselves
+   * (NEWS-255).
+   *
+   * The counterpart to `clearItemsForTopic`, and deliberately **not** built on
+   * it. Looping that per topic would be N transactions where one will do, and
+   * would push N snapshots through `ClearUndoBuffer` — which holds eight. On a
+   * ninth topic the oldest would be evicted mid-operation, so an "undo" would
+   * silently restore some topics and not others. A partial undo is worse than
+   * none, because it looks like it worked.
+   *
+   * So there is no undo here; the confirmation is the guard. What softens it is
+   * that clearing is not quite deletion: `covered_through_at` goes back to null,
+   * so the next check spans a sensible period again (FR-25.6) rather than
+   * resuming from where the vanished stories left off.
+   *
+   * Run history is kept, for the same reason `clearItemsForTopic` keeps it: it
+   * records what the app *did*, not what a topic is about, and the failure
+   * banner and falling-behind detector both read it.
+   */
+  clearAllItems(): number {
+    this.db.exec('BEGIN');
+    try {
+      const before = this.db.prepare('SELECT count(*) AS c FROM items').get() as { c: unknown };
+      this.db.exec('DELETE FROM items');
+      this.db.exec('UPDATE topics SET covered_through_at = NULL');
+      this.db.exec('COMMIT');
+      return asCount(before.c);
+    } catch (err) {
+      this.db.exec('ROLLBACK');
+      throw err;
+    }
+  }
+
   private coveredThroughAt(id: string): string | null {
     const row = this.db.prepare('SELECT covered_through_at AS c FROM topics WHERE id = ?').get(id) as
       | { c: unknown }

@@ -30,6 +30,7 @@ import {
   addSuggestedTopic,
   addTopic,
   backupNow,
+  clearAllStories,
   countItemsForTopic,
   deleteKey,
   deleteTopic,
@@ -2111,6 +2112,19 @@ function settingsPanelJsx(s: AppState): SafeHtml {
           your topics, settings and stories — after a check, at most once an hour. Leave it empty to turn backups
           off. <strong>Your API keys are never included</strong>; they stay in your {s.keychainLabel}.
         </p>
+        {/* Clear all stories (NEWS-255). Stories only — topics, settings and
+            keys all stay, which is what the label has to convey, because
+            "clear data" beside a backup control reads like a factory reset. */}
+        <div class="clear-row">
+          <button class="btn" type="button" data-action="clear-stories" disabled={s.feedTotal === 0}>
+            {icon('clear', 15)} Clear all stories
+          </button>
+          <p class="note">
+            Deletes every story from every topic. <strong>Your topics, settings and API keys stay.</strong> Each topic
+            starts covering news again from a sensible window on its next check, so this is a fresh start rather than a
+            hole in your history.
+          </p>
+        </div>
         {/* Restore (NEWS-252). Always-present container so the panel doesn't
             restructure when a backup is found (docs/3-ui.md). Offered only when
             there is something to restore — an empty folder needs no button, and
@@ -3563,6 +3577,26 @@ function wireEvents(root: HTMLElement): void {
   // half-typed paths on the way to a good one.
   void delegate(root, 'change', '[data-action=backup-dir]', (_e, el) => {
     if (el instanceof HTMLInputElement) void updateBackupDir(el.value.trim()).then(refreshBackupPreview);
+  });
+
+  void delegate(root, 'click', '[data-action=clear-stories]', () => {
+    void (async () => {
+      const total = appStore.state.value.feedTotal;
+      // Named, not "are you sure?" — and it says what *survives*, because the
+      // fear this dialog has to answer is "am I about to lose my topics too".
+      const ok = await confirm(
+        `Delete ${total > 0 ? String(total) : 'all'} stor${total === 1 ? 'y' : 'ies'} from every topic? ` +
+          `Your topics, settings and API keys are not touched. This cannot be undone.`,
+        { confirmLabel: 'Clear stories', danger: true },
+      );
+      if (!ok) return;
+      try {
+        const cleared = await clearAllStories();
+        showToast(`Cleared ${String(cleared)} stor${cleared === 1 ? 'y' : 'ies'}`);
+      } catch (err) {
+        showToast(`Clear failed: ${err instanceof Error ? err.message : String(err)}`);
+      }
+    })();
   });
 
   void delegate(root, 'click', '[data-action=restore-backup]', () => {

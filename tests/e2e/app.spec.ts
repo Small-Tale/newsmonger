@@ -1564,6 +1564,34 @@ test('backs up to a chosen folder, without the API keys (NEWS-192)', async ({ pa
   fs.rmSync(dest, { recursive: true, force: true });
 });
 
+test('clear all stories, keeping topics and settings (NEWS-255)', async ({ page }) => {
+  await page.goto('/');
+  await page.fill('.add-topic input', 'Clear Probe');
+  await page.press('.add-topic input', 'Enter');
+  const row = page.locator('.topic', { hasText: 'Clear Probe' });
+  await expect(row).toBeVisible();
+  // Adding checks it (NEWS-54); wait for the mock's stories to land.
+  await expect(page.locator('.item').first()).toBeVisible({ timeout: 15_000 });
+
+  await openSettingsTab(page, 'Data');
+  await page.locator('[data-action=clear-stories]').click();
+  // Names what survives, because the fear this dialog answers is "am I about to
+  // lose my topics too".
+  const confirmDialog = page.locator('.dialog.confirm');
+  await expect(confirmDialog).toContainText('topics, settings and API keys are not touched');
+  await page.locator('[data-action=confirm-ok]').click();
+
+  await expect(page.locator('.toast')).toContainText('Cleared', { timeout: 15_000 });
+  await page.locator('.dialog [data-action=close-settings]').click();
+  await expect(page.locator('.dialog')).toHaveCount(0);
+
+  // Stories gone, topic still there — the whole point of the narrowing.
+  await expect(page.locator('.item')).toHaveCount(0);
+  await expect(page.locator('.topic', { hasText: 'Clear Probe' })).toBeVisible();
+
+  await topicAction(page, page.locator('.topic', { hasText: 'Clear Probe' }), 'delete');
+});
+
 test('back up, then restore from that folder without moving files (NEWS-252)', async ({ page }) => {
   // The workflow this replaces was: find the backup file, rename it to
   // `data.json`, put it in a data directory you have never seen, and only if

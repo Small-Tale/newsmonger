@@ -65,6 +65,18 @@ A setting names a **backup** directory. The app keeps running from `~/.newsmonge
 - A backup that fails is **reported and swallowed**: it is housekeeping, exactly like pruning, and must never turn a successful check into a failed one. The destination is a folder that can be unmounted, full, or renamed by a sync client at any moment.
 - **The path is typed, not picked.** See open decision 4 below — that has not changed, and is the one rough edge in the shipped feature.
 
+- **FR-27.11** *(Shipped, NEWS-255)* **"Clear all stories" deletes stories and nothing else.** Settings → Data, below the backup controls. Topics, settings and API keys all survive — the label and the confirmation both say so, because "clear data" sitting beside a backup control reads like a factory reset, and the fear it has to answer is *"am I about to lose my topics too"*.
+
+  Its own route (`POST /api/items/clear`) rather than a flag on `PATCH /api/topics/:id`, which already carries the per-topic clear. FR-25.8 deliberately made that one require a rename to justify it, so `PATCH` would not quietly become a second delete; bolting *"…and every other topic"* onto it would be the same mistake at a larger scale.
+
+  **`covered_through_at` is reset**, exactly as the per-topic clear does (FR-25.6). Without it the next check resumes from where the deleted stories left off and reports nothing, so the clear would look like a permanent hole rather than a fresh start.
+
+  **Refused while a check is running** (`409`), as restore is. A check computed its "already known" list *before* the clear; letting it finish afterwards would file only the stories missing from that stale list, leaving a partial set that looks like the clear half-failed.
+
+  **No undo, deliberately.** The per-topic clear has a 60-second undo (NEWS-145) built on `ClearUndoBuffer`, which holds **eight** entries — so a bulk clear across nine topics would evict the oldest mid-operation and "undo" would restore some topics and not others. A partial undo is worse than none, because it looks like it worked. The confirmation is the guard, and the reset covered window means the next check starts filling the topic again rather than skipping the gap.
+
+  Styled plainly rather than boxed like the restore control: it *is* destructive, but far less so, and making every dangerous-ish control shout the same way teaches people to stop reading them.
+
 ## The offer (NEWS-230)
 
 - **FR-27.2** *(Shipped)* After the user's **third topic**, a dialog offers the backup folder with the detected locations one click away. Three, not one: someone with a single topic is still deciding whether they want the app at all, and a dialog about protecting data they barely have is noise. By the third, losing it would matter.

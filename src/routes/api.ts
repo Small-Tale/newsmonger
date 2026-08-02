@@ -345,6 +345,27 @@ export function registerApi(app: Hono<AppEnv>): void {
     }
   });
 
+  /**
+   * Delete every story, keeping topics, settings and keys (NEWS-255).
+   *
+   * Its own route rather than a flag on `PATCH /api/topics/:id`, which already
+   * carries the per-topic clear. FR-25.8 made that one require a rename to
+   * justify it, precisely so `PATCH` would not quietly become a second delete —
+   * bolting "…and all the others" onto it would be the same mistake at a larger
+   * scale.
+   *
+   * **Refused while a check is running**, as restore is. A check computed its
+   * "already known" list before the clear; letting it finish afterwards would
+   * file only the stories missing from that stale list, leaving a partial set
+   * that looks like the clear half-failed.
+   */
+  app.post('/api/items/clear', (c) => {
+    if (c.get('runner').checking().length > 0) {
+      return c.json({ error: 'a check is running — wait for it to finish, then clear' }, 409);
+    }
+    return c.json({ cleared: c.get('store').clearAllItems() });
+  });
+
   app.post('/api/check', async (c) => {
     const body = await parseBody(c, CheckReqSchema);
     if (!body) return c.json({ error: 'invalid request' }, 400);

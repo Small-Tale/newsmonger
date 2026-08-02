@@ -1787,6 +1787,24 @@ h2.eyebrow {
 // Same layout, two rows: the export button and the backup button (NEWS-192).
 // Separate classes because a selector naming one must not also match the other.
 .export-row,
+// Clear all stories (NEWS-255). Plain, not boxed like `.restore-row`: it is
+// destructive but far less so — topics, settings and keys all survive — and
+// making every dangerous-ish control shout the same way teaches people to stop
+// reading them.
+.clear-row {
+  margin: 14px 0 0;
+
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+  }
+
+  .note {
+    margin: 8px 0 0;
+  }
+}
+
 .backup-row {
   display: flex;
   flex-wrap: wrap;
