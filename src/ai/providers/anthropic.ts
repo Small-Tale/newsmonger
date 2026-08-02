@@ -13,7 +13,7 @@ import type {
   TokenUsage,
   TopicContext,
 } from '../types.js';
-import { DISCOVERY_MODELS, usesLegacyRequestShape } from '../types.js';
+import { DISCOVERY_MODELS, PROVIDER_EFFORT_LEVELS, usesLegacyRequestShape } from '../types.js';
 
 export const DEFAULT_ANTHROPIC_MODEL = 'claude-opus-4-8';
 
@@ -87,6 +87,11 @@ function readUsage(usage: Anthropic.Usage): TokenUsage {
  * the only call that runs on an older model is discovery, which needs no
  * thinking and is faster for skipping it.
  */
+/** The levels Anthropic's `output_config.effort` accepts, per the SDK's types. */
+function isAnthropicEffort(effort: Effort | undefined): effort is Exclude<Effort, '' | 'none' | 'minimal' | 'ultra'> {
+  return effort !== undefined && effort !== '' && (PROVIDER_EFFORT_LEVELS.anthropic as readonly string[]).includes(effort);
+}
+
 export function messageParams(
   system: string,
   prompt: string,
@@ -96,7 +101,15 @@ export function messageParams(
   const legacy = usesLegacyRequestShape(model);
   // Never on a legacy-shape model: those predate `output_config` and reject it.
   // The same guard that keeps `thinking` off them keeps effort off them.
-  const effort = !legacy && options.effort !== undefined && options.effort !== '' ? options.effort : null;
+  //
+  // Also narrowed to what Anthropic accepts (NEWS-250). `Effort` is now the
+  // *superset* across every provider, and this one takes five of the nine —
+  // the SDK's own types say so, `effort?: 'low' | 'medium' | 'high' | 'xhigh' |
+  // 'max'` under the comment "All possible effort levels", which is generated
+  // from Anthropic's spec and is the closest thing to a vendor answer available
+  // without a key. A level this API does not know is dropped rather than sent:
+  // silently running at the model's default beats a 400 on every check.
+  const effort = !legacy && isAnthropicEffort(options.effort) ? options.effort : null;
   return {
     model,
     max_tokens: options.maxTokens,
@@ -183,6 +196,7 @@ export function createAnthropicProvider(config: {
     // Metered and billed per token — safe to run on a schedule unattended.
     attended: false,
     isAvailable: async () => (await getApiKey()) !== null,
+    effortLevelsFor: () => [...PROVIDER_EFFORT_LEVELS.anthropic],
     async checkTopic(
       topicName: string,
       known: KnownItem[],

@@ -4,12 +4,14 @@ import { backoffDelayMs, classifyFailure, DEFAULT_BACKOFF, FAILURE_COOLDOWN, ret
 import type {
   CategoryOption,
   CheckResult,
+  Effort,
   FoundNewsItem,
   KnownItem,
   NewsProvider,
   TopicClassification,
   TopicContext,
 } from './ai/types.js';
+import { EFFORT_LEVELS, PROVIDER_EFFORT_LEVELS } from './ai/types.js';
 import type { LinkProbe } from './ai/verify-links.js';
 import { verifyItemLinks } from './ai/verify-links.js';
 import { Attendance } from './attendance.js';
@@ -221,6 +223,26 @@ export class CheckRunner {
       return (await provider.listModels?.()) ?? [];
     } catch {
       return [];
+    }
+  }
+
+  /**
+   * The effort levels the configured provider **and model** accept (NEWS-250).
+   *
+   * Answered beside `listModels` because it is the same question asked of the
+   * same resolved provider, and the UI needs both to render one control
+   * honestly. Falls back to the provider's declared union, then to the app's
+   * whole vocabulary — a control offering too much is recoverable, one offering
+   * nothing is broken.
+   */
+  async effortLevels(): Promise<Effort[]> {
+    try {
+      const provider = await this.resolveProvider();
+      const model = this.store.getSettings().model;
+      const levels = provider.effortLevelsFor?.(model) ?? [];
+      return levels.length > 0 ? levels : [...PROVIDER_EFFORT_LEVELS[provider.name]];
+    } catch {
+      return EFFORT_LEVELS.filter((l) => l !== '');
     }
   }
 

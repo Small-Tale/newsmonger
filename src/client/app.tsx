@@ -4,7 +4,6 @@ import { delegate, each, effect, mount } from 'kerfjs';
 import type { Effort,ProviderName  } from '../ai/types.js';
 import {
   EFFORT_LABELS,
-  EFFORT_LEVELS,
   isKeyedProvider,
   PROVIDER_INFO,
   PROVIDER_MODELS,
@@ -89,6 +88,7 @@ import {
   readDurations,
   recordDuration,
 } from './discover-progress.js';
+import { effortOptions, effortSupported } from './effort-options.js';
 import { exportHref } from './export-url.js';
 import { currentFailure } from './failure.js';
 import { icon } from './icons.js';
@@ -1944,9 +1944,10 @@ function settingsPanelJsx(s: AppState): SafeHtml {
                 : 'This provider takes no effort setting.'
             }
           >
-            {EFFORT_LEVELS.map((level) => (
+            {effortOptions({ liveEffortLevels: s.liveEffortLevels, chosen: s.settings.effort }).map((level) => (
               <option value={level} selected={level === s.settings.effort ? true : undefined}>
                 {EFFORT_LABELS[level]}
+                {level !== '' && !effortSupported({ liveEffortLevels: s.liveEffortLevels, chosen: s.settings.effort }, level) ? ' — not supported by this model' : ''}
               </option>
             ))}
           </select>

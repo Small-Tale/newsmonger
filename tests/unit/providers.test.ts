@@ -165,7 +165,7 @@ describe('GET /api/models (NEWS-248)', () => {
     const app = appWith({ listModels: () => Promise.resolve(['gpt-5.6-sol', 'gpt-5.5']) });
     const res = await app.request('/api/models');
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ models: ['gpt-5.6-sol', 'gpt-5.5'] });
+    expect(await res.json()).toMatchObject({ models: ['gpt-5.6-sol', 'gpt-5.5'] });
   });
 
   it('answers empty for a provider that cannot enumerate', async () => {
@@ -174,7 +174,7 @@ describe('GET /api/models (NEWS-248)', () => {
     // client falls back to the static suggestions.
     const res = await appWith({}).request('/api/models');
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ models: [] });
+    expect(await res.json()).toMatchObject({ models: [] });
   });
 
   it('answers empty rather than erroring when the vendor call fails', async () => {
@@ -184,7 +184,7 @@ describe('GET /api/models (NEWS-248)', () => {
     const app = appWith({ listModels: () => Promise.reject(new Error('401 Incorrect API key provided')) });
     const res = await app.request('/api/models');
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ models: [] });
+    expect(await res.json()).toMatchObject({ models: [] });
   });
 
   it('answers empty when no provider can even be resolved', async () => {
@@ -192,6 +192,14 @@ describe('GET /api/models (NEWS-248)', () => {
     const runner = new CheckRunner(store, () => Promise.reject(new Error('nothing configured')));
     const res = await createApp({ store, runner }).request('/api/models');
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ models: [] });
+    expect(await res.json()).toMatchObject({ models: [] });
+  });
+
+  it('carries the effort levels for the configured model (NEWS-250)', async () => {
+    // Same round trip, because the UI needs both to render one control
+    // honestly and they answer to the same resolved provider.
+    const app = appWith({ effortLevelsFor: () => ['low', 'high', 'ultra'] });
+    const res = await app.request('/api/models');
+    expect(await res.json()).toMatchObject({ effortLevels: ['low', 'high', 'ultra'] });
   });
 });

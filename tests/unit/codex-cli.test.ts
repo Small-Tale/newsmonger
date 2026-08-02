@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import type { CodexCliRunner } from '../../src/ai/providers/codex-cli.js';
 import { combinePrompt, createCodexCliProvider } from '../../src/ai/providers/codex-cli.js';
-import { EFFORT_LEVELS } from '../../src/ai/types.js';
+import { PROVIDER_EFFORT_LEVELS } from '../../src/ai/types.js';
 
 const NEWS = JSON.stringify({
   items: [
@@ -188,13 +188,22 @@ describe('effort reaches Codex (NEWS-244)', () => {
   });
 
   it('offers only levels Codex accepts', () => {
-    // The server validates the value and names its set:
-    //   Invalid value: 'bogus'. Supported values are: 'none', 'minimal', 'low',
-    //   'medium', 'high', 'xhigh', and 'max'.
-    // Every level this app offers is in it, so the value passes through with no
-    // mapping — and this test fails if a future level is added that isn't.
-    const CODEX_ACCEPTS = ['none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max'];
-    for (const level of EFFORT_LEVELS.filter((l) => l !== '')) {
+    // Narrowed in NEWS-250. This used to assert every level in `EFFORT_LEVELS`,
+    // which was right while that list was the *intersection* across providers
+    // and became wrong the moment it grew into the superset — `none` and
+    // `minimal` are OpenAI-only and would fail here for a reason that has
+    // nothing to do with Codex. The claim worth keeping is about **this
+    // provider's** set.
+    //
+    // Two sources, both from the vendor: the API named its own list in a 400
+    // ("Supported values are: 'none', 'low', 'medium', 'high', and 'xhigh'"),
+    // and `ultra` was confirmed live — `codex exec -m gpt-5.6-sol -c
+    // model_reasoning_effort=ultra` answered normally, while the same level on
+    // `gpt-5.4` was refused. Which is the whole point of NEWS-250: acceptance
+    // is per model, and the per-model narrowing is tested in
+    // `effort-levels.test.ts`.
+    const CODEX_ACCEPTS = ['none', 'low', 'medium', 'high', 'xhigh', 'max', 'ultra'];
+    for (const level of PROVIDER_EFFORT_LEVELS['codex-cli']) {
       expect(CODEX_ACCEPTS, level).toContain(level);
     }
   });

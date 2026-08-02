@@ -80,6 +80,32 @@ export function parseCodexEfforts(body: unknown, slug: string): string[] {
     .filter((e): e is string => typeof e === 'string' && e !== '');
 }
 
+/**
+ * The effort levels a Codex model accepts, read from the same cache.
+ *
+ * A **subset** of the truth, and knowingly so: asking `gpt-5.4` for a level it
+ * refuses produced *"Supported values are: 'none', 'low', 'medium', 'high', and
+ * 'xhigh'"* — the API allows `none`, which the cache's
+ * `supported_reasoning_levels` does not list. Erring narrow is the right
+ * direction here, because the cost of offering one level too few is a missing
+ * option and the cost of one too many is a failed check.
+ *
+ * An empty or unknown `model` yields the union across every listed model: which
+ * model Codex will pick is not known until it runs.
+ */
+export function readCodexEfforts(model: string, file: string = codexModelsCachePath()): string[] {
+  let body: unknown;
+  try {
+    body = JSON.parse(fs.readFileSync(file, 'utf-8'));
+  } catch {
+    return [];
+  }
+  if (model !== '') return parseCodexEfforts(body, model);
+  const union = new Set<string>();
+  for (const slug of parseCodexModels(body)) for (const e of parseCodexEfforts(body, slug)) union.add(e);
+  return [...union];
+}
+
 /** Read and parse the cache. `[]` when it is absent, unreadable or unexpected. */
 export function readCodexModels(file: string = codexModelsCachePath()): string[] {
   try {

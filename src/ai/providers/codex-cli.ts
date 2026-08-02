@@ -15,10 +15,10 @@ import type {
   SuggestResult,
   TopicContext,
 } from '../types.js';
-import { DISCOVERY_MODELS } from '../types.js';
+import { DISCOVERY_MODELS, PROVIDER_EFFORT_LEVELS, toEffortLevels } from '../types.js';
 import { agentCwd } from './agent-cwd.js';
 import { resolveCliBinary } from './cli-path.js';
-import { readCodexModels } from './codex-models.js';
+import { readCodexEfforts, readCodexModels } from './codex-models.js';
 
 /**
  * Run checks against the user's **ChatGPT subscription** rather than an
@@ -195,6 +195,12 @@ export function createCodexCliProvider(
     // reads (NEWS-249). Not the OpenAI API's list — Codex serves models that
     // one never lists and refuses ones it serves.
     listModels: () => Promise.resolve(readCodexModels()),
+    // Per model, because they differ: `gpt-5.6-sol` takes `ultra`, `gpt-5.4`
+    // does not, and asking for one a model refuses fails the check (NEWS-250).
+    effortLevelsFor: (m: string) => {
+      const found = toEffortLevels(readCodexEfforts(m !== '' ? m : model));
+      return found.length > 0 ? found : [...PROVIDER_EFFORT_LEVELS['codex-cli']];
+    },
     async checkTopic(
       topicName: string,
       known: KnownItem[],

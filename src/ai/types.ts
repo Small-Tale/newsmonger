@@ -204,6 +204,22 @@ export interface ModelLister {
 }
 
 /**
+ * Which effort levels a **specific model** accepts (NEWS-250).
+ *
+ * Separate from `PROVIDER_EFFORT_LEVELS` because the answer narrows with the
+ * model, not just the provider: on Codex `gpt-5.6-sol` takes `ultra` and
+ * `gpt-5.4` does not, and asking for one the model refuses fails the check
+ * outright rather than being ignored.
+ *
+ * `model` may be `''` — nothing has been chosen and the provider's own default
+ * will be resolved at check time — in which case the honest answer is the
+ * provider's union, since which model runs is not yet known.
+ */
+export interface EffortLister {
+  effortLevelsFor(model: string): Effort[];
+}
+
+/**
  * The set of provider ids the user can select. `auto` picks the best available.
  *
  * Only platforms that perform their own web search are supported — finding
@@ -351,18 +367,71 @@ export const AUTO_ORDER: ConcreteProviderName[] = ['claude-cli', 'codex-cli', 'a
  * medium and low at the same 72s while low used ~3x the input tokens. That is why
  * this is a `<select>` and not a slider.
  */
-export const EFFORT_LEVELS = ['', 'low', 'medium', 'high', 'xhigh', 'max'] as const;
+/**
+ * Every level any supported provider accepts — a **superset**, not a menu
+ * (NEWS-250).
+ *
+ * No single provider takes all of these, and which ones apply narrows with the
+ * *model*, not just the provider: on Codex `gpt-5.6-sol` takes `ultra` and
+ * `gpt-5.4` does not. So this is the vocabulary; `PROVIDER_EFFORT_LEVELS` and
+ * `effortLevelsFor` decide what is actually offered, and the UI shows that.
+ *
+ * Offering a level the model refuses is not cosmetic. Verified on Codex:
+ *
+ *   400 unsupported_value  param "reasoning.effort"
+ *   "Unsupported value: 'max' is not supported with the 'gpt-5.4-…' model.
+ *    Supported values are: 'none', 'low', 'medium', 'high', and 'xhigh'."
+ *
+ * — the check fails outright.
+ */
+export const EFFORT_LEVELS = ['', 'none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max', 'ultra'] as const;
 export type Effort = (typeof EFFORT_LEVELS)[number];
 
 /** What each level says to a person choosing one. */
 export const EFFORT_LABELS: Record<Effort, string> = {
   '': 'Provider default',
+  none: 'None — no reasoning',
+  minimal: 'Minimal',
   low: 'Low — fastest, cheapest',
   medium: 'Medium',
   high: 'High — the provider default for most models',
   xhigh: 'Extra high',
   max: 'Max — slowest, most thorough',
+  ultra: 'Ultra — maximum, with task delegation',
 };
+
+/**
+ * The levels each provider accepts, before the model narrows them further.
+ *
+ * Every entry is from the vendor rather than from memory, which is the standing
+ * lesson of NEWS-239/244/245 — three claims about other people's tools that
+ * were wrong, each time because an *absence* was read as evidence:
+ *
+ * - **`claude-cli`** — `claude --help`: *"Effort level for the current session
+ *   (low, medium, high, xhigh, max)"*.
+ * - **`codex-cli`** — the union of the per-model sets in
+ *   `~/.codex/models_cache.json`; a specific model narrows it further.
+ * - **`openai`** — the Responses API naming its own set in a 400: *"Supported
+ *   values are: 'none', 'minimal', 'low', 'medium', 'high', 'xhigh', and
+ *   'max'."*
+ * - **`anthropic`** — the app's own historical set. **Not vendor-verified**:
+ *   there is no Anthropic key on the development machine, so this is the one
+ *   entry here that is inherited rather than checked, and it is left as it has
+ *   always behaved rather than widened on a guess.
+ */
+export const PROVIDER_EFFORT_LEVELS: Record<ProviderName, readonly Effort[]> = {
+  auto: ['low', 'medium', 'high', 'xhigh', 'max'],
+  'claude-cli': ['low', 'medium', 'high', 'xhigh', 'max'],
+  'codex-cli': ['low', 'medium', 'high', 'xhigh', 'max', 'ultra'],
+  anthropic: ['low', 'medium', 'high', 'xhigh', 'max'],
+  openai: ['none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max'],
+  mock: [],
+};
+
+/** Narrow an arbitrary list of level names to the ones this app knows. */
+export function toEffortLevels(names: readonly string[]): Effort[] {
+  return EFFORT_LEVELS.filter((l) => l !== '' && names.includes(l));
+}
 
 export const DISCOVERY_MODELS: Record<ConcreteProviderName, string> = {
   'claude-cli': 'claude-haiku-4-5',
@@ -406,7 +475,7 @@ export function isKeyedProvider(name: string): name is KeyedProvider {
 }
 
 /** A selectable news backend. Every real provider searches the web itself. */
-export interface NewsProvider extends NewsService, Partial<ModelLister> {
+export interface NewsProvider extends NewsService, Partial<ModelLister>, Partial<EffortLister> {
   /**
    * Whether this provider may only run *scheduled* checks while the app is
    * foregrounded (see `src/attendance.ts`).

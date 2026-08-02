@@ -102,6 +102,24 @@ The Settings model field is a **combobox** (NEWS-37): an editable text input bac
 
   The control is **disabled** rather than hidden where it does not apply, and since NEWS-239 it both *looks* disabled and states the reason on the page — a `title` tooltip on a disabled control is close to unreachable.
 
+- **FR-6.13a** *(Shipped, NEWS-250)* **The levels offered narrow with the model, not just the provider.** `EFFORT_LEVELS` is now the cross-provider **superset** — `none`, `minimal`, `low`, `medium`, `high`, `xhigh`, `max`, `ultra` — and `PROVIDER_EFFORT_LEVELS` plus the provider's `effortLevelsFor(model)` decide the menu. `/api/models` returns both the model list and the levels for the configured model; the Settings control renders those.
+
+  Not cosmetic. Asking Codex for a level the chosen model refuses **fails the check**:
+
+  ```
+  400 unsupported_value  param "reasoning.effort"
+  "Unsupported value: 'max' is not supported with the 'gpt-5.4-…' model.
+   Supported values are: 'none', 'low', 'medium', 'high', and 'xhigh'."
+  ```
+
+  Every set is the vendor's own statement, not ours: `claude --help` for the Claude CLI; the **SDK type declarations** for Anthropic (`effort?: 'low'|'medium'|'high'|'xhigh'|'max'`, under the comment *"All possible effort levels"*) and OpenAI (`ReasoningEffort`, matching word for word what the live API named in a 400); and `~/.codex/models_cache.json` per model for Codex. The Anthropic set had been carried on inherited habit — the SDK's types turned out to confirm it exactly, which is the verification a missing key had seemed to rule out.
+
+  **`ultra` is Codex-only**, which is why a single global list was the wrong fix: adding it would have offered a level to three providers whose own types exclude it. Each request builder now **drops** a level its API does not declare rather than sending it, so switching provider with `ultra` saved runs at the model's default instead of failing.
+
+  A level the model refuses but the user has **saved** stays visible in the menu, labelled unsupported. Hiding it would leave the `<select>` showing a value absent from its own options — the control misreporting what is stored, the exact class of bug NEWS-238 was — and silently rewriting the setting to tidy the menu would be worse, since switching model is not consent to change it.
+
+  When the server cannot ask — no key, or a provider that cannot say — **every** level is offered. A control greying out all its options because a lookup failed is worse than one offering too much.
+
   Stored with `.catch('')` for the same reason `provider` has one: a level that stops being valid must degrade to "provider default", not reset the user's whole settings row.
 
   **Each run records the level it ran at** (NEWS-226) — `runs.effort`, beside the provider, model and token usage already there, and shown in the diagnostics bundle. It is read off the **provider object**, not off settings: a provider is constructed for the check with the settings as they were then, so that is the level the request actually carried. Reading settings at record time would report a level the run never used if someone changed the dropdown mid-sweep, which is worse than recording nothing.

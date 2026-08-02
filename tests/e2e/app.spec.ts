@@ -683,7 +683,9 @@ test('the model picker asks the provider rather than a hardcoded list (NEWS-248)
   await page.goto('/');
   const res = await page.request.get('/api/models');
   expect(res.status()).toBe(200);
-  expect(await res.json()).toEqual({ models: [] });
+  // `effortLevels` rides along since NEWS-250 — the UI needs both to render one
+  // control honestly, and they answer to the same resolved provider.
+  expect(await res.json()).toEqual({ models: [], effortLevels: [] });
 
   await openSettingsTab(page, 'Source');
   await page.selectOption('[data-action=provider]', 'openai');

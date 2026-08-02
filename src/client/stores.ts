@@ -1,5 +1,6 @@
 import { defineStore } from 'kerfjs';
 
+import type { Effort } from '../ai/types.js';
 import type { ItemsResp, KeysResp, ProviderInfo, StateResp, TopicSuggestion } from '../api/schemas.js';
 import type { BackupLocation } from '../backup-locations.js';
 import type { TunerState } from './discover.js';
@@ -171,6 +172,13 @@ export interface AppState {
    * back to the static `PROVIDER_MODELS` suggestions.
    */
   liveModels: string[];
+  /**
+   * Effort levels the configured provider *and model* accept (NEWS-250). Empty
+   * means "not fetched, or could not ask" — the control then offers the whole
+   * vocabulary, since a menu with too much is recoverable and one with nothing
+   * is broken.
+   */
+  liveEffortLevels: Effort[];
   /** Which settings tab is showing (NEWS-118). Resets to the first on reopen. */
   settingsTab: 'schedule' | 'source' | 'data' | 'app';
   /** Whether the privacy dialog is open (NEWS-121). Ephemeral, like every dialog. */
@@ -502,6 +510,7 @@ export const appStore = defineStore({
     diagIncludeTopics: false,
     providers: [],
     liveModels: [],
+    liveEffortLevels: [],
     settingsTab: 'schedule',
     privacyOpen: false,
     export: null,
@@ -788,8 +797,8 @@ export const appStore = defineStore({
     setProviders: (providers: ProviderInfo[]) => {
       set({ ...get(), providers });
     },
-    setLiveModels: (liveModels: string[]) => {
-      set({ ...get(), liveModels });
+    setLiveModels: (liveModels: string[], liveEffortLevels: Effort[]) => {
+      set({ ...get(), liveModels, liveEffortLevels });
     },
     setError: (error: string | null) => {
       set({ ...get(), error });

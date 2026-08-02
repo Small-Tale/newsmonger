@@ -368,10 +368,11 @@ export async function refreshProviders(): Promise<void> {
 export async function refreshModels(): Promise<void> {
   try {
     const body = await request('/api/models');
-    appStore.actions.setLiveModels(ModelsRespSchema.parse(body).models);
+    const parsed = ModelsRespSchema.parse(body);
+    appStore.actions.setLiveModels(parsed.models, parsed.effortLevels);
   } catch {
     // Non-fatal by design — the picker falls back to the static suggestions.
-    appStore.actions.setLiveModels([]);
+    appStore.actions.setLiveModels([], []);
   }
 }
 

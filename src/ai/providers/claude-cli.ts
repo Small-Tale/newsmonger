@@ -12,7 +12,7 @@ import type {
   SuggestResult,
   TopicContext,
 } from '../types.js';
-import { DISCOVERY_MODELS } from '../types.js';
+import { DISCOVERY_MODELS, PROVIDER_EFFORT_LEVELS } from '../types.js';
 import { agentCwd } from './agent-cwd.js';
 import { resolveCliBinary } from './cli-path.js';
 
@@ -210,6 +210,7 @@ export function createClaudeCliProvider(
     effort,
     attended: true,
     isAvailable: () => runner.available(),
+    effortLevelsFor: () => [...PROVIDER_EFFORT_LEVELS['claude-cli']],
     async checkTopic(
       topicName: string,
       known: KnownItem[],

@@ -1,7 +1,7 @@
 import { z } from 'zod';
 
 import { stripMarkup } from '../ai/sanitize.js';
-import { PROVIDER_NAMES } from '../ai/types.js';
+import { EFFORT_LEVELS, PROVIDER_NAMES } from '../ai/types.js';
 
 export const DEFAULT_CHECK_INTERVAL_MS = 24 * 60 * 60 * 1000; // 1 day
 
@@ -217,7 +217,11 @@ export const SettingsSchema = z.object({
    * being valid must degrade to "provider default", not reset the user's whole
    * settings row.
    */
-  effort: z.enum(['', 'low', 'medium', 'high', 'xhigh', 'max']).default('').catch(''),
+  // Widened to the cross-provider superset in NEWS-250. Safe for stored data:
+  // every value that used to be valid still is, and `.catch('')` means a level
+  // from some future version degrades to "provider default" rather than
+  // rejecting the whole settings row.
+  effort: z.enum(EFFORT_LEVELS).default('').catch(''),
   /**
    * Folder to write backups into (NEWS-192); '' = backups off.
    *

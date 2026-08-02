@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-import { KEYED_PROVIDERS, PROVIDER_NAMES } from '../ai/types.js';
+import { EFFORT_LEVELS, KEYED_PROVIDERS, PROVIDER_NAMES } from '../ai/types.js';
 import {
   CheckRunSchema,
   MAX_GUIDANCE_LENGTH,
@@ -290,7 +290,15 @@ export const ProvidersRespSchema = z.object({ providers: z.array(ProviderInfoSch
  * themselves and expose no catalogue, `mock` has no models, and a missing key
  * or a vendor outage lands here too. The client falls back to `PROVIDER_MODELS`.
  */
-export const ModelsRespSchema = z.object({ models: z.array(z.string()).default([]) });
+export const ModelsRespSchema = z.object({
+  models: z.array(z.string()).default([]),
+  /**
+   * Effort levels the configured provider *and model* accept (NEWS-250) —
+   * `EFFORT_LEVELS` minus what this combination refuses. Empty means "could not
+   * ask", and the UI offers the full vocabulary rather than nothing.
+   */
+  effortLevels: z.array(z.enum(EFFORT_LEVELS)).default([]),
+});
 export type ModelsResp = z.infer<typeof ModelsRespSchema>;
 export type ProvidersResp = z.infer<typeof ProvidersRespSchema>;
 

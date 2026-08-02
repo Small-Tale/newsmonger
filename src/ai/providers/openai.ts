@@ -14,7 +14,7 @@ import type {
   TokenUsage,
   TopicContext,
 } from '../types.js';
-import { DISCOVERY_MODELS } from '../types.js';
+import { DISCOVERY_MODELS, PROVIDER_EFFORT_LEVELS } from '../types.js';
 
 export const DEFAULT_OPENAI_MODEL = 'gpt-5';
 
@@ -104,6 +104,11 @@ function readUsage(usage: OpenAI.Responses.ResponseUsage | undefined): TokenUsag
   };
 }
 
+/** The levels the Responses API accepts, per the SDK's `ReasoningEffort`. */
+function isOpenAIEffort(effort: Effort | undefined): effort is Exclude<Effort, '' | 'ultra'> {
+  return effort !== undefined && effort !== '' && (PROVIDER_EFFORT_LEVELS.openai as readonly string[]).includes(effort);
+}
+
 function sdkRunner(getApiKey: () => Promise<string | null>, baseURL: string | undefined): OpenAIRunner {
   // Cached, but rebuilt when the credential changes — see the note in
   // `anthropic.ts`; a key edited in Settings must take effect immediately.
@@ -128,7 +133,16 @@ function sdkRunner(getApiKey: () => Promise<string | null>, baseURL: string | un
         max_output_tokens: 16000,
         // Omitted entirely at `''` — "provider default" has to mean the request
         // is the one it always was, not a request that names a level called "".
-        ...(effort !== undefined && effort !== '' ? { reasoning: { effort } } : {}),
+        //
+        // Narrowed to what this API takes (NEWS-250): `Effort` is the superset
+        // across providers and the Responses API takes seven of the nine. Its
+        // SDK types say `ReasoningEffort = 'none' | 'minimal' | 'low' |
+        // 'medium' | 'high' | 'xhigh' | 'max'` — matching, word for word, the
+        // set the live API named in a 400 — and notably **without `ultra`**,
+        // which is Codex-only. Dropping an unknown level rather than sending it
+        // means a Codex user who picked `ultra` and switched to this provider
+        // gets the model's default instead of a failed check.
+        ...(isOpenAIEffort(effort) ? { reasoning: { effort } } : {}),
       });
       return { text: response.output_text, usage: readUsage(response.usage) };
     },
@@ -183,6 +197,7 @@ export function createOpenAIProvider(config: {
     // Metered and billed per token — safe to run on a schedule unattended.
     attended: false,
     isAvailable: async () => (await getApiKey()) !== null,
+    effortLevelsFor: () => [...PROVIDER_EFFORT_LEVELS.openai],
     listModels: runner.listModels?.bind(runner),
     async checkTopic(
       topicName: string,
