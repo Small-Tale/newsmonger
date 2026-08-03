@@ -101,6 +101,74 @@ test('clean up the layout topics', async ({ page }) => {
   }
 });
 
+// The search field across the one-column collapse (NEWS-267).
+//
+// It shrank to a fixed 110px pill below 720px, leaving the input **62px** — about
+// four characters, so "Search stories" rendered as "Search st" and you could not
+// read your own query. Nothing caught it: the field was present, focusable,
+// named, and contrast-correct, so axe and every functional test passed while the
+// control was unusable. Size *is* the bug, which means measuring is the only way
+// to see it — the same reasoning as the column tests above.
+
+/** The pill and the text input inside it, as a reader would see them. */
+async function searchWidths(page: Page): Promise<{ pill: number; input: number }> {
+  return page.evaluate(() => {
+    const pill = document.querySelector('.search');
+    const input = document.querySelector('.search-input');
+    if (pill === null || input === null) throw new Error('search not rendered');
+    return {
+      pill: Math.round(pill.getBoundingClientRect().width),
+      input: Math.round(input.getBoundingClientRect().width),
+    };
+  });
+}
+
+test('below the one-column collapse the search is an icon, not a stub (NEWS-267)', async ({ page }) => {
+  await page.setViewportSize({ width: 720, height: 1000 });
+  await page.goto('/');
+  await expect(page.locator('.search')).toBeVisible();
+
+  // At rest: a circle the size of its sibling icon buttons, with no clipped
+  // placeholder behind it. The old bug lived precisely here — a pill wide enough
+  // to look like a field and too narrow to be one.
+  const rest = await searchWidths(page);
+  expect(rest.pill, 'collapsed to an icon-sized circle').toBeLessThanOrEqual(40);
+  expect(rest.input, 'no half-visible input at rest').toBeLessThanOrEqual(1);
+
+  // Clicking the icon must focus the input — a collapsed pill that cannot be
+  // opened by pointer is worse than the stub it replaced. This works through the
+  // `<label for>`, so it is also the assertion that catches that being dropped.
+  await page.click('.search-icon');
+  await expect(page.locator('.search-input')).toBeFocused();
+
+  // Polled, not measured once: `.search` animates its width over 200ms, so an
+  // immediate read catches the field mid-open (26px on the first attempt at
+  // writing this) and would fail for a reason that has nothing to do with the
+  // rule being tested.
+  await expect
+    .poll(async () => (await searchWidths(page)).input, { message: 'wide enough to read a query' })
+    .toBeGreaterThan(200);
+
+  // Opening it must not push the primary action off the row, which is the
+  // reason the field was pinned small in the first place.
+  await expect(page.locator('[data-action=check-all]')).toBeInViewport();
+  const overflow = await page.evaluate(
+    () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
+  );
+  expect(overflow, 'no horizontal overflow with the search open').toBeLessThanOrEqual(0);
+
+  await page.fill('.search-input', '');
+});
+
+test('the wide layout keeps the field it always had (NEWS-267)', async ({ page }) => {
+  // The fix is scoped to the narrow layout; a regression that collapsed the
+  // desktop search to an icon would be a different bug with the same shape.
+  await page.setViewportSize({ width: 1280, height: 1000 });
+  await page.goto('/');
+  const rest = await searchWidths(page);
+  expect(rest.input, 'a real field at desktop width').toBeGreaterThan(80);
+});
+
 // Card and sidebar text layout (NEWS-112, NEWS-113). Both are CSS-only, both
 // only misbehave once text is long enough to wrap, and neither is visible to any
 // other test — so they are measured here.

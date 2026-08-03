@@ -2495,9 +2495,17 @@ function appJsx(): SafeHtml {
           {/* Small by design; grows on focus or when it has a query (NEWS-60).
               Clear button is always rendered and shown via CSS so the input's
               siblings never restructure (kerf morph safety). */}
+          {/* The icon is a `<label>` so that clicking it focuses the input
+              natively (NEWS-267). Below 860px the field collapses to just this
+              icon, and a collapsed pill has to be clickable to be usable —
+              `for=` does that with no delegate, no handler, and no kerf rule to
+              get wrong. */}
           <div class={`search${searching ? ' has-query' : ''}`}>
-            {icon('search', 16)}
+            <label class="search-icon" for="search-input">
+              {icon('search', 16)}
+            </label>
             <input
+              id="search-input"
               type="text"
               class="search-input"
               placeholder="Search stories"

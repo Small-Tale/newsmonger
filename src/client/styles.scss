@@ -427,6 +427,13 @@ body {
     width 200ms ease,
     border-color 120ms ease;
 
+  .search-icon {
+    display: inline-flex;
+    flex: 0 0 auto;
+    align-items: center;
+    cursor: text;
+  }
+
   .icon {
     flex: 0 0 auto;
   }
@@ -474,15 +481,66 @@ body {
   }
 }
 
-// On a narrow window the search shouldn't crowd out the action buttons.
-@media (max-width: 720px) {
+// Below the one-column collapse the search becomes **icon-only** (NEWS-267).
+//
+// It used to stay a 110px pill here, on the reasoning that search shouldn't
+// crowd out the action buttons. That protected the buttons and broke the field:
+// 110px of pill minus its padding, icon and gap leaves the input **62px** —
+// about four characters — so "Search stories" rendered as "Search st" and you
+// could not read your own query. Focused it grew to 180px, which is not much
+// better. A control too small to use is worse than one that isn't there, and it
+// was failing in the layout where search matters *most*: one column means more
+// scrolling, so scanning by eye is hardest exactly here.
+//
+// So at rest it is a 34px circle, the same size and shape as the bookmark and
+// settings buttons beside it — no clipped placeholder, and it reads as one of
+// the icon controls rather than as a broken field. Focus or a query expands it
+// to something you can actually read, bounded by the viewport so it can never
+// push the primary action off the row.
+//
+// 860px rather than 720px because that is where the layout goes to one column
+// (FR-3.3); the old rule left a 140px band where the sidebar had already
+// collapsed but the search was still full width.
+@media (max-width: 860px) {
   .search {
-    width: 110px;
+    width: 34px;
+    padding: 0;
+    gap: 0;
+    justify-content: center;
+  }
+
+  .search .search-icon {
+    // The whole pill, so the collapsed circle is one hit target.
+    width: 34px;
+    justify-content: center;
+  }
+
+  .search .search-input {
+    width: 0;
+    flex: 0 0 0;
+    // Hidden rather than removed: the input stays focusable by keyboard, which
+    // is what lets Tab open it as well as a click.
+    opacity: 0;
   }
 
   .search:focus-within,
   .search.has-query {
-    width: 180px;
+    width: min(320px, calc(100vw - 320px));
+    padding: 0 12px;
+    gap: 6px;
+    justify-content: flex-start;
+  }
+
+  .search:focus-within .search-icon,
+  .search.has-query .search-icon {
+    width: auto;
+  }
+
+  .search:focus-within .search-input,
+  .search.has-query .search-input {
+    width: auto;
+    flex: 1 1 auto;
+    opacity: 1;
   }
 }
 
