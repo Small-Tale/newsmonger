@@ -7,6 +7,7 @@ import {
   ensureNotificationPermission,
   focusProbe,
   noteState,
+  sendTestNotification,
 } from '../../src/client/notifications.js';
 import { appStore } from '../../src/client/stores.js';
 
@@ -163,55 +164,96 @@ describe('noteState', () => {
   });
 });
 
-describe('Tauri notification path (NEWS-66)', () => {
-  interface FakePlugin {
-    isPermissionGranted: () => Promise<boolean>;
-    requestPermission: () => Promise<string>;
-    sendNotification: (o: { title: string; body?: string }) => void;
-  }
-  const sent: { title: string; body?: string }[] = [];
-  let plugin: FakePlugin;
-
-  function installTauri(over: Partial<FakePlugin> = {}): void {
-    plugin = {
-      isPermissionGranted: () => Promise.resolve(false),
-      requestPermission: () => Promise.resolve('granted'),
-      sendNotification: (o) => sent.push(o),
-      ...over,
-    };
-    // The unit env is Node (no window); fake one so `isTauri()` sees the global.
-    (globalThis as unknown as Record<string, unknown>)['window'] = { __TAURI__: { notification: plugin } };
+/**
+ * The desktop path (NEWS-66, rewritten in NEWS-260).
+ *
+ * **These tests used to manufacture `window.__TAURI__.notification` and assert
+ * against it, which is why the bug they were meant to cover survived them.** No
+ * build of this app defines that global: the Rust crate injects `init-iife.js`,
+ * which replaces `window.Notification` and defines no global, and the npm
+ * package is not a dependency. The old suite passed in a world we do not ship,
+ * while in the one we do the arm check waited forever on a value nothing set and
+ * the desktop could not deliver at all.
+ *
+ * So the environment modelled here is the real one: `__TAURI__` present with
+ * core only, and `window.Notification` replaced by a plugin-backed shim.
+ */
+describe('the desktop path delivers through the replaced window.Notification', () => {
+  /** Stands in for the crate's `init-iife.js`: replaces the constructor. */
+  class ShimNotification {
+    static permission: NotificationPermission = 'granted';
+    static requestPermission = vi.fn(() => Promise.resolve<NotificationPermission>('granted'));
+    static delivered: { title: string; body?: string }[] = [];
+    /** The real shim exposes nothing useful either; kept so this is a value type. */
+    onclick: (() => void) | null = null;
+    constructor(title: string, options?: NotificationOptions) {
+      ShimNotification.delivered.push({ title, ...(options?.body === undefined ? {} : { body: options.body }) });
+    }
   }
 
   beforeEach(() => {
-    sent.length = 0;
-    installTauri();
+    ShimNotification.delivered = [];
+    ShimNotification.permission = 'granted';
+    // `__TAURI__` carries `core` and `window` — and deliberately no
+    // `notification`, because the real global does not have one.
+    (globalThis as unknown as Record<string, unknown>)['window'] = { __TAURI__: { core: {}, window: {} } };
+    vi.stubGlobal('Notification', ShimNotification);
   });
   afterEach(() => {
     delete (globalThis as unknown as Record<string, unknown>)['window'];
+    vi.unstubAllGlobals();
   });
 
-  it('requests OS permission through the plugin (the real prompt)', async () => {
-    let asked = 0;
-    installTauri({ requestPermission: () => { asked += 1; return Promise.resolve('granted'); } });
+  // The regression that matters: with the old `tauriGranted` gate this was 0
+  // deliveries no matter what, because nothing ever set it.
+  it('fires on the desktop, where no notification global exists', () => {
+    noteState(state(['a']));
+    noteState(state(['a', 'b']));
+    expect(ShimNotification.delivered).toHaveLength(1);
+    expect(ShimNotification.delivered[0]?.title).toBe('New story');
+  });
+
+  it('reports permission granted without asking, as the plugin does', async () => {
+    // The desktop implementation hardcodes `Granted` and never asks macOS, so an
+    // already-granted shim must short-circuit rather than prompt.
     expect(await ensureNotificationPermission()).toBe(true);
-    expect(asked).toBe(1);
+    expect(ShimNotification.requestPermission).not.toHaveBeenCalled();
   });
 
-  it('fires via the plugin, not the web Notification API', async () => {
-    await ensureNotificationPermission(); // grants
+  it('still respects the toggle being off', () => {
+    appStore.actions.setState({ ...state([]), settings: { ...BASE_SETTINGS, notifyOnNewItems: false } });
     noteState(state(['a']));
     noteState(state(['a', 'b']));
-    expect(sent).toHaveLength(1);
-    expect(sent[0]?.title).toBe('New story');
+    expect(ShimNotification.delivered).toHaveLength(0);
+  });
+});
+
+describe('the test notification (NEWS-260)', () => {
+  it('delivers immediately, ignoring focus and the throttle', async () => {
+    // Both suppressions are deliberate: the user is watching Settings, and a
+    // real notification minutes earlier must not make the button appear broken.
+    focusProbe.isFocused = (): boolean => true;
+    noteState(state(['a']));
+    noteState(state(['a', 'b'])); // focused, so nothing fires
     expect(FakeNotification.instances).toHaveLength(0);
+
+    expect(await sendTestNotification()).toBe(true);
+    expect(FakeNotification.instances).toHaveLength(1);
+    expect(FakeNotification.instances[0]?.title).toBe('Newsmonger test');
   });
 
-  it('does not fire when the OS denied permission', async () => {
-    installTauri({ requestPermission: () => Promise.resolve('denied') });
-    expect(await ensureNotificationPermission()).toBe(false);
+  it('does not consume the throttle window a real notification uses', async () => {
+    // Sending a test must not suppress the next genuine one.
+    focusProbe.isFocused = (): boolean => false;
+    expect(await sendTestNotification()).toBe(true);
     noteState(state(['a']));
     noteState(state(['a', 'b']));
-    expect(sent).toHaveLength(0);
+    expect(FakeNotification.instances.map((n) => n.title)).toEqual(['Newsmonger test', 'New story']);
+  });
+
+  it('reports failure rather than throwing when permission is refused', async () => {
+    FakeNotification.permission = 'denied';
+    expect(await sendTestNotification()).toBe(false);
+    expect(FakeNotification.instances).toHaveLength(0);
   });
 });

@@ -248,14 +248,21 @@ Same shape as the Claude one — unit tests inject a fake runner, so the live pa
 
 ## New-item notifications in Tauri (NEWS-38) — needs a desktop run
 
-Browser-verified (toggle, permission, firing, throttle). The native desktop path is manual. As of NEWS-66 the shell routes through the **notification plugin** (`tauri-plugin-notification`) because the web Notification API's request was a silent "denied" with no OS prompt in the WKWebView. Rust compiles and both client paths are unit-tested; the runtime below is what needs a real machine.
+Browser-verified (toggle, permission, firing, throttle, and since NEWS-260 the test button). The native delivery is manual.
 
-1. `npm run tauri:dev`, open Settings, toggle notifications on. **Confirm the real OS permission dialog appears** (the NEWS-66 fix — previously it just said "blocked"). Grant it.
-2. Add a topic with active coverage on an API-key provider, background the app, and let a scheduled check run — confirm an OS notification appears **and** the dock icon bounces (macOS) / taskbar flashes.
-3. Clicking the OS notification: on the plugin path it may not focus the window (no JS click handler) — the dock bounce still draws the eye. Note the behaviour.
-4. Confirm nothing fires while the app is focused, and no more than once per 5 minutes.
-5. Quit and relaunch with the toggle still on — confirm notifications still fire (the startup permission re-sync), without re-toggling.
-6. If the plugin's `requestPermission()` still doesn't prompt (e.g. macOS requires a signed/bundled app rather than `tauri dev`), test again with `npm run tauri:build` — real notifications on macOS generally need the bundled app. Record which build works. (Related: NEWS-40.)
+**Read this before running it, because the previous version of these steps asked for something that cannot happen.** NEWS-260 established, from the plugin's own source and the macOS notification database:
+
+- **There is no OS permission dialog on desktop.** `tauri-plugin-notification`'s desktop implementation hardcodes `Ok(PermissionState::Granted)` for `request_permission` and `permission_state`; macOS is never asked. Delivery uses the legacy `NSUserNotificationCenter`, which has no authorization concept. Step 1 used to say "confirm the real OS permission dialog appears" — it never will, and waiting for it reads as a bug.
+- **The app is listed in System Settings → Notifications only after it has successfully delivered one.** So its absence there before the first notification is expected, not a permissions fault.
+- **`tauri:dev` cannot register this app.** In dev the plugin sets the application to `com.apple.Terminal` (`tauri::is_dev()`), so a dev notification registers *Terminal*. Anything about System Settings must be checked on a **built** app.
+
+1. `npm run tauri:build` (or install a released bundle), open Settings → App, and press **Send a test notification**. Confirm a notification appears and the result line says it was sent.
+2. Confirm the app now appears in **System Settings → Notifications** as Newsmonger. This is the check that was impossible before NEWS-260 — nothing else in the app delivers on demand.
+3. Toggle notifications on. Confirm no permission dialog appears and the toggle simply sticks (see above — there is nothing to grant).
+4. Add a topic with active coverage on an API-key provider, background the app, and let a scheduled check run — confirm an OS notification appears **and** the dock icon bounces (macOS) / taskbar flashes.
+5. Clicking the OS notification: expect it **not** to focus the window. The shim's constructor delivers and returns a bare object, so `onclick` is never read on the desktop; the dock bounce is the desktop's attention-getter. Confirm rather than assume, and note the behaviour.
+6. Confirm nothing fires while the app is focused, and no more than once per 5 minutes. A test notification in between must not suppress a genuine one.
+7. Quit and relaunch with the toggle still on — confirm notifications still fire without re-toggling. (There is no startup permission re-sync any more; it existed only to feed the cache NEWS-260 deleted.)
 
 ## Share a story in Tauri (NEWS-43) — run on macOS, works (NEWS-45)
 

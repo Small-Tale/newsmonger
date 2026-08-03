@@ -97,7 +97,7 @@ import { currentFailure } from './failure.js';
 import { icon } from './icons.js';
 import { menuStyle } from './menu-position.js';
 import { correctedModel, modelOptions } from './model-choice.js';
-import { ensureNotificationPermission, syncTauriNotificationPermission } from './notifications.js';
+import { ensureNotificationPermission, sendTestNotification } from './notifications.js';
 import { onboardingCountText } from './onboarding.js';
 import { browserPollDeps, startPolling as startStatePolling } from './poll.js';
 import { activeBehindWarnings } from './schedule.js';
@@ -1359,10 +1359,17 @@ function backupOfferJsx(locations: BackupLocation[]): SafeHtml {
  */
 function notifyBlockedNoteJsx(): SafeHtml {
   if (isTauri()) {
+    // Reachable only if the desktop shell's own notification bridge fails —
+    // it reports permission as granted without asking the OS, so there is no
+    // "denied" to recover from in the way a browser has (NEWS-260). Notably it
+    // must *not* send people to a System Settings entry for Newsmonger: that
+    // entry does not exist until the app has delivered its first notification,
+    // so the old copy pointed at a blank space and looked like a fault.
     return (
       <p class="note warn">
-        Your system is blocking notifications for Newsmonger. Open <strong>System Settings → Notifications →
-        Newsmonger</strong> and allow them, then switch this back on.
+        Newsmonger couldn’t hand a notification to your system. Try <strong>Send a test notification</strong> below —
+        the app only appears in <strong>System Settings → Notifications</strong> once it has delivered one, so there
+        may be nothing to allow there yet.
       </p>
     );
   }
@@ -2198,6 +2205,20 @@ function settingsPanelJsx(s: AppState): SafeHtml {
         {/* Always-present slot for the permission note (KF-377). */}
         <div class="notify-note">
           {s.notifyPermissionDenied ? notifyBlockedNoteJsx() : ''}
+        </div>
+        {/* A test notification (NEWS-260). The feature is otherwise
+            unobservable — a real one needs a check to find new stories while
+            the window is unfocused — and on macOS this is also what puts the
+            app into System Settings → Notifications, which happens only once it
+            has actually delivered one. Always-present result slot so the answer
+            is announced (see #banners, NEWS-99). */}
+        <div class="test-notify">
+          <button class="btn subtle" type="button" data-action="test-notification">
+            Send a test notification
+          </button>
+          <div class="test-notify-note" role="status" aria-live="polite">
+            {s.testNotifyMessage !== null ? <p class="note">{s.testNotifyMessage}</p> : ''}
+          </div>
         </div>
         <p class="note">
           <button class="btn subtle" type="button" data-action="rerun-onboarding">
@@ -4034,6 +4055,22 @@ function wireEvents(root: HTMLElement): void {
     });
   });
 
+  // Send one now (NEWS-260). Rides the click for the same reason the toggle
+  // does: if permission has not been asked for yet, the request must come from a
+  // user gesture. Says which surface it went to, because "sent" is the wrong
+  // word if the OS then suppresses it for Do Not Disturb or a per-app setting —
+  // this can only honestly report that it handed one over.
+  void delegate(root, 'click', '[data-action=test-notification]', () => {
+    appStore.actions.setTestNotifyMessage(null);
+    void sendTestNotification().then((sent) => {
+      appStore.actions.setTestNotifyMessage(
+        sent
+          ? 'Sent. If nothing appeared, check Do Not Disturb and this app’s entry in your notification settings.'
+          : 'Could not send — notifications are blocked for this app. See the note above.',
+      );
+    });
+  });
+
   // Notification toggle. Enabling requires a permission grant, and the request
   // must ride the user gesture that is this change event.
   void delegate(root, 'change', '[data-action=notify-toggle]', (_e, el) => {
@@ -4432,7 +4469,6 @@ if (root) {
   void refreshProviders().then(maybeOpenOnboarding);
   // Learn the OS notification permission up front in the desktop shell, so a
   // session that already had notifications on keeps firing them (NEWS-66).
-  void syncTauriNotificationPermission();
   // Surface an update the shell already found (NEWS-89). Fire-and-forget: the
   // banner appears whenever the answer arrives, which is never on the critical
   // path to reading the news.

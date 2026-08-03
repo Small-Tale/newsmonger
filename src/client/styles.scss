@@ -2316,6 +2316,18 @@ button.off-topic-pill {
   }
 }
 
+// Its own block rather than an extra selector on `.update-check` above: sharing
+// one would tie a notification control's spacing to the updater's, and NEWS-161
+// caught that exact splice once already when a shared rule gave the export
+// button a box's padding.
+.test-notify {
+  margin-top: 10px;
+
+  .test-notify-note p {
+    margin: 6px 0 0;
+  }
+}
+
 .banner.saved {
   display: flex;
   align-items: center;

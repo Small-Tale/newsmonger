@@ -1,6 +1,6 @@
 import type { StateResp } from '../api/schemas.js';
 import { appStore } from './stores.js';
-import { bounceDockIcon, focusAppWindow, isTauri, tauriNotification } from './tauri.js';
+import { bounceDockIcon, focusAppWindow } from './tauri.js';
 
 /**
  * OS notifications when new stories arrive while the app isn't in front of you.
@@ -33,57 +33,41 @@ export const focusProbe = {
 export const clock = { now: (): number => Date.now() };
 
 /**
- * Whether the OS granted notification permission, in the **Tauri** shell.
- *
- * Cached because the plugin's check is async but `notificationsArmed` (below) is
- * sync. Kept in sync by `ensureNotificationPermission` (the toggle) and
- * `syncTauriNotificationPermission` (startup). Null until first known.
- */
-let tauriGranted: boolean | null = null;
-
-/**
- * On startup, learn whether the OS already granted permission (Tauri only), so
- * a session that had notifications on keeps working without re-toggling.
- */
-export async function syncTauriNotificationPermission(): Promise<void> {
-  const n = tauriNotification();
-  if (!isTauri() || n?.isPermissionGranted === undefined) return;
-  try {
-    tauriGranted = await n.isPermissionGranted();
-  } catch {
-    tauriGranted = false;
-  }
-}
-
-/**
  * Ask for notification permission, returning whether it's granted.
  *
  * Must be called from a user gesture (the settings toggle) — browsers reject a
  * permission request that isn't. Already-granted or already-denied short-circuit
  * without a prompt.
  *
- * In the Tauri desktop shell (NEWS-66) this routes through the notification
- * plugin, which reaches the real OS dialog. Worth being precise about how,
- * because the plugin's own `requestPermission()` looks like it does nothing:
- * `api-iife.js` defines it as `window.Notification.requestPermission()`. That
- * works only because the plugin's `init-iife.js` has already **replaced
- * `window.Notification`** in the webview with a shim that invokes
- * `plugin:notification|request_permission` on the Rust side. Take the plugin
- * away and the same call is the raw WKWebView API, which answers "denied"
- * without ever asking macOS.
+ * ### One path, and on desktop it is not the browser API (NEWS-260)
+ *
+ * `window.Notification` looks like a browser fallback here and is not: in the
+ * desktop shell the plugin's `init-iife.js` **replaces `window.Notification`**
+ * with a shim whose `requestPermission` invokes `plugin:notification|…` on the
+ * Rust side, and whose constructor delivers through the OS. So this one call is
+ * the browser API in a browser and the plugin on the desktop.
+ *
+ * There used to be a second branch that preferred `window.__TAURI__.notification`
+ * and cached its answer. **That global does not exist in any build of this app**
+ * — the crate injects `init-iife.js`, which only replaces `window.Notification`;
+ * the `api-iife.js` that would define the global ships inside the crate but is
+ * never injected, and the npm package is not a dependency. The branch never ran,
+ * and because the sync arm check waited on its cached answer, desktop
+ * notifications could never fire at all. The unit tests missed it by
+ * manufacturing the global they were testing against.
+ *
+ * ### What this cannot do on macOS
+ *
+ * **It cannot produce an OS permission prompt.** The plugin's desktop
+ * implementation hardcodes `Ok(PermissionState::Granted)` for both
+ * `request_permission` and `permission_state`; macOS is never asked. Delivery
+ * goes through the legacy `NSUserNotificationCenter`, which has no authorization
+ * concept — unlike `UNUserNotificationCenter`, which is what apps that do prompt
+ * use. A macOS app therefore appears in System Settings → Notifications only
+ * once it has **successfully delivered** one, which is most of why
+ * `sendTestNotification` below exists.
  */
 export async function ensureNotificationPermission(): Promise<boolean> {
-  const n = tauriNotification();
-  if (isTauri() && n?.requestPermission !== undefined) {
-    try {
-      const already = (await n.isPermissionGranted?.()) ?? false;
-      tauriGranted = already || (await n.requestPermission()) === 'granted';
-      return tauriGranted;
-    } catch {
-      tauriGranted = false;
-      return false;
-    }
-  }
   if (typeof Notification === 'undefined') return false;
   if (Notification.permission === 'granted') return true;
   if (Notification.permission === 'denied') return false;
@@ -94,40 +78,73 @@ export async function ensureNotificationPermission(): Promise<boolean> {
   }
 }
 
-/** Whether notifications can fire right now (enabled + permitted). */
+/**
+ * Whether notifications can fire right now (enabled + permitted).
+ *
+ * One rule for both surfaces. It used to branch on `isTauri()` and require a
+ * cached plugin answer that nothing ever set, which is how the desktop build
+ * ended up unable to fire at all while the setting read "on" (NEWS-260).
+ */
 function notificationsArmed(): boolean {
   if (!appStore.state.value.settings.notifyOnNewItems) return false;
-  if (isTauri()) return tauriGranted === true;
+  return notificationsPermitted();
+}
+
+/** Whether the OS will accept one. On desktop the shim reports `granted`. */
+function notificationsPermitted(): boolean {
   return typeof Notification !== 'undefined' && Notification.permission === 'granted';
+}
+
+/**
+ * Hand one to the OS.
+ *
+ * `new Notification(...)` is the plugin on the desktop and the browser API in a
+ * browser — see `ensureNotificationPermission`. **The click handler only works
+ * in the browser**: the desktop shim's constructor delivers and returns a bare
+ * object, so nothing reads `onclick` there. It is still set rather than branched
+ * on, because it costs nothing and the alternative is two paths where one will
+ * do. The dock bounce is what draws the eye on the desktop.
+ */
+function deliver(title: string, body: string): void {
+  try {
+    const n = new Notification(title, { body, tag: 'newsmonger-new-items' });
+    n.onclick = (): void => {
+      focusAppWindow();
+      n.close();
+    };
+  } catch {
+    /* construction can throw if permission was revoked mid-session */
+  }
 }
 
 function fire(count: number): void {
   lastNotifiedAt = clock.now();
   const title = count === 1 ? 'New story' : `${String(count)} new stories`;
-  const body = 'Newsmonger found something new for you.';
-  const tauri = tauriNotification();
-  if (isTauri() && tauri?.sendNotification !== undefined) {
-    // The Tauri path can't attach a click handler; the dock bounce below still
-    // draws the eye, and clicking the OS notification focuses the app.
-    try {
-      tauri.sendNotification({ title, body });
-    } catch {
-      /* best-effort */
-    }
-  } else {
-    try {
-      const n = new Notification(title, { body, tag: 'newsmonger-new-items' });
-      n.onclick = (): void => {
-        focusAppWindow();
-        n.close();
-      };
-    } catch {
-      /* construction can throw if permission was revoked mid-session */
-    }
-  }
+  deliver(title, 'Newsmonger found something new for you.');
   // The dock bounce is separate: it draws the eye even when notifications are
   // suppressed by Do Not Disturb, and is the desktop-only half of the feature.
   bounceDockIcon();
+}
+
+/**
+ * Deliver one right now, on demand from Settings (NEWS-260).
+ *
+ * The feature is otherwise unobservable: a real notification needs a check to
+ * find new stories *while the window is unfocused*, so there is no way to answer
+ * "is this working" except to wait and hope. Worse on macOS, where an app is
+ * listed in System Settings → Notifications only once it has **delivered** one —
+ * so before this button there was nothing a user could do to make the app appear
+ * there, and its absence looked like a permissions fault rather than a feature
+ * that had never run.
+ *
+ * Deliberately ignores focus and the throttle: the point is to fire *now*, while
+ * the user is watching Settings. It does not consume the throttle window either,
+ * so testing cannot suppress a real notification minutes later.
+ */
+export async function sendTestNotification(): Promise<boolean> {
+  if (!(await ensureNotificationPermission())) return false;
+  deliver('Newsmonger test', 'If you can see this, notifications are working.');
+  return true;
 }
 
 /**
@@ -159,5 +176,4 @@ export function noteState(state: StateResp): void {
 export function __resetNotificationsForTests(): void {
   seenIds = null;
   lastNotifiedAt = 0;
-  tauriGranted = null;
 }

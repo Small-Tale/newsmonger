@@ -5,17 +5,20 @@ interface TauriWindow {
   setFocus?: () => Promise<unknown>;
 }
 
-/** The notification plugin's guest API, exposed on the global by `withGlobalTauri`. */
-interface TauriNotification {
-  isPermissionGranted?: () => Promise<boolean>;
-  requestPermission?: () => Promise<string>;
-  sendNotification?: (options: { title: string; body?: string }) => void;
-}
-
+/**
+ * Note there is deliberately **no notification entry here** (NEWS-260).
+ *
+ * There was one, typed against `window.__TAURI__.notification`, and that global
+ * does not exist in any build of this app: the Rust crate injects
+ * `init-iife.js`, which replaces `window.Notification` and defines no global;
+ * the `api-iife.js` that would define one ships inside the crate but is never
+ * injected, and the npm package is not a dependency. A hand-written interface
+ * for a global nobody defines type-checks perfectly and is always `undefined` at
+ * runtime, which is how it went unnoticed — see `notifications.ts`.
+ */
 interface TauriGlobal {
   core?: { invoke?: (cmd: string) => Promise<unknown> };
   window?: { getCurrentWindow?: () => TauriWindow };
-  notification?: TauriNotification;
 }
 
 /**
@@ -27,11 +30,6 @@ interface TauriGlobal {
  */
 export function getTauriInvoke(): ((cmd: string) => Promise<unknown>) | undefined {
   return getTauriGlobal()?.core?.invoke;
-}
-
-/** The Tauri notification plugin API, or undefined outside the desktop shell. */
-export function tauriNotification(): TauriNotification | undefined {
-  return getTauriGlobal()?.notification;
 }
 
 /** The Tauri global injected into the webview when running as a desktop app. */

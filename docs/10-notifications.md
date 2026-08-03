@@ -8,7 +8,11 @@ See also: [3 — UI](3-ui.md), [6 — AI Providers](6-providers.md) (the attenda
 
 ## When it fires
 
-- **FR-10.1** *(Shipped)* Off by default. A checkbox in the Settings dialog (`notifyOnNewItems`, persisted in the store's settings) enables it. Enabling requests notification permission on the spot — that request must ride the click, so it lives in the toggle's change handler. In the **Tauri desktop shell** the request goes through the notification plugin, whose `requestPermission()` raises the real OS dialog; in a browser it uses the web `Notification.requestPermission()` (NEWS-66).
+- **FR-10.1** *(Shipped; corrected in NEWS-260)* Off by default. A checkbox in the Settings dialog (`notifyOnNewItems`, persisted in the store's settings) enables it. Enabling requests notification permission on the spot — that request must ride the click, so it lives in the toggle's change handler.
+
+  **One call for both surfaces**: `Notification.requestPermission()`. That looks like the browser API and on the desktop it is not — the plugin's `init-iife.js` *replaces* `window.Notification` in the webview with a shim that invokes the Rust side. There is no separate desktop branch, and the one that used to be here was worse than redundant: see FR-10.5.
+
+  **It cannot raise an OS dialog on macOS**, which this doc previously claimed it did. The plugin's desktop implementation hardcodes `Ok(PermissionState::Granted)` for both `request_permission` and `permission_state` — macOS is never asked. Delivery uses the legacy `NSUserNotificationCenter`, which has no authorization concept, unlike the `UNUserNotificationCenter` that apps which do prompt use. A consequence worth knowing because it looks exactly like a fault: **a macOS app appears in System Settings → Notifications only once it has successfully delivered a notification**, so there is nothing to allow there until then (hence FR-10.7).
 
 - **FR-10.2** *(Shipped)* **Only when the app is not focused.** If the window is visible and focused when new stories land, the feed updating in front of you is enough — a notification would be noise. `focusProbe.isFocused()` (visible AND focused) gates it.
 
@@ -20,7 +24,15 @@ See also: [3 — UI](3-ui.md), [6 — AI Providers](6-providers.md) (the attenda
 
 ## What it does
 
-- **FR-10.5** *(Shipped)* A notification ("New story" / "N new stories"). In Tauri it's posted via the notification plugin's `sendNotification`; in a browser it's a web `Notification` whose click focuses the app window (NEWS-66). The permission-granted state for the Tauri path is cached (`tauriGranted`) — set on the toggle and re-synced on startup (`syncTauriNotificationPermission`) so a session that had notifications on keeps firing without re-toggling.
+- **FR-10.5** *(Shipped; the desktop half was broken until NEWS-260)* A notification ("New story" / "N new stories"), delivered by constructing a `Notification` — the plugin on the desktop, the browser API in a browser (FR-10.1). Its click focuses the app window **in a browser only**: the desktop shim's constructor delivers and returns a bare object, so nothing reads `onclick` there, and the dock bounce (FR-10.6) is what draws the eye.
+
+  **What was wrong.** There were two branches, and the desktop one preferred `window.__TAURI__.notification`, caching its answer in `tauriGranted` because the arm check is synchronous. **That global does not exist in any build of this app** — the crate injects `init-iife.js`, which replaces `window.Notification` and defines no global; the `api-iife.js` that would define one ships inside the crate but is never injected, and the npm package is not a dependency. So `tauriGranted` stayed `null`, the arm check returned false forever, and **the packaged desktop app never delivered a single notification**, while the setting read "on" — the precise failure the toggle's own comment says it exists to prevent. It also explains the macOS symptom completely: with nothing ever delivered, macOS had no reason to list the app.
+
+  Two things kept it hidden, both worth naming. A hand-written interface for a global nobody defines type-checks perfectly and is `undefined` only at runtime; and the unit tests **manufactured that global** and asserted against it, so they passed in a world we do not ship.
+- **FR-10.7** *(Shipped, NEWS-260)* A **Send a test notification** button in Settings → App, with a result line beside it. It delivers one immediately, ignoring both the focus gate (FR-10.2) and the throttle (FR-10.3), and without consuming the throttle window — so testing cannot suppress a genuine notification minutes later. It works with the toggle off, because "will the OS take one" is a different question from "do I want one per new story".
+
+  It exists because the feature is otherwise **unobservable**: a real notification requires a check to find new stories while the window is unfocused, which a user cannot arrange on purpose. On macOS it does double duty as the only way to get the app listed in System Settings → Notifications (FR-10.1). The result line claims only that one was *handed over* — the OS may still suppress it for Do Not Disturb or a per-app setting, and saying "sent" about something invisible would be the same class of lie this ticket fixed.
+
 - **FR-10.6** *(Shipped)* A **dock bounce** (macOS) / **taskbar flash** (Windows/Linux) via the Tauri window's `requestUserAttention`, reached through the global Tauri API so the browser build pulls in no Tauri packages. This is separate from the notification on purpose: it still draws the eye when notifications are suppressed by Do Not Disturb, and it's the desktop-only half. A no-op in a browser.
 
 ## Structure

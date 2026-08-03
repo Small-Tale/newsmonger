@@ -501,6 +501,59 @@ test('a refused notification permission shows a note and leaves the toggle off (
   expect(persisted).toBe(false);
 });
 
+test('a test notification can be sent on demand, and says so (NEWS-260)', async ({ page, context }) => {
+  // The button exists because the feature is otherwise unobservable: a real
+  // notification needs a check to find new stories *while the window is
+  // unfocused*, which a user cannot arrange on purpose. On macOS it is also the
+  // only way to get the app listed in System Settings → Notifications, which
+  // happens only once it has actually delivered one.
+  await context.grantPermissions(['notifications']);
+  await page.addInitScript(() => {
+    class Rec {
+      static permission = 'granted';
+      static requestPermission = () => Promise.resolve('granted');
+      static sent: string[] = [];
+      constructor(title: string) {
+        Rec.sent.push(title);
+      }
+      close() {}
+    }
+    (window as unknown as { Notification: unknown }).Notification = Rec;
+  });
+  await page.goto('/');
+  await openSettingsTab(page, 'App');
+
+  // No result line before it is pressed — the slot is present but empty.
+  await expect(page.locator('.test-notify-note .note')).toHaveCount(0);
+  await page.click('[data-action=test-notification]');
+
+  await expect(page.locator('.test-notify-note .note')).toContainText('Sent');
+  const sent = await page.evaluate(
+    () => (window as unknown as { Notification: { sent: string[] } }).Notification.sent,
+  );
+  expect(sent).toEqual(['Newsmonger test']);
+
+  // It works with the toggle *off*: this asks "will the OS take one", which is a
+  // different question from "do I want them on every new story".
+  await expect(page.locator('[data-action=notify-toggle]')).not.toBeChecked();
+});
+
+test('a test notification reports refusal instead of claiming success (NEWS-260)', async ({ page }) => {
+  await page.addInitScript(() => {
+    class Rec {
+      static permission = 'denied';
+      static requestPermission = () => Promise.resolve('denied');
+      close() {}
+    }
+    (window as unknown as { Notification: unknown }).Notification = Rec;
+  });
+  await page.goto('/');
+  await openSettingsTab(page, 'App');
+
+  await page.click('[data-action=test-notification]');
+  await expect(page.locator('.test-notify-note .note')).toContainText('Could not send');
+});
+
 test('the error banner can be dismissed (NEWS-41)', async ({ page }) => {
   await page.goto('/');
   // A duplicate topic raises the error banner.

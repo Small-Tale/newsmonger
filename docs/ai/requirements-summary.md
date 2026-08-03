@@ -260,7 +260,8 @@ Subscription-backed providers (`attended: true`) run *scheduled* checks only whi
 ## [10 — New-Item Notifications](../10-notifications.md) — Shipped (browser-verified; Tauri-native manual)
 
 - FR-10.1–10.4 opt-in setting, unfocused-only, 5-min throttle, first-load seeded silent: **Shipped**
-- FR-10.5 web Notification (click focuses the app): **Shipped, browser-verified**
+- FR-10.5 one `Notification` construction for both surfaces — the plugin on the desktop, the browser API in a browser; click-to-focus is browser-only: **Shipped**. The desktop half **never fired at all** until NEWS-260: the sync arm check waited on a cached answer from `window.__TAURI__.notification`, a global no build defines, so the packaged app delivered nothing while the setting read "on". Also why macOS never listed the app — an app appears in System Settings → Notifications only once it has delivered one.
+- FR-10.7 **Send a test notification** button (Settings → App), bypassing the focus gate and the throttle: **Shipped, NEWS-260**. The feature is otherwise unobservable, and on macOS this is the only way to get the app listed in System Settings.
 - FR-10.6 dock bounce / taskbar flash via Tauri `requestUserAttention`: **Shipped, unverified in a live WKWebView** (NEWS-40)
 
 ## [11 — Story Actions (Save & Share)](../11-story-actions.md) — Shipped
