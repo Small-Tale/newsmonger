@@ -14,6 +14,26 @@ fields reject semver prerelease suffixes.
 
 <!-- Nothing released yet. The first `npm run release` inserts its entry below. -->
 
+## [0.2.0-beta.15] - 2026-08-04
+
+## Bug Fixes
+
+- Fixed Codex CLI checks failing outright: the shared JSON schemas now list every declared property in `required`, as OpenAI's strict structured outputs demand, and topic discovery is fixed the same way.
+- CLI failures now show the actual error message and code (e.g. `invalid_json_schema: …`) instead of the closing braces of a JSON payload, with the detail cap raised from 300 to 600 characters.
+- A topic that has been checked but holds no stories now reads `checked 1d ago · no stories` instead of implying stories are still there.
+
+## Features
+
+- New effort comparison in Settings → App → Diagnostics: median duration and median tokens per effort level, fastest first. Only successful runs count, runs from before effort tracking are excluded, and tokens read "not reported" rather than 0 when a provider reports none. It stays silent below two levels and explains what to change instead.
+
+## Behavior Changes
+
+- Checks no longer ask the model to omit `category`/`subcategory`; they are always returned, as `null` when no classification was requested.
+
+## Documentation
+
+- Confirmed and documented that clicking a desktop notification on macOS brings the window forward — courtesy of the OS activating the posting app, not app code. Windows and Linux remain unverified.
+
 ## [0.2.0-beta.14] - 2026-08-03
 
 ## Bug Fixes
