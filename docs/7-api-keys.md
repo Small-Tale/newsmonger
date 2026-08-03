@@ -79,6 +79,16 @@ Verified on a Windows 11 VM. Every one of these exited 0 while doing the wrong t
 
   When a key exists there is **no input at all** — the value is never rendered, so there is nothing for a screenshot or password manager to pick up. The input is cleared after a save attempt either way.
 
+- **FR-7.10b** *(Shipped, NEWS-270)* The provider's name is a **real `<label for>`** on the row that has a field, and stays a `<span>` on the two that do not.
+
+  It was a `<span>` everywhere. Chromium reported both inputs' accessible name as **"Paste API key"**, sourced from the `placeholder` — so the Anthropic and OpenAI fields were indistinguishable to a screen reader, and clicking the visible provider name focused nothing. They now name themselves "Anthropic API key" and "OpenAI API key", from the label.
+
+  **axe stayed green the whole time**, because the field *had* a name. That is the blind spot: `tests/e2e/a11y.spec.ts` catches a missing label, not a misleading one, so this is asserted directly in `keys.spec.ts` instead — including that the element is a `LABEL` whose `for` matches the input's `id`, since a text assertion would not notice a revert to a span.
+
+  Only the unconfigured row gets the label. The `env` and `keychain` rows render no input, and a `for=` pointing at an id that is not in the document would be worse than the span it replaced — there is a test for that too, driven by actually saving a key.
+
+  **The placeholder stays.** With the label supplying the name it is no longer load-bearing for accessibility, and it still earns its place twice over: it tells a first-time reader what to do with the field, and in the keychain-unavailable case it is where `Set <ENV_VAR> instead` is said (FR-7.2). Emptying it would have cost that and bought nothing.
+
 - **FR-7.10a** *(Shipped, NEWS-156)* **There is no Save button.** The field commits on `change` — blur or Enter — the same rule the interval and budget fields follow, and for a costlier reason: a save **verifies the key with its vendor** (FR-20.9), so committing on `input` would probe once per keystroke and report every prefix of a key being typed as invalid. Blurring a field nobody touched saves nothing; an empty `PUT` would read as "clear my key".
 
   Enter fires **both** `submit` (a single-input form submits on Enter) and `change`, so one keypress reaches the handler twice. The field is therefore emptied *before* the save is awaited rather than after, so the second call finds it blank and stops. Measured: with the clear after the await, one Enter sends **two** `PUT`s and two vendor verifications. The E2E counts the requests rather than checking the key ended up stored — it ends up stored either way, so the obvious assertion passes on the bug.

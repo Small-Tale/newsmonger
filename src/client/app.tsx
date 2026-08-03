@@ -704,7 +704,20 @@ function keyRowJsx(
 
   return (
     <div class="key-row" data-key={`key-${key.provider}`}>
-      <span class="key-provider">{key.label}</span>
+      {/* A real `<label for>`, not a `<span>` (NEWS-270). Chromium reported both
+          rows' accessible name as "Paste API key" — sourced from the
+          `placeholder`, and therefore identical for Anthropic and OpenAI, so a
+          screen reader gave no way to tell the two fields apart. Clicking the
+          visible text focused nothing either.
+
+          Only this branch: the `env` and `keychain` rows above have no input, and
+          a label pointing at an id that isn't rendered is worse than a span.
+
+          axe stayed green throughout, because the field *had* a name — the same
+          blind spot NEWS-267 hit from the other side. */}
+      <label class="key-provider" for={inputId}>
+        {key.label}
+      </label>
       {/* No Save button (NEWS-156). The field commits on `change` — blur or
           Enter — which is the same rule the interval and budget fields follow,
           and for a stronger reason: saving verifies the key with its vendor

@@ -259,3 +259,67 @@ test('the source fields, key fields and status line share one column (NEWS-268)'
   expect(lefts.key, 'the key fields line up with the pickers').toBe(lefts.picker);
   expect(lefts.status, 'the status line sits under the control it reports on').toBe(lefts.picker);
 });
+
+// The key fields are labelled by association, not by adjacency (NEWS-270).
+//
+// Chromium reported both inputs' accessible name as "Paste API key", sourced from
+// the `placeholder` — so the two fields were indistinguishable to a screen reader,
+// and clicking the visible provider name focused nothing. axe stayed green
+// throughout, because the field *had* a name; that is the blind spot, and it is
+// why this is asserted directly rather than left to the a11y suite.
+//
+// `getByLabel` is the right instrument: it resolves label-for associations, so it
+// fails if the label ever reverts to a `<span>` — which a text-content assertion
+// would not notice.
+test('each key field is named by its own label, not by a shared placeholder (NEWS-270)', async ({ page }) => {
+  await page.goto('/');
+  await openSettingsTab(page, 'Source');
+
+  // Scoped to `.keys`, not the whole page. Page-wide `getByLabel` also matched the
+  // Provider `<select>`: `.field` is itself a `<label>` wrapping the select, so its
+  // *text content* absorbs the option labels — one of which is "Anthropic API key".
+  // Chromium still names that select correctly ("Provider", by the embedded-control
+  // rule), so there is no bug there; Playwright's text match is simply looser than
+  // an accessible name.
+  const keys = page.locator('.keys');
+  const anthropic = keys.getByLabel('Anthropic API key');
+  const openai = keys.getByLabel('OpenAI API key');
+  await expect(anthropic, 'the Anthropic field is reachable by its visible label').toHaveCount(1);
+  await expect(openai, 'the OpenAI field is reachable by its visible label').toHaveCount(1);
+
+  // Distinct fields — the bug was that both were named "Paste API key".
+  await expect(anthropic).toHaveAttribute('id', 'key-input-anthropic');
+  await expect(openai).toHaveAttribute('id', 'key-input-openai');
+
+  // And the association is a real `for=`, not a coincidence of nesting.
+  const bound = await page.locator(`${ANTHROPIC_ROW} .key-provider`).evaluate((el) => ({
+    tag: el.tagName,
+    htmlFor: el.getAttribute('for'),
+  }));
+  expect(bound.tag, 'the visible provider name must be a label').toBe('LABEL');
+  expect(bound.htmlFor).toBe('key-input-anthropic');
+
+  // A real association also means clicking the visible text focuses the field,
+  // which is the half a sighted user notices.
+  await page.locator('.key-row', { hasText: 'Anthropic' }).locator('.key-provider').click();
+  await expect(anthropic).toBeFocused();
+});
+
+test('rows with no field keep a span rather than a dangling label (NEWS-270)', async ({ page }) => {
+  // The `env` and `keychain` rows have no input, so a `<label for>` there would
+  // point at an id that is not rendered — worse than the span it replaced. Proven
+  // by saving a key, which switches that row to the keychain branch.
+  await page.goto('/');
+  await openSettingsTab(page, 'Source');
+  await page.fill('#key-input-anthropic', 'sk-ant-test-key-for-label-check');
+  await page.locator('#key-input-anthropic').press('Enter');
+  await expect(page.locator(ANTHROPIC_ROW).locator('.key-state.ok')).toBeVisible();
+
+  const tag = await page.locator(ANTHROPIC_ROW).locator('.key-provider').evaluate((el) => el.tagName);
+  expect(tag, 'a configured row has no input to label').toBe('SPAN');
+
+  // Leave the keys as the rest of the suite expects.
+  await page.locator(ANTHROPIC_ROW).locator('[data-remove-key]').click();
+  await acceptConfirm(page);
+  await expect(page.locator('#key-input-anthropic')).toBeVisible();
+});
