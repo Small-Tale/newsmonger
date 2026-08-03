@@ -1,0 +1,24 @@
+{
+  "name": "codex-invalid-schema",
+  "tool": "codex",
+  "describes": "NEWS-272's second cause: a schema whose `required` omits a declared property, rejected with a pretty-printed 400.",
+  "argv": [
+    "exec",
+    "-c",
+    "tools.web_search=true",
+    "--skip-git-repo-check",
+    "-s",
+    "read-only",
+    "--output-schema",
+    "<TMP>/schema.json",
+    "--output-last-message",
+    "<TMP>/last-message.txt",
+    "Reply with {\"items\":[]}"
+  ],
+  "code": 1,
+  "stdout": "",
+  "stderr": "Reading additional input from stdin...\nOpenAI Codex v0.145.0\n--------\nworkdir: /Users/westphal/Documents/news\nmodel: gpt-5.6-sol\nprovider: openai\napproval: never\nsandbox: read-only\nreasoning effort: none\nreasoning summaries: none\nsession id: 019fc9df-265b-7ce2-8deb-b4c7384ac8b3\n--------\nuser\nReply with {\"items\":[]}\nERROR: {\n  \"type\": \"error\",\n  \"error\": {\n    \"type\": \"invalid_request_error\",\n    \"code\": \"invalid_json_schema\",\n    \"message\": \"Invalid schema for response_format 'codex_output_schema': In context=('properties', 'items', 'items', 'properties', 'sources', 'items'), 'required' is required to be supplied and to be an array including every key in properties. Missing 'outlet'.\",\n    \"param\": \"text.format.schema\"\n  },\n  \"status\": 400\n}\nERROR: {\n  \"type\": \"error\",\n  \"error\": {\n    \"type\": \"invalid_request_error\",\n    \"code\": \"invalid_json_schema\",\n    \"message\": \"Invalid schema for response_format 'codex_output_schema': In context=('properties', 'items', 'items', 'properties', 'sources', 'items'), 'required' is required to be supplied and to be an array including every key in properties. Missing 'outlet'.\",\n    \"param\": \"text.format.schema\"\n  },\n  \"status\": 400\n}\n",
+  "lastMessage": "",
+  "recordedAt": "2026-08-03T23:04:36.694Z",
+  "toolVersion": "codex-cli 0.145.0"
+}

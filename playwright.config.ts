@@ -14,6 +14,18 @@ const PORT = 4189;
 
 export default defineConfig({
   testDir: 'tests/e2e',
+  /**
+   * The real-subscription spec is opt-in (NEWS-276).
+   *
+   * It spends plan quota and takes minutes, so it must not ride along on
+   * `npm run test:all` — the thing you run before every commit. `npm run
+   * test:e2e:real` sets the flag; nothing else does.
+   *
+   * Note the shared `--ai-test` webServer below still boots for a real run, and
+   * that is wanted rather than tolerated: its command builds the client bundle,
+   * which the real spec's own server needs in order to serve anything.
+   */
+  testIgnore: process.env['NEWSMONGER_E2E_REAL'] === '1' ? [] : ['**/real-providers.spec.ts'],
   // Serial: all tests share one server + one data file.
   workers: 1,
   retries: 1,

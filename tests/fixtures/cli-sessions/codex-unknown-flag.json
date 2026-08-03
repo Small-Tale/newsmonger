@@ -1,0 +1,19 @@
+{
+  "name": "codex-unknown-flag",
+  "tool": "codex",
+  "describes": "The NEWS-272 failure verbatim: a flag the CLI no longer accepts, answered with exit 2 and a usage dump.",
+  "argv": [
+    "exec",
+    "--search",
+    "--skip-git-repo-check",
+    "-s",
+    "read-only",
+    "say ok"
+  ],
+  "code": 2,
+  "stdout": "",
+  "stderr": "error: unexpected argument '--search' found\n\n  tip: to pass '--search' as a value, use '-- --search'\n\nUsage: codex exec [OPTIONS] [PROMPT]\n       codex exec [OPTIONS] <COMMAND> [ARGS]\n\nFor more information, try '--help'.\n",
+  "lastMessage": "",
+  "recordedAt": "2026-08-03T23:04:32.501Z",
+  "toolVersion": "codex-cli 0.145.0"
+}

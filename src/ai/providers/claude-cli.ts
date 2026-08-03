@@ -15,6 +15,7 @@ import type {
 import { DISCOVERY_MODELS, PROVIDER_EFFORT_LEVELS } from '../types.js';
 import { agentCwd } from './agent-cwd.js';
 import { cliErrorDetail } from './cli-error.js';
+import type { CliExec } from './cli-exec.js';
 import { resolveCliBinary } from './cli-path.js';
 
 /**
@@ -33,7 +34,15 @@ import { resolveCliBinary } from './cli-path.js';
  */
 
 /** Timeout for one check. A Claude Code run is an agentic loop, not one call. */
-const CHECK_TIMEOUT_MS = 10 * 60 * 1000;
+/**
+ * How long one check may take before the CLI is killed.
+ *
+ * Exported since NEWS-276 so the real-provider E2E can wait *longer* than this
+ * rather than restating it: a test that gives up first would report a failure the
+ * app itself considers a healthy, if slow, check — which is exactly what the first
+ * version did, with a 4-minute wait against this 10-minute ceiling.
+ */
+export const CHECK_TIMEOUT_MS = 10 * 60 * 1000;
 
 /** Seam over the CLI so tests never spawn a real process. */
 export interface ClaudeCliRunner {
@@ -86,11 +95,21 @@ export function parseCliEnvelope(stdout: string): string {
   throw new Error('Claude CLI returned no result');
 }
 
-function spawnRunner(name: string): ClaudeCliRunner {
+/**
+ * The real runner: builds the argv, writes the schema, spawns, parses.
+ *
+ * `execOverride` exists so a test can supply a **recording** of what the vendor
+ * actually said and still run every one of those steps for real (NEWS-277) — the
+ * `config.runner` seam replaces all of them, which is why the argv, the schema and
+ * the error extraction had no coverage when each of them broke.
+ */
+export function spawnRunner(name: string, execOverride?: CliExec): ClaudeCliRunner {
   // Resolved to an absolute path, because a Finder-launched macOS app does not
   // inherit the shell's PATH and these tools live in ~/.local/bin (NEWS-240).
-  const binary = resolveCliBinary(name);
-  const exec = async (
+  // Skipped entirely when an exec is injected: a replayed session must not need
+  // the binary to be installed, which is what lets these tests run in CI.
+  const binary = execOverride === undefined ? resolveCliBinary(name) : name;
+  const spawnExec = async (
     args: string[],
     timeoutMs: number,
     signal?: AbortSignal,
@@ -132,6 +151,8 @@ function spawnRunner(name: string): ClaudeCliRunner {
         resolve({ code, stdout, stderr });
       });
     });
+
+  const exec: CliExec = execOverride ?? spawnExec;
 
   return {
     async run(system, prompt, model, schema, effort, signal) {

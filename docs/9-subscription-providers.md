@@ -90,6 +90,30 @@ Claude Code reports `total_cost_usd` (a measured run: $1.35 across 21 turns). Fo
 
   `tests/unit/cli-error.test.ts` runs against **real captured stderr** from both Codex failures, and one case keeps the old expression alongside the new one — running it on the same payload is a clearer statement of the problem than any comment.
 
+- **FR-9.12d** *(Shipped, NEWS-277)* **Recorded CLI sessions, replayed in every run.** `npm run record:cli-sessions` captures real transcripts to `tests/fixtures/cli-sessions/*.json`; `tests/unit/cli-session-replay.test.ts` replays them through the real provider.
+
+  **The seam moved down a level, and that is the point.** `config.runner` replaces the argv construction, the schema temp file, the spawn *and* the parsing in one go — which is why all of those had no coverage when three of them broke (FR-9.12a, FR-9.12b, FR-9.12c). `spawnRunner(name, exec)` now takes an injectable process boundary, so a replayed test runs `codexExecArgs`, writes the real schema, reads the real last-message file, parses, sanitizes, and formats errors — against byte-exact output from `codex-cli 0.145.0`.
+
+  Five scenarios, and the two failures were produced **on purpose**: a run with the removed `--search` flag (exit 2, usage dump) and a run with the old schema whose `required` omitted declared properties (exit 1, `invalid_json_schema`). Inventing those payloads is how a fixture gets the shape wrong in exactly the way that hides the bug — the recorded stderr ends `}, "status": 400 }`, which is what the user actually saw, and no hand-written fixture would have thought to end there.
+
+  Proven rather than asserted: restoring the old `cliErrorDetail` makes the replay test produce `Codex CLI exited with code 1:   },   …` — the reported string verbatim — and fail.
+
+  **A recording is fidelity, not currency**, and the distinction decides the architecture:
+
+  | | Recorded replay | Live spec (FR-9.12e) |
+  |---|---|---|
+  | Runs | every `npm test`, including CI | opt-in, by hand |
+  | Catches | our handling of what the vendor says | the vendor changing what it says |
+  | Cost | milliseconds | minutes and plan quota |
+
+  A frozen recording of a working `--search` would have replayed success for weeks after the flag was removed. So re-record after a CLI upgrade and read the fixture diff as the vendor's changelog; the live spec is what notices drift unprompted. Each fixture carries its `toolVersion` and `recordedAt` so staleness is visible rather than inferred, and a test asserts both are present — a fixture with no provenance is indistinguishable from an invented one.
+
+- **FR-9.12e** *(Shipped, NEWS-276)* **A live-subscription E2E**, `npm run test:e2e:real`, on its own server with no `--ai-test`.
+
+  Deliberately **not** in `test:all`: a check may take up to the providers' own 10-minute ceiling and spends plan quota, while `test:all` has to stay the thing you run before every commit. Skips per provider when the CLI is not signed in, and always in CI.
+
+  Two things learned building it, both now encoded: the wait is **derived from the providers' exported `CHECK_TIMEOUT_MS`** rather than restated, because a test that gives up first reports a failure the app considers a healthy slow check — the first version waited four minutes against a ten-minute ceiling and duly failed one. And it is **not `mode: 'serial'`**, because serial skips the rest of the file after a failure, so one slow Claude check hid the Codex verdict entirely — the opposite of what a provider smoke test is for.
+
 - **FR-9.13** *(Shipped)* **`-s read-only`.** Codex is a coding agent that can execute shell commands; a news lookup must not write anything. This is the equivalent of `claude-cli`'s `--allowed-tools WebSearch` — narrow the agent to the job.
 
 - **FR-9.14** *(Shipped)* Two differences from the Claude CLI drive the implementation:

@@ -110,6 +110,8 @@ Data dir: `--data-dir` flag → `NEWSMONGER_DATA_DIR` → `~/.newsmonger`. Also 
 - `npm run tauri:dev` — desktop dev shell (needs Rust; verified on macOS)
 - `npm run tauri:build` — release app + dmg; runs `scripts/build-sidecar.sh` via `beforeBuildCommand`
 - `npm test` (vitest+coverage) · `npm run test:e2e` (playwright) · `npm run test:all` (typecheck+lint+unit+e2e)
+- `npm run record:cli-sessions` — capture real CLI transcripts to `tests/fixtures/cli-sessions/` (NEWS-277). Replayed by `tests/unit/cli-session-replay.test.ts` through `spawnRunner(name, exec)`, the process-boundary seam in `src/ai/providers/cli-exec.ts`, so argv/schema/parsing/error-formatting all run for real offline. Two fixtures are deliberate failures
+- `npm run test:e2e:real` — the **real** Claude/Codex subscriptions (NEWS-276), opt-in via `NEWSMONGER_E2E_REAL=1`, excluded from `test:all` by `testIgnore` in `playwright.config.ts`. Own server on port 4191, no `--ai-test`. Guards the class of bug the mock cannot see: a vendor CLI flag disappearing, a schema strict mode rejects (NEWS-272), and the populated effort comparison the mock's single effort level makes unreachable (NEWS-227)
 - `npm run commit:msg` — gitgist drafts a commit message from the staged diff. Output is Conventional Commits and must be reshaped to this project's style; see CLAUDE.md → Git
 - Lint/typecheck: `npm run lint` / `npm run typecheck` (eslint strictTypeChecked + eslint-plugin-kerfjs)
 - Rust: `cd src-tauri && cargo fmt --check && cargo clippy --all-targets -- -D warnings`, **and the same with `--release`** — the dev/release spawn paths are `cfg`-gated, so a debug-only check never compiles the release branch
