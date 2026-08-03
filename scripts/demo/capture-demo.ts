@@ -19,7 +19,8 @@
  *   1. the first check lands — summarized stories with source links
  *   2. topic discovery: sections and suggestions
  *   3. a later check reports **only what's new** — dedup is the product
- *   4. an end card
+ *   4. the same frame in dark mode, revealed by a left-to-right wipe
+ *   5. an end card
  *
  * ### Two constraints learned from glassbox, not rediscovered here
  *
@@ -66,6 +67,17 @@ interface Beat {
   title: string;
   caption: string;
   durationMs: number;
+  /**
+   * How this beat hands over to the **next** one. Defaults to the crossfade
+   * every other beat uses.
+   *
+   * Per-beat since NEWS-263, for one beat: the theme switch. A crossfade
+   * between two frames of the same layout in different colours just looks like
+   * a slow dim — the eye reads it as one picture changing brightness. A wipe
+   * reads as what it is, the new theme sweeping across the window, precisely
+   * because the geometry underneath does not move.
+   */
+  transition?: { type: 'crossfade' | 'wipe'; duration: number; easing?: string };
 }
 
 const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
@@ -172,6 +184,18 @@ async function main(): Promise<void> {
       });
     }
 
+    // Suppress the backup offer (NEWS-263). It appears once a third topic exists
+    // (FR-27.4) and opens a modal with a backdrop that swallows every click —
+    // which is exactly what broke the hero capture: the discover beat timed out
+    // for 30s against an invisible interceptor. Set through the real settings API
+    // rather than by dismissing the dialog, so the state is reached the way a user
+    // who chose "don't ask again" reaches it (FR-28.5).
+    await fetch(`${base}/api/settings`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ backupPromptNever: true }),
+    });
+
     await page.goto(base, { waitUntil: 'networkidle' });
 
     // Adding a topic fires an immediate first check (FR-1.12), so by now stories
@@ -211,6 +235,22 @@ async function main(): Promise<void> {
     await sleep(900);
     await grab('Newsmonger', 'Later checks report only what is new', 3400, 'dedup');
 
+    // Dark mode (NEWS-263), captured at the **same scroll position and state** as
+    // the beat before it. That is the whole trick: the wipe has to reveal the
+    // identical layout in the other palette, so it reads as the theme changing
+    // rather than as a jump to a different screen. Anything that moves between
+    // the two frames turns a theme switch into a scene change.
+    //
+    // `emulateMedia` rather than a UI control because there is no theme toggle to
+    // click — the app follows `prefers-color-scheme` (FR-3.7), so emulating the
+    // media query *is* how a user gets here.
+    beats[beats.length - 1].transition = { type: 'wipe', duration: 900, easing: 'ease-in-out' };
+    await page.emulateMedia({ colorScheme: 'dark' });
+    // Long enough for the CSS custom properties to settle and any transition on
+    // them to finish, so the frame is fully dark rather than caught mid-change.
+    await sleep(900);
+    await grab('Newsmonger', 'Dark mode for the small hours', 3200, 'dark');
+
     beats.push({
       tree: null,
       fullSvg: endCard('Follow topics, not feeds.'),
@@ -237,7 +277,11 @@ async function main(): Promise<void> {
         id: `f${String(i)}`,
         caption: b.caption,
       });
-    return { svgContent, duration: b.durationMs, transition: { type: 'crossfade' as const, duration: 450 } };
+    return {
+      svgContent,
+      duration: b.durationMs,
+      transition: b.transition ?? { type: 'crossfade' as const, duration: 450 },
+    };
   });
 
   let svg = generateAnimatedSvg({
@@ -246,7 +290,7 @@ async function main(): Promise<void> {
     frames,
     fontFaceCss: getEmbeddedFontFaceCss(),
     title: 'Newsmonger — follow topics, not feeds',
-    desc: 'An animated walkthrough: topics being watched, summarized stories with source links, topic discovery, and a later check reporting only what is new.',
+    desc: 'An animated walkthrough: topics being watched, summarized stories with source links, topic discovery, a later check reporting only what is new, and the same view in dark mode.',
   });
 
   writeFileSync(resolve(DEBUG_DIR, '_raw.svg'), svg);

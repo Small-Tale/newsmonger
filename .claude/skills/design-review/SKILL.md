@@ -50,12 +50,23 @@ npm run demo:stills      # → assets/stills/{feed,topics,discover,tuner,review,
 Then **Read those PNGs** — you can see images; a critique written from JSX is a
 code review wearing a hat. See `docs/28-demo-capture.md`.
 
-Two gaps to cover by hand, because the script does not: it captures **light mode
-only** at a fixed **1440×900**. The app ships dark mode and a one-column layout
-under 860px, both of which are where composition breaks. Drive Playwright for
-those — `tests/e2e/a11y.spec.ts` shows the `emulateMedia({ colorScheme })`
-pattern and `tests/e2e/fixtures.ts` has the helpers (`openSettingsTab`,
-`topicAction`).
+Those seven are **light mode at 1440×900** — the two conditions a critique needs
+least, since they already work. For the ones that matter, add `--review`:
+
+```
+npm run demo:stills -- --review   # → scripts/demo/.review/<scene>-{dark,narrow}.png
+```
+
+That captures every scene in **dark mode** and at **720px** (across the 860px
+one-column collapse), uncropped, into a gitignored directory. Read those too — a
+critique of the light desktop layout alone is a critique of the half that
+photographs well. Both runs need to be **outside the command sandbox**
+(Chromium needs Mach ports), and the soaking `topics` scene makes a full run take
+a couple of minutes.
+
+For anything the scenes do not reach, drive Playwright directly:
+`tests/e2e/a11y.spec.ts` shows the `emulateMedia({ colorScheme })` pattern and
+`tests/e2e/fixtures.ts` has the helpers (`openSettingsTab`, `topicAction`).
 
 **d. Read the tokens** in `src/client/styles.scss` (`--paper`, `--ink`,
 `--pine`, `--marigold`, `--serif`, `--sans`, `--mono`, `--shadow`). Naming a

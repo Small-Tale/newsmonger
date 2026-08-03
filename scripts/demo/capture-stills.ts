@@ -68,10 +68,41 @@ const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const OUT_DIR = resolve(ROOT, 'assets/stills');
 
 /**
+ * Review captures (NEWS-263) — **not** demo assets, and deliberately elsewhere.
+ *
+ * `assets/stills/` is git-tracked because those seven images are in the README.
+ * These are throwaway inputs for `/design-review`, regenerated whenever someone
+ * looks; tracking two more variants of each would triple the binary churn in the
+ * repo to serve a workflow that reads them once. Ignored, and named like the
+ * existing `.debug/` directory the hero already writes to.
+ */
+const REVIEW_DIR = resolve(ROOT, 'scripts/demo/.review');
+
+/**
  * Wide enough for the multi-column feed (FR-3.36–3.39 switches layout on width),
  * which is one of the things worth showing and is invisible at the hero's size.
  */
 const VIEWPORT = { width: 1440, height: 900 };
+
+/**
+ * What a review pass photographs, beyond the default.
+ *
+ * The demo stills are light mode at desktop width — the two conditions a design
+ * critique needs *least*, because they are the ones already known to work. Dark
+ * mode is a genuinely different palette ("pre-dawn slate-green", FR-3.7) and the
+ * place contrast problems live; the narrow width crosses the 860px one-column
+ * collapse, where composition breaks if it is going to.
+ *
+ * Uncropped on purpose. The demo crops frame one feature; a critique is judging
+ * the whole composition, and a crop would hide the balance being assessed.
+ */
+const REVIEW_VARIANTS = [
+  { suffix: 'dark', viewport: VIEWPORT, colorScheme: 'dark' as const },
+  { suffix: 'narrow', viewport: { width: 720, height: 1000 }, colorScheme: 'light' as const },
+];
+
+/** `--review` also captures the dark and narrow variants (NEWS-263). */
+const REVIEW = process.argv.includes('--review');
 
 const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
 
@@ -398,6 +429,7 @@ async function clipFor(page: Page, scene: Scene): Promise<Clip> {
 async function main(): Promise<void> {
   rmSync(OUT_DIR, { recursive: true, force: true });
   mkdirSync(OUT_DIR, { recursive: true });
+  if (REVIEW) mkdirSync(REVIEW_DIR, { recursive: true });
 
   /** Captured live, rendered after teardown — see the header. */
   const captured: { name: string; tree: Awaited<ReturnType<typeof captureElementTree>>; clip: Clip }[] = [];
@@ -416,6 +448,18 @@ async function main(): Promise<void> {
         body: JSON.stringify({ name: t.name }),
       });
     }
+    // Suppress the backup offer (NEWS-263). It appears once a third topic exists
+    // (FR-27.4) and opens a modal with a backdrop that swallows every click —
+    // which is exactly what broke the hero capture: the discover beat timed out
+    // for 30s against an invisible interceptor. Set through the real settings API
+    // rather than by dismissing the dialog, so the state is reached the way a user
+    // who chose "don't ask again" reaches it (FR-28.5).
+    await fetch(`${server.base}/api/settings`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ backupPromptNever: true }),
+    });
+
     if (scene.soak) {
       await fetch(`${server.base}/api/settings`, {
         method: 'PATCH',
@@ -426,9 +470,22 @@ async function main(): Promise<void> {
     await scene.arrange?.(server.base);
   };
 
-  /** Open a page against a prepared server, run the scene, and capture it. */
-  const shoot = async (scene: Scene, server: Server): Promise<void> => {
-    const page = await browser.newPage({ viewport: VIEWPORT });
+  /**
+   * Open a page against a prepared server, run the scene, and capture it.
+   *
+   * With a `variant` this is a **review** capture (NEWS-263): the other palette
+   * or the narrow layout, uncropped, into `.review/`, and it contributes nothing
+   * to the SVG/README pipeline.
+   */
+  const shoot = async (
+    scene: Scene,
+    server: Server,
+    variant?: (typeof REVIEW_VARIANTS)[number],
+  ): Promise<void> => {
+    const page = await browser.newPage({
+      viewport: variant?.viewport ?? VIEWPORT,
+      ...(variant === undefined ? {} : { colorScheme: variant.colorScheme }),
+    });
     try {
       // Onboarding would cover every scene with a modal.
       await page.addInitScript(() => {
@@ -437,12 +494,42 @@ async function main(): Promise<void> {
       await page.goto(server.base, { waitUntil: 'networkidle' });
       await scene.setup(page);
 
+      if (variant !== undefined) {
+        const file = resolve(REVIEW_DIR, `${scene.name}-${variant.suffix}.png`);
+        await page.screenshot({ path: file, fullPage: false });
+        console.log(`[stills] ${scene.name}-${variant.suffix} (review)`);
+        return;
+      }
+
       const clip = await clipFor(page, scene);
       await page.screenshot({ path: resolve(OUT_DIR, `${scene.name}.png`), clip });
       captured.push({ name: scene.name, tree: await captureElementTree(page, undefined, clip), clip });
       console.log(`[stills] ${scene.name} (${String(clip.width)}×${String(clip.height)})`);
     } finally {
       await page.close().catch(() => undefined);
+    }
+  };
+
+  /**
+   * Shoot every review variant of a scene, **each on its own freshly prepared
+   * server**.
+   *
+   * Not a loop over pages against one server, for the reason FR-28.10 gives: a
+   * scene's `setup` mutates real state — flagging a story off-topic, promoting a
+   * topic — so running it three times against one server would compound those
+   * mutations and photograph the second and third variants in a state the first
+   * never saw. The variants would then differ by more than the palette, which is
+   * the one thing a theme comparison must not do.
+   */
+  const shootReviewVariants = async (scene: Scene): Promise<void> => {
+    for (const variant of REVIEW_VARIANTS) {
+      const server = await startServer();
+      try {
+        await prepare(scene, server);
+        await shoot(scene, server, variant);
+      } finally {
+        stopServer(server);
+      }
     }
   };
 
@@ -466,6 +553,7 @@ async function main(): Promise<void> {
       } finally {
         stopServer(server);
       }
+      if (REVIEW) await shootReviewVariants(scene);
     }
 
     for (const { scene, server, seededAt } of soaking) {
@@ -488,6 +576,10 @@ async function main(): Promise<void> {
       } finally {
         stopServer(server);
       }
+      // Review variants of a soaking scene skip the soak: it costs minutes and
+      // buys a drained dial, which is a demo detail rather than a design one. The
+      // ring will read full in these — expected, not a bug.
+      if (REVIEW) await shootReviewVariants(scene);
     }
   } finally {
     for (const { server } of soaking) stopServer(server);

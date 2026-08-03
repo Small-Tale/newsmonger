@@ -11,7 +11,7 @@ The README's images are **photographs of the real application**, produced by dri
 | Script | `scripts/demo/capture-demo.ts` | `scripts/demo/capture-stills.ts` |
 | Command | `npm run demo:capture` | `npm run demo:stills` |
 | Output | `assets/demo.svg` + `.svgz` | `assets/stills/<scene>.png` + `.svg` |
-| Shape | one animated, chrome-wrapped artifact, five beats, crossfades | one flat image per feature, no chrome, no composition |
+| Shape | one animated, chrome-wrapped artifact, six beats, crossfades + one wipe | one flat image per feature, no chrome, no composition |
 
 - **FR-28.1** *(Shipped)* They are **separate scripts on purpose.** The hero is a composed narrative — window chrome, captions, timing, transitions, an end card. The stills are single frames of individual features. Merging them would make every still carry the animation machinery and every hero beat carry the still machinery, for one shared `spawn` call. Glassbox keeps the same split for the same reason.
 - **FR-28.2** *(Shipped)* Both run the app in **`--demo` mode**, which serves the fixture stories in `src/demo.ts` (FR-4.x). `--demo` implies `--ai-test`: no real AI call, no network, no lead-image fetching.
@@ -23,6 +23,24 @@ The README's images are **photographs of the real application**, produced by dri
 - **FR-28.5** *(Shipped)* **State is reached through the real UI or the real HTTP API**, never by writing to the database behind the server's back — topics are added with `POST /api/topics`, stories arrive from the check that firing that endpoint triggers (FR-1.12).
 - **FR-28.6** *(Shipped)* **Trees are captured live and rendered to SVG after teardown.** domotion's macOS glyph-path extraction is flaky under contention and falls back *silently* to CSS `<text>`, which renders as tofu on any machine without the font. Rendering once the browser and server are gone makes it reliable, and an **`@font-face` assertion** on the output is what stops a silent regression.
 - **FR-28.7** *(Shipped)* Both must run **outside the command sandbox** — Chromium needs Mach ports.
+
+### The dark-mode beat (NEWS-263)
+
+- **FR-28.16** *(Shipped, NEWS-263)* The hero ends its walkthrough by **switching to dark mode**, revealed by a left-to-right **wipe** rather than the crossfade every other beat uses.
+
+  The wipe is the point, not decoration. The dark frame is captured at the *same scroll position and state* as the beat before it, so the two frames differ only in palette — and a crossfade between two identical layouts in different colours reads as one picture dimming, not as a theme changing. A wipe reads correctly precisely because the geometry underneath does not move. Anything that shifts between the two frames turns a theme switch into a scene change, so that beat must not scroll, click, or wait for new stories.
+
+  Reached with `page.emulateMedia({ colorScheme: 'dark' })` because there is no theme toggle to click — the app follows `prefers-color-scheme` (FR-3.7), so emulating the media query *is* how a user gets there. `Beat.transition` is per-beat for this one case; everything else falls back to the shared crossfade.
+
+  Two things checked while building it, worth not re-deriving: domotion renders the wipe as a `clip-path: inset(...)` keyframe (`@keyframes fr-<n>`), and `optimizeSvg` rewrites `inset(0 100% 0 0)` to `inset(0 100%0 0)` — which **is** still valid, because `%` terminates the percentage token. Verified in Chromium rather than assumed; both forms compute to `inset(0px 100% 0px 0px)`.
+
+### The backup offer had to be suppressed (NEWS-263)
+
+- **FR-28.17** *(Shipped, NEWS-263)* Both pipelines `PATCH /api/settings { backupPromptNever: true }` before driving the UI.
+
+  The backup offer appears once a third topic exists (FR-27.4) and opens a modal whose backdrop swallows every click. `DEMO_TOPICS` has exactly three, so **the hero capture was broken**: the discover beat spent 30 seconds retrying a click against an invisible interceptor and the script died. Nothing caught it, because the capture is manual and run rarely — the same "no test, so it rotted" shape as the dock bounce in NEWS-261.
+
+  Set through the real settings API rather than by dismissing the dialog, per FR-28.5 — this is the state a user who chose "don't ask again" is in. The stills were unaffected in practice but do it too, since they are one topic away from the same trap.
 
 ## The stills (NEWS-214)
 
@@ -39,6 +57,18 @@ The README's images are **photographs of the real application**, produced by dri
   A soaking scene's server starts **before** the others and it is photographed **after** them, so the wait overlaps work that has to happen anyway. Be honest about the size of that: the other six scenes take about 15 seconds between them, so a two-minute soak still costs ~105 seconds of real waiting. It is the cheapest option, not a free one — the alternatives were a demo-only way to backdate `lastCheckedAt` (a product affordance existing purely for a screenshot, writing a false timestamp) or shipping a dial that never moves.
 
   The soak must stay **under** the interval: at the interval the scheduler checks again and the ring resets to full. The script warns rather than silently shipping a picture of the state the scene exists to avoid.
+
+### Review captures (NEWS-263)
+
+- **FR-28.18** *(Shipped, NEWS-263)* `npm run demo:stills -- --review` additionally captures each scene **in dark mode** (1440×900) and **narrow** (720×1000), uncropped, to `scripts/demo/.review/<scene>-{dark,narrow}.png`.
+
+  These exist for `/design-review` (NEWS-262), whose critique is only as good as what it can see. The demo stills are light mode at desktop width — the two conditions a critique needs *least*, because they are the ones already known to work. Dark mode is a genuinely different palette and where contrast problems live; 720px crosses the 860px one-column collapse, where composition breaks if it is going to.
+
+  **Uncropped on purpose**: the demo crops frame one feature, and a critique is judging the whole composition, which a crop would hide.
+
+  **Not tracked, and elsewhere.** `assets/stills/` is committed because those seven images are in the README. Review captures are throwaway inputs regenerated whenever someone looks, so tripling the repo's tracked binaries to serve them is the wrong trade. `scripts/demo/.review/` is gitignored, named after the `.debug/` directory the hero already writes to.
+
+  **Each variant gets its own freshly prepared server**, for the reason FR-28.10 gives: a scene's `setup` mutates real state, so running it three times against one server would compound those mutations and photograph the later variants in a state the first never saw — leaving the variants differing by more than the palette, which is the one thing a theme comparison must not do. A soaking scene's variants **skip the soak**: it costs minutes and buys a drained dial, which is a demo detail rather than a design one, so the ring reads full in those.
 
 ### Not captured, and why
 
