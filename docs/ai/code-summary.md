@@ -59,7 +59,7 @@ src/
     stores.ts         appStore (defineStore)
     api.ts            fetch wrappers, refreshState (zod-validated), withRefresh
     icons.tsx         ALL icons live here — Lucide paths inlined (lucide-static@1.26.0), no runtime dep, no emoji
-    tauri.ts          __TAURI__ detection, getTauriInvoke, openExternalUrl, bounceDockIcon, focusAppWindow
+    tauri.ts          __TAURI__ detection, getTauriInvoke, openExternalUrl, bounceDockIcon, focusAppWindow (tests: tauri-window.test.ts, NEWS-261)
     notifications.ts  noteState — OS notification when new items arrive while unfocused (NEWS-38); sendTestNotification (NEWS-260). One path: `new Notification(...)` is the Tauri plugin on the desktop (its init script replaces `window.Notification`) — there is no `__TAURI__.notification` global
     share.ts          shareText + shareItem — OS share sheet, clipboard fallback (NEWS-43)
     schedule.ts       isBehindSchedule/topicsBehindSchedule — falling-behind detection for the banner (NEWS-59)

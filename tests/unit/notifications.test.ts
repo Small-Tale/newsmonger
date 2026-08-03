@@ -220,6 +220,47 @@ describe('the desktop path delivers through the replaced window.Notification', (
     expect(ShimNotification.requestPermission).not.toHaveBeenCalled();
   });
 
+  // NEWS-261. The dock bounce is the desktop's attention-getter *because* the
+  // notification's own click handler cannot fire there, so the two facts belong
+  // in one test: delivery happens, and the bounce happens with it. Neither was
+  // asserted at this level before.
+  it('bounces the dock alongside the delivery, since the click handler cannot fire', () => {
+    const win = { requestUserAttention: vi.fn(() => Promise.resolve()) };
+    (globalThis as unknown as Record<string, unknown>)['window'] = {
+      __TAURI__: { core: {}, window: { getCurrentWindow: () => win } },
+    };
+    noteState(state(['a']));
+    noteState(state(['a', 'b']));
+    expect(ShimNotification.delivered).toHaveLength(1);
+    expect(win.requestUserAttention).toHaveBeenCalledTimes(1);
+  });
+
+  it('survives a shim whose constructed object has no browser API on it', () => {
+    // This is the class of bug NEWS-260 and NEWS-261 both are: the desktop's
+    // `Notification` is a plain function that delivers and returns a bare object
+    // — no `close`, and nothing ever reads `onclick`. Any future code that
+    // *depends* on the returned object (calling `close()`, reading `tag`) would
+    // throw into `deliver`'s catch, silently, after the notification had already
+    // gone out. Pinned so that lands as a failing test instead.
+    class BareShim {
+      // The real shim does define `permission` (via defineProperty) — it is the
+      // constructed *object* that carries nothing, which is what this pins.
+      static permission: NotificationPermission = 'granted';
+      static delivered = 0;
+      /** The real shim's object carries nothing; one inert field keeps this a value type. */
+      readonly bare = true;
+      constructor() {
+        BareShim.delivered += 1;
+      }
+    }
+    vi.stubGlobal('Notification', BareShim);
+    expect(() => {
+      noteState(state(['a']));
+      noteState(state(['a', 'b']));
+    }).not.toThrow();
+    expect(BareShim.delivered).toBe(1);
+  });
+
   it('still respects the toggle being off', () => {
     appStore.actions.setState({ ...state([]), settings: { ...BASE_SETTINGS, notifyOnNewItems: false } });
     noteState(state(['a']));
