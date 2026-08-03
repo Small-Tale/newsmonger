@@ -223,6 +223,7 @@ describe('topicRowCacheKey (NEWS-238)', () => {
     solo: new Set(),
     checking: [],
     todayByTopic: {},
+    newestItemAtByTopic: {},
   };
   const topic = (over: Partial<Topic> = {}): Topic => ({
     id: 'a',
@@ -276,10 +277,25 @@ describe('topicRowCacheKey (NEWS-238)', () => {
       { ...EMPTY, solo: new Set(['z']) }, // …and dimming depends on anything being soloed
       { ...EMPTY, checking: ['a'] },
       { ...EMPTY, todayByTopic: { a: 3 } },
+      // NEWS-273: the row says "no stories" for a checked topic holding none, so
+      // gaining or losing its last story has to change the key or the row keeps
+      // the stale sentence.
+      { ...EMPTY, newestItemAtByTopic: { a: '2026-08-03T00:00:00.000Z' } },
     ];
     for (const [i, state] of variants.entries()) {
       expect(topicRowCacheKey(t, state), `variant ${String(i)}`).not.toBe(base);
     }
+  });
+
+  it('keys on whether a topic has stories, not on when the newest arrived', () => {
+    // Presence only (NEWS-273). Keying on the timestamp would invalidate the memo
+    // on every new story and re-render the whole sidebar for a sentence that did
+    // not change.
+    const t = topic();
+    const early = topicRowCacheKey(t, { ...EMPTY, newestItemAtByTopic: { a: '2026-08-01T00:00:00.000Z' } });
+    const later = topicRowCacheKey(t, { ...EMPTY, newestItemAtByTopic: { a: '2026-08-03T00:00:00.000Z' } });
+    expect(later).toBe(early);
+    expect(topicRowCacheKey(t, EMPTY)).not.toBe(early);
   });
 
   it('still changes when the topic itself changes', () => {

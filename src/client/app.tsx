@@ -279,6 +279,8 @@ function topicRowJsx(
   soleSelection: boolean,
   /** Stories found today for this topic; 0 renders nothing (NEWS-242). */
   todayCount: number,
+  /** Whether this topic holds any stories at all (NEWS-273). */
+  hasStories: boolean,
 ): SafeHtml {
   const classes = [
     'topic',
@@ -343,7 +345,11 @@ function topicRowJsx(
             : topic.paused
               ? 'paused'
               : topic.lastCheckedAt !== null
-                ? `checked ${relativeTime(topic.lastCheckedAt)}`
+                ? // "checked 1d ago" alone implied we were holding what it found,
+                  // which reads as a failed clear once the feed is empty
+                  // (NEWS-273). The time still matters — it is what the dial
+                  // counts down from — so it is qualified rather than replaced.
+                  `checked ${relativeTime(topic.lastCheckedAt)}${hasStories ? '' : ' · no stories'}`
                 : 'not checked yet'}
         </span>
         {/* Its own line, below the name and status (NEWS-111). Sharing the row
@@ -2815,6 +2821,11 @@ function appJsx(): SafeHtml {
                   solo.size > 0 && !solo.has(row.id),
                   selected.size === 1 && selected.has(row.id),
                   s.todayByTopic[row.id] ?? 0,
+                  // `Object.hasOwn`, not `!== undefined`: the record is typed
+                  // `Record<string, string>` (no `noUncheckedIndexedAccess`), so
+                  // the comparison reads as impossible to the linter while being
+                  // exactly the question. Same trap as NEWS-264.
+                  Object.hasOwn(s.newestItemAtByTopic, row.id),
                 )
               ),
             {
@@ -2830,6 +2841,7 @@ function appJsx(): SafeHtml {
                   solo,
                   checking: s.checking,
                   todayByTopic: s.todayByTopic,
+                  newestItemAtByTopic: s.newestItemAtByTopic,
                 }),
               // A stable list identity (kerf 3.x). Unkeyed lists are identified by
               // their position among a render's `each()` calls, so a conditional

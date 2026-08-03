@@ -137,6 +137,14 @@ export interface RowRenderState {
   solo: ReadonlySet<string>;
   checking: readonly string[];
   todayByTopic: Record<string, number | undefined>;
+  /**
+   * Newest story per topic — read only for *presence* (NEWS-273).
+   *
+   * The status line says "no stories" for a topic that has been checked but holds
+   * none, so whether this key exists is something a row renders, and therefore
+   * something the memo key has to include.
+   */
+  newestItemAtByTopic: Record<string, string | undefined>;
 }
 
 /**
@@ -165,7 +173,7 @@ export interface RowRenderState {
  */
 export function topicRowCacheKey(row: TopicRow, state: RowRenderState): string {
   if (isHeading(row)) return row.label;
-  const { selected, solo, checking, todayByTopic } = state;
+  const { selected, solo, checking, todayByTopic, newestItemAtByTopic } = state;
   return [
     row.id, // identity first — without it, same-state rows collide
     String(row.category),
@@ -178,5 +186,9 @@ export function topicRowCacheKey(row: TopicRow, state: RowRenderState): string {
     String(row.highPriority), // the star, and which interval the dial counts down
     row.guidance,
     String(todayByTopic[row.id] ?? 0),
+    // Presence, not the timestamp: the row renders "no stories" or not, and
+    // keying on the value itself would churn the memo on every new story
+    // (NEWS-273).
+    String(newestItemAtByTopic[row.id] !== undefined),
   ].join('|');
 }

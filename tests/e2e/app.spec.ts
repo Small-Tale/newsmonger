@@ -1699,9 +1699,19 @@ test('clear all stories, keeping topics and settings (NEWS-255)', async ({ page 
 
   // Stories gone, topic still there — the whole point of the narrowing.
   await expect(page.locator('.item')).toHaveCount(0);
-  await expect(page.locator('.topic', { hasText: 'Clear Probe' })).toBeVisible();
+  const cleared = page.locator('.topic', { hasText: 'Clear Probe' });
+  await expect(cleared).toBeVisible();
 
-  await topicAction(page, page.locator('.topic', { hasText: 'Clear Probe' }), 'delete');
+  // And the row must not still claim it is holding what that check found
+  // (NEWS-273). It read "checked just now" beside an empty feed, which is the
+  // sentence a reader takes for "the clear did not work".
+  //
+  // The check time itself stays — it is what the dial counts down from, and the
+  // topic *was* checked — so this asserts the qualifier rather than its absence.
+  await expect(cleared.locator('.topic-meta')).toContainText('no stories');
+  await expect(cleared.locator('.topic-meta'), 'the check time is still a fact').toContainText('checked');
+
+  await topicAction(page, cleared, 'delete');
 });
 
 test('back up, then restore from that folder without moving files (NEWS-252)', async ({ page }) => {

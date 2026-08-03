@@ -90,6 +90,16 @@ The visible symptom was small — Settings → Source showed its two field group
 
 **The guard measures the browser, not the stylesheet.** `keys.spec.ts` asserts the three left edges are equal. Asserting against the SCSS variables would have passed the whole time this was broken, since the values were right and a shorthand was eating one of them.
 
+### A checked topic with no stories says so (NEWS-273)
+
+The sidebar status was a four-state ladder — `checking…` / `paused` / `checked <relative time>` / `not checked yet` — and after clearing every story a topic still read **"checked 1d ago"** beside an empty feed. Every word of that was true and the sentence was misleading: it implies the app is holding what the check found, so a reader takes it for the clear having failed. It now reads `checked 1d ago · no stories`.
+
+**The check time stays**, qualified rather than replaced, for two reasons: the topic *was* checked then, and that timestamp is what the dial counts down from (NEWS-144).
+
+**`lastCheckedAt` is deliberately not reset.** Nulling it would make the row read "not checked yet" and the dial show full, which is arguably more honest — but it would also make every topic *due*, so a clear would kick off a full sweep on the next minute tick. That directly contradicts NEWS-271, which made clearing **stop** checks. A clear must not start N checks a minute after cancelling one.
+
+Presence is read from `newestItemAtByTopic`, which the state payload already carries for the most-recent sort — and it had to be added to `topicRowCacheKey`, because `each()` memoizes a row against that string and anything the row renders has to be in it. Keyed on **presence, not the timestamp**: keying on the value would invalidate the memo on every new story and re-render the sidebar for a sentence that did not change.
+
 ### A mode's exit must look pressable (NEWS-266)
 
 `.btn.subtle` is `background: none; border-color: transparent; color: var(--ink-soft)` — at rest it is indistinguishable from the prose beside it, and only grows a border on hover. That is a reasonable treatment for a tertiary action and the wrong one for **the only way out of a mode**, which is what it was being used for in all four places the app has one: the saved-filter banner, the solo banner, the review banner, and the tuner's *Done*.
