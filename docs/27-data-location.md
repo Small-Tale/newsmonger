@@ -71,7 +71,19 @@ A setting names a **backup** directory. The app keeps running from `~/.newsmonge
 
   **`covered_through_at` is reset**, exactly as the per-topic clear does (FR-25.6). Without it the next check resumes from where the deleted stories left off and reports nothing, so the clear would look like a permanent hole rather than a fresh start.
 
-  **Refused while a check is running** (`409`), as restore is. A check computed its "already known" list *before* the clear; letting it finish afterwards would file only the stories missing from that stale list, leaving a partial set that looks like the clear half-failed.
+  **Clearing stops checks rather than refusing** (*revised in NEWS-271*). It used to answer `409` — "a check is running, wait for it to finish, then clear" — on sound reasoning: a check computed its "already known" list *before* the clear, so letting it finish afterwards files only the stories missing from that stale list, leaving a partial set that looks like a half-failed clear.
+
+  The reasoning was right and the remedy was wrong. It asked the user to wait out a check that can run for minutes in order to discard the very stories it was fetching. The stale-list problem is real, so it is solved by **stopping** the check instead of deferring to it. `POST /api/items/clear` now calls `cancelAllChecks()` first and reports `cancelledChecks` alongside `cleared`; the confirmation names how many checks will stop *before* the user agrees, and the toast says how many did.
+
+  Three things have to stop, and only the first is obvious:
+
+  1. **In-flight checks** are aborted through the same `AbortController` machinery as a settings change (FR-2.11).
+  2. **Results that arrive after the clear are thrown away.** Aborting the provider call is not enough — between the provider returning and the write there are three awaits (link verification, lead images, favicons), so a check already past the provider would complete and refill the feed that was just cleared. There is now an abort check immediately before `addItems`.
+  3. **Topics queued behind the running one**, and any **queued reissue**. A sweep pulls from a cursor, so aborting what is in flight says nothing about what has not started; a `cancelEpoch` counter stops the pool's workers. And `cancelStaleChecks` coalesces manual reissues behind a timer (NEWS-257), so a clear inside that window would otherwise be undone moments later — and spend quota doing it.
+
+  Each of the three has a test that was confirmed to fail without its fix. The queue one exists because removing the epoch check broke nothing, which is how I found I had added an uncovered path.
+
+  **No reissue after a clear**, unlike a settings change: there the *question* changed and a manual ask still deserves an answer, whereas here the user is throwing answers away.
 
   **No undo, deliberately.** The per-topic clear has a 60-second undo (NEWS-145) built on `ClearUndoBuffer`, which holds **eight** entries — so a bulk clear across nine topics would evict the oldest mid-operation and "undo" would restore some topics and not others. A partial undo is worse than none, because it looks like it worked. The confirmation is the guard, and the reset covered window means the next check starts filling the topic again rather than skipping the gap.
 

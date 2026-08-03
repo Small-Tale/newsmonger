@@ -19,7 +19,7 @@ src/
   backup.ts           Backups/writeBackup/buildBackup — snapshot to the user's backupDir in DataFileSchema shape, temp+rename, 1/hour (NEWS-192)
   undo.ts             ClearUndoBuffer: in-memory, per-topic, TTL'd snapshot of a cleared topic's stories + covered window (NEWS-145)
   scheduler.ts        startScheduler: 60s tick + 3s startup sweep, non-overlapping; drains an overrun cycle (NEWS-57)
-  checks.ts           CheckRunner (checkTopic/checkDue/checkAll, in-flight guard) + isDue()/isDueDaily()/isDueUnderSchedule()/lastSlotBefore() (NEWS-84) + effectiveInterval() + byCheckOrder() (most-overdue-first, NEWS-58). No budget logic — NEWS-119 removed it
+  checks.ts           CheckRunner (checkTopic/checkDue/checkAll, in-flight guard) + cancelStaleChecks() on a settings change (NEWS-257) / cancelAllChecks() on a story clear (NEWS-271, also stops the sweep queue via cancelEpoch and discards results arriving post-abort) + isDue()/isDueDaily()/isDueUnderSchedule()/lastSlotBefore() (NEWS-84) + effectiveInterval() + byCheckOrder() (most-overdue-first, NEWS-58). No budget logic — NEWS-119 removed it
   types.ts            Hono AppEnv (store, runner injected)
   keychain.ts         OS credential store via platform CLI (security/secret-tool/cmdkey)
   images/             og:image scrape + favicon resolution + local cache; safety.ts holds the SSRF guards

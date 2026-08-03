@@ -156,6 +156,17 @@ export class CheckRunner {
   private readonly reissueDelayMs: number;
   /** Topics whose manual check was cancelled and is waiting to be reissued. */
   private readonly pendingReissue = new Set<string>();
+
+  /**
+   * Bumped by `cancelAllChecks`, and read by `runPool`'s workers (NEWS-271).
+   *
+   * A sweep holds a queue of topics that have not started yet, and aborting the
+   * in-flight ones says nothing about those — without this, clearing mid-sweep
+   * stops two checks and then lets the remaining eight run and refill the feed.
+   * A counter rather than a boolean so a cancel cannot wedge later sweeps: each
+   * pool compares against the value it captured at its own start.
+   */
+  private cancelEpoch = 0;
   private reissueTimer: ReturnType<typeof setTimeout> | null = null;
   private readonly backups: Backups | null;
   private readonly fetchFavicon: FaviconFetcher | null;
@@ -373,6 +384,39 @@ export class CheckRunner {
     return cancelled;
   }
 
+  /**
+   * Stop everything: in-flight checks, the topics queued behind them, and any
+   * pending reissue (NEWS-271).
+   *
+   * Called when the user clears their stories. Clearing used to be refused
+   * outright while any check ran — "wait for it to finish, then clear" — which
+   * asks the user to wait out a check that may take minutes to produce stories
+   * they have just said they do not want.
+   *
+   * Deliberately **no reissue**, unlike `cancelStaleChecks`. That one cancels
+   * because the *question* changed and a manual ask still deserves an answer.
+   * Here the user is throwing the answers away, so re-asking immediately would
+   * spend quota to undo what they just did. It also clears any reissue the
+   * settings path had already queued, which would otherwise fire moments later
+   * and repopulate the feed — a trap created by that timer's coalescing delay.
+   *
+   * Returns how many in-flight checks were aborted, for the message the user sees.
+   */
+  cancelAllChecks(): number {
+    this.cancelEpoch += 1;
+    if (this.reissueTimer !== null) {
+      clearTimeout(this.reissueTimer);
+      this.reissueTimer = null;
+    }
+    this.pendingReissue.clear();
+    let aborted = 0;
+    for (const entry of this.inFlight.values()) {
+      entry.controller.abort();
+      aborted += 1;
+    }
+    return aborted;
+  }
+
   /** Topic ids currently being checked. */
   checking(): string[] {
     return [...this.inFlight.keys()];
@@ -444,6 +488,16 @@ export class CheckRunner {
       // (NEWS-169), not per source: an outlet cited by six stories is one icon,
       // and the same outlets recur every check. Same silence policy as images.
       const favicons = await this.resolveFavicons(fresh.flatMap(({ item }) => item.sources.map((s) => s.url)));
+
+      // Cancelled while we were finishing up? Throw the answer away (NEWS-271).
+      //
+      // Aborting the provider call is not enough on its own: between the provider
+      // returning and this write there are three awaits — link verification,
+      // lead images, favicons — and a check that was already past the provider
+      // when the abort landed would otherwise complete and **refill a feed the
+      // user had just cleared**. That is the "ignore any in-flight results" half
+      // of clearing, and it is the half that is invisible until it happens.
+      if (controller.signal.aborted) throw new CancelledCheck('cancelled before storing');
 
       // The topic may have been deleted while the check was in flight.
       if (this.store.getTopic(topicId)) {
@@ -723,8 +777,12 @@ export class CheckRunner {
   private async runPool(topics: { id: string }[], limit: number, manual: boolean): Promise<number> {
     let cursor = 0;
     let checked = 0;
+    // Captured per pool, so a cancel stops *this* sweep's queue without wedging
+    // any sweep that starts afterwards (NEWS-271).
+    const epoch = this.cancelEpoch;
     const workers = Array.from({ length: Math.max(1, Math.min(limit, topics.length)) }, async () => {
       for (;;) {
+        if (this.cancelEpoch !== epoch) return;
         const index = cursor++;
         if (index >= topics.length) return;
         const topic = topics[index];

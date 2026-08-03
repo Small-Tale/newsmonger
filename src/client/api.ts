@@ -381,11 +381,11 @@ export async function fetchBackupPreview(): Promise<BackupPreview | null> {
  * the 4-second poll would fix it eventually, and "eventually" after a
  * destructive action reads as the action not having worked.
  */
-export async function clearAllStories(): Promise<number> {
+export async function clearAllStories(): Promise<{ cleared: number; cancelledChecks: number }> {
   const body = await request('/api/items/clear', { method: 'POST' });
-  const { cleared } = ClearItemsRespSchema.parse(body);
+  const { cleared, cancelledChecks } = ClearItemsRespSchema.parse(body);
   await refreshState();
-  return cleared;
+  return { cleared, cancelledChecks };
 }
 
 /** Load the preview into the store; a failure leaves the control hidden. */

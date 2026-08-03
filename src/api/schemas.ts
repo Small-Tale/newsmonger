@@ -309,8 +309,16 @@ export const RestoreRespSchema = z.object({
 });
 export type BackupPreview = z.infer<typeof BackupPreviewSchema>;
 
-/** How many stories `POST /api/items/clear` removed (NEWS-255). */
-export const ClearItemsRespSchema = z.object({ cleared: z.number().int() });
+/**
+ * What `POST /api/items/clear` did (NEWS-255, extended in NEWS-271).
+ *
+ * `cancelledChecks` is defaulted rather than required so an older client parsing
+ * a newer server — or the reverse — does not fail on a field it has no use for.
+ */
+export const ClearItemsRespSchema = z.object({
+  cleared: z.number().int(),
+  cancelledChecks: z.number().int().default(0),
+});
 
 export const ModelsRespSchema = z.object({
   models: z.array(z.string()).default([]),

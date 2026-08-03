@@ -374,10 +374,19 @@ export function registerApi(app: Hono<AppEnv>): void {
    * that looks like the clear half-failed.
    */
   app.post('/api/items/clear', (c) => {
-    if (c.get('runner').checking().length > 0) {
-      return c.json({ error: 'a check is running — wait for it to finish, then clear' }, 409);
-    }
-    return c.json({ cleared: c.get('store').clearAllItems() });
+    // Cancel first, then clear (NEWS-271). This used to answer 409 — "a check is
+    // running, wait for it to finish, then clear" — which asked the user to wait
+    // out a check that can take minutes in order to discard the very stories it
+    // was fetching. Clearing now *means* stop: in-flight checks are aborted, the
+    // topics queued behind them are dropped, and any queued reissue is dropped
+    // too, so nothing repopulates the feed a moment later.
+    //
+    // The order matters and is safe: `cancelAllChecks` aborts synchronously, and
+    // `clearAllItems` runs before the event loop can hand control back to a
+    // check's continuation — which then finds its signal aborted and throws its
+    // results away rather than writing them.
+    const cancelled = c.get('runner').cancelAllChecks();
+    return c.json({ cleared: c.get('store').clearAllItems(), cancelledChecks: cancelled });
   });
 
   app.post('/api/check', async (c) => {

@@ -3685,17 +3685,31 @@ function wireEvents(root: HTMLElement): void {
   void delegate(root, 'click', '[data-action=clear-stories]', () => {
     void (async () => {
       const total = appStore.state.value.feedTotal;
+      const running = appStore.state.value.checking.length;
       // Named, not "are you sure?" — and it says what *survives*, because the
       // fear this dialog has to answer is "am I about to lose my topics too".
+      //
+      // The running-check sentence appears only when one is running (NEWS-271).
+      // Clearing now stops them rather than refusing, and stopping a check the
+      // user is waiting on is a consequence they should hear about *before* they
+      // agree, not afterwards in a toast.
       const ok = await confirm(
         `Delete ${total > 0 ? String(total) : 'all'} stor${total === 1 ? 'y' : 'ies'} from every topic? ` +
+          (running > 0
+            ? `${running === 1 ? 'The check' : `All ${String(running)} checks`} running now will be stopped. `
+            : '') +
           `Your topics, settings and API keys are not touched. This cannot be undone.`,
         { confirmLabel: 'Clear stories', danger: true },
       );
       if (!ok) return;
       try {
-        const cleared = await clearAllStories();
-        showToast(`Cleared ${String(cleared)} stor${cleared === 1 ? 'y' : 'ies'}`);
+        const { cleared, cancelledChecks } = await clearAllStories();
+        showToast(
+          `Cleared ${String(cleared)} stor${cleared === 1 ? 'y' : 'ies'}` +
+            (cancelledChecks > 0
+              ? `, stopped ${String(cancelledChecks)} check${cancelledChecks === 1 ? '' : 's'}`
+              : ''),
+        );
       } catch (err) {
         showToast(`Clear failed: ${err instanceof Error ? err.message : String(err)}`);
       }
