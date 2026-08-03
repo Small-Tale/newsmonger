@@ -14,6 +14,14 @@ fields reject semver prerelease suffixes.
 
 <!-- Nothing released yet. The first `npm run release` inserts its entry below. -->
 
+## [0.2.0-beta.14] - 2026-08-03
+
+## Bug Fixes
+
+- Clearing all stories no longer refuses while a check is running — it stops the running checks (and any queued topics or pending re-check) and clears immediately. The confirmation says how many checks will stop, and the toast reports how many did.
+- Results from a check that was already in flight can no longer refill the feed right after a clear.
+- Fixed every check failing on a ChatGPT (Codex) subscription with an exit-code-2 usage error; web search is now enabled through a config override after the CLI removed the `--search` flag.
+
 ## [0.2.0-beta.13] - 2026-08-03
 
 ## Features
