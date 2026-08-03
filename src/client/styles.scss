@@ -42,6 +42,23 @@
 // title, and a second hand-written copy of this number would drift.
 $topic-line: 1.4;
 
+// The settings dialog's label column (NEWS-268).
+//
+// One measurement, three copies, three different answers: `.field-label` was
+// 132px with a 12px gap (controls starting at 144), `.key-provider` was 120px
+// with a 10px gap (inputs at 130), and `.source-status` hard-coded a 132px
+// indent that lined it up with the label's edge rather than with the control it
+// sits under. So Settings → Source showed its two field groups on different
+// vertical lines, 14px apart on both edges — nobody names that, everybody
+// registers it.
+//
+// Named so the next control that joins the dialog inherits the column instead of
+// guessing at it. `$field-control-x` is derived rather than restated, which is
+// the part that stops them drifting again.
+$field-label-w: 132px;
+$field-gap: 12px;
+$field-control-x: $field-label-w + $field-gap;
+
 * {
   box-sizing: border-box;
 }
@@ -736,13 +753,19 @@ h2.eyebrow {
 }
 
 .source-status {
-  // Sits under the provider picker in the settings dialog (NEWS-24).
-  margin-left: 132px;
   display: flex;
   align-items: center;
   flex-wrap: wrap;
   gap: 4px 10px;
-  margin: 8px 0 0;
+  // Folded into the shorthand, and that matters (NEWS-268). This used to be a
+  // separate `margin-left: 132px` **above** a `margin: 8px 0 0` shorthand, which
+  // reset it to zero — so the indent had never once applied, and the comment
+  // claiming this "sits under the provider picker" described an intent the next
+  // declaration quietly overrode. It sat flush against the dialog's edge instead.
+  //
+  // `$field-control-x` rather than the label width, because it aligns with the
+  // *control* it reports on, not with the label beside it.
+  margin: 8px 0 0 $field-control-x;
   font-family: var(--mono);
   font-size: 10.5px;
   color: var(--ink-soft);
@@ -1324,7 +1347,7 @@ h2.eyebrow {
   // text itself, and keeps doing so if either font or size ever changes — which
   // the hand-tuned padding it replaces did not.
   align-items: baseline;
-  gap: 12px;
+  gap: $field-gap;
   margin-top: 14px;
 
   select,
@@ -1370,7 +1393,7 @@ h2.eyebrow {
 }
 
 .field-label {
-  flex: 0 0 132px;
+  flex: 0 0 $field-label-w;
   font-size: 13px;
   line-height: 1.35;
   color: var(--ink-soft);
@@ -1401,7 +1424,9 @@ h2.eyebrow {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
-  gap: 10px;
+  // The dialog's own column, so the key fields line up with the pickers above
+  // them rather than sitting 14px to their left (NEWS-268).
+  gap: $field-gap;
   padding: 10px 0;
 
   & + .key-row {
@@ -1410,7 +1435,7 @@ h2.eyebrow {
 }
 
 .key-provider {
-  flex: 0 0 120px;
+  flex: 0 0 $field-label-w;
   font-size: 13px;
   color: var(--ink-soft);
 }

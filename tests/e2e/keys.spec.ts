@@ -226,3 +226,36 @@ test('the topics list survives opening and closing the dialog', async ({ page })
   await topicAction(page, page.locator('.topic', { hasText: 'Dialog Structural Check' }), 'delete');
   await expect(page.locator('.topic')).toHaveCount(before - 1);
 });
+
+// Settings → Source shares one control column (NEWS-268).
+//
+// Three elements, three copies of the same measurement, three different answers:
+// `.field-label` was 132px with a 12px gap (controls at 144), `.key-provider` was
+// 120px with a 10px gap (inputs at 130), and `.source-status` declared a 132px
+// `margin-left` *above* a `margin` shorthand that reset it to zero — so its indent
+// had never applied at all and it sat flush with the dialog's edge.
+//
+// Measured rather than asserted against the SCSS variables: the point is where
+// these land on screen, and a shorthand quietly overriding an earlier longhand is
+// exactly the kind of thing that reads correct in the stylesheet and is wrong in
+// the browser.
+test('the source fields, key fields and status line share one column (NEWS-268)', async ({ page }) => {
+  await page.goto('/');
+  await openSettingsTab(page, 'Source');
+
+  const lefts = await page.evaluate(() => {
+    const left = (sel: string): number => {
+      const el = document.querySelector(sel);
+      if (el === null) throw new Error(`${sel} not rendered`);
+      return Math.round(el.getBoundingClientRect().left);
+    };
+    return {
+      picker: left('.field select'),
+      key: left('.key-input'),
+      status: left('.source-status'),
+    };
+  });
+
+  expect(lefts.key, 'the key fields line up with the pickers').toBe(lefts.picker);
+  expect(lefts.status, 'the status line sits under the control it reports on').toBe(lefts.picker);
+});

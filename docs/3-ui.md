@@ -80,6 +80,16 @@ The rail is also bounded to the viewport (`max-height: calc(100vh - 48px)`, a fl
 
 The page footer remains, but is **only filled when the sidebar is collapsed** (`display: none` hides the rail entirely in that state). One entry point on screen at a time, never zero; `.app-footer:not(:empty)` carries the rule and padding so an empty footer leaves no stray line across the page.
 
+### The settings dialog has one control column (NEWS-268)
+
+`$field-label-w` (132px) and `$field-gap` (12px) in `styles.scss`, with `$field-control-x` **derived** from them — that last part is what stops them drifting again.
+
+They were three separate copies of one measurement with three different answers: `.field-label` at 132px with a 12px gap put controls at 144; `.key-provider` at 120px with a 10px gap put the API key inputs at 130; and `.source-status` declared `margin-left: 132px` **above** a `margin: 8px 0 0` shorthand that reset it to zero, so its indent had never once applied and it sat flush with the dialog's edge. The comment above it claimed it "sits under the provider picker", describing an intent the next declaration silently overrode.
+
+The visible symptom was small — Settings → Source showed its two field groups 14px apart on both edges, the kind of misalignment nobody names and everybody registers — and the third element was only found by fixing the first two and measuring again.
+
+**The guard measures the browser, not the stylesheet.** `keys.spec.ts` asserts the three left edges are equal. Asserting against the SCSS variables would have passed the whole time this was broken, since the values were right and a shorthand was eating one of them.
+
 ### A mode's exit must look pressable (NEWS-266)
 
 `.btn.subtle` is `background: none; border-color: transparent; color: var(--ink-soft)` — at rest it is indistinguishable from the prose beside it, and only grows a border on hover. That is a reasonable treatment for a tertiary action and the wrong one for **the only way out of a mode**, which is what it was being used for in all four places the app has one: the saved-filter banner, the solo banner, the review banner, and the tuner's *Done*.
