@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import type { TopicSuggestion } from '../../src/api/schemas.js';
 import { MAX_TUNE_ROUNDS } from '../../src/api/schemas.js';
-import type { TunerState } from '../../src/client/discover.js';
+import type { SuggestionGroup, TunerState } from '../../src/client/discover.js';
 import {
   currentCandidate,
   groupSuggestions,
@@ -12,6 +12,7 @@ import {
   nextRound,
   providerLikelyUsable,
   resultsHeading,
+  resultsQualifier,
   sectionFor,
   sectionTiles,
   startTuner,
@@ -246,6 +247,66 @@ describe('tunerRationale (FR-24.8)', () => {
   it('falls back to the anchor in round one, when nothing is kept yet', () => {
     expect(tunerRationale(startTuner('Formula 1', 'narrower'))).toContain('narrower than');
     expect(tunerRationale(startTuner('Formula 1', 'similar'))).toContain('similar to');
+  });
+
+  // NEWS-269. A set-level tune anchors on the *heading*, and a heading can be the
+  // same string as a topic in the list — which shipped a card titled
+  // "Semiconductor supply chain" explaining itself as `narrower than
+  // “Semiconductor supply chain”`.
+  it('says nothing rather than something circular about the candidate', () => {
+    const tuner = loaded(['Formula 1']); // anchor is 'Formula 1' too
+    expect(tunerRationale(tuner)).toBe('');
+  });
+
+  it('ignores surrounding whitespace when deciding that', () => {
+    expect(tunerRationale(loaded(['  Formula 1  ']))).toBe('');
+  });
+
+  it('still cites the anchor for a genuinely different candidate', () => {
+    expect(tunerRationale(loaded(['Formula 1 tyre rules']))).toContain('narrower than');
+  });
+
+  it('a kept citation wins even when the candidate matches the anchor', () => {
+    // The kept list is the better explanation whenever there is one, and it is
+    // never circular — so the suppression must not swallow it.
+    const tuner = loaded(['Formula 1'], { kept: [candidate('AI policy')] });
+    expect(tunerRationale(tuner)).toBe('because you kept: AI policy');
+  });
+});
+
+describe('resultsQualifier (NEWS-269)', () => {
+  const group = (key: string): SuggestionGroup => ({ key, label: key, suggestions: [candidate('x')] });
+
+  it('flags a section drill-in whose results file themselves elsewhere', () => {
+    // The observed bug: a "Business · Markets" heading over a lone result grouped
+    // under "Business · Other". Both labels are true; presented as peers they
+    // read as the filter having failed.
+    const source = { kind: 'section' as const, category: 'business', subcategory: 'markets' };
+    expect(resultsQualifier(source, [group('business/other')])).toBe('closest matches');
+  });
+
+  it('says nothing when every group matches the section asked for', () => {
+    const source = { kind: 'section' as const, category: 'business', subcategory: 'markets' };
+    expect(resultsQualifier(source, [group('business/markets')])).toBe('');
+  });
+
+  it('flags a partial match, since one stray group is the confusing case', () => {
+    const source = { kind: 'section' as const, category: 'business', subcategory: 'markets' };
+    expect(resultsQualifier(source, [group('business/markets'), group('business/other')])).toBe('closest matches');
+  });
+
+  it('handles a whole-section drill-in, where no subcategory was asked for', () => {
+    const source = { kind: 'section' as const, category: 'business', subcategory: null };
+    expect(resultsQualifier(source, [group('business/')])).toBe('');
+    expect(resultsQualifier(source, [group('business/markets')])).toBe('closest matches');
+  });
+
+  it('says nothing for free text or an empty result', () => {
+    // A query has no section to disagree with, and an empty list has nothing to
+    // qualify — a note there would be noise on an already-empty pane.
+    expect(resultsQualifier({ kind: 'describe', query: 'cycling' }, [group('sports/')])).toBe('');
+    expect(resultsQualifier({ kind: 'section', category: 'business', subcategory: 'markets' }, [])).toBe('');
+    expect(resultsQualifier(null, [group('business/other')])).toBe('');
   });
 });
 

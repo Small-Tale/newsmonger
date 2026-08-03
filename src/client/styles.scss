@@ -2838,6 +2838,24 @@ button.off-topic-pill {
   gap: 14px;
 }
 
+// "closest matches" beside the heading (NEWS-269). Mono and soft: it is a note
+// about the results rather than part of the heading, and the mono "clockwork"
+// face is what this app already uses for machine-supplied asides. Its own block
+// rather than a selector added to `.results-depth` — NEWS-161.
+.results-qualifier {
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  color: var(--ink-soft);
+
+  // No padding when empty, so the always-present span costs nothing on an exact
+  // match. `:empty` rather than a conditional render, because the span has to
+  // exist before its content for the keyed list below to stay stable.
+  &:not(:empty) {
+    margin-left: 2px;
+  }
+}
+
 /* --- The door to discovery in onboarding's Topics step (NEWS-128, NEWS-146) -
    Was a second, smaller search box with its own results; it now opens the real
    discovery dialog, so all that is left is the button and its explanation. */

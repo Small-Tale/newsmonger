@@ -60,6 +60,14 @@ That last part is the decision worth stating plainly, because it is what the bra
 
 - **FR-24.12** A suggestion carries a **guidance steer** (FR-18), not just a name — "Formula 1: race results and team news, not driver gossip". Adding the topic stores it, so the *first* check is already narrowed. This costs nothing extra: the model is writing the justification prose anyway.
 
+- **FR-24.12a** *(Shipped, NEWS-269)* **The heading and the group labels must not contradict each other.** A section drill-in whose results classify themselves elsewhere shows a **"closest matches"** note beside the heading.
+
+  Drilling into "Business · Markets" and getting a lone result grouped under "Business · Other" puts two labels eight pixels apart that disagree, and the honest reading is that the filter failed. Both are true — the heading is the *request*, the group label is where the topic will actually file itself in the filter bar (FR-24.13) — so the fix **explains** the gap rather than hiding it. Suppressing the group label would have been easier and would have discarded the more useful of the two facts.
+
+  `resultsQualifier` is silent for a free-text query (no section to disagree with), for an empty result, and when every group matches — a hedge on an exact match is noise. The E2E asserts the *invariant* rather than a fixed string: if any group differs from the section asked for, the note must be present; if none do, it must be absent.
+
+  Related: the tuner's own rationale line no longer says `narrower than “X”` when X **is** the candidate. A set-level tune anchors on the heading, and a heading can be the same string as a topic in the list, which shipped a card explaining itself as narrower than itself. Saying nothing beats saying something circular; the reason line above it still carries the substance.
+
 - **FR-24.13** Suggestions arrive **pre-classified** into the taxonomy, so a topic added from discovery lands in the right filter-bar section without a second classification call. The returned slug is untrusted and validated exactly as FR-22.8 requires — an unresolvable slug degrades to unclassified rather than being written.
 
 ### Cost, which is the sharpest constraint here

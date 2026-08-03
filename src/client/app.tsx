@@ -79,6 +79,7 @@ import {
   nextRound,
   providerLikelyUsable,
   resultsHeading,
+  resultsQualifier,
   sectionFor,
   sectionTiles,
   startTuner,
@@ -1099,6 +1100,13 @@ function discoverResultsJsx(d: DiscoverState): SafeHtml {
           ‹ Back
         </button>
         <h3>{d.source === null ? 'Suggestions' : resultsHeading(d.source)}</h3>
+        {/* "closest matches" when the answers don't match the question
+            (NEWS-269) — a section drill-in whose results file themselves
+            somewhere else. Without it the heading and the group label below
+            contradict each other and the honest reading is "the filter broke".
+            Always-present span so its arrival can't disturb the keyed group list
+            below it (kerf). */}
+        <span class="results-qualifier">{resultsQualifier(d.source, groups)}</span>
         {d.suggestions.length === 0 || d.source === null ? (
           ''
         ) : (

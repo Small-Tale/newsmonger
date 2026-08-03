@@ -198,7 +198,41 @@ export function nextRound(tuner: TunerState, queue: TopicSuggestion[]): TunerSta
 export function tunerRationale(tuner: TunerState): string {
   const recent = tuner.kept.slice(-3).map((s) => s.name);
   if (recent.length > 0) return `because you kept: ${recent.join(', ')}`;
+  // Never "narrower than" the candidate's own name (NEWS-269). A set-level tune
+  // anchors on the *heading*, and a heading can be the same string as a topic in
+  // the list — which produced a card titled "Semiconductor supply chain"
+  // explaining itself as `narrower than “Semiconductor supply chain”`. Saying
+  // nothing is better than saying something circular; the reason line above it
+  // still carries the substance.
+  const candidate = currentCandidate(tuner);
+  if (candidate !== undefined && candidate.name.trim() === tuner.anchor.trim()) return '';
   return tuner.direction === 'narrower' ? `narrower than “${tuner.anchor}”` : `similar to “${tuner.anchor}”`;
+}
+
+/**
+ * A qualifier for the results heading when the answers don't match the question
+ * (NEWS-269).
+ *
+ * Drilling into "Business · Markets" and getting a topic classified
+ * "Business · Other" puts two labels eight pixels apart that contradict each
+ * other, and the natural reading is that the filter failed. Both are true:
+ * the heading is the *request*, the group label is where the topic will actually
+ * file itself in the filter bar (FR-24.13), which is information worth keeping.
+ *
+ * So this explains the gap rather than hiding it. Suppressing the group label
+ * would have been easier and would have thrown away the more useful of the two
+ * facts.
+ *
+ * Empty when the request was free text (there is no section to disagree with) or
+ * when every group matches — a qualifier on an exact match would be noise.
+ */
+export function resultsQualifier(
+  source: { kind: 'describe'; query: string } | { kind: 'section'; category: string; subcategory: string | null } | null,
+  groups: SuggestionGroup[],
+): string {
+  if (source === null || source.kind !== 'section' || groups.length === 0) return '';
+  const wanted = `${source.category}/${source.subcategory ?? ''}`;
+  return groups.every((g) => g.key === wanted) ? '' : 'closest matches';
 }
 
 /**

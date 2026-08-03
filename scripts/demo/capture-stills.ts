@@ -200,6 +200,13 @@ async function menuAction(page: Page, rowSelector: string, action: string): Prom
  * should still pick the section the held-back topic actually files itself
  * under, or the screenshot shows a "World · Africa" heading above a result
  * grouped under Business, which reads as a bug.
+ *
+ * **That workaround only ever matched the category, not the subcategory**, which
+ * is why the shipped screenshot still showed "Business · Markets" over a group
+ * labelled "BUSINESS · OTHER" — `subcategories[0]` is a guess at the chip. The UI
+ * now explains that gap itself with a "closest matches" note (NEWS-269, FR-24.5),
+ * so the mismatch is no longer misread as a broken filter and this alignment is a
+ * nicety rather than a requirement.
  */
 const DISCOVER_CATEGORY =
   BUILTIN_CATEGORIES.find((c) => c.label === DEMO_TOPICS.at(-1)?.category) ?? BUILTIN_CATEGORIES[0];

@@ -255,6 +255,33 @@ test('the two depth scopes do not read as the same control (NEWS-265)', async ({
   expect(gap, 'the set-level controls belong next to their heading').toBeLessThan(60);
 });
 
+test('the heading never contradicts the group labels beneath it (NEWS-269)', async ({ page }) => {
+  // The observed bug was a "Business · Markets" heading over a lone result
+  // grouped under "Business · Other" — both true, presented as peers, and the
+  // honest reading is that the filter failed.
+  //
+  // Asserted as an invariant rather than against a fixed string, because what the
+  // mock classifies things as is not this test's business: *if* any group differs
+  // from the section asked for, the qualifier must be there to explain it; if
+  // none do, it must stay silent rather than hedge an exact match.
+  await openMotorsportResults(page);
+
+  const heading = (await page.locator('.discover-results-head h3').innerText()).trim();
+  const labels = await page.locator('.suggestion-group-label').allInnerTexts();
+  const qualifier = (await page.locator('.results-qualifier').innerText()).trim();
+
+  expect(labels.length, 'need at least one group to compare against').toBeGreaterThan(0);
+  const allMatch = labels.every((l) => l.trim().toLowerCase() === heading.toLowerCase());
+
+  if (allMatch) {
+    expect(qualifier, 'an exact match must not be hedged').toBe('');
+  } else {
+    expect(qualifier, `heading “${heading}” vs groups ${JSON.stringify(labels)} needs explaining`).toBe(
+      'closest matches',
+    );
+  }
+});
+
 test('entering the tuner shows one candidate, the round count and a way out', async ({ page }) => {
   await openMotorsportResults(page);
   await page.locator('.suggestion .link-btn', { hasText: 'narrower' }).first().click();
