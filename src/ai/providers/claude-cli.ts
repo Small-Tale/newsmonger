@@ -14,6 +14,7 @@ import type {
 } from '../types.js';
 import { DISCOVERY_MODELS, PROVIDER_EFFORT_LEVELS } from '../types.js';
 import { agentCwd } from './agent-cwd.js';
+import { cliErrorDetail } from './cli-error.js';
 import { resolveCliBinary } from './cli-path.js';
 
 /**
@@ -158,7 +159,7 @@ function spawnRunner(name: string): ClaudeCliRunner {
       if (code !== 0) {
         // stderr is noisy on success for some installs, so it's only surfaced
         // when the exit code already says something went wrong.
-        const detail = stderr.trim().split('\n').slice(-3).join(' ').slice(0, 300);
+        const detail = cliErrorDetail(stderr);
         throw new Error(`Claude CLI exited with code ${String(code)}${detail !== '' ? `: ${detail}` : ''}`);
       }
       return parseCliEnvelope(stdout);

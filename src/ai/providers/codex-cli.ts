@@ -17,6 +17,7 @@ import type {
 } from '../types.js';
 import { DISCOVERY_MODELS, toEffortLevels } from '../types.js';
 import { agentCwd } from './agent-cwd.js';
+import { cliErrorDetail } from './cli-error.js';
 import { resolveCliBinary } from './cli-path.js';
 import { readCodexEfforts, readCodexModels } from './codex-models.js';
 
@@ -122,7 +123,7 @@ function spawnRunner(name: string): CodexCliRunner {
         if (code !== 0) {
           // stderr carries a benign PATH-alias warning on some installs, so it
           // is only surfaced once the exit code already indicates failure.
-          const detail = stderr.trim().split('\n').slice(-3).join(' ').slice(0, 300);
+          const detail = cliErrorDetail(stderr);
           throw new Error(`Codex CLI exited with code ${String(code)}${detail !== '' ? `: ${detail}` : ''}`);
         }
         const text = fs.readFileSync(outFile, 'utf-8').trim();

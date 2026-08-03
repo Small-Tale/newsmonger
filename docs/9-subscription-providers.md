@@ -82,6 +82,14 @@ Claude Code reports `total_cost_usd` (a measured run: $1.35 across 21 turns). Fo
 
   **Why only Codex saw it.** `claude-cli` passes the same schema through `--json-schema` and Claude tolerates the looser form, so the defect sat there harmlessly; the `anthropic` and `openai` API providers don't use structured outputs at all. Both CLI paths were re-verified end to end after the change — a real check on each returned real stories with outlets.
 
+- **FR-9.12c** *(Shipped, NEWS-274)* **A failed CLI's error is surfaced by finding the message, not by slicing the tail.** `cliErrorDetail` in `src/ai/providers/cli-error.ts`, shared by both CLI providers.
+
+  Both used to build the user-visible detail as `stderr.trim().split('\n').slice(-3).join(' ').slice(0, 300)`. The last three lines of a pretty-printed JSON error are its **closing braces**, so the 400 in FR-9.12b — whose payload named the exact schema path and what was wrong with it — reached the user as `Codex CLI exited with code 1: }, "status": 400 }`. The informative line sat four lines above the window, and diagnosing it meant re-running the CLI by hand and reading the whole stream, which a user cannot do.
+
+  It now pulls the last `"message"` value out of the stream and prefixes it with the `"code"` — code first because that is the searchable half, prose second because it explains. Failing that, it takes the tail with blank and brace-only lines removed, so a plain-text failure (a usage dump, a missing binary) still says something and a JSON blob with no `message` cannot degrade to braces again. The cap rose from 300 to 600 characters, because 300 truncated exactly the messages worth reading.
+
+  `tests/unit/cli-error.test.ts` runs against **real captured stderr** from both Codex failures, and one case keeps the old expression alongside the new one — running it on the same payload is a clearer statement of the problem than any comment.
+
 - **FR-9.13** *(Shipped)* **`-s read-only`.** Codex is a coding agent that can execute shell commands; a news lookup must not write anything. This is the equivalent of `claude-cli`'s `--allowed-tools WebSearch` — narrow the agent to the job.
 
 - **FR-9.14** *(Shipped)* Two differences from the Claude CLI drive the implementation:
