@@ -153,6 +153,23 @@ The Settings model field is a **combobox** (NEWS-37): an editable text input bac
 
   This is what dissolves NEWS-19's blocker: that ticket is parked waiting on budget for a formal multi-sample effort comparison, and with the level recorded per run, every ordinary check becomes a data point instead.
 
+- **FR-6.16** *(Shipped, NEWS-227)* **An effort comparison** in Settings → App → Diagnostics: median duration and median tokens per level, fastest first. `effortComparison` in `src/client/effort-stats.ts`.
+
+  Held back twice on purpose — a comparison over a handful of runs is noise presented as evidence — and built once the data arrived: a live database showed **24 succeeded runs at the model default (median 61.5s) against 23 at `low` (76.5s)**, which is a comparison worth reading. It is the answer NEWS-19 was parked waiting for.
+
+  Four rules, each of which would otherwise make the table lie:
+
+  - **Median, not mean.** The same real data gives means of 75s and 87s against medians of 61.5s and 76.5s — check durations have a long tail (a stall, a retry, a topic that searched twelve sources) and one outlier is enough to invert a ranking.
+  - **`effort === null` runs are dropped**, not folded into `''`. Null is "not recorded"; in that same database 124 of 237 runs are null, so folding them would drown the comparison in pre-NEWS-226 history.
+  - **Only succeeded runs count.** A check that failed after four seconds is not evidence that a level is fast, and a level that fails often would otherwise look like the quickest.
+  - **Tokens read "not reported" rather than 0** when no run at a level reported any. Both subscription CLIs return `usage: null` because they genuinely cannot report counts, so on a subscription-only install *every* run lands there — and a confident `0 tokens` beside a real duration would be a measurement the app never made. This is the same null-is-not-zero rule `CheckRunSchema` already states, applied to a reader-facing figure.
+
+  **Silent below two levels**, with a note naming the control to change and where it lives. One level is a number with no second number to read it against, and rendering one bar is exactly the "looks broken on first open" outcome the ticket was held back to avoid.
+
+  **Tokens only, no money** — consistent with NEWS-119, which removed the spend estimate, the budget cap and the price table. Reintroducing a currency figure here would partly reverse that decision, so the counts are shown and the reader can price them.
+
+  Only the empty state is reachable in E2E: the mock provider hardcodes `effort: ''`, so every run under `--ai-test` lands on one level. The populated table rests on twelve unit tests plus the real-database check above; seeding demo runs at two levels is filed as a follow-up.
+
 See also: [2 — News Checks and Deduplication](2-news-checks-and-dedup.md), [4 — CLI, Server, and Storage](4-cli-server-storage.md).
 
 Key storage and the Settings dialog are covered in [7 — API Keys and Settings Dialog](7-api-keys.md). Providers still report token usage on each check and it is stored on the `CheckRun`, but nothing reads it: the spend estimate, the budget cap and the price table were removed in NEWS-119. The counts are kept as telemetry rather than deleted, since dropping the column would be a migration for no visible gain.

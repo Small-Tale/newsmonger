@@ -93,6 +93,7 @@ import {
   recordDuration,
 } from './discover-progress.js';
 import { correctedEffort, effortAvailable, effortOptions } from './effort-options.js';
+import { effortComparison, hasEffortComparison } from './effort-stats.js';
 import { exportHref } from './export-url.js';
 import { currentFailure } from './failure.js';
 import { icon } from './icons.js';
@@ -1616,6 +1617,73 @@ function onboardingSourceJsx(s: AppState): SafeHtml {
  * something breaks for someone who isn't the author, this is the difference
  * between "it stopped working" and a report anyone can act on.
  */
+/**
+ * What each effort level costs, measured (NEWS-227).
+ *
+ * The question NEWS-19 parked: is a higher level buying anything? Beside the run
+ * list because that is where the evidence lives, and inside the collapsed
+ * Diagnostics section for the same reason the run list is — a thing you go
+ * looking for, not something a settings screen should lead with.
+ *
+ * **Not a nested `<details>`.** The first version was, which put the table behind
+ * two disclosures and made `details.advanced summary` ambiguous for a test that
+ * had reasonably assumed one match. One click to reach Diagnostics is enough.
+ *
+ * **Silent below two levels.** One level is a number with no second number to be
+ * read against, and NEWS-227 was held back for months precisely to avoid
+ * shipping a view that renders one bar and looks broken. The note says what to do
+ * about it rather than leaving an empty box.
+ */
+function effortComparisonJsx(s: AppState): SafeHtml {
+  const stats = effortComparison(s.runs);
+  if (!hasEffortComparison(stats)) {
+    return (
+      <div class="effort-compare">
+        <h4 class="eyebrow">Effort comparison</h4>
+        <p class="note">
+          Nothing to compare yet — this needs completed checks at two or more effort levels. Change{' '}
+          <strong>Effort</strong> in Settings → Source, let some checks run, and come back.
+        </p>
+      </div>
+    );
+  }
+  // Fastest first, so the comparison reads as a ranking rather than as a list in
+  // whatever order the levels happened to be used.
+  const fastest = stats[0];
+  return (
+    <div class="effort-compare">
+      <h4 class="eyebrow">Effort comparison</h4>
+      <ul class="effort-rows">
+        {stats.map((stat) => (
+          <li class="effort-row" data-key={stat.effort}>
+            <span class="effort-level">{stat.label}</span>
+            <span class="effort-median">{formatDuration(stat.medianMs)}</span>
+            {/* Just the count: the note below already says these are medians, and
+                "median of 3 checks" wrapped to two lines in a 460px dialog. */}
+            <span class="effort-runs">
+              {String(stat.runs)} check{stat.runs === 1 ? '' : 's'}
+            </span>
+            <span class="effort-tokens">
+              {stat.medianInputTokens === null
+                ? // Never "0 tokens" (NEWS-227). Both subscription CLIs report no
+                  // counts at all, so on those installs every run lands here — and a
+                  // zero would be a measurement the app never made, sitting beside a
+                  // duration it did.
+                  'tokens not reported'
+                : `${String(stat.medianInputTokens)} in / ${String(stat.medianOutputTokens)} out`}
+            </span>
+          </li>
+        ))}
+      </ul>
+      <p class="note">
+        Median rather than mean, because one stalled check would otherwise move the figure far enough to invert the
+        comparison. Fastest here is {fastest.label}. Runs recorded before effort was tracked are left out — they are
+        not a level.
+      </p>
+    </div>
+  );
+}
+
 function diagnosticsJsx(s: AppState): SafeHtml {
   const rows = runRows(s);
   return (
@@ -1641,6 +1709,7 @@ function diagnosticsJsx(s: AppState): SafeHtml {
           ))}
         </ul>
       )}
+      {effortComparisonJsx(s)}
       <label class="field checkbox-field">
         <input type="checkbox" data-action="diag-topics" checked={s.diagIncludeTopics ? true : undefined} />
         <span>Include topic names when copying</span>

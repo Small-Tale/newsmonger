@@ -67,6 +67,7 @@ src/
     search.ts         itemMatchesQuery/filterItemsByQuery — live feed search filter (NEWS-60)
     attribution.ts    outletFor/publishedLabel — source outlet + publication date display (NEWS-82)
     diagnostics.ts    runRows/formatDuration/buildDiagnostics — redacted bug-report bundle (NEWS-88) + the discovery call log (NEWS-130)
+    effort-stats.ts   effortComparison/hasEffortComparison/effortLabel — median duration + tokens per effort level for the Diagnostics comparison (NEWS-227)
     discover-progress.ts estimateTargetMs/recordDuration — the discovery progress-bar estimate, median of the last 10 durations in localStorage (NEWS-137)
     discover.ts       groupSuggestions/resultsHeading/sectionTiles (NEWS-126) + the pure tuner state machine: startTuner/judgeCandidate/nextRound/mergeKept (NEWS-127)
     solo.ts           toggleSolo/isAllSoloed — solo-set arithmetic shared by the context menu and the double-click gesture (NEWS-95)
