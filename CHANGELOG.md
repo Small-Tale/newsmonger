@@ -14,6 +14,38 @@ fields reject semver prerelease suffixes.
 
 <!-- Nothing released yet. The first `npm run release` inserts its entry below. -->
 
+## [0.2.0-beta.13] - 2026-08-03
+
+## Features
+
+- Settings → Data now offers **Clear all stories**, deleting every story while keeping topics, settings and API keys; the confirmation names what survives, and each topic's coverage window resets so the next check starts fresh.
+- Changing provider, model or effort **cancels any check already in flight** — a real abort that reaches both SDKs and kills CLI agent child processes — and reissues the manual ones under the new selections. Interval and retention edits leave running checks alone.
+- The model setting is now a dropdown that only offers models the current provider actually has, filling in a small default when nothing is chosen and replacing a model left over from a provider you switched away from.
+- The Effort control lists only the levels the chosen model accepts, and switches off entirely for models that accept none (such as `claude-haiku-4-5`). A saved level the new model refuses is moved to the nearest supported one instead of silently failing the next check.
+- A **Send a test notification** action in Settings lets you confirm notifications actually reach the OS, reporting the result inline.
+
+## Bug Fixes
+
+- Desktop notifications now work in the packaged app at all. The client was gated on a `window.__TAURI__.notification` global no build defines, so the desktop never delivered one; both surfaces now go through the single `Notification` API the shell shims.
+- Topic suggestions are no longer served from another provider's answers: the discovery cache is keyed on provider, model and effort, and suggestions on screen are dropped when a provider change invalidates them.
+- Article-image URL safety now rejects a host if **any** resolved address falls in a blocked range, not just the first, and treats an empty DNS answer as a rejection.
+- The discovery results heading no longer contradicts the group label beneath it — a qualifier explains where a suggestion will actually file itself — and a card no longer describes itself as "narrower than" its own name.
+
+## UX
+
+- Below the one-column collapse, search is an icon-only circle that expands on focus instead of a 62px stub that showed about four characters of your query.
+- The two discovery depth controls are now tellable apart: the whole-result-set pair reads **narrow these** / **more like these**, distinct from a card's **narrower** / **similar**.
+- Ways out of a mode (review, saved filter, and friends) render with a visible edge so the only exit no longer reads as plain text.
+- Settings → Source aligns its labels, controls, API-key fields and status line on one column; the status line, which had never been indented at all, now sits under the control it describes.
+
+## Accessibility
+
+- API key rows use a real `<label for>`, so the Anthropic and OpenAI fields announce as "Anthropic API key" and "OpenAI API key" instead of both reading as "Paste API key", and clicking a provider name focuses its field.
+
+## Documentation
+
+- The README hero animation gains a dark-mode beat revealed by a wipe, and the feature stills were recaptured.
+
 ## [0.2.0-beta.12] - 2026-08-02
 
 ## Features
