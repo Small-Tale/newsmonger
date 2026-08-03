@@ -55,13 +55,20 @@ export const SUGGEST_JSON_SCHEMA = {
           reason: { type: 'string' },
           kind: { type: 'string', enum: ['ongoing', 'evergreen'] },
           guidance: { type: ['string', 'null'] },
-          // Always allowed, only sometimes requested — `additionalProperties:
-          // false` means a structured-output provider would *reject* a
-          // classification that wasn't declared here.
+          // Always allowed *and* always required — `additionalProperties: false`
+          // means a structured-output provider would reject a classification that
+          // wasn't declared here, and strict mode additionally rejects a declared
+          // property missing from `required` (NEWS-272). All three are nullable,
+          // so "required" means "emit the key, as null when there is nothing to
+          // say".
           category: { type: ['string', 'null'] },
           subcategory: { type: ['string', 'null'] },
         },
-        required: ['name', 'reason', 'kind'],
+        // Every declared key. This schema had the same defect that broke every
+        // Codex *check* (NEWS-272) and would have broken every Codex
+        // *discovery* call the same way — found by the recursive invariant in
+        // `tests/unit/news-schema.test.ts`, not by a second live 400.
+        required: ['name', 'reason', 'kind', 'guidance', 'category', 'subcategory'],
       },
     },
   },

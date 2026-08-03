@@ -203,13 +203,30 @@ describe('the prompt and its parsing', () => {
     expect(asking).toContain('null rather than forcing one');
   });
 
-  it('declares the fields in the structured-output schema', () => {
+  it('declares the fields in the structured-output schema, and requires them', () => {
     // `additionalProperties: false` means a provider using this schema would
-    // *reject* a classification that wasn't declared — while `required` must
-    // stay items-only, since most checks don't ask.
+    // *reject* a classification that wasn't declared.
     expect(NEWS_JSON_SCHEMA.properties).toHaveProperty('category');
     expect(NEWS_JSON_SCHEMA.properties).toHaveProperty('subcategory');
-    expect(NEWS_JSON_SCHEMA.required).toEqual(['items']);
+
+    // This asserted `['items']` until NEWS-272, on the reasoning that most checks
+    // don't ask for a classification — so it had pinned the defect as the rule.
+    // OpenAI's strict structured outputs reject a schema whose `required` omits a
+    // declared property, and every Codex check died on exactly that. Optionality
+    // is expressed by the nullable type instead, so a check that doesn't ask gets
+    // `null` back rather than an absent key — which `parseNewsResult` has always
+    // treated identically (see the test below, which passes either way).
+    expect(NEWS_JSON_SCHEMA.required).toEqual(['items', 'category', 'subcategory']);
+  });
+
+  it('reads an unasked-for classification as absent whether it is null or missing', () => {
+    // The behaviour that makes requiring the keys safe. Both forms must land on
+    // `classification: null` rather than one of them inventing a category.
+    const items = [{ title: 'T', summary: 'S', sources: [{ title: 's', url: 'https://a.test/x' }] }];
+    const asNull = parseNewsResult(JSON.stringify({ items, category: null, subcategory: null }));
+    const asMissing = parseNewsResult(JSON.stringify({ items }));
+    expect(asNull.classification).toBeNull();
+    expect(asMissing.classification).toBeNull();
   });
 
   it('parses a classification alongside the items', () => {

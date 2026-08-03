@@ -63,20 +63,34 @@ export const NEWS_JSON_SCHEMA = {
                 outlet: { type: ['string', 'null'] },
                 publishedAt: { type: ['string', 'null'] },
               },
-              required: ['title', 'url'],
+              // **Every** key, not just the mandatory ones (NEWS-272). OpenAI's
+              // strict structured outputs reject a schema whose `required` omits
+              // any declared property:
+              //
+              //   invalid_json_schema: 'required' is required to be supplied and
+              //   to be an array including every key in properties.
+              //   Missing 'outlet'.
+              //
+              // Optionality is expressed by the type being nullable, which these
+              // already are — so listing them costs nothing and the prompt already
+              // tells the model to use null when it cannot tell.
+              required: ['title', 'url', 'outlet', 'publishedAt'],
             },
           },
         },
         required: ['title', 'summary', 'sources'],
       },
     },
-    // Declared but not required (NEWS-97). `additionalProperties: false` means a
-    // structured-output provider would *reject* a classification that wasn't
-    // named here — so the fields are always allowed and only ever requested.
+    // Declared (NEWS-97) *and* required (NEWS-272). `additionalProperties: false`
+    // means a structured-output provider would reject a classification that
+    // wasn't named here; strict mode additionally rejects a declared property
+    // missing from `required`. Both are nullable, so "required" here means "emit
+    // the key, as null when there is nothing to say" — which is why the prompt
+    // asks for null rather than for the keys to be omitted.
     category: { type: ['string', 'null'] },
     subcategory: { type: ['string', 'null'] },
   },
-  required: ['items'],
+  required: ['items', 'category', 'subcategory'],
 } as const;
 
 /** System prompt for a web-searching provider (finds genuinely new news). */
@@ -103,8 +117,12 @@ export function searchingSystemPrompt(): string {
     'Respond with a JSON object of exactly this shape (and, if your output is free text, put it in a fenced ```json block):',
     '{"items": [{"title": "...", "summary": "...", "sources": [{"title": "...", "url": "https://...", "outlet": "...", "publishedAt": "YYYY-MM-DD"}]}]}',
     '',
-    'If — and only if — the user message asks you to classify the topic, add top-level "category" and',
-    '"subcategory" fields to that same object. Otherwise omit them entirely.',
+    // "Always include, null when not asked" rather than "omit unless asked"
+    // (NEWS-272). A strict structured-output provider requires every declared
+    // property to be present, so telling the model to omit these put the prompt
+    // and the schema in direct conflict.
+    'Always include top-level "category" and "subcategory" fields on that same object. Fill them in',
+    'only if the user message asks you to classify the topic; otherwise set both to null.',
   ].join('\n');
 }
 

@@ -66,7 +66,7 @@ Three placements were reviewed specifically:
 
   The topic is **re-read after the check returns** rather than trusting the copy taken before it. A check takes minutes, and a user may categorise by hand in the meantime — `categorySource: 'manual'` has to win.
 
-  `category`/`subcategory` are declared in `NEWS_JSON_SCHEMA` but not required: `additionalProperties: false` means a structured-output provider would otherwise *reject* a classification, while most checks don't ask for one.
+  `category`/`subcategory` are declared in `NEWS_JSON_SCHEMA` **and required** (*corrected in NEWS-272*): `additionalProperties: false` means a structured-output provider would otherwise *reject* a classification, and strict mode additionally rejects a declared property missing from `required`. Both are nullable, so a check that doesn't ask for a classification gets them back as `null` rather than absent — the prompt asks for exactly that, and the zod parse has always treated absent and null identically.
 
 - **FR-22.9** *(Shipped, revised NEWS-111)* The sidebar shows a section label per topic, on **its own line** beneath the topic name and status, carrying the **full path** ("Technology · Consumer Tech").
 

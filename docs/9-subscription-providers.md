@@ -67,6 +67,21 @@ Claude Code reports `total_cost_usd` (a measured run: $1.35 across 21 turns). Fo
 
   A vendor CLI can drop a flag under us again and no test here can prevent that. What changed is that the flags are now visible to the suite and stated in one place.
 
+- **FR-9.12b** *(Fixed, NEWS-272)* **Every declared property in the shared JSON schemas is listed in `required`**, because OpenAI's strict structured outputs reject a schema where one is not:
+
+  ```
+  invalid_json_schema: 'required' is required to be supplied and to be an array
+  including every key in properties. Missing 'outlet'.
+  ```
+
+  This was the *second* Codex failure, behind the removed `--search` flag: with the argv accepted, every check then died on a 400 from the schema. Optionality in strict mode is expressed by a **nullable type**, never by omission from `required` — so `outlet`, `publishedAt`, `category` and `subcategory` are all `type: ['string', 'null']` *and* named in `required`, meaning "emit the key, as null when there is nothing to say".
+
+  The prompt changed with it. It used to tell the model to *omit* `category`/`subcategory` unless asked to classify, which put the prompt in direct conflict with the schema; it now asks for null.
+
+  **Three instances, and only one was reported.** Fixing the sources object would have moved the same 400 to the top level on the next run, and writing the rule as a recursive test rather than patching the reported path immediately turned up a third in `SUGGEST_JSON_SCHEMA` — which would have broken every Codex *discovery* call the same way. `tests/unit/news-schema.test.ts` checks the invariant offline, which is the point: the alternative is finding out from a live 400 on someone's subscription.
+
+  **Why only Codex saw it.** `claude-cli` passes the same schema through `--json-schema` and Claude tolerates the looser form, so the defect sat there harmlessly; the `anthropic` and `openai` API providers don't use structured outputs at all. Both CLI paths were re-verified end to end after the change — a real check on each returned real stories with outlets.
+
 - **FR-9.13** *(Shipped)* **`-s read-only`.** Codex is a coding agent that can execute shell commands; a news lookup must not write anything. This is the equivalent of `claude-cli`'s `--allowed-tools WebSearch` — narrow the agent to the job.
 
 - **FR-9.14** *(Shipped)* Two differences from the Claude CLI drive the implementation:
