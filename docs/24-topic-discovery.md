@@ -36,7 +36,13 @@ That last part is the decision worth stating plainly, because it is what the bra
 
 ### The tuner (depth)
 
-- **FR-24.5** Any result card offers **⌄ narrower** (more specific than this) and **≈ similar** (adjacent to this). Either enters the tuner scoped to that card. The result *set* offers the same two actions scoped to the whole list.
+- **FR-24.5** Any result card offers **narrower** (more specific than this) and **similar** (adjacent to this). Either enters the tuner scoped to that card. The result *set* offers the same two actions scoped to the whole list, worded **narrow these** and **more like these** (*NEWS-265*).
+
+  **The two scopes must be tellable apart without hovering.** They used to be byte-identical — same `link-btn` class, same Lucide icon, same word — sitting about 470px apart with a heading and a group label between them, so the only cue for which anchor a click committed to was position, and `margin-left: auto` had put the set-level pair as far from its heading as the row would allow. Both start a six-round tuner that spends a billable call per round (FR-24.6, FR-24.14), which makes a wrong guess expensive rather than merely annoying.
+
+  Three things now separate them, and `discover.spec.ts` asserts all three because any one of them can revert silently: plural wording for the set against singular for the row (and a check that the set label is not merely a superstring of the row's); a `title` on **both** pairs naming the anchor — the set-level pair previously had none, so the *less* obvious control was the one with no explanation; and the set-level pair sitting beside the heading it acts on rather than at the far edge.
+
+  The icons in this doc were written as `⌄` and `≈`; they are Lucide `funnel` and `blend` from `icons.tsx`, per the NEWS-133/134/135 rule that icons never come from glyphs.
 
 - **FR-24.6** The tuner presents candidates one at a time with **keep / skip**, and each round re-prompts on the accumulated keeps *and* skips. Skips matter as much as keeps — "not that kind of cycling" is the signal that makes round three worth reaching.
 

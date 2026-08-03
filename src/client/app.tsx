@@ -1102,12 +1102,31 @@ function discoverResultsJsx(d: DiscoverState): SafeHtml {
         {d.suggestions.length === 0 || d.source === null ? (
           ''
         ) : (
+          /* Plural, and only here (NEWS-267… NEWS-265): this pair retunes the
+             **whole result set**, while the identical-looking pair on each
+             suggestion row retunes that one topic. They used to read exactly the
+             same — same class, same icon, same word — 470px apart with a
+             heading and a group label between them, so nothing but position
+             said which anchor a click was committing to. Both start a
+             six-round, billable tuner (FR-24.6), so guessing is expensive.
+             "these" versus "this" is the whole distinction, carried in one
+             word, and the titles name the anchor outright. */
           <span class="results-depth">
-            <button class="link-btn" type="button" data-tune={`narrower:${resultsHeading(d.source)}`}>
-              {icon('funnel', 13)} narrower
+            <button
+              class="link-btn"
+              type="button"
+              data-tune={`narrower:${resultsHeading(d.source)}`}
+              title={`More specific than “${resultsHeading(d.source)}”`}
+            >
+              {icon('funnel', 13)} narrow these
             </button>
-            <button class="link-btn" type="button" data-tune={`similar:${resultsHeading(d.source)}`}>
-              {icon('blend', 13)} similar
+            <button
+              class="link-btn"
+              type="button"
+              data-tune={`similar:${resultsHeading(d.source)}`}
+              title={`Adjacent to “${resultsHeading(d.source)}”`}
+            >
+              {icon('blend', 13)} more like these
             </button>
           </span>
         )}

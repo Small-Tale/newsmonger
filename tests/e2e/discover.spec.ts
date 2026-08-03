@@ -212,7 +212,47 @@ test('a card offers both depth directions, and so does the whole set (FR-24.5)',
   await openMotorsportResults(page);
   await expect(page.locator('.suggestion .link-btn', { hasText: 'narrower' }).first()).toBeVisible();
   await expect(page.locator('.suggestion .link-btn', { hasText: 'similar' }).first()).toBeVisible();
-  await expect(page.locator('.results-depth .link-btn', { hasText: 'narrower' })).toBeVisible();
+  await expect(page.locator('.results-depth .link-btn', { hasText: 'narrow these' })).toBeVisible();
+});
+
+test('the two depth scopes do not read as the same control (NEWS-265)', async ({ page }) => {
+  // They were byte-identical — same class, same icon, same word — 470px apart
+  // with a heading and a group label between them, so the only cue for which
+  // anchor a click committed to was position. Both start a six-round, billable
+  // tuner (FR-24.6), so guessing is expensive. This asserts the three things
+  // that now distinguish them; any one of them silently reverting is the bug.
+  await openMotorsportResults(page);
+
+  const section = page.locator('.results-depth .link-btn');
+  const row = page.locator('.suggestion-depth .link-btn');
+
+  // 1. Different words. Plural for the set, singular for the one row.
+  await expect(section.first()).toHaveText(/narrow these/);
+  await expect(section.nth(1)).toHaveText(/more like these/);
+  await expect(row.first()).toHaveText(/narrower/);
+
+  // The set-level labels must not merely *contain* the row-level ones, which is
+  // what "narrower" / "narrower than these" would have been.
+  const sectionText = (await section.first().innerText()).trim();
+  const rowText = (await row.first().innerText()).trim();
+  expect(sectionText, 'the two labels must be tellable apart at a glance').not.toBe(rowText);
+
+  // 2. Both scopes name their anchor on hover. The set-level pair had no title
+  //    at all, which inverted the help: the *less* obvious control was the one
+  //    with no explanation.
+  await expect(section.first()).toHaveAttribute('title', /More specific than/);
+  await expect(section.nth(1)).toHaveAttribute('title', /Adjacent to/);
+  await expect(row.first()).toHaveAttribute('title', /More specific than this/);
+
+  // 3. The set-level pair sits beside the heading it acts on, not flung to the
+  //    far edge. `margin-left: auto` used to put ~470px between them.
+  const gap = await page.evaluate(() => {
+    const h3 = document.querySelector('.discover-results-head h3');
+    const depth = document.querySelector('.results-depth');
+    if (h3 === null || depth === null) throw new Error('results head not rendered');
+    return Math.round(depth.getBoundingClientRect().left - h3.getBoundingClientRect().right);
+  });
+  expect(gap, 'the set-level controls belong next to their heading').toBeLessThan(60);
 });
 
 test('entering the tuner shows one candidate, the round count and a way out', async ({ page }) => {
@@ -325,7 +365,9 @@ test('entering from a card and then from the set works without a reload', async 
   await expect(page.locator('.tuner-card')).toBeVisible();
   await page.click('[data-tuner=done]');
 
-  await page.locator('.results-depth .link-btn', { hasText: 'similar' }).click();
+  // "more like these" since NEWS-265 — the set-level pair is deliberately worded
+  // differently from the row-level "similar" so the two scopes are tellable apart.
+  await page.locator('.results-depth .link-btn', { hasText: 'more like these' }).click();
   await expect(page.locator('.tuner-card')).toBeVisible();
   await expect(page.locator('.tuner-why')).toContainText('similar to');
 });

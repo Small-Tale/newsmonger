@@ -2827,8 +2827,13 @@ button.off-topic-pill {
   margin-top: 6px;
 }
 
+// Beside the heading, not flung to the far edge (NEWS-265).
+//
+// `margin-left: auto` used to push this pair ~470px away from the heading it
+// acts on, with a group label in between — so the only cue for "this retunes the
+// section" was position, and position was saying the opposite. Adjacency is the
+// cheaper half of the fix; the labels ("these" vs "this") are the other half.
 .results-depth {
-  margin-left: auto;
   display: flex;
   gap: 14px;
 }
