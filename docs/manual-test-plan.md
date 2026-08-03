@@ -239,12 +239,15 @@ Unit tests inject a fake runner and never spawn the CLI, so the live path is man
 
 ## ChatGPT subscription provider (`codex-cli`, needs Codex signed in)
 
-Same shape as the Claude one — unit tests inject a fake runner, so the live path is manual.
+Same shape as the Claude one — unit tests inject a fake runner, so the live path is manual. **`codexExecArgs` is now unit-tested (NEWS-272), which covers the flag list but not whether the installed CLI still accepts it.** That gap is what shipped a dead `--search` flag, so step 2 matters more than it looks.
 
 1. With `codex` installed and `~/.codex/auth.json` reporting `auth_mode: chatgpt`, pick "ChatGPT subscription (Codex)" in Settings and confirm the status reads ready.
-2. Check a topic with active coverage — expect real current stories with working links.
-3. Confirm Codex writes nothing: it runs `-s read-only`, so a check must not create or modify files in the working directory.
-4. Sign out of Codex and check again — expect an actionable "Codex is not signed in" error.
+2. Check a topic with active coverage — expect real current stories with working links. **An exit code 2 with codex's usage text means it rejected our argv**, which is what a removed or renamed flag looks like; compare `codexExecArgs` against `codex exec --help`.
+3. Confirm the stories are actually *current*. Web search rides `-c tools.web_search=true`, and if that key ever stops taking effect Codex will answer from training data — plausible-looking output with stale or invented links, which is a quieter failure than a crash and the one worth looking for.
+4. Confirm Codex writes nothing: it runs `-s read-only`, so a check must not create or modify files in the working directory.
+5. Sign out of Codex and check again — expect an actionable "Codex is not signed in" error.
+
+To re-verify a config key after a CLI upgrade, use the technique from NEWS-244/272 rather than trusting `--help`: `codex exec --strict-config -c <key>=<value> "hi"` rejects an unrecognized field by name. Note that a *recognized but inert* key passes that check, so anything load-bearing also needs one real query watched end to end.
 
 ## New-item notifications in Tauri (NEWS-38) — needs a desktop run
 

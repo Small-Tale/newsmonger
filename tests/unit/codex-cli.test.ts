@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import type { CodexCliRunner } from '../../src/ai/providers/codex-cli.js';
-import { combinePrompt, createCodexCliProvider } from '../../src/ai/providers/codex-cli.js';
+import { codexExecArgs, combinePrompt, createCodexCliProvider } from '../../src/ai/providers/codex-cli.js';
 import { PROVIDER_EFFORT_LEVELS } from '../../src/ai/types.js';
 
 const NEWS = JSON.stringify({
@@ -118,6 +118,71 @@ describe('createCodexCliProvider', () => {
     });
     const p = createCodexCliProvider({ runner: fakeRunner({ run: () => Promise.resolve(withCite) }) });
     expect((await p.checkTopic('t', [], null)).items[0]?.summary).toBe('Body. Cited bit.');
+  });
+});
+
+describe('codexExecArgs — the flags we actually pass (NEWS-272)', () => {
+  /**
+   * **This is the code no test ever ran.** Every test in this file injects a
+   * `runner`, so the argv inside the default one was invisible to the suite — and
+   * that is precisely where it rotted: we passed `--search`, which `codex-cli`
+   * no longer has. Codex replied with its usage text and exit code 2, so every
+   * check on a ChatGPT subscription failed with "codex exec [OPTIONS] <COMMAND>
+   * [ARGS]" and nothing in the suite noticed.
+   *
+   * Extracting the builder is what makes these assertable at all. Verified against
+   * codex-cli 0.145.0 end to end, not just for parse-ability: the exact argv below
+   * exits 0 and writes the schema-constrained answer to the output file.
+   */
+  const base = { schemaFile: '/tmp/s.json', outFile: '/tmp/o.txt', prompt: 'THE PROMPT' };
+
+  it('never passes --search, the flag that broke every check', () => {
+    const args = codexExecArgs({ ...base, model: undefined, effort: undefined });
+    expect(args).not.toContain('--search');
+  });
+
+  it('enables web search, without which this provider cannot do the job', () => {
+    // The app only supports providers that search the web themselves, so losing
+    // this quietly would leave Codex answering from training data — a worse
+    // failure than the crash, because it would look like it worked.
+    const args = codexExecArgs({ ...base, model: undefined, effort: undefined });
+    const i = args.indexOf('tools.web_search=true');
+    expect(i).toBeGreaterThan(0);
+    expect(args[i - 1]).toBe('-c');
+  });
+
+  it('runs sandboxed read-only, since Codex can execute shell commands', () => {
+    const args = codexExecArgs({ ...base, model: undefined, effort: undefined });
+    const i = args.indexOf('-s');
+    expect(args[i + 1]).toBe('read-only');
+    expect(args).toContain('--skip-git-repo-check');
+  });
+
+  it('points the schema and last-message flags at the files it was given', () => {
+    const args = codexExecArgs({ ...base, model: undefined, effort: undefined });
+    expect(args[args.indexOf('--output-schema') + 1]).toBe('/tmp/s.json');
+    expect(args[args.indexOf('--output-last-message') + 1]).toBe('/tmp/o.txt');
+  });
+
+  it('puts the prompt last, so nothing can be read as a subcommand', () => {
+    // `codex exec` takes `resume` and `review` subcommands, so a flag appended
+    // after the positional prompt would change what runs rather than erroring.
+    const args = codexExecArgs({ ...base, model: 'gpt-5.6-sol', effort: 'high' });
+    expect(args.at(-1)).toBe('THE PROMPT');
+  });
+
+  it('omits the model and effort flags when nothing is configured', () => {
+    // '' is "provider default": the flag must be absent, not empty, or Codex is
+    // told to use a model called "" (NEWS-244).
+    const args = codexExecArgs({ ...base, model: '', effort: '' });
+    expect(args).not.toContain('-m');
+    expect(args.filter((a) => a.startsWith('model_reasoning_effort'))).toEqual([]);
+  });
+
+  it('passes a configured model and effort through unmapped', () => {
+    const args = codexExecArgs({ ...base, model: 'gpt-5.4-mini', effort: 'xhigh' });
+    expect(args[args.indexOf('-m') + 1]).toBe('gpt-5.4-mini');
+    expect(args).toContain('model_reasoning_effort=xhigh');
   });
 });
 

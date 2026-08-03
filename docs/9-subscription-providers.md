@@ -53,9 +53,19 @@ Claude Code reports `total_cost_usd` (a measured run: $1.35 across 21 turns). Fo
 - **FR-9.12** *(Shipped)* The OpenAI-side counterpart, on the same reasoning: `~/.codex/auth.json` reports `auth_mode: "chatgpt"` with `OPENAI_API_KEY: null`, so the CLI already holds subscription credentials.
 
   ```
-  codex exec --search --skip-git-repo-check -s read-only \
+  codex exec -c tools.web_search=true --skip-git-repo-check -s read-only \
     --output-schema <temp file> --output-last-message <temp file> "<prompt>"
   ```
+
+- **FR-9.12a** *(Fixed, NEWS-272)* **Web search rides `-c tools.web_search=true`, because `--search` was removed from the CLI.**
+
+  Every check on a ChatGPT subscription failed with `Codex CLI exited with code 2: codex exec [OPTIONS] <COMMAND> [ARGS]` — codex's usage text, meaning it rejected our argv. `codex exec --help` on 0.145.0 mentions "search" nowhere; `--search` is simply gone. Everything else we pass (`-s`, `--skip-git-repo-check`, `--output-schema`, `--output-last-message`) still exists.
+
+  The replacement was verified the same way NEWS-244 settled the effort key rather than guessed at. With `--strict-config`, `tools.web_search` is accepted and `tools.totally_made_up` is rejected as an unknown configuration field — and since *both* `tools.web_search` and `features.web_search` pass that test, a real query was run end to end: it emitted `web search:` lines and returned a story published that day. This uses the key whose effect was actually observed.
+
+  **Nothing caught this, and the reason is structural**: every test in `codex-cli.test.ts` injects a `runner`, so the flag list inside the default one was the one part of the provider the suite never executed. The argv is now built by an exported `codexExecArgs`, tested directly — including that `--search` is absent and that web search is switched on, since losing the latter silently would be *worse* than the crash: Codex would answer from training data and look like it worked.
+
+  A vendor CLI can drop a flag under us again and no test here can prevent that. What changed is that the flags are now visible to the suite and stated in one place.
 
 - **FR-9.13** *(Shipped)* **`-s read-only`.** Codex is a coding agent that can execute shell commands; a news lookup must not write anything. This is the equivalent of `claude-cli`'s `--allowed-tools WebSearch` — narrow the agent to the job.
 

@@ -116,30 +116,7 @@ function spawnRunner(name: string): CodexCliRunner {
       const outFile = path.join(dir, 'last-message.txt');
       try {
         fs.writeFileSync(schemaFile, JSON.stringify(schema));
-        const args = [
-          'exec',
-          '--search', // the native Responses web_search tool
-          '--skip-git-repo-check', // the app doesn't run inside a repo
-          '-s',
-          // Codex can execute shell commands. A news lookup must not write
-          // anything, so it runs sandboxed read-only.
-          'read-only',
-          '--output-schema',
-          schemaFile,
-          '--output-last-message',
-          outFile,
-        ];
-        if (model !== undefined && model !== '') args.push('-m', model);
-        // Reasoning effort, verified rather than assumed (NEWS-244). Codex has
-        // no `--effort` flag — it goes through the generic config override —
-        // and the key name was confirmed against the CLI itself: with
-        // `--strict-config`, `model_reasoning_effort` is accepted while a made-up
-        // key is rejected as an "unknown configuration field". Every level this
-        // app offers is in the set the server accepts (`none`, `minimal`, `low`,
-        // `medium`, `high`, `xhigh`, `max`), so the value passes straight
-        // through with no mapping to drift.
-        if (effort !== undefined && effort !== '') args.push('-c', `model_reasoning_effort=${effort}`);
-        args.push(combinePrompt(system, prompt));
+        const args = codexExecArgs({ schemaFile, outFile, model, effort, prompt: combinePrompt(system, prompt) });
 
         const { code, stderr } = await exec(args, CHECK_TIMEOUT_MS, signal);
         if (code !== 0) {
@@ -175,6 +152,65 @@ function spawnRunner(name: string): CodexCliRunner {
  * configured in Codex doesn't qualify: this provider exists specifically to
  * spend subscription quota, and `openai` already covers the key path.
  */
+/**
+ * The argv for one `codex exec` run.
+ *
+ * **Extracted so it can be tested at all (NEWS-272).** Every test injects a
+ * `runner`, so the flag list inside the default one was the one part of this
+ * provider no test ever executed — and that is exactly where it rotted: we passed
+ * `--search`, which `codex-cli` **no longer has**. Codex answered with its usage
+ * text and exit code 2, so every check against a ChatGPT subscription failed with
+ * "codex exec [OPTIONS] <COMMAND> [ARGS]".
+ *
+ * Web search now rides the generic config override, verified the same way
+ * NEWS-244 settled the effort key rather than assumed: with `--strict-config`,
+ * `tools.web_search` is accepted and an invented field is rejected as an "unknown
+ * configuration field" — and, because a recognized-but-inert key would pass that
+ * test too, a real query was run end to end and observed performing searches.
+ *
+ * `features.web_search` is also a recognized field in this version. This uses the
+ * one whose effect was actually watched.
+ *
+ * A vendor CLI can drop a flag under us again, and nothing here can prevent that.
+ * What this buys is that the flags are visible to a test and stated in one place,
+ * so the next drift is a one-line change rather than an archaeology exercise.
+ */
+export function codexExecArgs(opts: {
+  schemaFile: string;
+  outFile: string;
+  model: string | undefined;
+  effort: string | undefined;
+  prompt: string;
+}): string[] {
+  const args = [
+    'exec',
+    // Web search, without which this provider cannot do the app's only job.
+    '-c',
+    'tools.web_search=true',
+    '--skip-git-repo-check', // the app doesn't run inside a repo
+    '-s',
+    // Codex can execute shell commands. A news lookup must not write anything,
+    // so it runs sandboxed read-only.
+    'read-only',
+    '--output-schema',
+    opts.schemaFile,
+    '--output-last-message',
+    opts.outFile,
+  ];
+  if (opts.model !== undefined && opts.model !== '') args.push('-m', opts.model);
+  // Reasoning effort, verified rather than assumed (NEWS-244). Codex has no
+  // `--effort` flag — it goes through the generic config override — and the key
+  // name was confirmed against the CLI itself. Every level this app offers is in
+  // the set the server accepts (`none`, `minimal`, `low`, `medium`, `high`,
+  // `xhigh`, `max`), so the value passes straight through with no mapping to
+  // drift.
+  if (opts.effort !== undefined && opts.effort !== '') args.push('-c', `model_reasoning_effort=${opts.effort}`);
+  // Last: the prompt is positional, and anything appended after it would be read
+  // as one of `exec`'s subcommands (`resume`, `review`) rather than as a flag.
+  args.push(opts.prompt);
+  return args;
+}
+
 export function hasChatGptCredentials(): boolean {
   try {
     const file = path.join(os.homedir(), '.codex', 'auth.json');
