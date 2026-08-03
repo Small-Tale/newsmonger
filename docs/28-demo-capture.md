@@ -70,6 +70,26 @@ The README's images are **photographs of the real application**, produced by dri
 
   **Each variant gets its own freshly prepared server**, for the reason FR-28.10 gives: a scene's `setup` mutates real state, so running it three times against one server would compound those mutations and photograph the later variants in a state the first never saw — leaving the variants differing by more than the palette, which is the one thing a theme comparison must not do. A soaking scene's variants **skip the soak**: it costs minutes and buys a drained dial, which is a demo detail rather than a design one, so the ring reads full in those.
 
+### Checked by CI, since nothing else ran them (NEWS-264)
+
+- **FR-28.19** *(Shipped, NEWS-264)* `npm run demo:stills -- --only <scene>` captures a single scene, and CI runs `--only feed` on every push.
+
+  The hero sat **broken** for weeks (FR-28.17) because nothing ever ran it: the captures are manual, wanted rarely, and need Chromium outside the sandbox. A deliberately *smoke*-sized run closes that — one non-soaking scene boots the real server and drives the real UI in about fifteen seconds, which is enough to catch a modal eating a click, a selector that stopped matching, or a changed readiness line. A full run is minutes, most of it the `topics` soak, and buys little more.
+
+  Two assertions beyond a zero exit, because a script that "succeeds" while writing nothing is the failure a smoke test exists to catch: the PNG and SVG must exist and the PNG must clear 20KB (a blank frame is far smaller), and **the scenes the run did not capture must be untouched**.
+
+  That second one is there because the first version of `--only` broke it. `main()` wipes the output directory — that wipe is what removes a renamed scene's stale file, which `stills.test.ts` fails on — and with `--only` it deleted the other six. `git status` caught it locally; CI catches it next time.
+
+- **FR-28.20** *(Shipped, NEWS-264)* **`scripts/` is typechecked and linted** like the rest of the tree.
+
+  It was in neither: `tsconfig.json`'s `include` covered `src` and `tests` only, and `eslint.config.mjs` listed `scripts/**` under `ignores`. So `npm run typecheck` and `npm run lint` both passed while saying nothing about the ~950 lines here — during NEWS-263 a clean `tsc --noEmit` after editing `capture-demo.ts` was completely meaningless.
+
+  Turning it on surfaced 17 problems, and the interesting thing is that **none were bugs**:
+
+  - **`no-unnecessary-condition` on the readiness wait.** `base` and the exit flag are assigned by `stdout`/`exit` handlers, and TypeScript narrows them to their initial literal values because control-flow analysis cannot see a callback run. Annotating the declarations does not help — the *narrowed* type at the point of use is still the literal — so this is a scoped `eslint-disable` with the reason written down.
+  - **`no-unnecessary-condition` on the discovery-scene guards.** `BUILTIN_CATEGORIES[0]` is typed as definitely present because this project does not run `noUncheckedIndexedAccess`, which made a real guard look dead. Fixed properly with `.at(0)`, which returns `T | undefined` — the truth — so the guard and the linter now agree.
+  - **`strictTypeChecked` on the plain `.mjs` build utilities** produced 87 "unsafe any" errors, because there are no types to be safe about. That is the ruleset being wrong for the file, not 87 bugs, so those files get `disableTypeChecked` plus the two Node globals they use, and keep the rules that still mean something.
+
 ### Not captured, and why
 
 - ~~**A dial mid-countdown.**~~ *(Now captured — NEWS-232.)* See FR-28.15 above.

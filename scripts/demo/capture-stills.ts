@@ -104,6 +104,22 @@ const REVIEW_VARIANTS = [
 /** `--review` also captures the dark and narrow variants (NEWS-263). */
 const REVIEW = process.argv.includes('--review');
 
+/**
+ * `--only <scene>` captures one scene (NEWS-264).
+ *
+ * For CI, where the point is a *smoke* signal rather than fresh artwork: the hero
+ * capture sat broken for weeks because a modal started swallowing its clicks, and
+ * nothing ran the captures to notice. One non-soaking scene boots the real server,
+ * drives the real UI and takes about fifteen seconds, which is enough to catch
+ * that class of break. A full run is minutes, most of it the `topics` soak.
+ *
+ * Also useful by hand when iterating on a single scene.
+ */
+const ONLY = (() => {
+  const i = process.argv.indexOf('--only');
+  return i === -1 ? null : (process.argv[i + 1] ?? null);
+})();
+
 const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
 
 /** A region of the page to capture, or the whole viewport. */
@@ -165,7 +181,7 @@ interface Scene {
   soak?: {
     /** Check interval to set, in ms. The dial's denominator. */
     intervalMs: number;
-    /** How much of it must elapse before capturing. Must be < `intervalMs`. */
+    /** How much of it must elapse before capturing. Must be under `intervalMs`. */
     minElapsedMs: number;
   };
 }
@@ -208,8 +224,13 @@ async function menuAction(page: Page, rowSelector: string, action: string): Prom
  * so the mismatch is no longer misread as a broken filter and this alignment is a
  * nicety rather than a requirement.
  */
+// `.at(0)` rather than `[0]`: this project does not run
+// `noUncheckedIndexedAccess`, so `BUILTIN_CATEGORIES[0]` is typed as definitely
+// present and the guard below then reads as dead code. `.at()` returns
+// `T | undefined`, which is the truth — the array could be empty — so the guard
+// is honest and the linter agrees with it (NEWS-264).
 const DISCOVER_CATEGORY =
-  BUILTIN_CATEGORIES.find((c) => c.label === DEMO_TOPICS.at(-1)?.category) ?? BUILTIN_CATEGORIES[0];
+  BUILTIN_CATEGORIES.find((c) => c.label === DEMO_TOPICS.at(-1)?.category) ?? BUILTIN_CATEGORIES.at(0);
 const DISCOVER_SECTION = DISCOVER_CATEGORY?.label;
 const DISCOVER_CHIP = DISCOVER_CATEGORY?.subcategories[0]?.label;
 if (DISCOVER_SECTION === undefined || DISCOVER_CHIP === undefined) {
@@ -250,7 +271,7 @@ const SCENES: Scene[] = [
     arrange: async (base) => {
       const res = await fetch(`${base}/api/state`);
       const state = (await res.json()) as { topics: { id: string }[] };
-      const first = state.topics[0];
+      const first = state.topics.at(0);
       if (first === undefined) throw new Error('scene "topics": no topics to promote');
       await fetch(`${base}/api/topics/${first.id}`, {
         method: 'PATCH',
@@ -382,12 +403,13 @@ async function startServer(): Promise<Server> {
   proc.on('exit', () => {
     exited = true;
   });
-  proc.stdout?.on('data', (d: Buffer) => {
+  proc.stdout.on('data', (d: Buffer) => {
     const m = READY_RE.exec(d.toString());
     if (m?.[1] !== undefined && base === '') base = m[1];
   });
-  proc.stderr?.on('data', (d: Buffer) => process.stderr.write(`[server] ${d.toString()}`));
+  proc.stderr.on('data', (d: Buffer) => process.stderr.write(`[server] ${d.toString()}`));
 
+  /* eslint-disable @typescript-eslint/no-unnecessary-condition -- `base` and the exit flag are assigned by the `stdout` / `exit` handlers above. TypeScript narrows them to their initial literal values because its control-flow analysis cannot see a callback run, so it reads this wait as dead code. Annotating the declarations does not help: the *narrowed* type at this point is still the literal. Tried and reverted in NEWS-264. */
   for (let i = 0; i < 240 && base === '' && !exited; i++) await sleep(250);
   if (base === '') {
     rmSync(dataDir, { recursive: true, force: true });
@@ -397,6 +419,7 @@ async function startServer(): Promise<Server> {
         : 'Timed out waiting for the demo server readiness line.',
     );
   }
+  /* eslint-enable @typescript-eslint/no-unnecessary-condition */
   return { proc, base, dataDir };
 }
 
@@ -434,7 +457,19 @@ async function clipFor(page: Page, scene: Scene): Promise<Clip> {
 }
 
 async function main(): Promise<void> {
-  rmSync(OUT_DIR, { recursive: true, force: true });
+  // Wiped only on a **full** run. The wipe is what removes a renamed scene's
+  // stale file — `stills.test.ts` fails on a captured file belonging to no scene
+  // — but with `--only` it would delete the six scenes this run is not
+  // capturing. The first `--only feed` run did exactly that, and `git status`
+  // was what noticed (NEWS-264).
+  if (ONLY === null) rmSync(OUT_DIR, { recursive: true, force: true });
+  if (ONLY !== null && !SCENES.some((sc) => sc.name === ONLY)) {
+    // Loudly, because a typo would otherwise "pass" by capturing nothing — which
+    // is the failure mode a smoke test exists to avoid.
+    throw new Error(`--only ${ONLY}: no such scene. Have: ${SCENES.map((sc) => sc.name).join(', ')}`);
+  }
+  const scenes = ONLY === null ? SCENES : SCENES.filter((sc) => sc.name === ONLY);
+
   mkdirSync(OUT_DIR, { recursive: true });
   if (REVIEW) mkdirSync(REVIEW_DIR, { recursive: true });
 
@@ -545,14 +580,14 @@ async function main(): Promise<void> {
   const soaking: { scene: Scene; server: Server; seededAt: number }[] = [];
 
   try {
-    for (const scene of SCENES.filter((sc) => sc.soak)) {
+    for (const scene of scenes.filter((sc) => sc.soak)) {
       const server = await startServer();
       await prepare(scene, server);
       soaking.push({ scene, server, seededAt: Date.now() });
       console.log(`[stills] ${scene.name}: soaking, will shoot after the others`);
     }
 
-    for (const scene of SCENES.filter((sc) => !sc.soak)) {
+    for (const scene of scenes.filter((sc) => !sc.soak)) {
       const server = await startServer();
       try {
         await prepare(scene, server);

@@ -52,7 +52,7 @@ import {
 } from 'domotion-svg';
 
 import { DEMO_TOPICS } from '../../src/demo.js';
-import { CANVAS_H, CANVAS_W, CONTENT_H, CONTENT_W, chromeWrap, endCard } from './chrome.js';
+import { CANVAS_H, CANVAS_W, chromeWrap, CONTENT_H, CONTENT_W, endCard } from './chrome.js';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const OUT_SVG = resolve(ROOT, 'assets/demo.svg');
@@ -139,6 +139,7 @@ async function main(): Promise<void> {
     // The first version gave up quietly after N tries and kept going, which is how
     // it ended up capturing a different server. A capture that cannot reach its own
     // app has nothing useful to do.
+    /* eslint-disable @typescript-eslint/no-unnecessary-condition -- `base` and the exit flag are assigned by the `stdout` / `exit` handlers above. TypeScript narrows them to their initial literal values because its control-flow analysis cannot see a callback run, so it reads this wait as dead code. Annotating the declarations does not help: the *narrowed* type at this point is still the literal. Tried and reverted in NEWS-264. */
     for (let i = 0; i < 240 && base === '' && !serverExited; i++) await sleep(250);
     if (base === '') {
       throw new Error(

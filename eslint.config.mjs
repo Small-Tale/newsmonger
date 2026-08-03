@@ -7,14 +7,20 @@ import tseslint from "typescript-eslint";
 
 export default tseslint.config(
   {
-    ignores: ["dist/**", "node_modules/**", "src-tauri/**", "playwright-report/**", "test-results/**", "coverage/**", "scripts/**"],
+    ignores: ["dist/**", "node_modules/**", "src-tauri/**", "playwright-report/**", "test-results/**", "coverage/**"],
   },
   eslint.configs.recommended,
   ...tseslint.configs.strictTypeChecked,
   {
     languageOptions: {
       parserOptions: {
-        projectService: true,
+        // `allowDefaultProject` covers the handful of plain `.mjs` build
+        // utilities under `scripts/`, which belong to no tsconfig project
+        // (NEWS-264). Without it, un-ignoring `scripts/**` trades one silent
+        // hole for a parsing error per file.
+        projectService: {
+          allowDefaultProject: ["scripts/*.mjs", "scripts/release/*.mjs"],
+        },
         tsconfigRootDir: import.meta.dirname,
       },
     },
@@ -37,4 +43,31 @@ export default tseslint.config(
     },
   },
   kerfjs.configs.recommended,
+  {
+    // The plain `.mjs` build utilities under `scripts/` (NEWS-264).
+    //
+    // They used to be covered by `scripts/**` being ignored wholesale, which also
+    // hid ~950 lines of real TypeScript. Un-ignoring the directory brought these
+    // in too — and `strictTypeChecked` on untyped JS produced 87 errors, almost
+    // all of them "unsafe any", because there are no types to be safe about. That
+    // is the ruleset being wrong for the file, not 87 bugs.
+    //
+    // So they get the type-aware rules switched off and the two Node globals they
+    // actually use declared. Real linting — unused vars, undefined names,
+    // import order — without pretending untyped JS can satisfy a type-aware
+    // config.
+    files: ["scripts/**/*.mjs"],
+    extends: [tseslint.configs.disableTypeChecked],
+    languageOptions: {
+      globals: { console: "readonly", process: "readonly" },
+    },
+    rules: {
+      "@typescript-eslint/no-unsafe-assignment": "off",
+      "@typescript-eslint/no-unsafe-member-access": "off",
+      "@typescript-eslint/no-unsafe-call": "off",
+      "@typescript-eslint/no-unsafe-argument": "off",
+      "@typescript-eslint/no-unsafe-return": "off",
+      "tsdoc/syntax": "off",
+    },
+  },
 );
