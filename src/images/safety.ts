@@ -80,13 +80,30 @@ export function staticUrlRejection(raw: string): string | null {
 }
 
 /**
+ * How a hostname is resolved. Injectable so the rule can be tested (NEWS-259).
+ *
+ * The rebinding case — a public-looking name pointing into the LAN — is the one
+ * this function exists for, and **real DNS cannot produce it on demand**: no
+ * name under anyone's control reliably resolves to `10.0.0.1` from a test. So
+ * the interesting input has to be supplied, not waited for.
+ *
+ * The tests previously reached for real DNS anyway, and resolving a `.invalid`
+ * name occasionally took longer than vitest's 5-second timeout under a fully
+ * parallel run — a red suite over the resolver's mood rather than over this
+ * code. The default argument keeps every production caller unchanged.
+ */
+export type HostResolver = (host: string) => Promise<{ address: string }[]>;
+
+const resolveWithDns: HostResolver = (host) => lookup(host, { all: true });
+
+/**
  * Full check, including DNS.
  *
  * A hostname that looks public can still resolve into a private range — the
  * classic DNS-rebinding shape — so the resolved addresses are checked too.
  * Returns null when the URL is safe to fetch, or a reason when it isn't.
  */
-export async function rejectUnsafeUrl(raw: string): Promise<string | null> {
+export async function rejectUnsafeUrl(raw: string, resolve: HostResolver = resolveWithDns): Promise<string | null> {
   const staticReason = staticUrlRejection(raw);
   if (staticReason !== null) return staticReason;
 
@@ -95,7 +112,7 @@ export async function rejectUnsafeUrl(raw: string): Promise<string | null> {
 
   let addresses: { address: string }[];
   try {
-    addresses = await lookup(host, { all: true });
+    addresses = await resolve(host);
   } catch {
     return `could not resolve ${host}`;
   }

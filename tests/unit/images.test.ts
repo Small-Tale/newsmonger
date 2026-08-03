@@ -87,10 +87,49 @@ describe('SSRF guards', () => {
     expect(staticUrlRejection('http://example.com/a?b=1#c')).toBeNull();
   });
 
-  it('also checks what a hostname resolves to', async () => {
-    // The rebinding shape: a public-looking name pointing into the LAN.
-    expect(await rejectUnsafeUrl('http://localhost/x')).toMatch(/blocked/);
-    expect(await rejectUnsafeUrl('https://nonexistent.invalid/x')).toMatch(/resolve/);
+  // NEWS-259. These used to reach for real DNS, which made the suite depend on
+  // the resolver answering inside vitest's 5-second timeout — it once didn't,
+  // under a fully parallel run. Resolution is injected now, which also buys the
+  // case real DNS could never supply: a public *name* pointing into the LAN,
+  // which is the whole reason this function looks past the hostname.
+  it('rejects a public-looking name that resolves into a private range', async () => {
+    const toLan = (): Promise<{ address: string }[]> => Promise.resolve([{ address: '10.0.0.7' }]);
+    expect(await rejectUnsafeUrl('https://totally-public.example/x', toLan)).toMatch(
+      /resolves to blocked address 10\.0\.0\.7/,
+    );
+  });
+
+  it('rejects when any one of several answers is private, not just the first', async () => {
+    // A rebinding attack only needs one usable answer, so "the first address is
+    // fine" is not a safe reading of a multi-answer response.
+    const mixed = (): Promise<{ address: string }[]> =>
+      Promise.resolve([{ address: '93.184.216.34' }, { address: '169.254.169.254' }]);
+    expect(await rejectUnsafeUrl('https://totally-public.example/x', mixed)).toMatch(/169\.254\.169\.254/);
+  });
+
+  it('allows a name that resolves entirely into public space', async () => {
+    const toPublic = (): Promise<{ address: string }[]> => Promise.resolve([{ address: '93.184.216.34' }]);
+    expect(await rejectUnsafeUrl('https://totally-public.example/x', toPublic)).toBeNull();
+  });
+
+  it('rejects a name that cannot be resolved, and one that resolves to nothing', async () => {
+    const fails = (): Promise<{ address: string }[]> => Promise.reject(new Error('ENOTFOUND'));
+    expect(await rejectUnsafeUrl('https://nonexistent.invalid/x', fails)).toMatch(/could not resolve/);
+    // An empty answer is not an allow: there is nothing to have checked.
+    const empty = (): Promise<{ address: string }[]> => Promise.resolve([]);
+    expect(await rejectUnsafeUrl('https://nonexistent.invalid/x', empty)).toMatch(/could not resolve/);
+  });
+
+  it('never reaches the resolver for a statically blocked host or a literal IP', async () => {
+    // `localhost` is in the static blocklist and `127.0.0.1` is a literal
+    // address, so both are judged before DNS. A resolver that throws if called
+    // proves it rather than assuming it.
+    const explode = (): Promise<{ address: string }[]> => {
+      throw new Error('resolver must not be called');
+    };
+    expect(await rejectUnsafeUrl('http://localhost/x', explode)).toMatch(/blocked/);
+    expect(await rejectUnsafeUrl('http://127.0.0.1:4187/api/state', explode)).toMatch(/blocked/);
+    expect(await rejectUnsafeUrl('https://93.184.216.34/x', explode)).toBeNull();
   });
 });
 
