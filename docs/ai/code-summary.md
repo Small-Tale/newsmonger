@@ -14,7 +14,7 @@ src/
   server.ts           createApp (Hono, DI via middleware) + startServer (127.0.0.1, port fallback), /static handler
   export.ts           toMarkdown/toJson/toAtom + escapeXml — export & feed rendering, pure (NEWS-85)
   origin-guard.ts     Host/Origin check on every route — cross-origin + DNS-rebinding guard (NEWS-86)
-  discovery.ts        DiscoveryService: topic-suggestion exclusions + in-memory request cache + classification validation + call log (NEWS-125)
+  discovery.ts        DiscoveryService: topic-suggestion exclusions + in-memory cache keyed on request *and* provider|model|effort (NEWS-125, NEWS-258) + classification validation + call log
   backup-locations.ts suggestedBackupLocations (probes iCloud/Drive/OneDrive/Dropbox per OS, incl. the macOS CloudStorage prefix scan; NEWS-230) + normalizeBackupDir (expands ~, refuses relative — node-only, so NOT in api/schemas.ts which the client imports; NEWS-237)
   backup.ts           Backups/writeBackup/buildBackup — snapshot to the user's backupDir in DataFileSchema shape, temp+rename, 1/hour (NEWS-192)
   undo.ts             ClearUndoBuffer: in-memory, per-topic, TTL'd snapshot of a cleared topic's stories + covered window (NEWS-145)

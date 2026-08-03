@@ -70,6 +70,14 @@ That last part is the decision worth stating plainly, because it is what the bra
 
   **The exclusions are part of the cache key**, which matters more than it looks: adding a topic changes what a valid answer is, so an entry computed before the change could otherwise suggest the topic the user just added — the one thing FR-24.11 exists to prevent.
 
+  **So is who was asked** — provider, model and effort (*NEWS-258*). This was missing: the key described the *request* and not the answerer, so a repeat query after switching provider was served the previous provider's ideas, long after every other part of the app had moved on. Those are the same three fields an in-flight check is signed with ([2 — Checks](2-checks.md) FR-2.11), for the same reason — they are the ones that change what comes back. Keyed rather than cleared on change: a key cannot be forgotten by a caller the way a `clear()` can, and switching back finds the earlier answers still there instead of paying for them twice. The signature is read from settings rather than by resolving the provider, so a cache hit still costs nothing and still works with no key configured.
+
+- **FR-24.15a** *(Shipped, NEWS-258)* Changing provider, model or effort **clears the suggestions currently on screen**, returning the pane to its browse grid.
+
+  Reachable rather than theoretical: Settings opens *over* the discovery pane — it is above it on the Escape ladder — so a user can get suggestions, change provider without closing them, and come back to one model's answer presented under another's name, with tuner rounds (FR-24.6) counted against a list nothing will produce again.
+
+  Cleared rather than relabelled, because a suggestion list is one cheap call to regenerate and there is no honest label for "these came from somewhere you are no longer asking". An `endpoint`-only change does **not** clear them: it moves which host answers, not which model does.
+
 - **FR-24.16** Every call is **user-initiated**. Nothing in discovery refreshes on a timer — that is the property that keeps this affordable, and it is the reason the newsstand variation was deferred rather than built.
 
 ### Where it appears

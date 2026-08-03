@@ -259,6 +259,48 @@ describe('the cache (FR-24.15)', () => {
 
     expect(service.suggestCalls).toHaveLength(2);
   });
+
+  // NEWS-258. The key covered the *request* and not who was asked, so a repeat
+  // query after switching provider answered with the previous provider's ideas
+  // — long after every other part of the app had moved on.
+  it('is invalidated by a provider change, because suggestions are the model\'s answer', async () => {
+    const { app, store, service } = makeApp();
+
+    await post(app, DESCRIBE);
+    store.updateSettings({ provider: 'openai' });
+    await post(app, DESCRIBE);
+
+    expect(service.suggestCalls).toHaveLength(2);
+  });
+
+  it('is invalidated by a model change, and by an effort change', async () => {
+    const { app, store, service } = makeApp();
+
+    await post(app, DESCRIBE);
+    store.updateSettings({ model: 'gpt-5.4-mini' });
+    await post(app, DESCRIBE);
+    expect(service.suggestCalls).toHaveLength(2);
+
+    store.updateSettings({ effort: 'high' });
+    await post(app, DESCRIBE);
+    expect(service.suggestCalls).toHaveLength(3);
+  });
+
+  // Keyed, not cleared: the reason to key it is that switching back does not pay
+  // for the same answer twice.
+  it('still has the earlier answer after switching back', async () => {
+    const { app, store, service } = makeApp();
+
+    const first = await body(await post(app, DESCRIBE));
+    store.updateSettings({ provider: 'openai' });
+    await post(app, DESCRIBE);
+    store.updateSettings({ provider: 'auto' }); // back to the default it started on
+    const back = await body(await post(app, DESCRIBE));
+
+    expect(service.suggestCalls).toHaveLength(2);
+    expect(back.cached).toBe(true);
+    expect(back.suggestions).toEqual(first.suggestions);
+  });
 });
 
 describe('cost recording (FR-24.14)', () => {

@@ -436,17 +436,46 @@ export async function refreshModels(): Promise<void> {
   }
 }
 
+/**
+ * Who a suggestion or a check would be asked of (NEWS-258).
+ *
+ * The same three fields the server signs an in-flight check with, because they
+ * are the ones that change *what comes back*. `endpoint` is left out: it moves
+ * which host answers, not which model does, and the catalogue refresh below
+ * already covers it.
+ */
+function providerSignature(s: { provider: string; model: string; effort: string }): string {
+  return `${s.provider}|${s.model}|${s.effort}`;
+}
+
 export async function updateProviderSettings(patch: {
   provider?: ProviderName;
   model?: string;
   endpoint?: string;
   effort?: Effort;
 }): Promise<void> {
+  const before = providerSignature(appStore.state.value.settings);
   await withRefresh(() => request('/api/settings', { method: 'PATCH', body: JSON.stringify(patch) }));
   await refreshProviders();
   // The catalogue is per provider and per key, so a provider or endpoint change
   // invalidates it.
   await refreshModels();
+  // And so do the suggestions on screen (NEWS-258). Settings opens *over* the
+  // discovery pane — it sits above it on the Escape ladder — so changing
+  // provider here and closing leaves the previous provider's ideas on display,
+  // with a tuner whose kept/skipped rounds (FR-24.6) were counted against a
+  // list nothing will produce again.
+  //
+  // Cleared rather than relabelled: a suggestion list is one cheap call to
+  // regenerate, and there is no honest label for "these came from somewhere you
+  // are no longer asking". The pane stays open on its browse grid, which is
+  // where a fresh query starts anyway.
+  if (
+    appStore.state.value.discover !== null &&
+    providerSignature(appStore.state.value.settings) !== before
+  ) {
+    appStore.actions.openDiscover();
+  }
 }
 
 /** Fetch per-provider key status. Carries no key values — see `KeyStatusSchema`. */

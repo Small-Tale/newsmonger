@@ -50,17 +50,28 @@ interface CacheEntry {
 }
 
 /**
- * A stable cache key for a request.
+ * A stable cache key for a request, **and for who was asked** (NEWS-258).
  *
  * The exclusions are part of it on purpose: adding a topic changes what a valid
  * answer looks like, so the entry that would now suggest a topic the user
  * already follows must not survive the change.
+ *
+ * `providerSignature` is part of it for the same reason, and it was missing.
+ * Suggestions are the *model's* answer, so a repeat query after switching
+ * provider would have been served the previous provider's ideas — long after
+ * every other part of the app had moved on.
+ *
+ * Keyed rather than cleared on change: a caller cannot forget a key, and
+ * switching back finds the earlier answers still there instead of paying for
+ * them twice. The parameter is required for the same reason — an optional one
+ * would let a future caller silently reinstate the bug.
  */
-export function cacheKeyFor(request: SuggestRequest): string {
+export function cacheKeyFor(request: SuggestRequest, providerSignature: string): string {
   return JSON.stringify({
     scope: request.scope,
     exclude: [...request.exclude].sort((a, b) => a.localeCompare(b)),
     limit: request.limit ?? null,
+    provider: providerSignature,
   });
 }
 
@@ -100,6 +111,17 @@ export class DiscoveryService {
     return (this.options.now ?? Date.now)();
   }
 
+  /**
+   * Who a suggestion would be asked of: provider, model, effort (NEWS-258).
+   *
+   * The same three fields that cancel an in-flight check (FR-2.11), for the same
+   * reason — they are the ones that change *what comes back*.
+   */
+  private providerSignature(): string {
+    const { provider, model, effort } = this.store.getSettings();
+    return `${provider}|${model}|${effort}`;
+  }
+
   /** Recent calls, newest first (FR-24.14). */
   recentCalls(): DiscoveryCall[] {
     return [...this.log].reverse();
@@ -136,7 +158,11 @@ export class DiscoveryService {
       ...(limit === undefined ? {} : { limit: Math.min(limit, MAX_SUGGESTIONS) }),
     };
 
-    const key = cacheKeyFor(request);
+    // Read from settings rather than by resolving the provider: a cache hit is
+    // meant to cost nothing, and resolving would both build a client and throw
+    // when nothing is configured — which would take away the ability to look at
+    // suggestions you already have without a key.
+    const key = cacheKeyFor(request, this.providerSignature());
     const hit = this.cache.get(key);
     if (hit !== undefined && this.now() - hit.at < (this.options.ttlMs ?? DEFAULT_CACHE_TTL_MS)) {
       // Recorded like any other call, but flagged as free — otherwise the log
