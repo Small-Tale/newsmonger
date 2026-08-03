@@ -922,6 +922,23 @@ test('flag a story off-topic: collapse, hide on reload, review, unflag (NEWS-61)
   await expect(page.locator('.banner.review')).toBeVisible();
   await expect(cards).toHaveCount(1);
   await expect(page.locator('.item .off-topic-pill.label')).toHaveCount(1);
+
+  // The way out has to look pressable (NEWS-266). It was `btn subtle`, i.e.
+  // `background: none; border-color: transparent`, so the only exit from a mode
+  // that filters the whole feed was indistinguishable from the sentence beside it
+  // until hovered. Checked by computed style rather than class name: a future
+  // change to `.btn` that dropped its border would pass a class assertion while
+  // bringing the bug back.
+  const exitEdge = await page.evaluate(() => {
+    const el = document.querySelector('[data-action=exit-review]');
+    if (el === null) throw new Error('exit-review not rendered');
+    const cs = getComputedStyle(el);
+    return { color: cs.borderTopColor, width: cs.borderTopWidth };
+  });
+  expect(exitEdge.width, 'the exit needs a visible edge').not.toBe('0px');
+  expect(exitEdge.color, 'a transparent border is not an affordance').not.toBe('transparent');
+  expect(exitEdge.color).not.toMatch(/rgba\(.*,\s*0\)$/);
+
   await page.locator('[data-action=exit-review]').click();
   await expect(page.locator('.banner.review')).toHaveCount(0);
   await expect(flaggedRow).toHaveCount(1); // back to the collapsed row

@@ -1188,8 +1188,13 @@ function tunerJsx(t: TunerState): SafeHtml {
           Round {String(t.round)} of {String(MAX_TUNE_ROUNDS)}
         </span>
         {/* Endable at any point (FR-24.9) — and the only way out, so it is
-            never hidden behind a state the user has to reach first. */}
-        <button class="btn subtle" type="button" data-tuner="done">
+            never hidden behind a state the user has to reach first. `btn` rather
+            than `btn subtle` for the same reason as the review banner's exit
+            (NEWS-266): subtle renders borderless and transparent, so the escape
+            from a six-round flow read as a caption while Skip and Keep below it
+            read as buttons. Equal weight to Skip is right — both are buttons,
+            and Keep stays the primary. */}
+        <button class="btn" type="button" data-tuner="done">
           Done
         </button>
       </div>
@@ -2625,7 +2630,10 @@ function appJsx(): SafeHtml {
             <span class="banner-text">
               Showing {String(savedCount)} saved {savedCount === 1 ? 'story' : 'stories'}
             </span>
-            <button class="btn subtle" type="button" data-action="clear-saved-filter">
+            {/* `btn` for the same reason as the review and tuner exits
+                (NEWS-266) — this is a mode exit, and promoting only some of them
+                would leave the app less coherent than leaving them all alone. */}
+            <button class="btn" type="button" data-action="clear-saved-filter">
               Show all
             </button>
           </div>
@@ -2638,7 +2646,7 @@ function appJsx(): SafeHtml {
             <span>
               Showing {String(solo.size)} of {String(s.topics.length)} topics
             </span>
-            <button class="btn subtle" type="button" data-action="clear-solo">
+            <button class="btn" type="button" data-action="clear-solo">
               Show all
             </button>
           </div>
@@ -2734,7 +2742,14 @@ function appJsx(): SafeHtml {
                 ? ` for ${topicNames.get(s.reviewTopicIds[0] ?? '') ?? 'a topic'}`
                 : ''}
             </span>
-            <button class="btn subtle" type="button" data-action="exit-review">
+            {/* `btn`, not `btn subtle` (NEWS-266). `.btn.subtle` is
+                `background: none; border-color: transparent`, so at rest it is
+                indistinguishable from the sentence beside it and only grows a
+                border on hover. That is the wrong weight for the **only way out
+                of a mode that filters the whole feed**: the reversible in-mode
+                actions looked pressable and the consequential exit looked like a
+                caption. */}
+            <button class="btn" type="button" data-action="exit-review">
               Exit review
             </button>
           </div>

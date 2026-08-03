@@ -101,6 +101,41 @@ test('clean up the layout topics', async ({ page }) => {
   }
 });
 
+// Mode exits look pressable (NEWS-266).
+//
+// All four were `btn subtle`, which is `background: none; border-color:
+// transparent` — indistinguishable from the sentence beside it until you hover.
+// That put the weight backwards: the reversible in-mode actions read as buttons
+// while the **only way out** read as a caption.
+//
+// Asserted by computed style rather than by class name: `class="btn"` passing is
+// not the point, a visible edge is, and a future change to `.btn` that removed
+// its border would otherwise pass a class assertion while reintroducing the bug.
+
+/** Whether a control has an edge a reader could take for pressable. */
+async function hasVisibleEdge(page: Page, selector: string): Promise<boolean> {
+  return page.evaluate((sel) => {
+    const el = document.querySelector(sel);
+    if (el === null) throw new Error(`${sel} not rendered`);
+    const cs = getComputedStyle(el);
+    const transparent = (c: string): boolean => c === 'transparent' || /rgba\(.*,\s*0\)$/.test(c);
+    return !transparent(cs.borderTopColor) && cs.borderTopWidth !== '0px';
+  }, selector);
+}
+
+// Review mode's exit is asserted in `app.spec.ts`, beside the flow that already
+// produces a flagged story — reaching that state needs a topic menu and a
+// confirm dialog, and duplicating it here to check one border would be a second
+// copy of a setup that exists.
+test('leaving the saved filter is a button, not a caption (NEWS-266)', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 1000 });
+  await page.goto('/');
+  await page.click('[data-action=toggle-saved-filter]');
+  await expect(page.locator('.banner.saved')).toBeVisible();
+  expect(await hasVisibleEdge(page, '[data-action=clear-saved-filter]')).toBe(true);
+  await page.click('[data-action=clear-saved-filter]');
+});
+
 // The search field across the one-column collapse (NEWS-267).
 //
 // It shrank to a fixed 110px pill below 720px, leaving the input **62px** — about

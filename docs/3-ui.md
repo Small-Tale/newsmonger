@@ -80,6 +80,19 @@ The rail is also bounded to the viewport (`max-height: calc(100vh - 48px)`, a fl
 
 The page footer remains, but is **only filled when the sidebar is collapsed** (`display: none` hides the rail entirely in that state). One entry point on screen at a time, never zero; `.app-footer:not(:empty)` carries the rule and padding so an empty footer leaves no stray line across the page.
 
+### A mode's exit must look pressable (NEWS-266)
+
+`.btn.subtle` is `background: none; border-color: transparent; color: var(--ink-soft)` — at rest it is indistinguishable from the prose beside it, and only grows a border on hover. That is a reasonable treatment for a tertiary action and the wrong one for **the only way out of a mode**, which is what it was being used for in all four places the app has one: the saved-filter banner, the solo banner, the review banner, and the tuner's *Done*.
+
+The weight was backwards. Skip and Keep inside the tuner read as buttons while the escape from a six-round flow read as a caption; the review banner filtered the entire feed and offered a text-coloured exit. All four are now plain `.btn`, which has a border and a panel background — clearly pressable, still not `.btn.primary`, so *Keep* stays the loudest thing in the tuner.
+
+**All four, not the two that were reported.** Promoting some would have left the app less coherent than leaving them alone, and "the exits are quiet" was the finding — a pattern, not two bugs.
+
+Two decisions worth keeping:
+
+- **Placement did not change.** Every banner in the app is `icon · text (flex:1) · action`, so the action sits at the right edge. The distance from the sentence is real but it is the app's own convention, and one banner breaking rank is worse than a long gap. A bordered button at a banner's edge is not hard to find.
+- **The tests assert computed style, not the class.** `class="btn"` passing is not the point — a visible edge is. A future change to `.btn` that dropped its border would sail through a class assertion while reintroducing exactly this bug.
+
 ### New controls must reuse the established classes (NEWS-133/134/135)
 
 Three visual bugs shipped in the discovery dialog at once, and all three were the same mistake: inventing markup instead of reusing what the rest of the app already has.
