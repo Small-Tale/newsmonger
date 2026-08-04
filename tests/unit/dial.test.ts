@@ -46,6 +46,35 @@ describe('dialRemaining', () => {
   it('falls back to full on an unparseable timestamp', () => {
     expect(dialRemaining({ lastCheckedAt: 'not a date', paused: false }, HOUR)).toBe(1);
   });
+
+  /**
+   * A cleared topic counts down from the clear (NEWS-291).
+   *
+   * The row's *text* says "not checked yet", which is a claim about the past and
+   * is true. The ring is a claim about the future: a check really is coming, one
+   * interval after the clear. Leaving it full for a whole day would be the same
+   * kind of lie this ticket set out to remove, pointing the other way.
+   */
+  it('counts down from a clear when there is no check to count from', () => {
+    expect(dialRemaining({ lastCheckedAt: null, clearedAt: ago(0), paused: false }, HOUR)).toBeCloseTo(1, 2);
+    expect(dialRemaining({ lastCheckedAt: null, clearedAt: ago(HOUR / 2), paused: false }, HOUR)).toBeCloseTo(0.5, 2);
+    expect(dialRemaining({ lastCheckedAt: null, clearedAt: ago(HOUR), paused: false }, HOUR)).toBeCloseTo(0, 2);
+  });
+
+  it('prefers a check over an older clear', () => {
+    // Once a check has run since the clear, it owns the countdown again.
+    expect(
+      dialRemaining({ lastCheckedAt: ago(HOUR / 4), clearedAt: ago(HOUR * 3), paused: false }, HOUR),
+    ).toBeCloseTo(0.75, 2);
+  });
+
+  it('is still full for a topic neither checked nor cleared', () => {
+    expect(dialRemaining({ lastCheckedAt: null, clearedAt: null, paused: false }, HOUR)).toBe(1);
+  });
+
+  it('is still full while paused, even after a clear', () => {
+    expect(dialRemaining({ lastCheckedAt: null, clearedAt: ago(HOUR * 10), paused: true }, HOUR)).toBe(1);
+  });
 });
 
 /**
@@ -89,6 +118,20 @@ describe('dialCountdownMs', () => {
 
   it('is null before the first check', () => {
     expect(dialCountdownMs({ lastCheckedAt: null, paused: false }, HOUR)).toBeNull();
+  });
+
+  it('counts down from a clear, so the tooltip names the real next check (NEWS-291)', () => {
+    // `null` here is what makes the caller say "Waiting for first check" — which
+    // a cleared topic is not doing. It is waiting for the *next* one, an interval
+    // after the clear, and the tooltip should say when.
+    const left = dialCountdownMs({ lastCheckedAt: null, clearedAt: ago(HOUR * 0.75), paused: false }, HOUR);
+    expect(left).not.toBeNull();
+    expect(left as number).toBeCloseTo(HOUR * 0.25, -3);
+  });
+
+  it('stays null for a topic neither checked nor cleared', () => {
+    // The one case that really is "waiting for the first check".
+    expect(dialCountdownMs({ lastCheckedAt: null, clearedAt: null, paused: false }, HOUR)).toBeNull();
   });
 
   it('is null on an unparseable timestamp', () => {

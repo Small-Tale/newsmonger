@@ -106,6 +106,25 @@ That scheduling objection was correct. The conclusion drawn from it was not: it 
 
 Presence is read from `newestItemAtByTopic`, which the state payload already carries for the most-recent sort — and it had to be added to `topicRowCacheKey`, because `each()` memoizes a row against that string and anything the row renders has to be in it. Keyed on **presence, not the timestamp**: keying on the value would invalidate the memo on every new story and re-render the sidebar for a sentence that did not change.
 
+**Three surfaces speak about checking, and they do not all answer the same question.** The complaint named "labels per item", so all three were audited:
+
+| Surface | After a clear | Why |
+|---|---|---|
+| `.topic-meta` text | `not checked yet` | a claim about the **past**, and it is true — we hold nothing and asked nothing |
+| the dial ring + tooltip | drains from the clear; `Next check in 23h` | a claim about the **future**, and a check really is coming one interval after the clear. Left on `lastCheckedAt` it would have shown a full ring and "Waiting for first check" for a whole day while one silently approached — the same species of lie as the original bug, pointing the other way. `dial.ts` mirrors the server's `scheduleBaseline` for this |
+| Diagnostics run rows | unchanged | the run history survives a clear on purpose (FR-2.13); it is a record of what the *app* did, not a claim about the topic |
+
+The "falling behind" banner is deliberately quiet about a cleared topic: `isBehindSchedule` already excludes never-checked topics ("they're new, not behind"), and a cleared topic is new by construction.
+
+**The feed had its own copy of the problem**, and it is the general shape rather than one oversight: the client owns per-story state the server refresh cannot reach, so every such field has to be dropped explicitly. `clearStoryOverlays` is that one place, and it drops four things:
+
+- **`recentlyFlaggedItems`** — an overlay of stories flagged this session, merged into the feed so a misclick stays undoable (NEWS-61). `refreshState` cannot empty it, because the server does not know it exists, so a clear left any just-flagged story rendering over an emptied feed.
+- **`reviewTopicIds`** — review shows *only* flagged stories, so staying in it would strand the user behind a banner explaining why an unfillable feed is filtered.
+- **`expandedItemId`** + `threadShowAll` (NEWS-281/282) — it would name a story that no longer exists. Every other view change in the store already nulls it, and a clear is the most drastic view change there is.
+- **`threadPanes`** (NEWS-282) — a per-story cache of fetched threads whose invalidation rule is the thread's *size*. A clear does not change a size, it removes the thread, so nothing about that rule would ever evict these. No visible bug (story ids are UUIDs, so a new story cannot collide with a cached entry) — dropped because the store should not go on holding fetched data about deleted stories.
+
+Called **before** the request, so there is no frame in which the refreshed empty feed renders with the stale overlay still merged in.
+
 ### A mode's exit must look pressable (NEWS-266)
 
 `.btn.subtle` is `background: none; border-color: transparent; color: var(--ink-soft)` — at rest it is indistinguishable from the prose beside it, and only grows a border on hover. That is a reasonable treatment for a tertiary action and the wrong one for **the only way out of a mode**, which is what it was being used for in all four places the app has one: the saved-filter banner, the solo banner, the review banner, and the tuner's *Done*.

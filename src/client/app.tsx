@@ -225,8 +225,9 @@ const DIAL_R = 8;
 const DIAL_C = 2 * Math.PI * DIAL_R;
 
 /**
- * The watch dial: a ring that fills as the next scheduled check approaches.
- * Spins while checking; dashed while paused; empty when never checked.
+ * The watch dial: a ring that drains as the next scheduled check approaches.
+ * Spins while checking; dashed while paused; full when there is nothing to count
+ * from (never checked, or checked at an unreadable time).
  */
 function dialJsx(topic: Topic, checking: boolean, intervalMs: number): SafeHtml {
   // Counts **down** (NEWS-144): full just after a check, empty as the next one
@@ -241,11 +242,15 @@ function dialJsx(topic: Topic, checking: boolean, intervalMs: number): SafeHtml 
   // the interval was. The ring already conveys the proportion; the tooltip's job is
   // the thing the ring can't show.
   const countdown = dialCountdownMs(topic, intervalMs);
+  // `countdown === null` is the whole test for "nothing to count from" — it
+  // already covers a never-checked topic, and asking `lastCheckedAt === null`
+  // as well would claim a *cleared* topic was waiting for its first check while
+  // the ring beside it visibly counted down to the next one (NEWS-291).
   const title = checking
     ? 'Checking now'
     : topic.paused
       ? 'Paused'
-      : topic.lastCheckedAt === null || countdown === null
+      : countdown === null
         ? 'Waiting for first check'
         : `Next check ${formatCountdown(countdown)}`;
   return (
@@ -3983,6 +3988,9 @@ function wireEvents(root: HTMLElement): void {
       );
       if (!ok) return;
       try {
+        // Before the request, so there is no window in which the refreshed
+        // (empty) feed renders with the stale overlay still merged into it.
+        appStore.actions.clearStoryOverlays();
         const { cleared, cancelledChecks } = await clearAllStories();
         showToast(
           `Cleared ${String(cleared)} stor${cleared === 1 ? 'y' : 'ies'}` +

@@ -1901,6 +1901,67 @@ test('clear all stories, keeping topics and settings (NEWS-255)', async ({ page 
   await topicAction(page, cleared, 'delete');
 });
 
+test('after a clear no topic says "checked N ago", and none starts checking itself (NEWS-273)', async ({ page }) => {
+  // The owner's complaint was "labels like 'checked N minutes ago' **per item**",
+  // so this sweeps every row rather than the one row a single-topic test would
+  // create — a fix that only reached the selected topic would pass that and fail
+  // this.
+  await page.goto('/');
+  for (const name of ['Reset One', 'Reset Two']) {
+    await page.fill('.add-topic input', name);
+    await page.press('.add-topic input', 'Enter');
+    await expect(page.locator('.topic', { hasText: name })).toBeVisible();
+  }
+  // Adding checks a topic immediately (NEWS-54), so wait until both rows really
+  // do claim a check — otherwise the assertions below could pass on timing.
+  const rows = page.locator('.topic');
+  await expect(page.locator('.topic', { hasText: 'Reset One' }).locator('.topic-meta')).toContainText(
+    /checked\s+\S+\s+ago/,
+    { timeout: 15_000 },
+  );
+  await expect(page.locator('.topic', { hasText: 'Reset Two' }).locator('.topic-meta')).toContainText(
+    /checked\s+\S+\s+ago/,
+    { timeout: 15_000 },
+  );
+
+  await openSettingsTab(page, 'Data');
+  await page.locator('[data-action=clear-stories]').click();
+  await page.locator('[data-action=confirm-ok]').click();
+  await expect(page.locator('.toast')).toContainText('Cleared', { timeout: 15_000 });
+  await page.locator('.dialog [data-action=close-settings]').click();
+  await expect(page.locator('.dialog')).toHaveCount(0);
+
+  // Not one row anywhere may still claim a check.
+  const count = await rows.count();
+  expect(count).toBeGreaterThanOrEqual(2);
+  for (let i = 0; i < count; i++) {
+    await expect(rows.nth(i).locator('.topic-meta')).not.toContainText(/checked\s+\S+\s+ago/);
+  }
+
+  // The dial is the other surface that speaks about checking, and it must not
+  // read "Waiting for first check" — a check *is* coming, one interval after the
+  // clear. This is also the user-visible proxy for the scheduling half: the
+  // tooltip naming a wait is what a `clearedAt` baseline produces, where nulling
+  // `lastCheckedAt` on its own would leave the topic due immediately.
+  const dial = page.locator('.topic', { hasText: 'Reset One' }).locator('.dial');
+  await expect(dial).toHaveAttribute('title', /^Next check in /);
+
+  // …and nothing may start checking on its own afterwards. Note the scheduler's
+  // tick is pinned to 24h for the E2E run (`playwright.config.ts`), so this is
+  // not a test of the minute tick — the unit suite owns that, where a clear
+  // followed by `checkDue` must check nothing. What this does catch is the class
+  // of bug that repopulates the feed without the scheduler: a queued reissue, a
+  // cancelled check's results landing late, or the client re-firing a check.
+  await page.waitForTimeout(3_000);
+  await expect(page.locator('.item')).toHaveCount(0);
+  await expect(page.locator('.dial.checking')).toHaveCount(0);
+  await expect(page.locator('.topic-meta', { hasText: /checked\s+\S+\s+ago/ })).toHaveCount(0);
+
+  for (const name of ['Reset One', 'Reset Two']) {
+    await topicAction(page, page.locator('.topic', { hasText: name }), 'delete');
+  }
+});
+
 test('back up, then restore from that folder without moving files (NEWS-252)', async ({ page }) => {
   // The workflow this replaces was: find the backup file, rename it to
   // `data.json`, put it in a data directory you have never seen, and only if

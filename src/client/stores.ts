@@ -806,6 +806,44 @@ export const appStore = defineStore({
       const s = get();
       set({ ...s, recentlyFlaggedItems: s.recentlyFlaggedItems.filter((i) => i.id !== id) });
     },
+    /**
+     * Drop the client-only story state after every story has been cleared
+     * (NEWS-291).
+     *
+     * `refreshState` cannot do this. `recentlyFlaggedItems` is an overlay the
+     * *client* owns — full copies of stories flagged this session, merged into
+     * the feed so a misclick stays undoable (NEWS-61) — so a server refresh
+     * emptying `feedItems` leaves it untouched, and the overlay goes on rendering
+     * rows whose database rows are gone. A clear that visibly leaves a story on
+     * screen is the same bug this ticket is about, one layer up.
+     *
+     * Review mode goes with it: it shows only flagged stories, and there are
+     * none, so staying in it would strand the user on a permanently empty feed
+     * behind a banner.
+     *
+     * So does the expanded card (NEWS-281) and its thread state (NEWS-282):
+     * `expandedItemId` would otherwise name a story that no longer exists. Every
+     * other view change in this store already nulls it, and a clear is the most
+     * drastic view change there is.
+     *
+     * `threadPanes` goes too. Its invalidation rule is the thread's **size** — a
+     * thread that has grown is refetched — and a clear does not change a size, it
+     * removes the thread entirely, so nothing about that rule would ever evict
+     * these entries. No visible bug today, because story ids are UUIDs and a new
+     * story cannot collide with a cached one; dropped because the store should not
+     * go on holding fetched data about stories the user has deleted.
+     */
+    clearStoryOverlays: () => {
+      set({
+        ...get(),
+        recentlyFlaggedItems: [],
+        reviewTopicIds: [],
+        feedLimit: FEED_PAGE,
+        expandedItemId: null,
+        threadShowAll: false,
+        threadPanes: {},
+      });
+    },
     setReviewTopicIds: (reviewTopicIds: string[]) => {
       set({ ...get(), reviewTopicIds, feedLimit: FEED_PAGE, expandedItemId: null });
     },
