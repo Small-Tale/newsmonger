@@ -298,6 +298,21 @@ export interface AppState {
   /** Open story context menu (bookmark / share / flag), viewport coords (NEWS-61). */
   itemMenu: { x: number; y: number; itemId: string } | null;
   /**
+   * Id of the story whose detail pane is open, or null (NEWS-281).
+   *
+   * **One at a time — an accordion, not a set.** Two reasons, both about the
+   * feed rather than about simplicity: cards lay out in a CSS grid whose rows
+   * stretch every card to the tallest on the line (FR-3.37), so a second open
+   * pane grows a row that already grew; and the pane is *reading* surface, which
+   * is a thing you do to one story at a time. A set would also need a rule for
+   * what clears it, and "the story I am reading" clears itself.
+   *
+   * Ephemeral, like Solo and the filters (`docs/3-ui.md`): every action that
+   * replaces the list collapses it, because a pane pinned to a story that is no
+   * longer on screen is state nobody can see or dismiss.
+   */
+  expandedItemId: string | null;
+  /**
    * Stories flagged off-topic **this session** (NEWS-61), full data kept so
    * they can be merged (collapsed) into the server's normal-view page, which
    * now excludes them (NEWS-76). A just-flagged story stays visible as a dimmed
@@ -553,6 +568,7 @@ export const appStore = defineStore({
     categoryFilter: null,
     contextMenu: null,
     itemMenu: null,
+    expandedItemId: null,
     recentlyFlaggedItems: [],
     reviewTopicIds: [],
     confirm: null,
@@ -645,18 +661,20 @@ export const appStore = defineStore({
       set({ ...get(), selectedTopicIds });
     },
     // The four view-changing actions reset the feed page: a different view is a
-    // fresh list, shown from the top (NEWS-62).
+    // fresh list, shown from the top (NEWS-62). They also collapse an expanded
+    // story (NEWS-281) — the pane belongs to the list being read, and one left
+    // open behind a filter change is state with nothing on screen to close it.
     setSolo: (soloTopicIds: string[]) => {
-      set({ ...get(), soloTopicIds, feedLimit: FEED_PAGE });
+      set({ ...get(), soloTopicIds, feedLimit: FEED_PAGE, expandedItemId: null });
     },
     setCategoryFilter: (categoryFilter: AppState['categoryFilter']) => {
-      set({ ...get(), categoryFilter, feedLimit: FEED_PAGE });
+      set({ ...get(), categoryFilter, feedLimit: FEED_PAGE, expandedItemId: null });
     },
     setSavedFilter: (savedFilter: boolean) => {
-      set({ ...get(), savedFilter, feedLimit: FEED_PAGE });
+      set({ ...get(), savedFilter, feedLimit: FEED_PAGE, expandedItemId: null });
     },
     setSearchQuery: (searchQuery: string) => {
-      set({ ...get(), searchQuery, feedLimit: FEED_PAGE });
+      set({ ...get(), searchQuery, feedLimit: FEED_PAGE, expandedItemId: null });
     },
     showMoreFeed: () => {
       set({ ...get(), feedLimit: get().feedLimit + FEED_PAGE });
@@ -673,6 +691,32 @@ export const appStore = defineStore({
     closeItemMenu: () => {
       set({ ...get(), itemMenu: null });
     },
+    /**
+     * Open `id`'s detail pane, or close it if it is the one already open (NEWS-281).
+     *
+     * Opening a second story closes the first — see `expandedItemId` for why the
+     * feed is an accordion rather than a set of open cards.
+     */
+    toggleItemExpanded: (id: string) => {
+      const s = get();
+      set({ ...s, expandedItemId: s.expandedItemId === id ? null : id });
+    },
+    /**
+     * Collapse `id` specifically. A **no-op** when some other story — or none —
+     * is expanded, so a caller acting on one card (flagging it off-topic) can't
+     * close a pane the user opened on a different one.
+     */
+    collapseItem: (id: string) => {
+      const s = get();
+      if (s.expandedItemId !== id) return;
+      set({ ...s, expandedItemId: null });
+    },
+    /** Collapse whatever is expanded (the Escape key). No-op when nothing is. */
+    collapseExpandedItem: () => {
+      const s = get();
+      if (s.expandedItemId === null) return;
+      set({ ...s, expandedItemId: null });
+    },
     setFeed: (feed: { items: NewsItem[]; total: number }) => {
       set({ ...get(), feedItems: feed.items, feedTotal: feed.total });
     },
@@ -680,15 +724,21 @@ export const appStore = defineStore({
     // though the server's normal-view page now excludes it (NEWS-76).
     addRecentlyFlagged: (item: NewsItem) => {
       const s = get();
-      if (s.recentlyFlaggedItems.some((i) => i.id === item.id)) return;
-      set({ ...s, recentlyFlaggedItems: [...s.recentlyFlaggedItems, { ...item, offTopic: true }] });
+      // Flagging collapses that story's pane (NEWS-281): the card becomes a
+      // dimmed one-liner, which has no pane and no expander to close one with.
+      const expandedItemId = s.expandedItemId === item.id ? null : s.expandedItemId;
+      if (s.recentlyFlaggedItems.some((i) => i.id === item.id)) {
+        if (expandedItemId !== s.expandedItemId) set({ ...s, expandedItemId });
+        return;
+      }
+      set({ ...s, expandedItemId, recentlyFlaggedItems: [...s.recentlyFlaggedItems, { ...item, offTopic: true }] });
     },
     removeRecentlyFlagged: (id: string) => {
       const s = get();
       set({ ...s, recentlyFlaggedItems: s.recentlyFlaggedItems.filter((i) => i.id !== id) });
     },
     setReviewTopicIds: (reviewTopicIds: string[]) => {
-      set({ ...get(), reviewTopicIds, feedLimit: FEED_PAGE });
+      set({ ...get(), reviewTopicIds, feedLimit: FEED_PAGE, expandedItemId: null });
     },
     openDiscover: () => {
       set({ ...get(), discover: emptyDiscover() });

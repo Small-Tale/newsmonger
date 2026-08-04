@@ -1262,7 +1262,8 @@ h2.eyebrow {
   .dial .dial-fill,
   .btn,
   .chip,
-  .sources a {
+  .sources a,
+  .item-action.expand .icon {
     transition: none;
   }
 }
@@ -1656,6 +1657,65 @@ h2.eyebrow {
     // publisher's tall or panoramic artwork can't distort the feed's rhythm.
     aspect-ratio: 16 / 9;
     object-fit: cover;
+  }
+}
+
+// ---------------------------------------------------- story detail pane ---
+
+// The expanded card's pane (NEWS-281). Always in the DOM and *empty* when
+// collapsed — the same rule as `.item-media` above, plus one this element has of
+// its own: it is the expander's `aria-controls` target, and that cannot point at
+// an element which is sometimes absent.
+//
+// It bleeds to the card's own edges (the negative margins are `.item`'s padding)
+// so it reads as a drawer opening at the foot of the card rather than as a
+// paragraph someone forgot to indent. `var(--paper)` inside a `var(--panel)`
+// card is an inset well in *both* schemes — lighter page grey behind light
+// porcelain, near-black behind slate — so the effect is one declaration rather
+// than a light rule and a dark override.
+.item-pane {
+  &:empty {
+    display: none;
+  }
+
+  margin: 14px -20px -14px;
+  padding: 13px 20px;
+  border-top: 1px solid var(--line);
+  border-radius: 0 0 9px 9px; // the card's 10px, less its 1px border
+  background: var(--paper);
+  // Long unbroken strings (a URL in the timeline to come) must wrap rather than
+  // widen the card — a grid column at 720px has no room to give.
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+// The open card sits a little forward of the others on its grid row — a soft
+// halo just outside its border, in the accent's quiet tint rather than the
+// accent itself, so "open" doesn't compete with "selected" anywhere else.
+.item.expanded {
+  box-shadow:
+    var(--shadow),
+    0 0 0 1px var(--pine-soft);
+}
+
+// Placeholder until NEWS-282 fills the pane with the thread timeline.
+.item-pane-note {
+  margin: 0;
+  font-family: var(--sans);
+  font-size: 13px;
+  color: var(--ink-soft);
+}
+
+// The disclosure marker points down when closed, up when open. Driven off
+// `aria-expanded` rather than a second class, so the visual state cannot
+// disagree with the state screen readers are told.
+.item-action.expand {
+  .icon {
+    transition: transform 140ms ease;
+  }
+
+  &[aria-expanded='true'] .icon {
+    transform: rotate(180deg);
   }
 }
 

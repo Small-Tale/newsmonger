@@ -515,12 +515,36 @@ function flaggedRowJsx(item: NewsItem, topicName: string): SafeHtml {
   );
 }
 
-function itemJsx(item: NewsItem, topicName: string, variant: 'normal' | 'review' = 'normal'): SafeHtml {
+/**
+ * One story card.
+ *
+ * `expandedItemId` is threaded in rather than read from the store here: the leaf
+ * stays a function of its arguments, and the tracked read happens in `appJsx`
+ * where every other piece of state is read.
+ *
+ * **Only a normal, unflagged card expands** (NEWS-281). A flagged one-liner is
+ * on its way out of the feed, and review mode is triage — "is this story about
+ * my topic?", answered by the title — so neither gets the expander, and the
+ * click handler keys off the button's *presence* rather than re-deriving the
+ * variant from the DOM. See `docs/3-ui.md` FR-3.63.
+ */
+function itemJsx(
+  item: NewsItem,
+  topicName: string,
+  variant: 'normal' | 'review' = 'normal',
+  expandedItemId: string | null = null,
+): SafeHtml {
   // A just-flagged story collapses to a dimmed one-liner in the normal feed.
   if (variant === 'normal' && item.offTopic) return flaggedRowJsx(item, topicName);
   const review = variant === 'review';
+  const paneId = `item-pane-${item.id}`;
+  const expanded = !review && expandedItemId === item.id;
   return (
-    <article class={`item${item.saved ? ' saved' : ''}`} data-key={item.id} data-item-id={item.id}>
+    <article
+      class={`item${item.saved ? ' saved' : ''}${expanded ? ' expanded' : ''}`}
+      data-key={item.id}
+      data-item-id={item.id}
+    >
       <header>
         <span class="item-topic">{topicName}</span>
         <span class="item-time">{relativeTime(item.foundAt)}</span>
@@ -547,6 +571,22 @@ function itemJsx(item: NewsItem, topicName: string, variant: 'normal' | 'review'
               title="Share story"
             >
               {icon('share', 15)}
+            </button>
+            {/* The expander (NEWS-281). A real focusable control, because the
+                card body's click is a convenience gesture and an <article> with
+                a click handler is reachable by neither keyboard nor screen
+                reader. `aria-controls` mirrors the sidebar toggle → #topics-panel,
+                which is exactly why the pane below is always in the DOM. */}
+            <button
+              class="item-action expand"
+              type="button"
+              data-expand-item={item.id}
+              aria-expanded={expanded ? 'true' : 'false'}
+              aria-controls={paneId}
+              aria-label={expanded ? 'Hide story detail' : 'Show story detail'}
+              title={expanded ? 'Hide detail' : 'Show detail'}
+            >
+              {icon('chevron', 15)}
             </button>
           </span>
         )}
@@ -604,11 +644,25 @@ function itemJsx(item: NewsItem, topicName: string, variant: 'normal' | 'review'
           </li>
         ))}
       </ul>
+      {/* Always-present detail pane (NEWS-281), filled and emptied rather than
+          rendered conditionally — the same rule as `.item-media` above, and for
+          a second reason on top of it: this is the target of the expander's
+          `aria-controls`, and an `aria-controls` pointing at nothing is an axe
+          violation (docs/3-ui.md, NEWS-99). `:empty` hides it when collapsed.
+          NEWS-282 replaces the placeholder line with the thread timeline. */}
+      <div class="item-pane" id={paneId}>
+        {expanded ? <p class="item-pane-note">The story so far will appear here.</p> : ''}
+      </div>
     </article>
   );
 }
 
-function feedJsx(items: NewsItem[], topicNames: Map<string, string>, variant: 'normal' | 'review' = 'normal'): SafeHtml[] {
+function feedJsx(
+  items: NewsItem[],
+  topicNames: Map<string, string>,
+  variant: 'normal' | 'review' = 'normal',
+  expandedItemId: string | null = null,
+): SafeHtml[] {
   // Group by local calendar day, newest first. Groups are dynamic, so plain
   // `.map()` (no memoization); items keep data-key for keyed morphing.
   const groups = new Map<string, NewsItem[]>();
@@ -621,7 +675,7 @@ function feedJsx(items: NewsItem[], topicNames: Map<string, string>, variant: 'n
   return [...groups.entries()].map(([dateKey, dayItems]) => (
     <section class="day" data-key={`day-${dateKey}`}>
       <h2 class="eyebrow">{dayLabel(dateKey)}</h2>
-      {dayItems.map((item) => itemJsx(item, topicNames.get(item.topicId) ?? 'unknown topic', variant))}
+      {dayItems.map((item) => itemJsx(item, topicNames.get(item.topicId) ?? 'unknown topic', variant, expandedItemId))}
     </section>
   ));
 }
@@ -2963,7 +3017,7 @@ function appJsx(): SafeHtml {
       </section>
 
       <section id="feed" class="feed">
-        {feedJsx(feedItems, topicNames, feedVariant)}
+        {feedJsx(feedItems, topicNames, feedVariant, s.expandedItemId)}
         <div class="empty-slot">
           {s.loaded && feedItems.length === 0 && reviewMode ? (
             <p class="empty">No flagged stories for these topics.</p>
@@ -4142,6 +4196,40 @@ function wireEvents(root: HTMLElement): void {
     void refreshFeed();
   });
 
+  // --- Expandable story card (NEWS-281) ---
+  //
+  // ONE delegate for the whole gesture, the expander button included, per the
+  // NEWS-126 lesson: `delegate()` runs every matching handler for the same
+  // click, and the first one to re-render moves the DOM under the ones that
+  // follow. A second handler on the button would have to guess whether this one
+  // had already fired.
+  //
+  // Left-click only — `contextmenu` still opens the story menu, untouched.
+  void delegate(root, 'click', '[data-item-id]', (e, el) => {
+    const id = el.getAttribute('data-item-id');
+    if (id === null || !(e.target instanceof Element)) return;
+    // The expander's presence *is* the affordance, so ask the DOM rather than
+    // re-deriving "is this expandable" from the variant: a flagged one-liner and
+    // a review-mode card both render without one, and both must stay inert.
+    if (el.querySelector('[data-expand-item]') === null) return;
+    const target = e.target;
+    if (target.closest('[data-expand-item]') === null) {
+      // Everything else that already owns a click inside the card. Without these
+      // the toggle rides along with the action the user actually pressed — most
+      // visibly on a source link, which would open a tab AND move the card.
+      if (target.closest('.item-actions') !== null) return;
+      if (target.closest('ul.sources') !== null) return;
+      // Content the pane will grow in NEWS-282 is its own; clicking into it must
+      // not close the thing it is inside.
+      if (target.closest('.item-pane') !== null) return;
+      // Selecting the summary ends in a click on the card. Collapsing the story
+      // someone is copying out of would be the worst possible reading of that.
+      const selection = window.getSelection();
+      if (selection !== null && !selection.isCollapsed) return;
+    }
+    appStore.actions.toggleItemExpanded(id);
+  });
+
   void delegate(root, 'click', '[data-save-item]', (_e, el) => {
     const id = el.getAttribute('data-save-item');
     if (id === null) return;
@@ -4387,6 +4475,14 @@ function wireGlobalKeysAndDismiss(): void {
       }
       if (s.onboarding !== null && s.onboarding !== 'auto') {
         closeOnboarding();
+        return;
+      }
+      // An expanded story card (NEWS-281) is page content rather than an
+      // overlay, so it closes *after* every dialog — and after the menus, since
+      // a menu opens over a card — but before the selection rung, so one press
+      // does one thing.
+      if (s.contextMenu === null && s.itemMenu === null && s.expandedItemId !== null) {
+        appStore.actions.collapseExpandedItem();
         return;
       }
       appStore.actions.closeContextMenu();

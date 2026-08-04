@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
+import AxeBuilder from '@axe-core/playwright';
 import type { Page } from '@playwright/test';
 
 import { expect, openSettingsTab, resetTopics, test, topicAction } from './fixtures.js';
@@ -752,6 +753,189 @@ test('share a story via the OS sheet, or fall back to the clipboard (NEWS-43)', 
   // Clean up.
   await topicAction(page, row, 'delete');
   await expect(page.locator('.topic', { hasText: 'share probe topic' })).toHaveCount(0);
+});
+
+test('expanding a story card opens a detail pane in place (NEWS-281)', async ({ page }) => {
+  await page.goto('/');
+  await page.fill('.add-topic input', 'expand probe topic');
+  await page.press('.add-topic input', 'Enter');
+  const row = page.locator('.topic', { hasText: 'expand probe topic' });
+  await expect(row).toBeVisible();
+  await topicAction(page, row, 'check');
+
+  const probeItems = page.locator('.item', { has: page.locator('.item-topic', { hasText: 'expand probe topic' }) });
+  await expect(probeItems).toHaveCount(2, { timeout: 15_000 });
+  const card = probeItems.first();
+  const other = probeItems.nth(1);
+  const expander = card.locator('[data-expand-item]');
+  const pane = card.locator('.item-pane');
+
+  // The pane is always in the DOM and *empty* while collapsed — it is the
+  // expander's `aria-controls` target, and an always-present container is what
+  // keeps the card from being restructured (docs/3-ui.md).
+  await expect(pane).toHaveCount(1);
+  await expect(pane).toBeHidden();
+  const paneId = await pane.getAttribute('id');
+  expect(paneId).toBeTruthy();
+  await expect(expander).toHaveAttribute('aria-controls', paneId ?? '');
+  await expect(expander).toHaveAttribute('aria-expanded', 'false');
+
+  // The gesture: a click on the card body expands it in place. It must not open
+  // a browser — the source links do that, and this pane is the app-native half.
+  await card.locator('h3').click();
+  await expect(expander).toHaveAttribute('aria-expanded', 'true');
+  await expect(pane).toBeVisible();
+  await expect(card).toHaveClass(/expanded/);
+
+  // Clicking the body again collapses it.
+  await card.locator('h3').click();
+  await expect(expander).toHaveAttribute('aria-expanded', 'false');
+  await expect(pane).toBeHidden();
+
+  // An accordion: opening a second story closes the first. The feed's grid rows
+  // stretch to the tallest card on the line, so two open panes grow a row twice.
+  await card.locator('p').click();
+  await other.locator('h3').click();
+  await expect(other.locator('[data-expand-item]')).toHaveAttribute('aria-expanded', 'true');
+  await expect(expander).toHaveAttribute('aria-expanded', 'false');
+
+  // Escape collapses.
+  await page.keyboard.press('Escape');
+  await expect(other.locator('[data-expand-item]')).toHaveAttribute('aria-expanded', 'false');
+
+  // THE regression that matters: a source link is followed and the card does not
+  // move. Both handlers match the same click — `delegate()` walks up from the
+  // target — so without the `ul.sources` guard a link opens a tab *and* toggles.
+  // The request is aborted rather than attempted: the mock's URLs are fictional
+  // and the suite must not depend on the network.
+  await page.context().route('**://*.example.com/**', (r) => void r.abort());
+  const link = card.locator('ul.sources a').first();
+  expect(await link.getAttribute('href')).toMatch(/^https?:\/\//);
+  const popupPromise = page.waitForEvent('popup');
+  await link.click();
+  const popup = await popupPromise;
+  await popup.close();
+  await page.context().unroute('**://*.example.com/**');
+  await expect(expander).toHaveAttribute('aria-expanded', 'false');
+
+  // Same for the header controls: bookmark still toggles, and the card stays put.
+  await card.locator('[data-save-item]').click();
+  await expect(card).toHaveClass(/saved/);
+  await expect(expander).toHaveAttribute('aria-expanded', 'false');
+  await card.locator('[data-save-item]').click();
+  await expect(card).not.toHaveClass(/saved/);
+  await expect(expander).toHaveAttribute('aria-expanded', 'false');
+
+  await page.evaluate(() => {
+    (navigator as unknown as { share: (d: unknown) => Promise<void> }).share = () => Promise.resolve();
+  });
+  await card.locator('[data-share-item]').click();
+  await expect(expander).toHaveAttribute('aria-expanded', 'false');
+
+  // Right-click still opens the story menu, unchanged, and does not expand.
+  await card.locator('h3').click({ button: 'right' });
+  await expect(page.locator('.menu [data-item-menu-action=flag]')).toBeVisible();
+  await expect(expander).toHaveAttribute('aria-expanded', 'false');
+  await page.keyboard.press('Escape');
+  await expect(page.locator('.menu')).toHaveCount(0);
+
+  // Keyboard-only. The <article> is deliberately NOT focusable — a click handler
+  // on it would be a dead end for a keyboard user and an axe failure — so the
+  // expander is a real button that Enter and Space both operate.
+  expect(await card.evaluate((el) => el.hasAttribute('tabindex'))).toBe(false);
+  await expander.press('Enter');
+  await expect(expander).toBeFocused();
+  await expect(expander).toHaveAttribute('aria-expanded', 'true');
+  await expander.press(' ');
+  await expect(expander).toHaveAttribute('aria-expanded', 'false');
+
+  // Clean up.
+  await topicAction(page, row, 'delete');
+  await expect(page.locator('.topic', { hasText: 'expand probe topic' })).toHaveCount(0);
+});
+
+test('a flagged one-liner and a review card do not expand (NEWS-281)', async ({ page }) => {
+  // Neither variant carries an expander, and the click handler keys off the
+  // button's presence — so this asserts the two exemptions in one pass.
+  await page.goto('/');
+  await page.fill('.add-topic input', 'inert expand topic');
+  await page.press('.add-topic input', 'Enter');
+  const row = page.locator('.topic', { hasText: 'inert expand topic' });
+  await expect(row).toBeVisible();
+  const cards = page.locator('.item:not(.flagged-row)', {
+    has: page.locator('.item-topic', { hasText: 'inert expand topic' }),
+  });
+  await expect(cards).toHaveCount(2, { timeout: 15_000 });
+
+  // Expand one story, then flag it: the pane has to go with the card, which is
+  // about to become a dimmed one-liner with nothing left to close it.
+  await cards.first().locator('h3').click();
+  await expect(cards.first().locator('[data-expand-item]')).toHaveAttribute('aria-expanded', 'true');
+  await cards.first().click({ button: 'right' });
+  await page.locator('[data-item-menu-action=flag]').click();
+
+  const flagged = page.locator('.item.flagged-row', { hasText: 'inert expand topic' });
+  await expect(flagged).toHaveCount(1);
+  await expect(flagged.locator('[data-expand-item]')).toHaveCount(0);
+  await expect(flagged.locator('.item-pane')).toHaveCount(0);
+  // A dimmed row is on its way out of the feed: clicking its title does nothing.
+  await flagged.locator('.flagged-title').click();
+  await expect(flagged.locator('.item-pane')).toHaveCount(0);
+  await expect(page.locator('.item-pane:not(:empty)')).toHaveCount(0);
+
+  // Review mode is triage — "is this about my topic?" — so its cards carry the
+  // off-topic pill where the expander would be, and the body click is inert.
+  await row.click({ button: 'right' });
+  await page.locator('[data-menu-action=review-flagged]').click();
+  await expect(page.locator('.banner.review')).toBeVisible();
+  const reviewCard = page.locator('.item', { has: page.locator('.off-topic-pill.label') }).first();
+  await expect(reviewCard).toBeVisible();
+  await expect(reviewCard.locator('[data-expand-item]')).toHaveCount(0);
+  await reviewCard.locator('h3').click();
+  await expect(page.locator('.item-pane:not(:empty)')).toHaveCount(0);
+
+  // Clean up: leave review mode and remove the topic.
+  await page.locator('.banner.review [data-action=exit-review]').click();
+  await expect(page.locator('.banner.review')).toHaveCount(0);
+  await topicAction(page, row, 'delete');
+  await expect(page.locator('.topic', { hasText: 'inert expand topic' })).toHaveCount(0);
+});
+
+test('an expanded card is accessible in both themes (NEWS-281)', async ({ page }) => {
+  await page.goto('/');
+  await page.fill('.add-topic input', 'axe expand topic');
+  await page.press('.add-topic input', 'Enter');
+  const row = page.locator('.topic', { hasText: 'axe expand topic' });
+  await expect(row).toBeVisible();
+  const cardFor = () =>
+    page.locator('.item', { has: page.locator('.item-topic', { hasText: 'axe expand topic' }) }).first();
+  await expect(cardFor()).toBeVisible({ timeout: 15_000 });
+
+  for (const scheme of ['light', 'dark'] as const) {
+    // Emulate *then* navigate, as `a11y.spec.ts` does. Flipping the scheme on a
+    // live page animates every `.btn` through its colour transition, and axe
+    // scanning mid-flight reports an interpolated frame that is on screen for
+    // 120ms and fails contrast — a violation in neither theme.
+    await page.emulateMedia({ colorScheme: scheme });
+    await page.goto('/');
+    const card = cardFor();
+    await expect(card).toBeVisible({ timeout: 15_000 });
+    // Expansion is ephemeral, so each reload starts collapsed.
+    await card.locator('[data-expand-item]').click();
+    await expect(card.locator('.item-pane')).toBeVisible();
+
+    const results = await new AxeBuilder({ page })
+      .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])
+      .analyze();
+    const serious = results.violations.filter((v) => v.impact === 'serious' || v.impact === 'critical');
+    expect(serious, `expanded card / ${scheme}`).toEqual([]);
+  }
+  await page.emulateMedia({ colorScheme: 'light' });
+  await page.goto('/');
+
+  // Clean up.
+  await topicAction(page, row, 'delete');
+  await expect(page.locator('.topic', { hasText: 'axe expand topic' })).toHaveCount(0);
 });
 
 test('warns when checks fall behind the chosen interval (NEWS-59)', async ({ page }) => {

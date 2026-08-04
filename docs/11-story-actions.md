@@ -18,7 +18,15 @@ Per-story actions that live in each feed card's header: a **bookmark** to save a
 
   The **toast** (`#toast-slot`, `.toast`) is an in-app bottom-of-screen notice with a self-clearing timer (`showToast` in `app.tsx`), used because `window.alert` is a WKWebView no-op. It lives in an always-present slot (kerf KF-377, see [3 — UI](3-ui.md)).
 
+### The card's own click is now claimed (NEWS-281)
+
+Bookmark, share and flag are the actions *on* a story. As of NEWS-281 the card **body** has an action too: a left-click anywhere that isn't one of those controls or a source link **expands the card into a detail pane**. It is documented with the rest of the feed's interaction rules in [3 — UI](3-ui.md) (FR-3.63–3.66), not here, because what the pane holds is a feed concern rather than a per-story action — but it matters to this document for one reason: **every control on this page shares its click with that handler.**
+
+`delegate()` matches by walking up from the event target, so a press on the bookmark button also matches the card. The expand handler bails inside `.item-actions` and inside `ul.sources`; a new per-story control added outside those two wrappers will toggle the card as well as doing its own job. Put it in `.item-actions`.
+
+Right-click is unchanged: the story context menu (bookmark / share / flag) still opens exactly as before, since a right-click produces no `click` event.
+
 ## Testing
 
 - **Unit**: `Store.setItemSaved` and `PATCH /api/items/:id` (`tests/unit/saved-items.test.ts`); `shareText` formatting incl. the no-source case (`tests/unit/share.test.ts`).
-- **E2E** (`tests/e2e/app.spec.ts`): bookmark a story → filter to saved → unbookmark while filtered → reload clears the filter but not the flags (NEWS-42); share via a stubbed OS sheet (no toast) then via the clipboard fallback (toast + clipboard content), and the toast self-clears (NEWS-43).
+- **E2E** (`tests/e2e/app.spec.ts`): bookmark a story → filter to saved → unbookmark while filtered → reload clears the filter but not the flags (NEWS-42); share via a stubbed OS sheet (no toast) then via the clipboard fallback (toast + clipboard content), and the toast self-clears (NEWS-43). Both actions are also asserted **not** to expand the card (NEWS-281) — that they still fire is only half the property.
