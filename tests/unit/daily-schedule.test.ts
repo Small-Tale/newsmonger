@@ -83,6 +83,17 @@ describe('isDueDaily (NEWS-84)', () => {
     expect(isDueDaily({ paused: false, lastCheckedAt: null }, times, local(2026, 7, 27, 3))).toBe(true);
     expect(isDueDaily({ paused: true, lastCheckedAt: null }, times, local(2026, 7, 27, 12))).toBe(false);
   });
+
+  it('counts a clear as having served the slot (NEWS-291)', () => {
+    // A cleared topic reads as never checked, and "never checked" is
+    // unconditionally due in daily mode — so without the clear baseline, clearing
+    // at 9am would refill the feed within the minute, from the 8am slot the user
+    // had already had.
+    const cleared = { paused: false, lastCheckedAt: null, clearedAt: local(2026, 7, 27, 9).toISOString() };
+    expect(isDueDaily(cleared, times, local(2026, 7, 27, 9, 1))).toBe(false);
+    // The *next* slot is still owed, exactly as it would be after a real check.
+    expect(isDueDaily(cleared, times, local(2026, 7, 27, 18, 1))).toBe(true);
+  });
 });
 
 describe('isDueUnderSchedule (NEWS-84)', () => {

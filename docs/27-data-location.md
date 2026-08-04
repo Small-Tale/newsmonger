@@ -69,7 +69,7 @@ A setting names a **backup** directory. The app keeps running from `~/.newsmonge
 
   Its own route (`POST /api/items/clear`) rather than a flag on `PATCH /api/topics/:id`, which already carries the per-topic clear. FR-25.8 deliberately made that one require a rename to justify it, so `PATCH` would not quietly become a second delete; bolting *"…and every other topic"* onto it would be the same mistake at a larger scale.
 
-  **`covered_through_at` is reset**, exactly as the per-topic clear does (FR-25.6). Without it the next check resumes from where the deleted stories left off and reports nothing, so the clear would look like a permanent hole rather than a fresh start.
+  **Every topic's check state is reset**, exactly as the per-topic clear does (FR-25.6, and the full audit in [FR-2.13](2-news-checks-and-dedup.md#what-a-clear-resets)). `covered_through_at` was the original case: without it the next check resumes from where the deleted stories left off and reports nothing, so the clear would look like a permanent hole rather than a fresh start. NEWS-291 extended that to `last_checked_at`, the failure streak and its cooldown, so a cleared topic is genuinely back where it started — and set `cleared_at` so it does not become due for it (FR-1.15).
 
   **Clearing stops checks rather than refusing** (*revised in NEWS-271*). It used to answer `409` — "a check is running, wait for it to finish, then clear" — on sound reasoning: a check computed its "already known" list *before* the clear, so letting it finish afterwards files only the stories missing from that stale list, leaving a partial set that looks like a half-failed clear.
 

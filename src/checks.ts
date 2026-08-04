@@ -560,6 +560,21 @@ export class CheckRunner {
       });
       return fresh.length;
     } catch (err) {
+      // A cancellation is neither a success nor a failure: the user changed their
+      // mind, and **nothing about it should be recorded** (NEWS-257, NEWS-271).
+      // Returning here rather than after the failure bookkeeping below is the
+      // NEWS-291 correction: `recordCheckFailure` used to run first, so stopping
+      // a check quietly gave the topic a failure streak and a two-minute
+      // cooldown. Both comments here and on `cancelStaleChecks` claimed the topic
+      // was left untouched and therefore still due; the cooldown meant it was
+      // not, and after a clear it meant a freshly reset topic carried a phantom
+      // failure the user never saw.
+      if (err instanceof CancelledCheck) {
+        // Recording it as failed would also raise the failure banner and feed the
+        // falling-behind detector over something they chose to stop.
+        this.store.deleteRun(run.id);
+        return null;
+      }
       // Advance the *attempt* clock so the scheduler waits a full interval
       // before retrying instead of hammering a broken provider — but leave
       // `coveredThroughAt` alone, so whatever news was pending is still asked
@@ -593,15 +608,6 @@ export class CheckRunner {
         // every tick.
         const streak = (this.store.getTopic(topicId)?.consecutiveFailures ?? 0) + 1;
         this.store.recordCheckFailure(topicId, new Date(Date.now() + backoffDelayMs(streak, FAILURE_COOLDOWN)));
-      }
-      if (err instanceof CancelledCheck) {
-        // Neither a success nor a failure: the user changed their mind. Recording
-        // it as failed would raise the failure banner and feed the
-        // falling-behind detector over something they chose to stop, and
-        // `lastCheckedAt` is untouched so the topic stays due — which is what
-        // makes a cancelled *scheduled* check need no reissuing (NEWS-257).
-        this.store.deleteRun(run.id);
-        return null;
       }
       this.store.finishRun(run.id, {
         status: 'failed',
@@ -879,25 +885,62 @@ export function effectiveInterval(
  * ordering is the right call over a fancier anti-starvation scheme.
  */
 export function byCheckOrder(
-  a: { highPriority: boolean; lastCheckedAt: string | null },
-  b: { highPriority: boolean; lastCheckedAt: string | null },
+  a: { highPriority: boolean } & Schedulable,
+  b: { highPriority: boolean } & Schedulable,
 ): number {
   if (a.highPriority !== b.highPriority) return a.highPriority ? -1 : 1;
-  if (a.lastCheckedAt === null && b.lastCheckedAt === null) return 0;
-  if (a.lastCheckedAt === null) return -1; // never checked = most overdue
-  if (b.lastCheckedAt === null) return 1;
-  return Date.parse(a.lastCheckedAt) - Date.parse(b.lastCheckedAt); // oldest first
+  // The scheduling baseline, not `lastCheckedAt` (NEWS-291) — a just-cleared
+  // topic reads as never checked, and ordering on that alone would send it to the
+  // *front* of the sweep as the most overdue thing in the app, ahead of topics
+  // that have genuinely been waiting.
+  const aSince = scheduleBaseline(a);
+  const bSince = scheduleBaseline(b);
+  if (aSince === null && bSince === null) return 0;
+  if (aSince === null) return -1; // never checked = most overdue
+  if (bSince === null) return 1;
+  return Date.parse(aSince) - Date.parse(bSince); // oldest first
+}
+
+/** The fields due-ness is computed from. `clearedAt` is optional for callers that predate it. */
+export interface Schedulable {
+  lastCheckedAt: string | null;
+  clearedAt?: string | null;
+}
+
+/**
+ * The moment a topic's next interval is measured from — the answer to "when did
+ * we last *act* on this topic", which is not the same question as "when did we
+ * last check it" (NEWS-291).
+ *
+ * Clearing a topic's stories resets it to its initial state, `lastCheckedAt`
+ * included, because that is what every "checked N ago" surface reads and the
+ * owner asked twice for a genuine reset (NEWS-273). Taken alone that would make
+ * the topic **due**, so a clear would cancel the checks in flight (NEWS-271) and
+ * then start a full sweep on the next minute tick — one minute after the user
+ * said they wanted none of it.
+ *
+ * Splitting the two fields is what satisfies both: **display** asks
+ * `lastCheckedAt` and sees a topic that has never been checked; **scheduling**
+ * asks this, and waits a full interval from the clear. The alternative shapes
+ * considered were a stated `nextDueAt` (which has to be recomputed on every
+ * interval change, so an interval the user shortens would not take effect until
+ * after the stale due date) and a not-due flag (which says *that* a topic is
+ * held back but not *until when*, so nothing can render a countdown).
+ *
+ * `??` rather than a max: the clear nulls `lastCheckedAt` in the same
+ * transaction that sets `clearedAt`, so a non-null `lastCheckedAt` is always
+ * from a check that ran *after* the clear and is always the later of the two.
+ */
+export function scheduleBaseline(topic: Schedulable): string | null {
+  return topic.lastCheckedAt ?? topic.clearedAt ?? null;
 }
 
 /** Whether a topic is due for a scheduled check at `now`, given its interval. */
-export function isDue(
-  topic: { paused: boolean; lastCheckedAt: string | null },
-  intervalMs: number,
-  now: Date,
-): boolean {
+export function isDue(topic: { paused: boolean } & Schedulable, intervalMs: number, now: Date): boolean {
   if (topic.paused) return false;
-  if (topic.lastCheckedAt === null) return true;
-  return now.getTime() - Date.parse(topic.lastCheckedAt) >= intervalMs;
+  const since = scheduleBaseline(topic);
+  if (since === null) return true;
+  return now.getTime() - Date.parse(since) >= intervalMs;
 }
 
 /**
@@ -937,16 +980,16 @@ export function lastSlotBefore(times: string[], now: Date): Date | null {
  * once a minute and the app may be closed at 08:00, so a missed slot stays
  * outstanding until it is served rather than being skipped to tomorrow.
  */
-export function isDueDaily(
-  topic: { paused: boolean; lastCheckedAt: string | null },
-  times: string[],
-  now: Date,
-): boolean {
+export function isDueDaily(topic: { paused: boolean } & Schedulable, times: string[], now: Date): boolean {
   if (topic.paused) return false;
-  if (topic.lastCheckedAt === null) return true;
+  // The clear baseline counts here too (NEWS-291): a topic cleared *after* the
+  // last slot passed has already had its reset this period, and running the slot
+  // anyway would repopulate the feed within the minute.
+  const since = scheduleBaseline(topic);
+  if (since === null) return true;
   const slot = lastSlotBefore(times, now);
   if (slot === null) return false;
-  return Date.parse(topic.lastCheckedAt) < slot.getTime();
+  return Date.parse(since) < slot.getTime();
 }
 
 /**
@@ -960,11 +1003,10 @@ export function isDueDaily(
 export function isDueUnderSchedule(
   topic: {
     paused: boolean;
-    lastCheckedAt: string | null;
     highPriority: boolean;
     /** Failure cooldown (NEWS-110); absent in callers that predate it. */
     retryAfter?: string | null;
-  },
+  } & Schedulable,
   settings: Settings,
   now: Date,
 ): boolean {

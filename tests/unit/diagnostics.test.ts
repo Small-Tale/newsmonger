@@ -20,6 +20,7 @@ function state(over: Partial<StateResp> = {}): StateResp {
     categorySource: 'auto',
     consecutiveFailures: 0,
     retryAfter: null,
+    clearedAt: null,
       },
     ],
     latestItemIds: [],

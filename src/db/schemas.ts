@@ -89,6 +89,22 @@ export const TopicSchema = z.object({
    * hadn't — which is what made a five-minute outage cost a whole interval.
    */
   retryAfter: z.string().nullable().default(null),
+  /**
+   * ISO timestamp of the last time this topic's stories were **cleared**
+   * (NEWS-291); null if they never have been.
+   *
+   * Clearing resets the topic to its initial state — `lastCheckedAt` and
+   * `coveredThroughAt` go back to null, so every surface reads as never checked.
+   * That alone would make the topic *due*, and a clear would start the sweep it
+   * had just cancelled (NEWS-271). This field is what keeps the two apart:
+   * display asks `lastCheckedAt`, scheduling asks the later of the two, so a
+   * cleared topic reads as new **and** waits a full interval.
+   *
+   * Only consulted while `lastCheckedAt` is null — see `scheduleBaseline` in
+   * `src/checks.ts`. Kept rather than wiped by the next check, because it is the
+   * record of when the reset happened, and the undo needs the previous value.
+   */
+  clearedAt: z.string().nullable().default(null),
 });
 export type Topic = z.infer<typeof TopicSchema>;
 

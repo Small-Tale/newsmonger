@@ -25,6 +25,10 @@ function snapshot(n: number): ClearedItems {
       offTopic: false,
     })),
     coveredThroughAt: '2026-01-01T00:00:00.000Z',
+    lastCheckedAt: '2026-01-01T00:00:00.000Z',
+    consecutiveFailures: 0,
+    retryAfter: null,
+    clearedAt: null,
   };
 }
 
@@ -133,6 +137,70 @@ describe('restoring a cleared topic', () => {
     expect(store.listItems(id)).toHaveLength(2);
     // Both halves, or the next check re-reports every restored story as new.
     expect(store.getTopic(id)?.coveredThroughAt).toBe(coveredIso);
+  });
+
+  /**
+   * The fuller reset of NEWS-291 has to be undoable too.
+   *
+   * An undo is supposed to be an inverse. Now that a clear resets the whole check
+   * state, restoring only the stories and the window would put the feed back
+   * while leaving the topic claiming it had never been checked — a state no
+   * sequence of real events could produce, and one that would show the user
+   * "not checked yet" over two stories.
+   */
+  it('puts the whole check state back, not just the stories (NEWS-291)', async () => {
+    const { store, app: a } = app();
+    const id = seed(store);
+    const checked = new Date('2026-01-04T00:00:00.000Z');
+    store.markTopicChecked(id, checked);
+    store.markTopicCovered(id, new Date('2026-01-03T00:00:00.000Z'));
+    store.recordCheckFailure(id, new Date('2026-01-05T00:00:00.000Z'));
+    const before = store.getTopic(id);
+
+    await a.request(`/api/topics/${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: 'F1', clearItems: true }),
+    });
+    // The clear did reset it…
+    expect(store.getTopic(id)?.lastCheckedAt).toBeNull();
+    expect(store.getTopic(id)?.clearedAt).not.toBeNull();
+
+    await a.request(`/api/topics/${id}/restore-cleared`, { method: 'POST' });
+
+    const after = store.getTopic(id);
+    expect(after?.lastCheckedAt).toBe(before?.lastCheckedAt);
+    expect(after?.coveredThroughAt).toBe(before?.coveredThroughAt);
+    expect(after?.consecutiveFailures).toBe(before?.consecutiveFailures);
+    expect(after?.retryAfter).toBe(before?.retryAfter);
+    // Including the baseline: the clear it belonged to has been undone, so
+    // leaving it set would hold the topic back for an interval on account of an
+    // event that no longer happened.
+    expect(after?.clearedAt).toBe(before?.clearedAt ?? null);
+  });
+
+  it('restores the previous clear, not the undone one, when a topic is cleared twice', async () => {
+    // Clear, undo, clear, undo. The second undo must land on the state the second
+    // clear found — which still carries the *first* clear's baseline.
+    const { store, app: a } = app();
+    const id = seed(store);
+    const clearOnce = async () =>
+      a.request(`/api/topics/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: 'F1', clearItems: true }),
+      });
+
+    await clearOnce();
+    const firstClearedAt = store.getTopic(id)?.clearedAt;
+    expect(firstClearedAt).not.toBeNull();
+    await a.request(`/api/topics/${id}/restore-cleared`, { method: 'POST' });
+    expect(store.getTopic(id)?.clearedAt, 'the undo rolled the baseline back to null').toBeNull();
+
+    await clearOnce();
+    await a.request(`/api/topics/${id}/restore-cleared`, { method: 'POST' });
+    expect(store.getTopic(id)?.clearedAt).toBeNull();
+    expect(store.listItems(id)).toHaveLength(2);
   });
 
   it('restores stories under their original ids, with their flags', async () => {

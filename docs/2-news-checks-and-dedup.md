@@ -26,6 +26,37 @@ Checks run through a pluggable **provider** abstraction (`src/ai/providers/`, se
 
 The distinction is load-bearing rather than pedantic. Two outlets covering one event yield two different dedupe keys, which is exactly why both are stored and both appear in the feed — so key proximity cannot be read as relatedness, and thread membership has to be computed from the titles themselves. The two also have opposite outcomes: dedup **drops** a story, threading **keeps and groups** it. Dedup runs first; threading only ever describes what survived it.
 
+## What a clear resets
+
+- **FR-2.13** *(Shipped, NEWS-291)* **Clearing a topic's stories clears what we have seen for that topic**, and returns the topic to its initial check state. The scheduling half of this rule — why a cleared topic reads as never checked without becoming due — is [FR-1.15](1-topics-and-scheduling.md).
+
+  The question this answers is whether a clear leaves a hidden ledger behind that would stop the same news being found again. It does not, and the reason is worth stating: **`items` *is* the ledger.** There is no separate "stories we have seen" table to forget. Everything derived from it goes when the rows go:
+
+  | Derived from `items` | Read by |
+  |---|---|
+  | `dedupeKeysForTopic` | the dedup filter (FR-2.8) — so a cleared topic can find the same stories again |
+  | `offTopicTitlesForTopic` | the prompt's negative examples (FR-15.x) |
+  | `itemStatsByTopic` | the sidebar's today-count badge and the most-recent sort |
+  | `flaggedCountsByTopic` | the "Review flagged" badge |
+  | `latestItemIds` | new-story notifications |
+  | `thread_id` and every thread read off it | story threads (NEWS-280, [29](29-story-threads.md)) — a thread is a set of `items` rows, so there is no thread table to orphan |
+
+  The columns a clear resets, and the one it sets:
+
+  | Column | On a clear | Why |
+  |---|---|---|
+  | `covered_through_at` | → null | the prompt's window; a cleared topic must ask from scratch, not resume from where the vanished stories left off |
+  | `last_checked_at` | → null | what every "checked N ago" surface reads (FR-1.5) |
+  | `consecutive_failures` | → 0 | a failure streak is a fact about stories we no longer hold |
+  | `retry_after` | → null | a cooldown outranks the schedule, so carrying one in would hold back a check nobody has asked for yet |
+  | `cleared_at` | → now | the scheduling baseline that lets `last_checked_at` go to null safely |
+
+  Deliberately untouched: `id`, `created_at`, `name`, `guidance`, `paused`, `high_priority`, `category`/`subcategory`/`category_source`. A clear discards *findings*, not the user's preferences for the topic. Re-classifying in particular would spend a model call to relearn something already known, and would discard a manual classification (FR-22.7).
+
+  **The one thing that survives on purpose is the `runs` history.** It records what the app *did*, not what the topic is about, and Diagnostics (FR-3.25–3.28), the failure banner (FR-3.x) and the falling-behind detector (FR-13.3a) all read it. This is the single respect in which a clear is not the same as deleting and re-adding the topic — a delete cascades its runs, a clear keeps them. Consequence worth knowing: a topic whose last check *failed* keeps that failed run, so the failure banner can still name it after a clear even though the topic's own streak has been reset.
+
+  Both clear paths apply the same reset — `clearItemsForTopic` (per topic, offered with a rename) and `clearAllItems` (app-wide). They are separate implementations for the reasons in FR-27.11, so they share the reset SQL rather than one calling the other.
+
 ## Sanitizing model output
 
 Titles, summaries and source titles are stripped of markup at the boundary (`src/ai/sanitize.ts`), on both write and read.
@@ -92,6 +123,8 @@ Source URLs come from the model. The live-API check on 2026-07-24 found every ci
   **It is a real abort, not a discarded result.** An `AbortSignal` reaches both SDKs (`messages.stream(…, { signal })`, `responses.create(…, { signal })`), and for the CLI agents it kills the child process — the same `SIGTERM` the ten-minute timeout already used, because a subscription agent left running keeps spending quota on the abandoned question. The retry loop checks the signal at the top of every attempt as well as after the request, so an abort landing during a backoff sleep is not answered by trying again.
 
   **A cancelled check records nothing.** Its run row is deleted rather than marked failed: `runs` feeds the failure banner and the falling-behind detector (FR-13.3a), and neither should fire over something the user chose to stop. No `cancelled` status was added — that would widen an enum older builds validate on read, and a check that produced nothing may as well leave nothing.
+
+  *Nothing* has been literal only since NEWS-291. The cancellation path used to fall through the ordinary failure bookkeeping on its way out, so stopping a check gave its topic a `consecutiveFailures` of 1 and a two-minute `retryAfter` — invisible, because the run row was then deleted, but real. It made FR-2.12's promise below false (the cooldown outranks the schedule, so the topic was *not* left due), and after a clear it landed a microtask **after** the reset and quietly undid it. The cancellation now returns before any of that runs.
 
 - **FR-2.12** *(Shipped, NEWS-257)* **Only *manual* checks are reissued.** `lastCheckedAt` is untouched by a cancellation, so a cancelled scheduled check leaves its topic due and the next tick picks it up under the new settings unaided. Reissuing those here would re-spend quota every time someone browsed the dropdowns — which is precisely the interaction this feature invites.
 

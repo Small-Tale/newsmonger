@@ -12,7 +12,9 @@ See also [25 — Topic Editing](25-topic-editing.md), where clearing is specifie
 
 - **FR-26.1** *(Shipped)* Clearing a topic's stories is undoable for a short window. Nothing else is: deleting a topic already confirms first, and everything else in the app is reversible by doing it again.
 
-- **FR-26.2** *(Shipped)* The undo restores **both halves of what the clear removed** — the stories *and* `coveredThroughAt`. Clearing nulls the window so the next check spans a sensible period (FR-25.6); an undo that put the stories back and left the window null would re-report every restored story as new on the next check, which is a worse outcome than the clear.
+- **FR-26.2** *(Shipped; widened in NEWS-291)* The undo restores **everything the clear reset**, not just the stories. Originally that was the stories *and* `coveredThroughAt`: clearing nulls the window so the next check spans a sensible period (FR-25.6), and an undo that put the stories back and left the window null would re-report every restored story as new on the next check — a worse outcome than the clear.
+
+  Since a clear resets the topic's whole check state (FR-1.15), the snapshot carries all of it: `coveredThroughAt`, `lastCheckedAt`, `consecutiveFailures`, `retryAfter`, and the **previous** `clearedAt`. The principle is that an undo is an *inverse*, and a partial one lands the topic in a third state that no sequence of real events could produce — stories on screen under a row reading "not checked yet", scheduled off a clear the user has just taken back. Restoring the previous `clearedAt` rather than clearing the field matters for the clear-undo-clear-undo sequence, where the topic genuinely does have an earlier clear to return to.
 
 - **FR-26.3** *(Shipped)* Stories return **under their original ids**, with `saved` and `offTopic` intact. A story's id is what a bookmark, an off-topic flag and an open share dialog all refer to, so re-adding it under a fresh id would restore the text while quietly breaking every reference to it. An undo that silently un-bookmarked a story is worse than the clear it was undoing.
 

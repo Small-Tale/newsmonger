@@ -31,7 +31,7 @@ const { DatabaseSync } = createRequire(import.meta.url)('node:sqlite') as {
  */
 
 /** Bumped when `TABLES` changes in a way an existing database must be migrated for. */
-export const SCHEMA_VERSION = 5;
+export const SCHEMA_VERSION = 6;
 
 /**
  * Upgrades for a database created by an older `SCHEMA_VERSION`.
@@ -71,6 +71,12 @@ const MIGRATIONS: Partial<Record<number, (db: DatabaseSyncType) => void>> = {
     db.exec(`ALTER TABLE items ADD COLUMN thread_id TEXT NOT NULL DEFAULT ''`);
     db.exec(`UPDATE items SET thread_id = id`);
   },
+  // v5 → v6: the scheduling baseline a clear leaves behind (NEWS-291). Additive
+  // and nullable, and null is right for every existing topic: none of them has
+  // been cleared, so their due-ness still comes from `last_checked_at` alone.
+  5: (db) => {
+    db.exec(`ALTER TABLE topics ADD COLUMN cleared_at TEXT`);
+  },
 };
 
 /**
@@ -109,7 +115,8 @@ CREATE TABLE IF NOT EXISTS topics (
   subcategory        TEXT,
   category_source    TEXT NOT NULL DEFAULT 'auto',
   consecutive_failures INTEGER NOT NULL DEFAULT 0,
-  retry_after        TEXT
+  retry_after        TEXT,
+  cleared_at         TEXT
 );
 
 CREATE TABLE IF NOT EXISTS items (

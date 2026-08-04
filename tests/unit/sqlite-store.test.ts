@@ -4,6 +4,7 @@ import { DatabaseSync } from 'node:sqlite';
 
 import { describe, expect, it, vi } from 'vitest';
 
+import { scheduleBaseline } from '../../src/checks.js';
 import { DEFAULT_RETENTION_DAYS } from '../../src/db/schemas.js';
 import { dbPath, SCHEMA_VERSION } from '../../src/db/sqlite.js';
 import { Store } from '../../src/db/store.js';
@@ -650,6 +651,24 @@ describe('schema migration v1 → v2 (NEWS-97)', () => {
     expect(topic?.category).toBeNull();
     expect(topic?.subcategory).toBeNull();
     expect(topic?.categorySource).toBe('auto');
+    // Null is the right arrival value for the v4 → v5 clear baseline too
+    // (NEWS-291): this topic has never been cleared, so its due-ness must still
+    // come from `lastCheckedAt` alone. A non-null default here would silently
+    // re-date every existing topic's schedule on upgrade.
+    expect(topic?.clearedAt).toBeNull();
+  });
+
+  it('leaves a migrated topic scheduled off its real check time (NEWS-291)', () => {
+    // The migration's behavioural consequence, not just its column. The v1 row
+    // was checked on 2026-07-02 and never cleared, so the baseline is that date.
+    const dir = tmpDataDir();
+    v1Database(dir);
+
+    const topic = new Store(dir).getTopic('t1');
+    expect(topic).toBeDefined();
+    expect(scheduleBaseline({ lastCheckedAt: topic?.lastCheckedAt ?? null, clearedAt: topic?.clearedAt ?? null })).toBe(
+      '2026-07-02T00:00:00.000Z',
+    );
   });
 
   it('widens runs with an effort column, and an old run reads back as unknown (NEWS-226)', () => {
@@ -705,6 +724,7 @@ describe('schema migration v1 → v2 (NEWS-97)', () => {
     const cols = (db.prepare('PRAGMA table_info(topics)').all() as { name: string }[]).map((c) => c.name);
     expect(cols).toContain('category');
     expect(cols).toContain('category_source');
+    expect(cols).toContain('cleared_at');
     db.close();
   });
 });

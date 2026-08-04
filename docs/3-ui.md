@@ -90,13 +90,19 @@ The visible symptom was small — Settings → Source showed its two field group
 
 **The guard measures the browser, not the stylesheet.** `keys.spec.ts` asserts the three left edges are equal. Asserting against the SCSS variables would have passed the whole time this was broken, since the values were right and a shorthand was eating one of them.
 
-### A checked topic with no stories says so (NEWS-273)
+### A cleared topic reads as never checked (NEWS-273)
 
-The sidebar status was a four-state ladder — `checking…` / `paused` / `checked <relative time>` / `not checked yet` — and after clearing every story a topic still read **"checked 1d ago"** beside an empty feed. Every word of that was true and the sentence was misleading: it implies the app is holding what the check found, so a reader takes it for the clear having failed. It now reads `checked 1d ago · no stories`.
+The sidebar status is a four-state ladder — `checking…` / `paused` / `checked <relative time>` / `not checked yet` — and after clearing every story a topic still read **"checked 1d ago"** beside an empty feed. Every word of that was true and the sentence was misleading: it implies the app is holding what the check found, so a reader takes it for the clear having failed.
 
-**The check time stays**, qualified rather than replaced, for two reasons: the topic *was* checked then, and that timestamp is what the dial counts down from (NEWS-144).
+**This took two attempts, and the first one is worth recording because its reasoning was half right.**
 
-**`lastCheckedAt` is deliberately not reset.** Nulling it would make the row read "not checked yet" and the dial show full, which is arguably more honest — but it would also make every topic *due*, so a clear would kick off a full sweep on the next minute tick. That directly contradicts NEWS-271, which made clearing **stop** checks. A clear must not start N checks a minute after cancelling one.
+The first fix qualified the sentence: `checked 1d ago · no stories`. The check time stayed on the grounds that the topic *was* checked then and the timestamp is what the dial counts down from (NEWS-144) — and, decisively, that nulling `lastCheckedAt` would make every topic *due*, so a clear would kick off a full sweep on the next minute tick, contradicting NEWS-271, which had just made clearing **stop** checks.
+
+That scheduling objection was correct. The conclusion drawn from it was not: it treated one field as having to serve both display and due-ness, and so traded the honest sentence away to protect the schedule. The owner rejected the result — a cleared topic should read as one we have never checked, because that is what it now is.
+
+**Both are satisfied by splitting the field, not by choosing between them** (NEWS-291, FR-1.15). Clearing resets `lastCheckedAt` to null and records `clearedAt`; the UI reads the former and shows `not checked yet`, while the scheduler reads `lastCheckedAt ?? clearedAt` and waits a full interval. Nothing in this file needs to know about the second field — the row's four-state ladder is unchanged, and the state it renders after a clear is simply the one a brand-new topic renders.
+
+**`· no stories` stays**, for the case it is actually right about: a topic that has genuinely been checked and found nothing (a quiet week, or the mock's "empty" topic). That is a real state, distinct from a cleared topic, and it deserves the sentence it was given. What changed is that a clear no longer produces it.
 
 Presence is read from `newestItemAtByTopic`, which the state payload already carries for the most-recent sort — and it had to be added to `topicRowCacheKey`, because `each()` memoizes a row against that string and anything the row renders has to be in it. Keyed on **presence, not the timestamp**: keying on the value would invalidate the memo on every new story and re-render the sidebar for a sentence that did not change.
 

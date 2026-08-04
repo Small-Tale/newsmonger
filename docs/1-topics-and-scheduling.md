@@ -10,7 +10,7 @@ The core of the app: a list of topics the user follows, checked for news on a sc
 - **FR-1.2** Topic names are unique, case-insensitively. Adding a duplicate is rejected with a clear error.
 - **FR-1.3** The user can delete a topic. Deleting a topic removes all of its news items and check-run records.
 - **FR-1.4** The user can pause and resume a topic. Paused topics are skipped by both scheduled and "check all" sweeps (an explicit per-topic "Check" still works via the API only when unpaused — the UI disables nothing, but scheduled/check-all never touch paused topics).
-- **FR-1.5** Each topic tracks when it was last checked (`lastCheckedAt`); this is shown in the UI as relative time.
+- **FR-1.5** Each topic tracks when it was last checked (`lastCheckedAt`); this is shown in the UI as relative time, or as "not checked yet" when it is null — which includes a topic whose stories have just been cleared (FR-1.15).
 - **FR-1.13** A topic may carry optional free-text **guidance** describing what the user wants from it, which is fed to every check's prompt. Empty by default, so a plain topic behaves exactly as before. Full spec in [18 — Topic Guidance](18-topic-guidance.md).
 
 ## Scheduling
@@ -19,14 +19,17 @@ The core of the app: a list of topics the user follows, checked for news on a sc
 - **FR-1.7** A scheduler sweeps once per minute (plus once ~3 s after startup) and checks every unpaused topic whose last check is older than the interval, or that has never been checked.
 - **FR-1.8** Sweeps never overlap; topics are checked sequentially within a sweep; a topic is never checked concurrently with itself.
 - **FR-1.9** A failed check still advances `lastCheckedAt`, so a broken topic retries next interval instead of hammering the API every minute. The failure is recorded in the run history and surfaced in the UI.
-- **FR-1.10** *(Shipped)* A topic tracks **two** clocks, because they answer different questions:
+- **FR-1.10** *(Shipped)* A topic tracks **three** clocks, because they answer different questions:
 
   | Field | Advances on | Drives |
   |---|---|---|
-  | `lastCheckedAt` | every attempt, success **or** failure | `isDue()` — the retry throttle above |
+  | `lastCheckedAt` | every attempt, success **or** failure | what the UI displays — "checked 3h ago" vs "not checked yet" |
   | `coveredThroughAt` | successes only | `sinceIso` in the prompt — how far back to ask |
+  | `clearedAt` | a clear of the topic's stories (FR-1.15) | nothing on its own; it is the *fallback* due-ness baseline |
 
   A single failed check used to move `lastCheckedAt` to now, and the prompt asked from there — so one rate-limit blip with five days of news pending discarded all five days, permanently and silently. Keeping the covered-through point separate means a failure delays the catch-up without shrinking it. An attendance deferral (see [6 — AI Providers](6-providers.md)) advances neither.
+
+  Due-ness is measured from the **scheduling baseline**, `lastCheckedAt ?? clearedAt` (`scheduleBaseline` in `src/checks.ts`), not from `lastCheckedAt` alone. The two are the same for every topic that has never been cleared, which is why this is a fallback rather than a new mechanism. `??` rather than a maximum is safe because a clear nulls `lastCheckedAt` in the same transaction that sets `clearedAt`: a non-null check time is therefore always from a check that ran *after* the clear.
 - **FR-1.14** *(Shipped)* **Two schedule modes** (NEWS-84), chosen in Settings:
 
   - `interval` (default, and what every existing install keeps on load) — the original behaviour: a duration since the last check.
@@ -44,6 +47,19 @@ The core of the app: a list of topics the user follows, checked for news on a sc
 
 - **FR-1.11** The user can trigger an immediate check for one topic or all unpaused topics ("Check all now").
 - **FR-1.12** *(Shipped)* **Adding a topic checks it immediately** rather than leaving it for the next scheduler tick (up to a minute away) — the user just added it and is watching for the first results. The initial check is treated as **manual** (`checkTopic({ manual: true })`): it records attendance and so runs even for a subscription provider with no prior foreground signal, matching the Check-now buttons. It is fired in the background, so `POST /api/topics` returns immediately; the client's `/api/state` poll surfaces the in-flight state and then the items. The in-flight guard (FR-1.8) means a scheduler tick that also finds the new topic due won't double-run it.
+
+- **FR-1.15** *(Shipped)* **Clearing a topic's stories resets it to its initial state** (NEWS-291) — in the owner's words, "almost like removing and readding it". This applies to both clear paths: the per-topic clear offered with a rename ([25 — Topic Editing](25-topic-editing.md)) and the app-wide "clear all stories" ([27 — Data Location](27-data-location.md)).
+
+  Reset: `lastCheckedAt`, `coveredThroughAt`, `consecutiveFailures` and `retryAfter`. Set: `clearedAt`. Untouched: the topic's identity and the user's preferences for it — `name`, `guidance`, `paused`, `highPriority`, `category`/`subcategory`/`categorySource`, `createdAt`. The full field-by-field audit, including what is not a column at all, is in [2 — News Checks and Deduplication](2-news-checks-and-dedup.md#what-a-clear-resets).
+
+  **A cleared topic reads as never checked but is not due.** These pull in opposite directions and both are requirements:
+
+  1. Every surface must show a genuinely initial state. "checked 54m ago" beside an empty feed reads as a clear that did not work, and qualifying it ("· no stories") was rejected as insufficient — the user asked for the state where we have never yet checked.
+  2. A clear must not make the topic due. Clearing **stops** the checks in flight and the topics queued behind them (FR-27.11); making every cleared topic due would start a fresh sweep on the next minute tick, one minute after the user said they wanted none of it.
+
+  Separating the display field from the scheduling baseline (FR-1.10) is what satisfies both: the UI asks `lastCheckedAt` and sees null; the scheduler asks the baseline and waits a full interval from the clear. In `daily` mode the same baseline means a clear counts as having served the slot that has passed, so the *next* slot is owed — exactly as a real check would leave it.
+
+  Undoing a clear (FR-26.x, [26 — Undo](26-undo.md)) restores every field the reset touched, `clearedAt` included: an undo is an inverse, and leaving the baseline set would hold the topic back on account of an event that no longer happened.
 
 Per-topic interval overrides (high-priority topics) are covered in [12 — Topic Priority](12-topic-priority.md). What happens when a cycle can't keep up with the interval — immediate restart, most-overdue-first ordering, and the falling-behind signal — is in [13 — Scheduling Under Load](13-scheduling-under-load.md).
 

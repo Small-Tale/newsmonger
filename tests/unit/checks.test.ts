@@ -6,7 +6,7 @@ import { describe, expect, it } from 'vitest';
 import { createMockProvider } from '../../src/ai/providers/index.js';
 import type { CheckResult } from '../../src/ai/types.js';
 import { BACKUP_FILE,Backups } from '../../src/backup.js';
-import { byCheckOrder, CheckRunner, effectiveInterval, isDue } from '../../src/checks.js';
+import { byCheckOrder, CheckRunner, effectiveInterval, isDue, scheduleBaseline } from '../../src/checks.js';
 import { DataFileSchema } from '../../src/db/schemas.js';
 import { Store } from '../../src/db/store.js';
 import { asResolver, fakeProvider, noUsage } from '../helpers/provider.js';
@@ -34,6 +34,55 @@ describe('isDue', () => {
   });
 });
 
+/**
+ * Due-ness after a clear (NEWS-291).
+ *
+ * The two constraints that look contradictory and both have to hold: a cleared
+ * topic must *read* as never checked (NEWS-273), and must not *be* due, or a
+ * clear would cancel the checks in flight and start a fresh sweep a minute later
+ * — the exact thing NEWS-271 was about.
+ */
+describe('scheduleBaseline (NEWS-291)', () => {
+  const now = new Date('2026-07-23T12:00:00Z');
+
+  it('falls back to the clear when there is no check', () => {
+    expect(scheduleBaseline({ lastCheckedAt: null, clearedAt: '2026-07-23T11:00:00Z' })).toBe('2026-07-23T11:00:00Z');
+  });
+
+  it('prefers the check, which after a clear can only be the newer of the two', () => {
+    // The clear nulls `lastCheckedAt` in the same transaction that sets
+    // `clearedAt`, so a non-null check time is always from a check that ran
+    // after the clear. That is what makes `??` correct and a max() unnecessary.
+    expect(scheduleBaseline({ lastCheckedAt: '2026-07-23T11:30:00Z', clearedAt: '2026-07-23T11:00:00Z' })).toBe(
+      '2026-07-23T11:30:00Z',
+    );
+  });
+
+  it('is null for a topic that has neither been checked nor cleared', () => {
+    expect(scheduleBaseline({ lastCheckedAt: null })).toBeNull();
+    expect(scheduleBaseline({ lastCheckedAt: null, clearedAt: null })).toBeNull();
+  });
+
+  it('a just-cleared topic is NOT due, though it reads as never checked', () => {
+    // The regression this whole ticket turns on. If this flips to true, clearing
+    // starts a sweep on the next minute tick.
+    const cleared = { paused: false, lastCheckedAt: null, clearedAt: '2026-07-23T11:59:00Z' };
+    expect(isDue(cleared, HOUR, now)).toBe(false);
+    expect(cleared.lastCheckedAt, 'and it still reads as never checked').toBeNull();
+  });
+
+  it('becomes due one full interval after the clear, not before', () => {
+    const cleared = (at: string) => ({ paused: false, lastCheckedAt: null, clearedAt: at });
+    expect(isDue(cleared('2026-07-23T11:00:01Z'), HOUR, now)).toBe(false); // a second short
+    expect(isDue(cleared('2026-07-23T11:00:00Z'), HOUR, now)).toBe(true); // exactly an interval
+    expect(isDue(cleared('2026-07-22T00:00:00Z'), HOUR, now)).toBe(true); // long overdue
+  });
+
+  it('a cleared topic is still not due while paused', () => {
+    expect(isDue({ paused: true, lastCheckedAt: null, clearedAt: '2026-07-01T00:00:00Z' }, HOUR, now)).toBe(false);
+  });
+});
+
 describe('byCheckOrder (NEWS-58)', () => {
   const T = (iso: string | null, highPriority = false) => ({ highPriority, lastCheckedAt: iso });
 
@@ -49,6 +98,18 @@ describe('byCheckOrder (NEWS-58)', () => {
 
   it('puts the oldest lastCheckedAt first among checked, same priority', () => {
     expect(byCheckOrder(T('2026-07-23T00:00:00Z'), T('2026-07-24T00:00:00Z'))).toBeLessThan(0);
+  });
+
+  it('does not send a just-cleared topic to the front of the sweep (NEWS-291)', () => {
+    // A cleared topic reads as never checked, and ordering on that alone would
+    // make it the most overdue thing in the app — ahead of topics that have
+    // genuinely been waiting. It sorts by when it was *cleared* instead.
+    const cleared = { highPriority: false, lastCheckedAt: null, clearedAt: '2026-07-24T11:00:00Z' };
+    const waiting = { highPriority: false, lastCheckedAt: '2026-07-01T00:00:00Z' };
+    expect(byCheckOrder(cleared, waiting)).toBeGreaterThan(0);
+    expect(byCheckOrder(waiting, cleared)).toBeLessThan(0);
+    // …but a genuinely never-touched topic still leads.
+    expect(byCheckOrder(T(null), cleared)).toBeLessThan(0);
   });
 
   it('sorts a mixed set: high-priority (stalest-first) then normal (stalest-first)', () => {

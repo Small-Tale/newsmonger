@@ -23,6 +23,7 @@ function topic(name: string, over: Partial<Topic> = {}): Topic {
     categorySource: 'auto',
     consecutiveFailures: 0,
     retryAfter: null,
+    clearedAt: null,
     ...over,
   };
 }
@@ -239,6 +240,7 @@ describe('topicRowCacheKey (NEWS-238)', () => {
     coveredThroughAt: null,
     consecutiveFailures: 0,
     retryAfter: null,
+    clearedAt: null,
     ...over,
   });
 

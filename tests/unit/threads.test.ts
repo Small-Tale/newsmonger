@@ -532,6 +532,70 @@ describe('threads in the store (NEWS-280)', () => {
     // ...and the backfill groups them, as startup would.
     expect(store.backfillThreads()).toBe(1);
     expect(store.threadForItem('i1').map((i) => i.id)).toEqual(['i1', 'i2']);
+    // The chain does not stop at this ticket's own migration (NEWS-291). A v4
+    // database has to cross **both** v5 (threads) and v6 (the clear baseline) in
+    // one open, and the second is exactly the migration that would have been
+    // skipped had it also claimed version 5: whichever of the two `MIGRATIONS[4]`
+    // held would run, the other would never be reached, and the missing column
+    // reads as corruption — the data loss this test already exists to prevent.
+    expect(store.getTopic('t1')?.clearedAt, 'never cleared, so null').toBeNull();
+    expect(store.getTopic('t1')?.name, 'and the v4 row is intact').toBe('Flooding');
+    store.close();
+
+    const reopened = new DatabaseSync(dbPath(dir));
+    expect((reopened.prepare('PRAGMA user_version').get() as { user_version: number }).user_version).toBe(
+      SCHEMA_VERSION,
+    );
+    // Both columns present, from two different migrations in one open.
+    const cols = (reopened.prepare('PRAGMA table_info(items)').all() as { name: string }[]).map((c) => c.name);
+    expect(cols).toContain('thread_id');
+    const topicCols = (reopened.prepare('PRAGMA table_info(topics)').all() as { name: string }[]).map((c) => c.name);
+    expect(topicCols).toContain('cleared_at');
+    reopened.close();
+  });
+
+  it('migrates a v5 (threads, pre-clear-baseline) database to v6 without losing anything', () => {
+    // The other end of the same hazard. A database created by a build that had
+    // NEWS-280 but not NEWS-291 sits at v5 with `thread_id` already present, so
+    // only `MIGRATIONS[5]` should run — and it must not retry the thread column,
+    // because `ALTER TABLE ADD COLUMN` throws on a duplicate and that throw is
+    // read as corruption.
+    const dir = tmpDataDir();
+    const db = new DatabaseSync(dbPath(dir));
+    db.exec(`
+      CREATE TABLE topics (
+        id TEXT PRIMARY KEY, name TEXT NOT NULL, paused INTEGER NOT NULL DEFAULT 0,
+        high_priority INTEGER NOT NULL DEFAULT 0, guidance TEXT NOT NULL DEFAULT '',
+        created_at TEXT NOT NULL, last_checked_at TEXT, covered_through_at TEXT,
+        category TEXT, subcategory TEXT, category_source TEXT NOT NULL DEFAULT 'auto',
+        consecutive_failures INTEGER NOT NULL DEFAULT 0, retry_after TEXT
+      );
+      CREATE TABLE items (
+        id TEXT PRIMARY KEY, topic_id TEXT NOT NULL, title TEXT NOT NULL, summary TEXT NOT NULL,
+        sources TEXT NOT NULL, image TEXT, dedupe_key TEXT NOT NULL,
+        thread_id TEXT NOT NULL DEFAULT '', found_at TEXT NOT NULL,
+        saved INTEGER NOT NULL DEFAULT 0, off_topic INTEGER NOT NULL DEFAULT 0
+      );
+      CREATE TABLE runs (
+        id TEXT PRIMARY KEY, topic_id TEXT NOT NULL, started_at TEXT NOT NULL, finished_at TEXT,
+        status TEXT NOT NULL, new_items INTEGER NOT NULL DEFAULT 0, error TEXT,
+        provider TEXT, model TEXT, usage TEXT, effort TEXT
+      );
+      CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+      INSERT INTO topics (id, name, created_at, last_checked_at)
+        VALUES ('t1', 'Flooding', '2026-07-01T00:00:00.000Z', '2026-07-02T00:00:00.000Z');
+      INSERT INTO items (id, topic_id, title, summary, sources, dedupe_key, thread_id, found_at)
+        VALUES ('i1', 't1', 'Riverside Dam collapse floods three towns', 's', '[]', 'k1', 'i1', '2026-07-01T00:00:00.000Z');
+      PRAGMA user_version = 5;
+    `);
+    db.close();
+
+    const store = new Store(dir);
+    const topic = store.getTopic('t1');
+    expect(topic?.name).toBe('Flooding');
+    expect(topic?.lastCheckedAt, 'its real check time survives').toBe('2026-07-02T00:00:00.000Z');
+    expect(topic?.clearedAt, 'and it arrives never-cleared').toBeNull();
+    expect(store.listItems('t1').map((i) => i.threadId), 'the v5 thread id is untouched').toEqual(['i1']);
     store.close();
 
     const reopened = new DatabaseSync(dbPath(dir));
@@ -539,6 +603,11 @@ describe('threads in the store (NEWS-280)', () => {
       SCHEMA_VERSION,
     );
     reopened.close();
+
+    // And opening again must not re-run it — the duplicate-column throw.
+    expect(() => {
+      new Store(dir).close();
+    }).not.toThrow();
   });
 
   it('backfills stories whose topic was deleted without throwing', () => {

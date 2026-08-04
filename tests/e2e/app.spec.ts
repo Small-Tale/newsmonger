@@ -1886,14 +1886,17 @@ test('clear all stories, keeping topics and settings (NEWS-255)', async ({ page 
   const cleared = page.locator('.topic', { hasText: 'Clear Probe' });
   await expect(cleared).toBeVisible();
 
-  // And the row must not still claim it is holding what that check found
-  // (NEWS-273). It read "checked just now" beside an empty feed, which is the
-  // sentence a reader takes for "the clear did not work".
+  // And the row must read as a topic we have never checked (NEWS-273/NEWS-291).
   //
-  // The check time itself stays — it is what the dial counts down from, and the
-  // topic *was* checked — so this asserts the qualifier rather than its absence.
-  await expect(cleared.locator('.topic-meta')).toContainText('no stories');
-  await expect(cleared.locator('.topic-meta'), 'the check time is still a fact').toContainText('checked');
+  // The first attempt at this qualified the sentence instead — "checked just now
+  // · no stories" — and that was rejected: a clear resets the topic, so the row
+  // should say what a brand-new topic's row says. `lastCheckedAt` really is null
+  // now, and `clearedAt` is what keeps the scheduler from treating that as due.
+  await expect(cleared.locator('.topic-meta')).toHaveText('not checked yet');
+  // Belt and braces on the exact phrasing the owner objected to: no "checked 5m
+  // ago" anywhere on the row. ("not checked yet" contains the word "checked", so
+  // this has to match the relative-time shape rather than the bare word.)
+  await expect(cleared.locator('.topic-meta')).not.toContainText(/checked\s+\S+\s+ago/);
 
   await topicAction(page, cleared, 'delete');
 });

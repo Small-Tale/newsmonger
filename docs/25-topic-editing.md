@@ -30,7 +30,7 @@ Guidance (FR-18) has been editable since it shipped; this doc covers the **name*
 
 - **FR-25.5** *(Shipped)* When a renamed topic already has stories, the dialog offers to clear them — **only when there are stories to clear**, and **unticked by default**. Renaming is usually a correction, and discarding a topic's history should never happen because a box was already checked.
 
-- **FR-25.6** *(Shipped)* Clearing removes that topic's stories **and resets `coveredThroughAt`**. Clearing the stories alone would leave the topic *looking* fresh while still behaving as though it had been covered up to now, so the next check would report nothing; resetting the window makes it behave like a first check and span a sensible period.
+- **FR-25.6** *(Shipped; widened in NEWS-291)* Clearing removes that topic's stories **and resets its check state** — `coveredThroughAt`, `lastCheckedAt`, the failure streak and its cooldown — while recording `clearedAt`. Clearing the stories alone would leave the topic *looking* fresh while still behaving as though it had been covered up to now, so the next check would report nothing; resetting makes it behave like a first check and span a sensible period. The full field-by-field audit is [FR-2.13](2-news-checks-and-dedup.md#what-a-clear-resets), and why a reset topic still is not immediately due is [FR-1.15](1-topics-and-scheduling.md).
 
 - **FR-25.7** *(Shipped)* The **run history is kept**. It records what the app did, not what the topic is about, and the diagnostics bundle would be poorer for losing it.
 

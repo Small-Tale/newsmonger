@@ -70,11 +70,66 @@ export interface ThreadSummary {
  * restore: clearing sets it to null so the next check spans a sensible period
  * (FR-25.6), and an undo that left it null would re-report every restored story
  * as new. Its value before the clear is the only correct thing to return to.
+ *
+ * The same argument extended to the whole check state in NEWS-291. A clear now
+ * resets the topic to its initial state, so an undo has to restore **every**
+ * field the reset touched, not just the window — otherwise undoing a clear would
+ * put the stories back while leaving the topic claiming it had never been
+ * checked, which is a state no sequence of real events could produce.
  */
 export interface ClearedItems {
   items: NewsItem[];
   coveredThroughAt: string | null;
+  /** The check state the reset overwrote (NEWS-291). */
+  lastCheckedAt: string | null;
+  consecutiveFailures: number;
+  retryAfter: string | null;
+  /** The *previous* clear's timestamp, so an undo doesn't inherit this one's. */
+  clearedAt: string | null;
 }
+
+/**
+ * The columns a clear resets, and the one it sets (NEWS-291).
+ *
+ * Clearing a topic's stories means "put this topic back where it started" —
+ * almost the same thing as deleting it and adding it again. The audit behind that
+ * sentence, field by field, because the interesting part is what is *not* here:
+ *
+ * **Reset.** `covered_through_at` (the prompt's window — a cleared topic must ask
+ * from scratch, FR-25.6), `last_checked_at` (what every "checked N ago" surface
+ * reads; leaving it is what NEWS-273 rejected), `consecutive_failures` +
+ * `retry_after` (a failure streak is a fact about stories we no longer hold, and
+ * carrying a cooldown into a reset topic would hold back a check nobody has asked
+ * for yet).
+ *
+ * **Set.** `cleared_at` — the scheduling baseline that lets `last_checked_at` go
+ * to null without making the topic instantly due. This is the whole trick; see
+ * `scheduleBaseline` in `src/checks.ts`.
+ *
+ * **Deliberately untouched.** `id` / `created_at` (the topic was not re-created,
+ * and its age is a fact), `name` / `guidance` / `paused` / `high_priority` (the
+ * user's own settings for the topic — a clear discards *findings*, not
+ * preferences), `category` / `subcategory` / `category_source` (what the topic
+ * *is* rather than what we found; re-classifying would spend a model call to
+ * relearn something already known, and would silently discard a manual
+ * classification, FR-22.7).
+ *
+ * **Not columns at all**, and so reset for free by deleting the rows: the dedupe
+ * keys (`dedupeKeysForTopic` reads `items`), the off-topic prompt examples
+ * (`offTopicTitlesForTopic`), the sidebar's today-count and newest-story
+ * timestamp (`itemStatsByTopic`), and the flagged counts. There is no separate
+ * "seen stories" ledger to miss — `items` **is** the ledger.
+ *
+ * **The one thing that survives on purpose:** the `runs` history. It records what
+ * the app did, not what the topic is about, and diagnostics, the failure banner
+ * and the falling-behind detector all read it. Documented in
+ * `docs/2-news-checks-and-dedup.md`.
+ */
+const RESET_CHECK_STATE_SQL = `covered_through_at = NULL,
+                               last_checked_at = NULL,
+                               consecutive_failures = 0,
+                               retry_after = NULL,
+                               cleared_at = ?`;
 
 /** A feed query for `Store.queryItems` (NEWS-74). */
 export interface ItemQuery {
@@ -281,6 +336,7 @@ export class Store {
       categorySource: row['category_source'] ?? 'auto',
       consecutiveFailures: asCount(row['consecutive_failures']),
       retryAfter: row['retry_after'] ?? null,
+      clearedAt: row['cleared_at'] ?? null,
     });
   }
 
@@ -324,8 +380,8 @@ export class Store {
       .prepare(
         `INSERT INTO topics (id, name, paused, high_priority, guidance, created_at, last_checked_at,
                              covered_through_at, category, subcategory, category_source,
-                             consecutive_failures, retry_after)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                             consecutive_failures, retry_after, cleared_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         topic.id,
@@ -341,6 +397,7 @@ export class Store {
         topic.categorySource,
         topic.consecutiveFailures,
         topic.retryAfter,
+        topic.clearedAt,
       );
   }
 
@@ -440,6 +497,7 @@ export class Store {
       categorySource: 'auto',
       consecutiveFailures: 0,
       retryAfter: null,
+      clearedAt: null,
     };
     this.insertTopic(topic);
     return topic;
@@ -479,32 +537,34 @@ export class Store {
   }
 
   /**
-   * Drop a topic's stories and reset its check window (NEWS-139).
+   * Drop a topic's stories and reset it to its initial state (NEWS-139, NEWS-291).
    *
    * Offered after a rename, where the user is saying the topic now means
    * something else. Clearing the stories alone would leave the topic *looking*
-   * fresh while still behaving as though it had been covered up to now, so
-   * `coveredThroughAt` goes with them — the next check treats it as a first
-   * check and spans a sensible window rather than reporting nothing.
+   * fresh while still behaving as though it had been covered up to now, so the
+   * whole check state goes with them — see `RESET_CHECK_STATE_SQL` for the
+   * field-by-field reasoning.
    *
    * The run history is deliberately **kept**: it records what the app did, not
    * what the topic is about, and diagnostics would be poorer for losing it.
    */
-  clearItemsForTopic(id: string): ClearedItems {
+  clearItemsForTopic(id: string, now = new Date()): ClearedItems {
     this.db.exec('BEGIN');
     try {
-      // Read before deleting, so the caller can offer an undo (NEWS-145). Both
-      // halves have to come back together: restoring the stories while leaving
-      // `coveredThroughAt` null would re-report them all on the next check.
-      const coveredThroughAt = this.coveredThroughAt(id);
+      // Read before deleting, so the caller can offer an undo (NEWS-145). Every
+      // field the reset overwrites has to come back together: restoring the
+      // stories while leaving `coveredThroughAt` null would re-report them all
+      // on the next check, and leaving `lastCheckedAt` null would leave the row
+      // reading "not checked yet" over a feed full of stories.
+      const before = this.checkState(id);
       const items = (this.db.prepare('SELECT * FROM items WHERE topic_id = ? ORDER BY rowid').all(id) as Record<
         string,
         unknown
       >[]).map((r) => Store.rowToItem(r));
       this.db.prepare('DELETE FROM items WHERE topic_id = ?').run(id);
-      this.db.prepare('UPDATE topics SET covered_through_at = NULL WHERE id = ?').run(id);
+      this.db.prepare(`UPDATE topics SET ${RESET_CHECK_STATE_SQL} WHERE id = ?`).run(now.toISOString(), id);
       this.db.exec('COMMIT');
-      return { items, coveredThroughAt };
+      return { items, ...before };
     } catch (err) {
       this.db.exec('ROLLBACK');
       throw err;
@@ -523,20 +583,21 @@ export class Store {
    * none, because it looks like it worked.
    *
    * So there is no undo here; the confirmation is the guard. What softens it is
-   * that clearing is not quite deletion: `covered_through_at` goes back to null,
-   * so the next check spans a sensible period again (FR-25.6) rather than
-   * resuming from where the vanished stories left off.
+   * that clearing is not quite deletion: every topic goes back to its initial
+   * check state (NEWS-291, `RESET_CHECK_STATE_SQL`), so the next check spans a
+   * sensible period again (FR-25.6) rather than resuming from where the vanished
+   * stories left off.
    *
    * Run history is kept, for the same reason `clearItemsForTopic` keeps it: it
    * records what the app *did*, not what a topic is about, and the failure
    * banner and falling-behind detector both read it.
    */
-  clearAllItems(): number {
+  clearAllItems(now = new Date()): number {
     this.db.exec('BEGIN');
     try {
       const before = this.db.prepare('SELECT count(*) AS c FROM items').get() as { c: unknown };
       this.db.exec('DELETE FROM items');
-      this.db.exec('UPDATE topics SET covered_through_at = NULL');
+      this.db.prepare(`UPDATE topics SET ${RESET_CHECK_STATE_SQL}`).run(now.toISOString());
       this.db.exec('COMMIT');
       return asCount(before.c);
     } catch (err) {
@@ -545,11 +606,22 @@ export class Store {
     }
   }
 
-  private coveredThroughAt(id: string): string | null {
-    const row = this.db.prepare('SELECT covered_through_at AS c FROM topics WHERE id = ?').get(id) as
-      | { c: unknown }
-      | undefined;
-    return typeof row?.c === 'string' ? row.c : null;
+  /** The check state a clear is about to overwrite, for the undo (NEWS-291). */
+  private checkState(id: string): Omit<ClearedItems, 'items'> {
+    const row = this.db
+      .prepare(
+        `SELECT covered_through_at AS covered, last_checked_at AS checked,
+                consecutive_failures AS failures, retry_after AS retry, cleared_at AS cleared
+           FROM topics WHERE id = ?`,
+      )
+      .get(id) as Record<string, unknown> | undefined;
+    return {
+      coveredThroughAt: typeof row?.['covered'] === 'string' ? row['covered'] : null,
+      lastCheckedAt: typeof row?.['checked'] === 'string' ? row['checked'] : null,
+      consecutiveFailures: asCount(row?.['failures']),
+      retryAfter: typeof row?.['retry'] === 'string' ? row['retry'] : null,
+      clearedAt: typeof row?.['cleared'] === 'string' ? row['cleared'] : null,
+    };
   }
 
   /**
@@ -565,6 +637,12 @@ export class Store {
    * Ignores rows whose id is already present, which is what a double-submitted
    * undo looks like. The insert would otherwise throw on the primary key and
    * abort the whole restore, losing the rest of the batch to a duplicate click.
+   *
+   * Restores the **whole** check state the clear reset, not just the window
+   * (NEWS-291). An undo has to be a true inverse: putting the stories back while
+   * leaving the topic reading "not checked yet" — and scheduled off a `clearedAt`
+   * for a clear that no longer happened — is a state the app could not otherwise
+   * reach, and the user asked for the previous state, not a third one.
    */
   restoreClearedItems(id: string, cleared: ClearedItems): number {
     this.db.exec('BEGIN');
@@ -576,7 +654,20 @@ export class Store {
         this.insertItem(item);
         restored += 1;
       }
-      this.db.prepare('UPDATE topics SET covered_through_at = ? WHERE id = ?').run(cleared.coveredThroughAt, id);
+      this.db
+        .prepare(
+          `UPDATE topics SET covered_through_at = ?, last_checked_at = ?, consecutive_failures = ?,
+                             retry_after = ?, cleared_at = ?
+             WHERE id = ?`,
+        )
+        .run(
+          cleared.coveredThroughAt,
+          cleared.lastCheckedAt,
+          cleared.consecutiveFailures,
+          cleared.retryAfter,
+          cleared.clearedAt,
+          id,
+        );
       this.db.exec('COMMIT');
       return restored;
     } catch (err) {
