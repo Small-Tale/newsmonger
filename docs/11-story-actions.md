@@ -22,7 +22,9 @@ Per-story actions that live in each feed card's header: a **bookmark** to save a
 
 Bookmark, share and flag are the actions *on* a story. As of NEWS-281 the card **body** has an action too: a left-click anywhere that isn't one of those controls or a source link **expands the card into a detail pane**. It is documented with the rest of the feed's interaction rules in [3 — UI](3-ui.md) (FR-3.63–3.66), not here, because what the pane holds is a feed concern rather than a per-story action — but it matters to this document for one reason: **every control on this page shares its click with that handler.**
 
-`delegate()` matches by walking up from the event target, so a press on the bookmark button also matches the card. The expand handler bails inside `.item-actions` and inside `ul.sources`; a new per-story control added outside those two wrappers will toggle the card as well as doing its own job. Put it in `.item-actions`.
+`delegate()` matches by walking up from the event target, so a press on the bookmark button also matches the card. The expand handler bails inside `.item-actions`, `ul.sources` and `.item-pane`; a new per-story control added outside those three wrappers will toggle the card as well as doing its own job. Put it in `.item-actions`.
+
+**The cluster is also out of room** (NEWS-283). The thread badge — "4th update", the only thing on a collapsed card that advertises the story-so-far pane — was added *inside the expander button as its label* rather than as a fourth control beside bookmark and share, because the header's fifth element reflowed the topic pill onto three lines. See [3 — UI](3-ui.md) FR-3.67. Anything else that wants a place here should expect to justify it the same way.
 
 Right-click is unchanged: the story context menu (bookmark / share / flag) still opens exactly as before, since a right-click produces no `click` event.
 

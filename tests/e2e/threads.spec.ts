@@ -199,8 +199,75 @@ test('a story that is the only one on its subject says so, with no stray heading
   // the common expansion makes no request at all.
   expect(threadRequests).toEqual([]);
 
+  // No badge either (NEWS-283) — that is the point of it: one on every card
+  // would say nothing about which cards hold history.
+  await expect(card.locator('.thread-badge')).toHaveCount(0);
+  await expect(card.locator('[data-expand-item]')).toHaveAttribute('aria-label', 'Hide story detail');
+
   await topicAction(page, row, 'delete');
   await expect(page.locator('.topic', { hasText: 'lone story topic' })).toHaveCount(0);
+});
+
+test('a collapsed card advertises its thread, without crowding the header (NEWS-283)', async ({ page }) => {
+  await page.goto('/');
+  // One check is enough here: the mock's first answer is two stories on one
+  // subject, so the pair is a thread of two — the smallest thing a badge has to
+  // describe, and it exercises both phrasings at once.
+  await page.fill('.add-topic input', 'badge thread topic');
+  await page.press('.add-topic input', 'Enter');
+  const row = page.locator('.topic', { hasText: 'badge thread topic' });
+  await expect(row).toBeVisible();
+  const cards = page.locator('.item:not(.flagged-row)', {
+    has: page.locator('.item-topic', { hasText: 'badge thread topic' }),
+  });
+  await expect(cards).toHaveCount(2, { timeout: 20_000 });
+
+  // The newer story is the 2nd update; the one that started the thread says how
+  // many followed it, because "1st update" would be wrong.
+  await expect(cards.first().locator('.thread-badge')).toHaveText('2nd update');
+  await expect(cards.nth(1).locator('.thread-badge')).toHaveText('1 follow-up');
+
+  // The badge **is** the expander, so its accessible name says what pressing it
+  // does and carries the date the card has no room to show.
+  const expander = cards.first().locator('[data-expand-item]');
+  await expect(expander).toHaveAttribute('aria-label', 'Show the story so far — 2nd update · since today');
+  await expect(expander).toHaveAttribute('title', '2nd update · since today');
+
+  // …and pressing it opens the timeline, which is the whole point of the badge.
+  await expander.click();
+  await expect(cards.first().locator('.thread-row')).toHaveCount(2);
+  await expect(expander).toHaveAttribute('aria-label', 'Hide the story so far — 2nd update · since today');
+  await expander.click();
+  await expect(cards.first().locator('.item-pane')).toBeHidden();
+
+  // No collision with bookmark and share, at the narrow viewport where the
+  // header has least room. Asserted as geometry rather than as a class, because
+  // "does not crowd" is a question about pixels — and a long topic name beside a
+  // header's controls has read as cramped before (NEWS-71).
+  await page.setViewportSize({ width: 420, height: 900 });
+  const boxes = await Promise.all(
+    ['[data-save-item]', '[data-share-item]', '.thread-badge'].map((sel) =>
+      cards.first().locator(sel).boundingBox(),
+    ),
+  );
+  const [save, share, badge] = boxes;
+  expect(save).not.toBeNull();
+  expect(share).not.toBeNull();
+  expect(badge).not.toBeNull();
+  if (save === null || share === null || badge === null) return;
+  // Left to right, in order, with no overlap…
+  expect(save.x + save.width).toBeLessThanOrEqual(share.x);
+  expect(share.x + share.width).toBeLessThanOrEqual(badge.x);
+  // …on one row (centres within a couple of pixels), and inside the card.
+  const centre = (b: { y: number; height: number }) => b.y + b.height / 2;
+  expect(Math.abs(centre(badge) - centre(save))).toBeLessThan(3);
+  const card = await cards.first().boundingBox();
+  expect(card).not.toBeNull();
+  if (card !== null) expect(badge.x + badge.width).toBeLessThanOrEqual(card.x + card.width);
+  await page.setViewportSize({ width: 1280, height: 900 });
+
+  await topicAction(page, row, 'delete');
+  await expect(page.locator('.topic', { hasText: 'badge thread topic' })).toHaveCount(0);
 });
 
 test('unrelated stories in one topic stay separate threads', async ({ page }) => {

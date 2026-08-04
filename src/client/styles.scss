@@ -1821,6 +1821,32 @@ h2.eyebrow {
   }
 }
 
+// The expander wearing its thread label (NEWS-283) — "4th update · since Jun 12".
+//
+// It is the *only* thing on a collapsed card that says a click reveals anything,
+// so it has to be findable; it is also sitting in a header that already read as
+// cramped once (NEWS-71), so it must not shout. Hence a quiet mono line in the
+// clockwork family with the accent kept for hover: the eye finds it because it is
+// the only text in the action cluster, not because it is loud.
+.item-action.expand.threaded {
+  gap: 5px;
+  padding: 2px 5px;
+
+  .thread-badge {
+    font-family: var(--mono);
+    font-size: 10.5px;
+    letter-spacing: 0.02em;
+    color: var(--ink-soft);
+    white-space: nowrap;
+  }
+
+  &:hover .thread-badge,
+  &:focus-visible .thread-badge {
+    color: var(--pine);
+  }
+}
+
+
 // ------------------------------------------------------ confirm dialog ---
 
 .dialog.confirm {
@@ -2648,6 +2674,14 @@ button.off-topic-pill {
 // tighter than the header's default gap.
 .item > header .item-action + .item-action {
   margin-left: -4px;
+}
+
+// …but the expander wearing a thread label is a *word*, not a third icon, so it
+// keeps its distance from the icons instead of tucking under them (NEWS-283).
+// Same specificity as the rule above, deliberately: a shorter selector would
+// lose to it and the negative margin would silently win.
+.item > header .item-action.expand.threaded {
+  margin-left: 2px;
 }
 
 // Transient share confirmation, anchored to the bottom-centre of the screen.

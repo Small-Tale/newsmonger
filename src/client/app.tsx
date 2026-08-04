@@ -121,7 +121,15 @@ import {
   writeOnboardingSeen,
 } from './stores.js';
 import { getTauriInvoke, isTauri, openExternalUrl } from './tauri.js';
-import { showAllLabel, threadFetchNeeded, threadRowDate, visibleThreadRows } from './thread-view.js';
+import {
+  showAllLabel,
+  threadBadge,
+  threadBadgeLabel,
+  threadExpanderLabel,
+  threadFetchNeeded,
+  threadRowDate,
+  visibleThreadRows,
+} from './thread-view.js';
 import type { TopicRow } from './topic-sort.js';
 import { isHeading, sortTopics, topicRowCacheKey, topicRows } from './topic-sort.js';
 
@@ -650,6 +658,10 @@ function itemJsx(
   const review = variant === 'review';
   const paneId = `item-pane-${item.id}`;
   const expanded = !review && expandedItemId === item.id;
+  // Null for a thread of one, which is most stories — a badge on every card
+  // would be noise and would say nothing (NEWS-283).
+  const threadSummary = threads.summaries[item.id];
+  const badge = threadBadge(threadSummary);
   return (
     <article
       class={`item${item.saved ? ' saved' : ''}${expanded ? ' expanded' : ''}`}
@@ -687,16 +699,31 @@ function itemJsx(
                 card body's click is a convenience gesture and an <article> with
                 a click handler is reachable by neither keyboard nor screen
                 reader. `aria-controls` mirrors the sidebar toggle → #topics-panel,
-                which is exactly why the pane below is always in the DOM. */}
+                which is exactly why the pane below is always in the DOM.
+
+                On a story in a thread it grows a **label** — "4th update"
+                (NEWS-283) — rather than gaining a badge beside it. One control,
+                so the accessible name says what pressing it does *and* what it
+                would reveal; a separate badge would either be inert chrome or a
+                second control in a header that has no room for one
+                (docs/3-ui.md FR-3.67, NEWS-71). The text comes from the feed
+                page's thread summary, so no card fetches anything to draw it. */}
             <button
-              class="item-action expand"
+              class={`item-action expand${badge === null ? '' : ' threaded'}`}
               type="button"
               data-expand-item={item.id}
               aria-expanded={expanded ? 'true' : 'false'}
               aria-controls={paneId}
-              aria-label={expanded ? 'Hide story detail' : 'Show story detail'}
-              title={expanded ? 'Hide detail' : 'Show detail'}
+              aria-label={threadExpanderLabel(threadSummary, expanded)}
+              title={badge === null ? (expanded ? 'Hide detail' : 'Show detail') : threadBadgeLabel(threadSummary)}
             >
+              {/* The **count only** on the card — "4th update". The card header
+                  is a flex row and the widest a feed column gets is ~430px in the
+                  two-column layout, where "· since Jun 12" pushed the topic pill
+                  from one line onto three: exactly the crowding NEWS-71 recorded.
+                  The date is not lost — it is in this button's tooltip and
+                  accessible name, and the pane it opens dates every row. */}
+              {badge === null ? '' : <span class="thread-badge">{badge.count}</span>}
               {icon('chevron', 15)}
             </button>
           </span>
