@@ -309,9 +309,23 @@ The symptom to watch for is the sidecar dying instantly: the window opens on the
 
 Worth doing on both an Apple Silicon and an Intel Mac if both are available, since the JIT paths differ.
 
+## E2E port pre-flight (NEWS-287) — ✅ all four states verified 2026-08-04
+
+The E2E port is derived per checkout (`tests/helpers/e2e-port.ts`) and `scripts/e2e-preflight.mjs` clears it before Playwright's own check. The derivation and the script's decision structure are unit-tested (`tests/unit/e2e-port.test.ts`), but the *behaviour* needs real servers holding real ports, so it lives here.
+
+Get this checkout's port with `node -e "import('./tests/helpers/e2e-port.ts')"`-style resolution, or just read it from a run's output. Then, with `$P` as that port:
+
+1. **Free.** `node scripts/e2e-preflight.mjs $P` → exit 0, no output.
+2. **Held by something foreign.** Hold it with `node -e "require('net').createServer().listen($P,'127.0.0.1')"`, then run the pre-flight → exit 1, *"port $P is held by pid N, and it does not answer /healthz as newsmonger"*.
+3. **Orphaned newsmonger.** Start one so its parent exits and init adopts it — `( node dist/cli.js --no-open --strict-port --ai-test --port $P --data-dir "$TMPDIR/pf" & )` — wait for `/healthz`, then run the pre-flight → *"reclaiming port $P from an orphaned newsmonger server (pid N)"*, exit 0, and the port is free afterwards. This is the case a killed agent creates.
+4. **Live newsmonger.** Start one from a shell that stays alive, then run the pre-flight → exit 1, *"another checkout is running E2E on port $P"*, **and the server is still running** — it must never kill a run in progress.
+
+Note two sandbox facts found while verifying this: `ps` is denied inside a command sandbox (hence `lsof -FpR` for the parent pid), and so is signalling a process spawned outside it — state 3 reports *"could not send SIGTERM ... EPERM"* and stops rather than hanging.
+
 ## Automated Coverage Summary
 
 - Topics CRUD, scheduling logic, dedup, parsing, API validation, and full UI flows are covered by `npm test` + `npm run test:e2e` (mock AI service).
 - API key precedence, the `/api/keys` routes, and the Settings dialog save/remove flows are covered by `tests/unit/api-keys*.test.ts` and `tests/e2e/keys.spec.ts`, against the in-memory keychain (`NEWSMONGER_FAKE_KEYCHAIN=1`). The OS keychain layer itself stays manual per platform, above.
 - **Gatekeeper on a published macOS release** moved here from manual (NEWS-21): `bash scripts/verify-released-dmg.sh <tag>` downloads the real artifact, quarantines it, and verifies stapling, `spctl` assessment, quarantine inheritance through drag-out, and that the sidecar starts and JITs under the hardened runtime. First run on `v0.2.0-beta.7` — both `aarch64` and `x64` pass. Only the GUI launch itself is still manual.
 - **The Linux sidecar build** is covered by `bash scripts/verify-sidecar-linux.sh` (NEWS-20), which runs `build-sidecar.sh` in a container for both Linux triples so the isolated boot check actually executes instead of self-skipping as it does when cross-compiling.
+- **The E2E harness itself**: the per-checkout port derivation and the pre-flight's decision structure are covered by `tests/unit/e2e-port.test.ts` (NEWS-287). Only the four live port states above stay manual, since each needs a real server holding a real port.

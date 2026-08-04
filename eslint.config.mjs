@@ -59,7 +59,10 @@ export default tseslint.config(
     files: ["scripts/**/*.mjs"],
     extends: [tseslint.configs.disableTypeChecked],
     languageOptions: {
-      globals: { console: "readonly", process: "readonly" },
+      // The Node globals these scripts actually use. `fetch`/`AbortSignal` came
+      // in with scripts/e2e-preflight.mjs (NEWS-287) — both are Node 22 globals,
+      // and the engines field already requires 22.5+.
+      globals: { console: "readonly", process: "readonly", fetch: "readonly", AbortSignal: "readonly" },
     },
     rules: {
       "@typescript-eslint/no-unsafe-assignment": "off",

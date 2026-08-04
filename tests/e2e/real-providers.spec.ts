@@ -9,6 +9,7 @@ import { expect, test } from '@playwright/test';
 
 import { CHECK_TIMEOUT_MS as CLAUDE_CEILING, hasSubscriptionCredentials } from '../../src/ai/providers/claude-cli.js';
 import { CHECK_TIMEOUT_MS as CODEX_CEILING, hasChatGptCredentials } from '../../src/ai/providers/codex-cli.js';
+import { E2E_REAL_SERVER, e2ePort } from '../helpers/e2e-port.js';
 
 /**
  * The real subscriptions, not the mock (NEWS-276).
@@ -46,7 +47,11 @@ import { CHECK_TIMEOUT_MS as CODEX_CEILING, hasChatGptCredentials } from '../../
  * see `docs/ai/code-summary.md`.
  */
 
-const PORT = 4191;
+// The second port in this checkout's window (NEWS-287). It was the constant
+// 4191, which collided across checkouts exactly the way the shared server's 4189
+// did — and this spec boots its own server, so it needs its own port, not the
+// shared one.
+const PORT = e2ePort(E2E_REAL_SERVER);
 
 /**
  * How long to wait for one real check, derived rather than guessed.

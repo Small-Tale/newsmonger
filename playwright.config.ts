@@ -1,8 +1,11 @@
+import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
 import { defineConfig } from '@playwright/test';
+
+import { E2E_REAL_SERVER, E2E_SERVER, e2ePort } from './tests/helpers/e2e-port.js';
 
 // Each test run gets its own isolated data dir (pid-scoped) so E2E state never
 // touches the real ~/.newsmonger and parallel runs don't collide.
@@ -10,7 +13,41 @@ const dataDir = path.join(os.tmpdir(), `newsmonger-e2e-${process.pid}`);
 fs.rmSync(dataDir, { recursive: true, force: true });
 fs.mkdirSync(dataDir, { recursive: true });
 
-const PORT = 4189;
+// Derived from the checkout path, not hardcoded (NEWS-287) — two worktrees, or an
+// agent and a developer, can now run E2E at the same time. See
+// tests/helpers/e2e-port.ts for why the path and not the pid.
+const PORT = e2ePort(E2E_SERVER);
+
+const realRun = process.env['NEWSMONGER_E2E_REAL'] === '1';
+
+/**
+ * Clear the port before Playwright's own check gets to it.
+ *
+ * This is the only hook that runs *before* the webServer plugin: Playwright's
+ * task order is plugin setup (which starts the server) and only then
+ * `globalSetup`, and with `reuseExistingServer: false` the plugin throws on a
+ * held port before it ever runs the command — so neither a `globalSetup` nor a
+ * prefix on the command can get in front of it.
+ *
+ * **Guarded to the main process.** Worker processes re-import this config file,
+ * and by then our own server is legitimately listening — an unguarded pre-flight
+ * would see it and abort the run it is meant to protect. `TEST_WORKER_INDEX` is
+ * set by Playwright's worker entry before it loads the config; verified by
+ * logging pid/ppid/worker from here across a real run (main: `worker=undefined`,
+ * worker: `worker=0`).
+ */
+if (process.env['TEST_WORKER_INDEX'] === undefined) {
+  const ports = realRun ? [PORT, e2ePort(E2E_REAL_SERVER)] : [PORT];
+  try {
+    execFileSync(process.execPath, ['scripts/e2e-preflight.mjs', ...ports.map(String)], {
+      cwd: import.meta.dirname,
+      stdio: 'inherit',
+    });
+  } catch {
+    // The script has already explained itself on stderr; this only stops the run.
+    throw new Error(`E2E pre-flight failed for port ${ports.join(', ')} — see the message above.`);
+  }
+}
 
 export default defineConfig({
   testDir: 'tests/e2e',
@@ -25,7 +62,7 @@ export default defineConfig({
    * that is wanted rather than tolerated: its command builds the client bundle,
    * which the real spec's own server needs in order to serve anything.
    */
-  testIgnore: process.env['NEWSMONGER_E2E_REAL'] === '1' ? [] : ['**/real-providers.spec.ts'],
+  testIgnore: realRun ? [] : ['**/real-providers.spec.ts'],
   // Serial: all tests share one server + one data file.
   workers: 1,
   retries: 1,
