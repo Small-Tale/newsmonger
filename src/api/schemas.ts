@@ -255,14 +255,48 @@ export const StateRespSchema = z.object({
 });
 export type StateResp = z.infer<typeof StateRespSchema>;
 
+/**
+ * Where one story sits in its thread (NEWS-282), for the collapsed card's badge
+ * (NEWS-283).
+ *
+ * The **shape** of a thread, not its contents: three numbers per story, which is
+ * what a badge can say without the timeline being fetched. The stories
+ * themselves come from `GET /api/items/:id/thread`, on expand — folding them
+ * into the feed page would multiply a size-sensitive payload by the average
+ * thread length for a pane nobody has opened (`docs/17-server-pagination.md`).
+ */
+export const ThreadSummarySchema = z.object({
+  /** 1-based position in the thread, chronologically. */
+  position: z.number().int(),
+  /** How many stories the thread holds. Always ≥ 2 — see below. */
+  size: z.number().int(),
+  /** `foundAt` of the thread's first story: when the subject first appeared. */
+  startedAt: z.string(),
+});
+export type ThreadSummary = z.infer<typeof ThreadSummarySchema>;
+
 /** A feed page (server-side pagination, NEWS-74). */
 export const ItemCursorSchema = z.object({ foundAt: z.string(), id: z.string() });
 export const ItemsRespSchema = z.object({
   items: z.array(NewsItemSchema),
   nextCursor: ItemCursorSchema.nullable(),
   total: z.number().int(),
+  /**
+   * Thread shape per story id (NEWS-282), for the stories on **this page**.
+   *
+   * **Only stories in a thread of two or more get an entry**, which is what
+   * keeps this from growing the payload: a thread of one is the ordinary case
+   * (FR-29.6), so on a feed with no threading yet this map is empty and the
+   * response is byte-for-byte what it was before. It is also what tells the
+   * client there is nothing to fetch when a card is expanded.
+   */
+  threads: z.record(z.string(), ThreadSummarySchema).default({}),
 });
 export type ItemsResp = z.infer<typeof ItemsRespSchema>;
+
+/** One story's whole thread, oldest first — `GET /api/items/:id/thread` (NEWS-282). */
+export const ThreadRespSchema = z.object({ items: z.array(NewsItemSchema) });
+export type ThreadResp = z.infer<typeof ThreadRespSchema>;
 
 export const ProviderInfoSchema = z.object({
   name: z.enum(PROVIDER_NAMES),

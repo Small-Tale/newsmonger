@@ -47,6 +47,23 @@ export interface ItemCursor {
 }
 
 /**
+ * Where one story sits in its thread (NEWS-282).
+ *
+ * Declared here rather than imported from `src/api/schemas.ts`, the same way
+ * `ItemCursor` is: the store does not depend on the API layer, and the route
+ * assigning its result into an `ItemsResp` is what holds the two shapes
+ * together.
+ */
+export interface ThreadSummary {
+  /** 1-based position in the thread, chronologically. */
+  position: number;
+  /** How many stories the thread holds; never 1 (a thread of one has no entry). */
+  size: number;
+  /** `foundAt` of the thread's first story. */
+  startedAt: string;
+}
+
+/**
  * What a clear removed, and therefore what an undo has to put back (NEWS-145).
  *
  * The check window travels with the stories rather than being recomputed on
@@ -819,6 +836,71 @@ export class Store {
       )
       .all(head.t, threadId, id) as Record<string, unknown>[];
     return rows.map((r) => Store.rowToItem(r));
+  }
+
+  /**
+   * Where each of `items` sits in its thread (NEWS-282) — position, size, and
+   * when the subject first appeared.
+   *
+   * This is the **shape** of a thread rather than its contents, and it is what
+   * rides the feed page so a collapsed card can say "4th update · since Jun 12"
+   * without a request of its own (NEWS-283). The stories themselves are a
+   * separate route, fetched only when a card is expanded.
+   *
+   * **A story whose thread holds only itself gets no entry.** That is the
+   * ordinary case (FR-29.6), so the common feed page carries an empty map — and
+   * the absence is also the client's signal that there is nothing to fetch.
+   *
+   * Flagged stories are excluded from the counting, matching `threadForItem` and
+   * the feed: a story the user has rejected must not be the "3rd update" of
+   * anything, and the position a badge shows has to be the position the timeline
+   * will show. A flagged story therefore gets no entry either — it appears only
+   * in review mode, whose cards carry no expander (FR-3.66).
+   *
+   * One query for the whole page. A thread id **is** an item id (FR-29.5) and
+   * item ids are unique, so a thread cannot span topics; `topic_id` is in the
+   * `WHERE` anyway because `items_topic_thread` leads with it.
+   */
+  threadSummaries(items: readonly NewsItem[]): Record<string, ThreadSummary> {
+    if (items.length === 0) return {};
+    const threadIds = [...new Set(items.map((i) => i.threadId))];
+    const topicIds = [...new Set(items.map((i) => i.topicId))];
+    const rows = this.db
+      .prepare(
+        `SELECT id, thread_id AS th, found_at AS at FROM items
+          WHERE off_topic = 0
+            AND topic_id IN (${topicIds.map(() => '?').join(',')})
+            AND thread_id IN (${threadIds.map(() => '?').join(',')})
+          ORDER BY found_at, id`,
+      )
+      .all(...topicIds, ...threadIds) as Record<string, unknown>[];
+
+    const byThread = new Map<string, { id: string; foundAt: string }[]>();
+    for (const row of rows) {
+      const id = row['id'];
+      const foundAt = row['at'];
+      if (typeof id !== 'string' || typeof foundAt !== 'string') continue;
+      const stored = row['th'];
+      // An empty stored value is a row from before the column existed, which the
+      // schema reads as a thread of one — so this must too (FR-29.6).
+      const threadId = typeof stored === 'string' && stored !== '' ? stored : id;
+      const members = byThread.get(threadId);
+      if (members === undefined) byThread.set(threadId, [{ id, foundAt }]);
+      else members.push({ id, foundAt });
+    }
+
+    const summaries: Record<string, ThreadSummary> = {};
+    for (const item of items) {
+      const members = byThread.get(item.threadId) ?? [];
+      if (members.length < 2) continue;
+      const position = members.findIndex((m) => m.id === item.id) + 1;
+      const first = members.at(0);
+      // Position 0 means the story is not among its own thread's members, which
+      // only happens when it is flagged and therefore filtered out above.
+      if (position === 0 || first === undefined) continue;
+      summaries[item.id] = { position, size: members.length, startedAt: first.foundAt };
+    }
+    return summaries;
   }
 
   /**

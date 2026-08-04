@@ -1698,12 +1698,114 @@ h2.eyebrow {
     0 0 0 1px var(--pine-soft);
 }
 
-// Placeholder until NEWS-282 fills the pane with the thread timeline.
+// The pane's one-line states: a thread of one, a fetch in flight, a failure.
+// A thread of one is the *ordinary* case (FR-29.6), so this is not an edge —
+// it is what most expansions look like, and it gets the quiet treatment of a
+// meta line rather than the loudness of an empty heading.
 .item-pane-note {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
   margin: 0;
   font-family: var(--sans);
   font-size: 13px;
   color: var(--ink-soft);
+
+  // A failed background read for one card stays in that card — the page banner
+  // is for things the user did, not for a lookup they can simply retry.
+  &.error {
+    color: var(--ink);
+  }
+}
+
+// ------------------------------------------------------- thread timeline ---
+
+// "The story so far" (NEWS-282): the thread's stories in the order they landed.
+.thread {
+  .thread-heading {
+    margin: 0 0 8px;
+  }
+}
+
+.thread-rows {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+// Date in a fixed gutter, story beside it — so a run of rows reads as a
+// chronology down the left edge rather than as ragged sentences. The date
+// column is `flex: 0 0 auto` for the same reason `.item-time` is (NEWS-112):
+// a long headline must not squeeze "Jun 12" onto two lines.
+.thread-row {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+
+  .thread-when {
+    flex: 0 0 auto;
+    min-width: 58px;
+    font-family: var(--mono);
+    font-size: 10.5px;
+    color: var(--ink-soft);
+  }
+
+  .thread-what {
+    // `min-width: 0` or a long unbroken headline widens the flex item past the
+    // card — the pane is inside a grid column with nothing to give at 720px.
+    min-width: 0;
+    flex: 1;
+  }
+
+  .thread-title {
+    font-family: var(--serif);
+    font-size: 14px;
+    line-height: 1.4;
+    color: var(--ink);
+    text-decoration: none;
+  }
+
+  a.thread-title {
+    transition: color 120ms ease;
+
+    &:hover {
+      color: var(--pine);
+      text-decoration: underline;
+    }
+  }
+
+  .thread-meta {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 4px 8px;
+    margin-top: 2px;
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--ink-soft);
+  }
+
+  // The story you are reading. Dimmed rather than emphasised: it is the row you
+  // already have in front of you, and its job here is to place the others.
+  &.current {
+    .thread-title {
+      color: var(--ink-soft);
+    }
+
+    .thread-here {
+      color: var(--pine);
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+    }
+  }
+}
+
+// Always-present slot for the "show all" affordance (docs/3-ui.md).
+.thread-more:not(:empty) {
+  margin-top: 9px;
 }
 
 // The disclosure marker points down when closed, up when open. Driven off

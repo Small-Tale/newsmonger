@@ -10,7 +10,7 @@ import {
   PROVIDER_NAMES,
   providerTakesEffort,
 } from '../ai/types.js';
-import type { TopicSuggestion } from '../api/schemas.js';
+import type { ThreadSummary, TopicSuggestion } from '../api/schemas.js';
 import { MAX_DISCOVER_QUERY_LENGTH, MAX_TUNE_ROUNDS } from '../api/schemas.js';
 import type { BackupLocation } from '../backup-locations.js';
 import {
@@ -38,6 +38,7 @@ import {
   dismissBackupPrompt,
   fetchBackupLocations,
   fetchDiscoveryUsage,
+  loadThread,
   refreshBackupPreview,
   refreshFeed,
   refreshKeys,
@@ -67,6 +68,7 @@ import {
 } from './api.js';
 import { outletFor, publishedLabel } from './attribution.js';
 import { shouldOfferBackup, snoozeUntil } from './backup-prompt.js';
+import { dayKeyOf, dayLabel } from './dates.js';
 import { buildDiagnostics, formatDuration, runRows } from './diagnostics.js';
 import { dialCountdownMs, dialRemaining, formatCountdown } from './dial.js';
 import type { TunerState } from './discover.js';
@@ -107,7 +109,7 @@ import { itemMatchesQuery } from './search.js';
 import { syncSelects } from './select-sync.js';
 import { shareItem } from './share.js';
 import { isAllSoloed, toggleSolo } from './solo.js';
-import type { AppState, DiscoverSource, DiscoverState, OnboardingStep, ToastState } from './stores.js';
+import type { AppState, DiscoverSource, DiscoverState, OnboardingStep, ThreadPane, ToastState } from './stores.js';
 import {
   appStore,
   FEED_PAGE,
@@ -119,6 +121,7 @@ import {
   writeOnboardingSeen,
 } from './stores.js';
 import { getTauriInvoke, isTauri, openExternalUrl } from './tauri.js';
+import { showAllLabel, threadFetchNeeded, threadRowDate, visibleThreadRows } from './thread-view.js';
 import type { TopicRow } from './topic-sort.js';
 import { isHeading, sortTopics, topicRowCacheKey, topicRows } from './topic-sort.js';
 
@@ -208,17 +211,6 @@ function relativeTime(iso: string): string {
   if (hours < 24) return `${hours}h ago`;
   const days = Math.floor(hours / 24);
   return `${days}d ago`;
-}
-
-/** Label for a feed day group: Today, Yesterday, or "Jul 20". */
-function dayLabel(dateKey: string): string {
-  const today = new Date();
-  const yesterday = new Date(today.getTime() - 24 * 60 * 60 * 1000);
-  const keyOf = (d: Date): string => d.toLocaleDateString('en-CA'); // YYYY-MM-DD, local tz
-  if (dateKey === keyOf(today)) return 'Today';
-  if (dateKey === keyOf(yesterday)) return 'Yesterday';
-  const d = new Date(`${dateKey}T12:00:00`);
-  return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
 }
 
 const DIAL_R = 8;
@@ -516,6 +508,124 @@ function flaggedRowJsx(item: NewsItem, topicName: string): SafeHtml {
 }
 
 /**
+ * Everything the feed's leaves need to know about threads (NEWS-282), passed
+ * down rather than read from the store in the leaf — the same reason
+ * `expandedItemId` is: the tracked reads all happen in `appJsx`.
+ */
+interface FeedThreads {
+  /** Thread shape per story id, for the stories on this page. */
+  summaries: Record<string, ThreadSummary | undefined>;
+  /** Fetched timelines, per story id. Only the expanded card's is ever drawn. */
+  panes: Record<string, ThreadPane | undefined>;
+  /** Whether the open pane has had its row cap lifted. */
+  showAll: boolean;
+}
+
+const NO_THREADS: FeedThreads = { summaries: {}, panes: {}, showAll: false };
+
+/**
+ * One row of the "story so far" (NEWS-282): when it landed, its headline, who
+ * carried it.
+ *
+ * **The headline is a link to the story's own source**, and nothing else in the
+ * row is interactive. That is the one destination this row can promise: a
+ * control that scrolled the feed to that story's card would silently do nothing
+ * for the common case, since a thread reaches back 30 days and the feed holds
+ * one page — and a row that looks pressable and isn't is worse than a plain row.
+ * A story with no usable source renders as plain text, so what looks like a link
+ * always is one.
+ *
+ * The row for the story being read is **not** a link: it is marked as the one you
+ * are on, which is what gives the timeline a "you are here" without a second
+ * mechanism, and it is why the current story is in the list at all rather than
+ * being filtered out of its own history.
+ */
+function threadRowJsx(entry: NewsItem, current: boolean): SafeHtml {
+  const source = entry.sources.at(0) ?? null;
+  const outlet = source === null ? '' : outletFor(source);
+  return (
+    <li
+      class={`thread-row${current ? ' current' : ''}`}
+      data-key={`thread-${entry.id}`}
+      aria-current={current ? 'true' : 'false'}
+    >
+      <span class="thread-when">{threadRowDate(entry.foundAt)}</span>
+      <span class="thread-what">
+        {current || source === null ? (
+          <span class="thread-title">{entry.title}</span>
+        ) : (
+          <a class="thread-title" href={source.url} target="_blank" rel="noopener noreferrer" data-external="1">
+            {entry.title}
+          </a>
+        )}
+        <span class="thread-meta">
+          {outlet === '' ? '' : <span class="thread-outlet">{outlet}</span>}
+          {current ? <span class="thread-here">this story</span> : ''}
+        </span>
+      </span>
+    </li>
+  );
+}
+
+/**
+ * The expanded card's pane: how this story's subject developed (NEWS-282).
+ *
+ * Four states, and the first is the common one. **A thread of one is the ordinary
+ * case** (FR-29.6) — most stories are the only thing we have on their subject,
+ * especially before history accumulates — so it gets one honest line and *no
+ * heading*: a "The story so far" with nothing under it reads as a bug rather
+ * than as an answer. The heading only appears where there is a timeline to head.
+ *
+ * A failure shows in the pane with a retry, not in the page's error banner: one
+ * card's background read failing is not worth a red bar across the app, and the
+ * pane is where the person who asked is looking.
+ */
+function threadPaneJsx(item: NewsItem, threads: FeedThreads): SafeHtml {
+  const summary = threads.summaries[item.id];
+  if (!threadFetchNeeded(summary)) {
+    return <p class="item-pane-note">Nothing else on this subject yet — later stories about it will collect here.</p>;
+  }
+  const pane = threads.panes[item.id];
+  if (pane === undefined || pane.status === 'loading') {
+    return <p class="item-pane-note">Looking up the story so far…</p>;
+  }
+  if (pane.status === 'error') {
+    return (
+      <p class="item-pane-note error">
+        <span>Couldn't load the story so far: {pane.message}</span>
+        <button class="btn link" type="button" data-retry-thread={item.id}>
+          Try again
+        </button>
+      </p>
+    );
+  }
+  const { rows, hidden } = visibleThreadRows(pane.items, threads.showAll);
+  return (
+    <div class="thread">
+      <h4 class="thread-heading eyebrow">The story so far</h4>
+      <ol class="thread-rows">
+        {/* `.map()`, not `each()`: one pane is open at a time and its rows are
+            fixed for as long as it is, so memoizing them buys nothing — and it
+            keeps the number of `each()` calls in a render stable (kerf Hard
+            Rule 14 / docs/3-ui.md). */}
+        {rows.map((entry) => threadRowJsx(entry, entry.id === item.id))}
+      </ol>
+      {/* Always-present slot: the button appearing or leaving must not restructure
+          the pane around it (docs/3-ui.md). */}
+      <div class="thread-more">
+        {hidden > 0 ? (
+          <button class="btn link" type="button" data-action="show-all-thread">
+            {showAllLabel(pane.items.length)}
+          </button>
+        ) : (
+          ''
+        )}
+      </div>
+    </div>
+  );
+}
+
+/**
  * One story card.
  *
  * `expandedItemId` is threaded in rather than read from the store here: the leaf
@@ -533,6 +643,7 @@ function itemJsx(
   topicName: string,
   variant: 'normal' | 'review' = 'normal',
   expandedItemId: string | null = null,
+  threads: FeedThreads = NO_THREADS,
 ): SafeHtml {
   // A just-flagged story collapses to a dimmed one-liner in the normal feed.
   if (variant === 'normal' && item.offTopic) return flaggedRowJsx(item, topicName);
@@ -649,9 +760,9 @@ function itemJsx(
           a second reason on top of it: this is the target of the expander's
           `aria-controls`, and an `aria-controls` pointing at nothing is an axe
           violation (docs/3-ui.md, NEWS-99). `:empty` hides it when collapsed.
-          NEWS-282 replaces the placeholder line with the thread timeline. */}
+          and it holds the thread timeline (NEWS-282). */}
       <div class="item-pane" id={paneId}>
-        {expanded ? <p class="item-pane-note">The story so far will appear here.</p> : ''}
+        {expanded ? threadPaneJsx(item, threads) : ''}
       </div>
     </article>
   );
@@ -662,12 +773,13 @@ function feedJsx(
   topicNames: Map<string, string>,
   variant: 'normal' | 'review' = 'normal',
   expandedItemId: string | null = null,
+  threads: FeedThreads = NO_THREADS,
 ): SafeHtml[] {
   // Group by local calendar day, newest first. Groups are dynamic, so plain
   // `.map()` (no memoization); items keep data-key for keyed morphing.
   const groups = new Map<string, NewsItem[]>();
   for (const item of items) {
-    const key = new Date(item.foundAt).toLocaleDateString('en-CA');
+    const key = dayKeyOf(new Date(item.foundAt));
     const group = groups.get(key);
     if (group) group.push(item);
     else groups.set(key, [item]);
@@ -675,7 +787,9 @@ function feedJsx(
   return [...groups.entries()].map(([dateKey, dayItems]) => (
     <section class="day" data-key={`day-${dateKey}`}>
       <h2 class="eyebrow">{dayLabel(dateKey)}</h2>
-      {dayItems.map((item) => itemJsx(item, topicNames.get(item.topicId) ?? 'unknown topic', variant, expandedItemId))}
+      {dayItems.map((item) =>
+        itemJsx(item, topicNames.get(item.topicId) ?? 'unknown topic', variant, expandedItemId, threads),
+      )}
     </section>
   ));
 }
@@ -3017,7 +3131,11 @@ function appJsx(): SafeHtml {
       </section>
 
       <section id="feed" class="feed">
-        {feedJsx(feedItems, topicNames, feedVariant, s.expandedItemId)}
+        {feedJsx(feedItems, topicNames, feedVariant, s.expandedItemId, {
+          summaries: s.threads,
+          panes: s.threadPanes,
+          showAll: s.threadShowAll,
+        })}
         <div class="empty-slot">
           {s.loaded && feedItems.length === 0 && reviewMode ? (
             <p class="empty">No flagged stories for these topics.</p>
@@ -4228,6 +4346,24 @@ function wireEvents(root: HTMLElement): void {
       if (selection !== null && !selection.isCollapsed) return;
     }
     appStore.actions.toggleItemExpanded(id);
+    // Fetch the thread **on expand only** (NEWS-282), and only when the feed's
+    // thread summary says there is one — a thread of one needs no request, which
+    // is the majority of cards. `loadThread` also owns the cache, so a
+    // collapse/re-expand costs nothing.
+    if (appStore.state.value.expandedItemId === id) void loadThread(id);
+  });
+
+  // Retry a thread whose fetch failed (NEWS-282). A separate delegate is safe
+  // here — unlike the NEWS-126 case — because the expand handler above returns
+  // early for anything inside `.item-pane`, so exactly one of the two acts.
+  void delegate(root, 'click', '[data-retry-thread]', (_e, el) => {
+    const id = el.getAttribute('data-retry-thread');
+    if (id === null) return;
+    void loadThread(id);
+  });
+
+  void delegate(root, 'click', '[data-action=show-all-thread]', () => {
+    appStore.actions.showAllThread();
   });
 
   void delegate(root, 'click', '[data-save-item]', (_e, el) => {

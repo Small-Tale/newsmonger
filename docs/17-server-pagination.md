@@ -45,6 +45,13 @@ The search-UX decision is settled: **server-side, debounced** — the instant pe
 - `Store.queryItems` / `latestItemIds` / `flaggedCountsByTopic` (`src/db/store.ts`); `GET /api/items` + slimmed `/api/state` (`src/routes/api.ts`); `ItemsResp` + slimmed `StateResp` (`src/api/schemas.ts`).
 - Client: `refreshFeed` (`src/client/api.ts`); `feedItems`/`feedTotal`/`flaggedByTopic`/`recentlyFlaggedItems` state + `setFeed`/`addRecentlyFlagged`/`removeRecentlyFlagged` (`src/client/stores.ts`); the feed pipeline, overlay merge, and view-change refetch wiring (`src/client/app.tsx`). `itemMatchesQuery` stays for the client-side overlay match.
 
+## The page also carries thread shape (NEWS-282)
+
+`ItemsResp` gained `threads: Record<storyId, { position, size, startedAt }>` — where each story on the page sits in its thread ([29 — Story Threads](29-story-threads.md) FR-29.29). It is on the feed page rather than behind a request per card because a card has to be able to *say* it is the fourth update without asking anything, and three numbers a story wide is not what "size-sensitive" was about.
+
+- **FR-17.10** *(Shipped, NEWS-282)* Only stories whose thread holds **more than one** get an entry, so a feed with no threading yet — the common one, and every feed before this existed — carries `{}` and the response is byte-for-byte what it was. The absence is load-bearing twice over: no entry means no badge, and it also means expanding that card fetches nothing.
+- The thread's **stories** are deliberately *not* here. That would multiply the payload by the average thread length to serve a pane nobody has opened, which is exactly the trade this document exists to make carefully. They come from `GET /api/items/:id/thread`, on expand, cached client-side.
+
 ## Out-of-order refresh responses (NEWS-104)
 
 Refreshes run concurrently by design: the 4-second poll, plus one after every mutation (`withRefresh` PATCHes, then refreshes). The store applied whichever response **resolved** last, which is not the one **issued** last.

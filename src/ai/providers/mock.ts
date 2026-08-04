@@ -1,6 +1,7 @@
 import type {
   CategoryOption,
   CheckResult,
+  FoundNewsItem,
   KnownItem,
   NewsProvider,
   SuggestRequest,
@@ -83,6 +84,66 @@ function mockSuggestions(request: SuggestRequest): TopicSuggestion[] {
     guidance: `Focus on ${seed}, and skip anything tangential.`,
     classification: classify(name.toLowerCase(), options),
   }));
+}
+
+/**
+ * One subject, reported six times — the mock's answer for a topic whose name
+ * contains "thread" (NEWS-280, extended in NEWS-282).
+ *
+ * Every headline shares "Riverside" and at least two other content words with the
+ * first, and every one of them carries a capitalized entity in common, so they
+ * clear `src/threads.ts`'s gates and land in **one** thread. They are deliberately
+ * *different articles from different outlets*, which is what dedup cannot relate
+ * and threading exists to.
+ *
+ * **The series grows with what the topic already knows**: two instalments on the
+ * first check, two more on each later one. Dedup drops the repeats (same URLs), so
+ * repeated checks extend one thread by two stories at a time — which is the only
+ * way an E2E flow can build a thread longer than the timeline's row cap
+ * (`THREAD_ROW_CAP`) and reach the "show all" affordance. Returning all six at
+ * once instead would make the very first check of a brand-new topic produce a
+ * six-story thread, which is not what a first check looks like.
+ */
+function threadSeries(slug: string, knownCount: number): FoundNewsItem[] {
+  const series: FoundNewsItem[] = [
+    {
+      title: 'Riverside Dam collapse floods three towns',
+      summary:
+        'The Riverside Dam gave way overnight, flooding three towns downstream. Officials have ordered evacuations. Damage assessments are under way.',
+      sources: [{ title: 'Example News', url: `https://news.example.com/${slug}/riverside-dam-collapse` }],
+    },
+    {
+      title: 'Rescue teams reach Riverside Dam flood zone',
+      summary:
+        'Rescue teams have reached the Riverside Dam flood zone and begun searching the worst-hit streets. A relief centre has opened nearby.',
+      sources: [{ title: 'Example Times', url: `https://times.example.com/${slug}/riverside-rescue` }],
+    },
+    {
+      title: 'Riverside flood inquiry opens into collapse warnings',
+      summary:
+        'An inquiry into the Riverside flood has opened, examining warnings issued before the collapse. It will report within the year.',
+      sources: [{ title: 'Example Herald', url: `https://herald.example.com/${slug}/riverside-inquiry` }],
+    },
+    {
+      title: 'Riverside Dam engineers detail the collapse sequence',
+      summary:
+        'Engineers gave the first detailed account of how the Riverside Dam failed, hour by hour. Their account differs from the operator’s.',
+      sources: [{ title: 'Example Post', url: `https://post.example.com/${slug}/riverside-engineers` }],
+    },
+    {
+      title: 'Riverside flood recovery begins in three towns',
+      summary:
+        'Recovery work has begun in the three towns the Riverside flood reached. Rebuilding is expected to take two years.',
+      sources: [{ title: 'Example News', url: `https://news.example.com/${slug}/riverside-recovery` }],
+    },
+    {
+      title: 'Riverside Dam collapse inquiry names the contractor',
+      summary:
+        'The Riverside Dam inquiry has named the contractor responsible for the failed repair. The company disputes the finding.',
+      sources: [{ title: 'Example Times', url: `https://times.example.com/${slug}/riverside-contractor` }],
+    },
+  ];
+  return series.slice(0, Math.min(series.length, knownCount + 2));
 }
 
 /**
@@ -178,28 +239,16 @@ export function createMockProvider(
       if (lower.includes('empty'))
         return Promise.resolve({ items: [], usage, classification: classify(lower, context.categoryOptions ?? []) });
       const slug = lower.replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
-      // "thread" → two outlets covering *one* subject, so story threading
-      // (NEWS-280) is reachable end to end. The default pair below deliberately
-      // shares nothing but the topic's own name, which threading discounts, so
-      // without this keyword no E2E flow could ever produce a thread of two.
+      // "thread" → coverage of *one* subject, so story threading (NEWS-280) and
+      // the timeline built on it (NEWS-282) are reachable end to end. The default
+      // pair below deliberately shares nothing but the topic's own name, which
+      // threading discounts, so without this keyword no E2E flow could ever
+      // produce a thread of two.
       if (lower.includes('thread'))
         return Promise.resolve({
           usage,
           classification: classify(lower, context.categoryOptions ?? []),
-          items: [
-            {
-              title: 'Riverside Dam collapse floods three towns',
-              summary:
-                'The Riverside Dam gave way overnight, flooding three towns downstream. Officials have ordered evacuations. Damage assessments are under way.',
-              sources: [{ title: 'Example News', url: `https://news.example.com/${slug}/riverside-dam-collapse` }],
-            },
-            {
-              title: 'Rescue teams reach Riverside Dam flood zone',
-              summary:
-                'Rescue teams have reached the Riverside Dam flood zone and begun searching the worst-hit streets. A relief centre has opened nearby.',
-              sources: [{ title: 'Example Times', url: `https://times.example.com/${slug}/riverside-rescue` }],
-            },
-          ],
+          items: threadSeries(slug, known.length),
         });
       return Promise.resolve({
         usage,

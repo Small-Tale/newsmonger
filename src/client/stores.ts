@@ -1,12 +1,33 @@
 import { defineStore } from 'kerfjs';
 
 import type { Effort } from '../ai/types.js';
-import type { BackupPreview, ItemsResp, KeysResp, ProviderInfo, StateResp, TopicSuggestion } from '../api/schemas.js';
+import type {
+  BackupPreview,
+  ItemsResp,
+  KeysResp,
+  ProviderInfo,
+  StateResp,
+  ThreadSummary,
+  TopicSuggestion,
+} from '../api/schemas.js';
 import type { BackupLocation } from '../backup-locations.js';
 import type { TunerState } from './discover.js';
 import type { ExportChoice } from './export-url.js';
 
 type NewsItem = ItemsResp['items'][number];
+
+/**
+ * One story's thread timeline as the pane knows it (NEWS-282).
+ *
+ * A three-state union rather than `items | null` plus flags: "asked and waiting",
+ * "asked and failed" and "have it" are what the pane draws, and a shape that
+ * cannot express them separately is a shape that renders an empty timeline while
+ * a request is still in flight.
+ */
+export type ThreadPane =
+  | { status: 'loading' }
+  | { status: 'error'; message: string }
+  | { status: 'ready'; items: NewsItem[]; size: number };
 
 /** How many stories the feed reveals per "Show more" page (NEWS-62). */
 export const FEED_PAGE = 100;
@@ -144,6 +165,40 @@ export interface AppState {
   feedItems: NewsItem[];
   /** Total stories matching the active view, from the server — drives "Show more". */
   feedTotal: number;
+  /**
+   * Thread shape per story id for the current feed page (NEWS-282), keyed by
+   * **story** id: position, size, and when the subject first appeared.
+   *
+   * Arrives with the page rather than being fetched per card — three numbers a
+   * story wide, and only for stories whose thread holds more than one, so the
+   * ordinary feed carries an empty map. It decides whether a card has a thread
+   * badge (NEWS-283) *and* whether expanding it has anything to fetch.
+   *
+   * `| undefined` in the value type because this is read **by key** and most
+   * keys are absent — the same shape as `todayByTopic` in `RowRenderState`, and
+   * for the same reason: a lookup that cannot express a miss lies about it.
+   */
+  threads: Record<string, ThreadSummary | undefined>;
+  /**
+   * The timeline behind each story whose pane has been opened this session
+   * (NEWS-282), keyed by story id.
+   *
+   * A cache, deliberately: collapsing and re-opening a card must not re-ask the
+   * server for something it already answered. `size` is what it was fetched at,
+   * so a thread that has since grown — the feed poll would show a bigger badge —
+   * is refetched rather than served stale. An `error` entry is never reused, so
+   * a failure is retried by re-opening the card as well as by the retry button.
+   */
+  threadPanes: Record<string, ThreadPane | undefined>;
+  /**
+   * Whether the open pane is showing its whole thread rather than the last
+   * `THREAD_ROW_CAP` rows (NEWS-282).
+   *
+   * One flag rather than a set, because the feed is an accordion: only one pane
+   * can be open, so "showing all" can only be true of that one. Opening any card
+   * resets it — a cap the previous card's reader lifted is not a preference.
+   */
+  threadShowAll: boolean;
   /** Off-topic count per topic, for the "Review Flagged (N)" badge (NEWS-76). */
   flaggedByTopic: Record<string, number>;
   /** Stories found today per topic, for the sidebar badge (NEWS-242). */
@@ -512,6 +567,9 @@ export const appStore = defineStore({
     topics: [],
     feedItems: [],
     feedTotal: 0,
+    threads: {},
+    threadPanes: {},
+    threadShowAll: false,
     flaggedByTopic: {},
     todayByTopic: {},
     newestItemAtByTopic: {},
@@ -699,7 +757,9 @@ export const appStore = defineStore({
      */
     toggleItemExpanded: (id: string) => {
       const s = get();
-      set({ ...s, expandedItemId: s.expandedItemId === id ? null : id });
+      // `threadShowAll` belongs to the pane being opened, not to the reader, so
+      // every open (and every close) starts capped again — see the field.
+      set({ ...s, expandedItemId: s.expandedItemId === id ? null : id, threadShowAll: false });
     },
     /**
      * Collapse `id` specifically. A **no-op** when some other story — or none —
@@ -717,8 +777,17 @@ export const appStore = defineStore({
       if (s.expandedItemId === null) return;
       set({ ...s, expandedItemId: null });
     },
-    setFeed: (feed: { items: NewsItem[]; total: number }) => {
-      set({ ...get(), feedItems: feed.items, feedTotal: feed.total });
+    setFeed: (feed: { items: NewsItem[]; total: number; threads: Record<string, ThreadSummary> }) => {
+      set({ ...get(), feedItems: feed.items, feedTotal: feed.total, threads: feed.threads });
+    },
+    /** Record what the thread route said (or that it is still being asked). */
+    setThreadPane: (id: string, pane: ThreadPane) => {
+      const s = get();
+      set({ ...s, threadPanes: { ...s.threadPanes, [id]: pane } });
+    },
+    /** Lift the row cap on the open pane (NEWS-282). */
+    showAllThread: () => {
+      set({ ...get(), threadShowAll: true });
     },
     // Hold a just-flagged story (full data) so it can render collapsed even
     // though the server's normal-view page now excludes it (NEWS-76).

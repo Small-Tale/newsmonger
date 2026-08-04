@@ -13,6 +13,7 @@ import {
   ProvidersRespSchema,
   RestoreRespSchema,
   StateRespSchema,
+  ThreadRespSchema,
 } from '../api/schemas.js';
 import type { BackupLocation } from '../backup-locations.js';
 import { noteState } from './notifications.js';
@@ -120,11 +121,56 @@ export async function refreshFeed(): Promise<void> {
     // filters have already excluded.
     if (seq < feedApplied) return;
     feedApplied = seq;
-    appStore.actions.setFeed({ items: resp.items, total: resp.total });
+    appStore.actions.setFeed({ items: resp.items, total: resp.total, threads: resp.threads });
   } catch (err) {
     if (seq < feedApplied) return;
     feedApplied = seq;
     appStore.actions.setError(err instanceof Error ? err.message : String(err));
+  }
+}
+
+/**
+ * Load one story's thread for the detail pane (NEWS-282).
+ *
+ * **On expand, never on render.** The feed already carries each story's thread
+ * *shape* (`threads`, one small record per multi-story thread), so this is only
+ * ever called for a card someone actually opened — a fetch per card in a
+ * hundred-story feed for a pane nobody looked at is the thing this avoids.
+ *
+ * Three early returns, each a decision rather than a guard:
+ *
+ * - **No summary means a thread of one** (FR-29.6), the ordinary case. There is
+ *   nothing to fetch and the pane says so in a line; asking anyway would spend a
+ *   request per expansion to be told what the feed already said.
+ * - **A cached thread of the same size is reused**, so collapse/re-expand is
+ *   free. Keyed on size rather than on time: the 4-second poll refreshes the
+ *   badge, so a thread that has grown announces itself and is refetched.
+ * - **An in-flight request is not duplicated.** The button and the card body are
+ *   one handler, but a double-click still arrives as two clicks.
+ *
+ * A failure lands in the pane, not in the page banner: a background read for one
+ * card is not something to raise a red banner across the app over, and the pane
+ * is where the reader is looking. It offers a retry rather than clearing itself,
+ * and is never cached — re-opening the card tries again.
+ */
+export async function loadThread(id: string): Promise<void> {
+  const state = appStore.state.value;
+  const summary = state.threads[id];
+  if (summary === undefined || summary.size < 2) return;
+  const cached = state.threadPanes[id];
+  if (cached !== undefined) {
+    if (cached.status === 'loading') return;
+    if (cached.status === 'ready' && cached.size === summary.size) return;
+  }
+  appStore.actions.setThreadPane(id, { status: 'loading' });
+  try {
+    const resp = ThreadRespSchema.parse(await request(`/api/items/${encodeURIComponent(id)}/thread`));
+    appStore.actions.setThreadPane(id, { status: 'ready', items: resp.items, size: resp.items.length });
+  } catch (err) {
+    appStore.actions.setThreadPane(id, {
+      status: 'error',
+      message: err instanceof Error ? err.message : String(err),
+    });
   }
 }
 

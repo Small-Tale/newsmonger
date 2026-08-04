@@ -7,7 +7,7 @@ import type { z } from 'zod';
 import { deleteApiKey, resolveApiKey, saveApiKey } from '../ai/api-keys.js';
 import { probeProviders } from '../ai/providers/index.js';
 import { isKeyedProvider, KEY_ENV_VARS, KEYED_PROVIDERS, PROVIDER_INFO } from '../ai/types.js';
-import type { ItemsResp, KeysResp, ProvidersResp, StateResp } from '../api/schemas.js';
+import type { ItemsResp, KeysResp, ProvidersResp, StateResp, ThreadResp } from '../api/schemas.js';
 import {
   CheckReqSchema,
   CreateTopicReqSchema,
@@ -81,7 +81,8 @@ export function registerApi(app: Hono<AppEnv>): void {
     const beforeAt = c.req.query('beforeAt');
     const beforeId = c.req.query('beforeId');
     const before = beforeAt !== undefined && beforeId !== undefined ? { foundAt: beforeAt, id: beforeId } : null;
-    const resp: ItemsResp = c.get('store').queryItems({
+    const store = c.get('store');
+    const page = store.queryItems({
       mode,
       topicIds,
       saved: c.req.query('saved') === '1',
@@ -91,6 +92,33 @@ export function registerApi(app: Hono<AppEnv>): void {
       limit,
       before,
     });
+    // Thread *shape* per story (NEWS-282) — position, size, first-seen — so a
+    // collapsed card can say "4th update · since Jun 12" without a request per
+    // card (NEWS-283). Only multi-story threads get an entry, so the usual page
+    // carries an empty map. The thread's stories are a separate route.
+    const resp: ItemsResp = { ...page, threads: store.threadSummaries(page.items) };
+    return c.json(resp);
+  });
+
+  /**
+   * One story's whole thread, oldest first — the "story so far" (NEWS-282).
+   *
+   * Its own route rather than part of the feed page: a thread is several whole
+   * stories, and multiplying a size-sensitive payload (`docs/17-server-pagination.md`)
+   * by the average thread length would pay for a pane nobody has opened. The
+   * feed carries only each story's `ThreadSummary`, which is what the collapsed
+   * card needs; this is fetched on expand.
+   *
+   * `threadForItem` answers with at least the requested story for any id it
+   * knows, so an empty list means the id itself is unknown — a stale card, or a
+   * story retention removed while it was on screen. That is a 404 with a message
+   * rather than an empty timeline, which would state something false about a
+   * story that is no longer there.
+   */
+  app.get('/api/items/:id/thread', (c) => {
+    const items = c.get('store').threadForItem(c.req.param('id'));
+    if (items.length === 0) return c.json({ error: 'unknown story' }, 404);
+    const resp: ThreadResp = { items };
     return c.json(resp);
   });
 
