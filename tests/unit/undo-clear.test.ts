@@ -19,6 +19,7 @@ function snapshot(n: number): ClearedItems {
       sources: [],
       image: null,
       dedupeKey: `k${String(i)}`,
+      threadId: `i${String(i)}`,
       foundAt: '2026-01-01T00:00:00.000Z',
       saved: false,
       offTopic: false,

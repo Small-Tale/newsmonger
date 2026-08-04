@@ -18,6 +18,7 @@ function item(over: Partial<NewsItem> = {}): NewsItem {
     sources: [],
     image: null,
     dedupeKey: `k${String(seq)}`,
+    threadId: `i${String(seq)}`,
     foundAt: '2026-07-24T00:00:00Z',
     ...over,
   };

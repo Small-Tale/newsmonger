@@ -1,3 +1,5 @@
+import { randomUUID } from 'node:crypto';
+
 import { filterNewItems } from './ai/dedupe.js';
 import type { BackoffConfig, FailureKind } from './ai/retry.js';
 import { backoffDelayMs, classifyFailure, DEFAULT_BACKOFF, FAILURE_COOLDOWN, retryAfterMs } from './ai/retry.js';
@@ -22,6 +24,7 @@ import type { Store } from './db/store.js';
 import { originOf } from './images/favicon.js';
 import type { FaviconFetcher, ImageFetcher } from './images/index.js';
 import { liveImageHashes, pruneImageCache } from './images/index.js';
+import { withThreadIds } from './threads.js';
 
 /**
  * A provider failure that made it through the retry policy, carrying how it was
@@ -502,24 +505,31 @@ export class CheckRunner {
       // The topic may have been deleted while the check was in flight.
       if (this.store.getTopic(topicId)) {
         const now = new Date().toISOString();
-        this.store.addItems(
-          fresh.map(({ item, dedupeKey }, i) => ({
-            topicId,
-            title: item.title,
-            summary: item.summary,
-            sources: item.sources.map((source) => ({
-              ...source,
-              // Absent means "the model didn't say"; normalise to null so the
-              // stored shape is uniform and the UI has one case to handle.
-              outlet: source.outlet ?? null,
-              publishedAt: source.publishedAt ?? null,
-              favicon: favicons.get(originOf(source.url) ?? '') ?? null,
-            })),
-            image: images[i] ?? null,
-            dedupeKey,
-            foundAt: now,
+        const landing = fresh.map(({ item, dedupeKey }, i) => ({
+          // Minted here rather than by the store, because thread assignment
+          // refers to stories by id and two stories about the same subject in
+          // one batch have to be able to name each other (NEWS-280).
+          id: randomUUID(),
+          topicId,
+          title: item.title,
+          summary: item.summary,
+          sources: item.sources.map((source) => ({
+            ...source,
+            // Absent means "the model didn't say"; normalise to null so the
+            // stored shape is uniform and the UI has one case to handle.
+            outlet: source.outlet ?? null,
+            publishedAt: source.publishedAt ?? null,
+            favicon: favicons.get(originOf(source.url) ?? '') ?? null,
           })),
-        );
+          image: images[i] ?? null,
+          dedupeKey,
+          foundAt: now,
+        }));
+        // Threaded as it lands, against the topic's own history — read fresh
+        // rather than reusing `known` above, which was taken before a
+        // multi-minute provider call (NEWS-280). Local and free: no model call,
+        // no extra query beyond this one.
+        this.store.addItems(withThreadIds(landing, this.store.listItems(topicId), { topicName: topic.name }));
         this.applyClassification(topicId, found.classification ?? null);
         const checkedAt = new Date();
         this.store.markTopicChecked(topicId, checkedAt);

@@ -20,6 +20,12 @@ Checks run through a pluggable **provider** abstraction (`src/ai/providers/`, se
 - **FR-2.9** Dedup scope is per-topic: the same story may legitimately appear under two different topics.
 - **FR-2.10** If the topic is deleted while its check is in flight, the results are discarded.
 
+### Deduplication is not threading
+
+`dedupeKey` answers **"is this the same article?"** — it is a URL identity with no notion of subject. Grouping stories about the same *developing subject* is a separate concern, computed separately, and documented in [29 — Story Threads](29-story-threads.md).
+
+The distinction is load-bearing rather than pedantic. Two outlets covering one event yield two different dedupe keys, which is exactly why both are stored and both appear in the feed — so key proximity cannot be read as relatedness, and thread membership has to be computed from the titles themselves. The two also have opposite outcomes: dedup **drops** a story, threading **keeps and groups** it. Dedup runs first; threading only ever describes what survived it.
+
 ## Sanitizing model output
 
 Titles, summaries and source titles are stripped of markup at the boundary (`src/ai/sanitize.ts`), on both write and read.
@@ -100,4 +106,4 @@ Beyond the topic name, two user signals reach the prompt through `TopicContext`:
 
 Guidance comes first in the prompt: it is what the user said, where the flags are only what their behaviour implied.
 
-See also: [1 — Topics and Scheduling](1-topics-and-scheduling.md), [15 — Off-Topic Flagging](15-off-topic-flagging.md), [18 — Topic Guidance](18-topic-guidance.md).
+See also: [1 — Topics and Scheduling](1-topics-and-scheduling.md), [15 — Off-Topic Flagging](15-off-topic-flagging.md), [18 — Topic Guidance](18-topic-guidance.md), [29 — Story Threads](29-story-threads.md).

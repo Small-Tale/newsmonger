@@ -18,6 +18,7 @@ src/
   backup-locations.ts suggestedBackupLocations (probes iCloud/Drive/OneDrive/Dropbox per OS, incl. the macOS CloudStorage prefix scan; NEWS-230) + normalizeBackupDir (expands ~, refuses relative — node-only, so NOT in api/schemas.ts which the client imports; NEWS-237)
   backup.ts           Backups/writeBackup/buildBackup — snapshot to the user's backupDir in DataFileSchema shape, temp+rename, 1/hour (NEWS-192)
   undo.ts             ClearUndoBuffer: in-memory, per-topic, TTL'd snapshot of a cleared topic's stories + covered window (NEWS-145)
+  threads.ts          story threads (NEWS-280): planThreadIds/threadIdFor/withThreadIds — pure local similarity (content tokens minus the topic's own words, capitalized entities, shared host as tie-break only, 30-day recency). **Not dedup** — see docs/29-story-threads.md
   scheduler.ts        startScheduler: 60s tick + 3s startup sweep, non-overlapping; drains an overrun cycle (NEWS-57)
   checks.ts           CheckRunner (checkTopic/checkDue/checkAll, in-flight guard) + cancelStaleChecks() on a settings change (NEWS-257) / cancelAllChecks() on a story clear (NEWS-271, also stops the sweep queue via cancelEpoch and discards results arriving post-abort) + isDue()/isDueDaily()/isDueUnderSchedule()/lastSlotBefore() (NEWS-84) + effectiveInterval() + byCheckOrder() (most-overdue-first, NEWS-58). No budget logic — NEWS-119 removed it
   types.ts            Hono AppEnv (store, runner injected)
@@ -28,7 +29,7 @@ src/
   db/
     schemas.ts        zod: Topic, NewsItem, Settings, CheckRun, DataFile; DEFAULT_CHECK_INTERVAL_MS, MAX_GUIDANCE_LENGTH
     store.ts          Store: SQLite (node:sqlite), per-row writes, zod-validated rows, corrupt-db backup+reset, one-time data.json import (NEWS-94)
-    sqlite.ts         schema DDL, SCHEMA_VERSION + MIGRATIONS (user_version based), openDb (WAL + sanity probe), backupUnreadableDb, dbPath
+    sqlite.ts         schema DDL as **TABLES then MIGRATIONS then INDEXES** (an index on a column a migration adds cannot be created before it — NEWS-280), SCHEMA_VERSION + MIGRATIONS (user_version based), openDb (WAL + sanity probe), backupUnreadableDb, dbPath
     warnings.ts       filters ONLY node:sqlite's ExperimentalWarning; imported before the require in sqlite.ts
   ai/
     types.ts          AUTO_ORDER (client-safe, NEWS-128); DISCOVERY_MODELS + usesLegacyRequestShape (NEWS-132); NewsService (checkTopic + suggestTopics) + NewsProvider, TopicContext, CheckResult/TokenUsage, SuggestRequest/SuggestScope/TopicSuggestion (NEWS-124), PROVIDER_NAMES/INFO, FoundNewsItem, KnownItem
@@ -88,7 +89,7 @@ tests/
   helpers/            tmp.ts (tmp data dirs), provider.ts (asResolver/fakeProvider)
   unit/               vitest: dedupe, store, checks, scheduler, config, parse-result, providers, openai, api, api-keys, api-keys-routes, attendance, catch-up, sanitize, origin-guard, guidance, key-verify, diagnostics, retention, export, daily-schedule, verify-links, attribution, concurrency, suggest-prompt, suggest-providers, discovery, discover-client, discover-progress
   e2e/                playwright, serial, mock AI (--ai-test), port 4189: app.spec.ts, keys.spec.ts, topics.spec.ts, a11y.spec.ts (axe-core, both themes), categories.spec.ts (NEWS-97), discover.spec.ts (NEWS-126), layout.spec.ts (full-window layout + column count at several viewports, NEWS-96). `resetTopics` in a beforeAll gives every attempt — first run or serial retry — an empty server (NEWS-101). **One browser context for the whole run** (worker-scoped `sharedContext`), pages still per-test: a context owns its connection pool, and a fresh one per test churned 457 sockets into `TIME_WAIT` — 46 now. `localStorage` and permissions are cleared in teardown to keep the isolation that gave (NEWS-246)
-docs/                 numbered requirements (1–25), ai/ summaries, manual-test-plan.md
+docs/                 numbered requirements (1–29), ai/ summaries, manual-test-plan.md
 ```
 
 ## Data schema (`<data-dir>/newsmonger.db`, SQLite — NEWS-94)
@@ -96,7 +97,7 @@ docs/                 numbered requirements (1–25), ai/ summaries, manual-test
 Tables `topics` / `items` / `runs` / `meta` (settings as one JSON row). Booleans are INTEGER 0/1; `sources`, `image` and `usage` are JSON columns. No foreign keys — a check can outlive its topic, so `deleteTopic` cascades explicitly. The shapes below are the zod schemas every row is validated against on read.
 
 - `topics[]`: id, name, paused, highPriority (checked on the shorter interval — NEWS-56), guidance (free-text steer fed to the prompt — NEWS-80), createdAt, lastCheckedAt (every attempt), coveredThroughAt (successes only — drives the prompt window)
-- `items[]`: id, topicId, title, summary, sources[{title,url,outlet,publishedAt — NEWS-82}], image, saved (bookmark), offTopic (NEWS-61 flag), dedupeKey, foundAt
+- `items[]`: id, topicId, title, summary, sources[{title,url,outlet,publishedAt — NEWS-82}], image, saved (bookmark), offTopic (NEWS-61 flag), dedupeKey, threadId (NEWS-280 — the thread's first story's id; its **own** id = a thread of one), foundAt
 - `settings`: itemRetentionDays (default 365, 0 = forever — NEWS-87), checkIntervalMs (default 1 day, min 5 min), highPriorityIntervalMs (≤ checkIntervalMs, clamped on update+load — NEWS-56), provider (default `auto`, `.catch('auto')` for retired providers), model (''), endpoint (''), notifyOnNewItems, monthlyBudgetUsd (0 = no cap — NEWS-79)
 - `runs[]`: id, topicId, startedAt, finishedAt, status(running|succeeded|failed), newItems, error, provider, model, usage (tokens+searches, null = unknown — NEWS-79) (last 200)
 
@@ -130,6 +131,7 @@ Data dir: `--data-dir` flag → `NEWSMONGER_DATA_DIR` → `~/.newsmonger`. Also 
 | Undoing a clear | `src/undo.ts` (`ClearUndoBuffer`), `Store.clearItemsForTopic`/`restoreClearedItems`, `POST /api/topics/:id/restore-cleared`, `showUndoToast` + `[data-undo-clear]` in `client/app.tsx`. See `docs/26-undo.md` |
 | Sidebar today-count badge / newest sort | `store.itemStatsByTopic(startOfDayIso)` — one query for both, excludes off-topic, omits topics with none (absence is what makes the sort sink them). Surfaced on `/api/state`; badge in `topicRowJsx` **and in the `each()` memo key** (it lives outside the topic object); `'recent'` case in `src/client/topic-sort.ts`. See `docs/3-ui.md` FR-3.60/3.61 |
 | Dedup behavior | `src/ai/dedupe.ts` (keys), `src/checks.ts` (application) |
+| Story threads ("story so far") | `src/threads.ts` (pure similarity + `planThreadIds`), assigned in `CheckRunner.checkTopic` right before the insert, `Store.backfillThreads()` (startup, from `cli.ts`) + `Store.threadForItem(id)`; column `items.thread_id` (schema v5). **A different question from dedup** — URL identity vs subject identity. Mock keyword **"thread"** makes a same-subject pair. See `docs/29-story-threads.md` |
 | Dead / hallucinated source links | `src/ai/verify-links.ts`, called from `CheckRunner.verifyLinks` **before** dedup. Reuses `images/safety.ts` SSRF vetting; null probe under `--ai-test`. See `docs/2-news-checks-and-dedup.md` FR-2.6–2.10 |
 | Scheduling rules | `src/checks.ts` (`isDueUnderSchedule` picks interval vs daily — NEWS-84; `isDue`, `effectiveInterval`, `byCheckOrder`), `src/scheduler.ts` (tick + overrun drain). **Adding a topic checks it immediately** — `POST /api/topics` fires `checkTopic({manual:true})` in the background (NEWS-54, FR-1.12) |
 | How many checks run at once | `checkConcurrency` setting + `CheckRunner.runPool` (shared cursor, `byCheckOrder` start order). See `docs/13-scheduling-under-load.md` FR-13.4–13.7 |

@@ -42,6 +42,7 @@ function item(over: Partial<NewsItem> = {}): NewsItem {
     sources: [{ title: 'Example News', url: 'https://news.example.com/a?x=1&y=2', outlet: null, publishedAt: null, favicon: null }],
     image: null,
     dedupeKey: 'k1',
+    threadId: 'i1',
     foundAt: '2026-07-26T09:00:00.000Z',
     ...over,
   };

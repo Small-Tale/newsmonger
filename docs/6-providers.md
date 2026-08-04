@@ -40,6 +40,8 @@ Newsmonger checks run through a pluggable provider abstraction so you can choose
 | `openai` | key from Settings or `OPENAI_API_KEY`, plus `OPENAI_BASE_URL`; default model `gpt-5` (discovery: `gpt-5-mini`) | **Shipped** (live path needs a key to verify) |
 | `mock` | none (`--ai-test` / `--provider mock`) | **Shipped** (tests / offline) |
 
+The mock keys off the **topic name**, so a test says what it wants by naming a topic: "fail" throws, "empty" returns no stories, **"thread" returns two outlets' coverage of a single subject** (story threading is otherwise unreachable end to end, since the default pair shares only the topic's own name — see [29 — Story Threads](29-story-threads.md)), and anything else returns the same two deterministic stories every call, which is what makes dedup testable. Discovery follows the same convention off a request seed (FR-24.21).
+
 ### Anthropic
 
 Claude with adaptive thinking and the `web_search_20260209` server tool (max 8 searches per check), streamed to avoid HTTP timeouts. **Discovery calls use a different model and a different request shape** — see FR-6.12.

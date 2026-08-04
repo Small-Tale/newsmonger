@@ -5,12 +5,14 @@ import type { DatabaseSync } from 'node:sqlite';
 
 import type { TokenUsage } from '../ai/types.js';
 import { NO_SUBCATEGORY_FILTER, UNCATEGORIZED_FILTER } from '../categories.js';
+import { planThreadIds } from '../threads.js';
 import type { CheckRun, DataFile, NewsItem, Settings, Topic } from './schemas.js';
 import {
   CheckRunSchema,
   DataFileSchema,
   emptyDataFile,
   MAX_GUIDANCE_LENGTH,
+  NewsItemFieldsSchema,
   NewsItemSchema,
   SettingsSchema,
   TopicSchema,
@@ -276,6 +278,10 @@ export class Store {
       sources: parseJson(row['sources']) ?? [],
       image: parseJson(row['image']),
       dedupeKey: row['dedupe_key'],
+      // `?? ''` covers a database created before the column existed being read
+      // through a path that selects named columns; the schema turns an empty
+      // thread id into "a thread of one" (NEWS-280).
+      threadId: row['thread_id'] ?? '',
       foundAt: row['found_at'],
     });
   }
@@ -324,8 +330,8 @@ export class Store {
   private insertItem(item: NewsItem): void {
     this.db
       .prepare(
-        `INSERT INTO items (id, topic_id, title, summary, sources, image, dedupe_key, found_at, saved, off_topic)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO items (id, topic_id, title, summary, sources, image, dedupe_key, thread_id, found_at, saved, off_topic)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         item.id,
@@ -335,6 +341,7 @@ export class Store {
         JSON.stringify(item.sources),
         item.image === null ? null : JSON.stringify(item.image),
         item.dedupeKey,
+        item.threadId,
         item.foundAt,
         bit(item.saved),
         bit(item.offTopic),
@@ -781,6 +788,98 @@ export class Store {
     return { items, nextCursor, total };
   }
 
+  /**
+   * A story's whole thread, oldest first (NEWS-280) — the "story so far".
+   *
+   * Chronological rather than newest-first because a thread is read as a
+   * sequence: the point of showing it is *how we got here*. A story that joined
+   * nothing returns just itself, so a caller never has to special-case the
+   * thread-of-one; a missing id returns nothing.
+   *
+   * Flagged stories are left out, matching the feed's promise that they are not
+   * shown (FR-15.x) — except the requested story itself, so asking about a
+   * flagged story still answers with it rather than with an empty list.
+   *
+   * Scoped by topic as well as thread id: a thread never spans topics, and the
+   * pair is the index.
+   */
+  threadForItem(id: string): NewsItem[] {
+    const head = this.db.prepare('SELECT topic_id AS t, thread_id AS th FROM items WHERE id = ?').get(id) as
+      | { t: string; th: unknown }
+      | undefined;
+    if (head === undefined) return [];
+    // An empty stored thread id means the row predates the column; the schema
+    // reads that as a thread of one, and so must this query.
+    const threadId = typeof head.th === 'string' && head.th !== '' ? head.th : id;
+    const rows = this.db
+      .prepare(
+        `SELECT * FROM items
+          WHERE topic_id = ? AND thread_id = ? AND (off_topic = 0 OR id = ?)
+          ORDER BY found_at, id`,
+      )
+      .all(head.t, threadId, id) as Record<string, unknown>[];
+    return rows.map((r) => Store.rowToItem(r));
+  }
+
+  /**
+   * Group stories already in the database into threads (NEWS-280).
+   *
+   * Runs at startup. Threading happens as stories land, so this exists for the
+   * rows that landed before it did — and, less obviously, for stories that
+   * arrived out of chronological order, since replaying a topic in date order is
+   * the canonical assignment.
+   *
+   * **Deterministic and idempotent**, which are separate promises:
+   *
+   * - *Deterministic* because each topic is replayed strictly in `(found_at, id)`
+   *   order, and a story is only ever matched against stories **before** it. So
+   *   an assignment never depends on what arrived later, and two runs over the
+   *   same rows see the same pool in the same order.
+   * - *Idempotent* because `thread_id = id` — a thread of one — is the "not yet
+   *   grouped" marker, and a story that recomputes to a thread of one recomputes
+   *   to the same thing forever. Rows that *did* join a thread are skipped
+   *   outright, so an id the user has already seen is never rewritten. Running
+   *   this twice changes nothing the second time.
+   *
+   * Returns how many rows it grouped, for the startup log.
+   */
+  backfillThreads(): number {
+    const names = new Map(this.listTopics().map((t) => [t.id, t.name]));
+    const byTopic = new Map<string, NewsItem[]>();
+    for (const item of this.listItems()) {
+      const group = byTopic.get(item.topicId);
+      if (group === undefined) byTopic.set(item.topicId, [item]);
+      else group.push(item);
+    }
+
+    const updates: { id: string; threadId: string }[] = [];
+    for (const [topicId, group] of byTopic) {
+      group.sort((a, b) => (a.foundAt === b.foundAt ? (a.id < b.id ? -1 : 1) : a.foundAt < b.foundAt ? -1 : 1));
+      const planned = planThreadIds(
+        // A story whose thread id is its own id has not been grouped yet; hand it
+        // over undecided. Anything else keeps what it has.
+        group.map((i) => ({ ...i, threadId: i.threadId === i.id ? undefined : i.threadId })),
+        { topicName: names.get(topicId) ?? '' },
+      );
+      group.forEach((item, i) => {
+        const threadId = planned.at(i) ?? item.id;
+        if (threadId !== item.threadId) updates.push({ id: item.id, threadId });
+      });
+    }
+    if (updates.length === 0) return 0;
+
+    this.db.exec('BEGIN');
+    try {
+      const update = this.db.prepare('UPDATE items SET thread_id = ? WHERE id = ?');
+      for (const row of updates) update.run(row.threadId, row.id);
+      this.db.exec('COMMIT');
+    } catch (err) {
+      this.db.exec('ROLLBACK');
+      throw err;
+    }
+    return updates.length;
+  }
+
   dedupeKeysForTopic(topicId: string): Set<string> {
     const rows = this.db.prepare('SELECT dedupe_key AS k FROM items WHERE topic_id = ?').all(topicId) as {
       k: string;
@@ -872,7 +971,7 @@ export class Store {
       .all(topicId, limit) as { title: string }[];
     // Through the schema, not straight off the row: stored titles may predate
     // `stripMarkup`, and the prompt should never be handed citation markup.
-    return rows.map((r) => NewsItemSchema.shape.title.parse(r.title));
+    return rows.map((r) => NewsItemFieldsSchema.shape.title.parse(r.title));
   }
 
   /** Toggle one item flag and return the reloaded item, or null if it's gone. */
@@ -893,15 +992,36 @@ export class Store {
     return this.setItemFlag(id, 'off_topic', offTopic);
   }
 
-  /** `image`/`saved`/`offTopic` are optional: a new story has no picture, isn't saved, and isn't flagged. */
+  /**
+   * `image`/`saved`/`offTopic` are optional: a new story has no picture, isn't
+   * saved, and isn't flagged.
+   *
+   * `id` is optional too, and a caller that supplies one is doing so because it
+   * needed the id *before* the insert: thread assignment refers to sibling
+   * stories by id, and two stories about the same subject arriving in one batch
+   * must be able to name each other (NEWS-280). `threadId` left out means "a
+   * thread of one", which is what an unthreaded story is.
+   */
   addItems(
-    items: (Omit<NewsItem, 'id' | 'image' | 'saved' | 'offTopic'> & {
+    items: (Omit<NewsItem, 'id' | 'image' | 'saved' | 'offTopic' | 'threadId'> & {
+      id?: string;
       image?: NewsItem['image'];
       saved?: boolean;
       offTopic?: boolean;
+      threadId?: string;
     })[],
   ): NewsItem[] {
-    const added = items.map((item) => ({ image: null, saved: false, offTopic: false, ...item, id: randomUUID() }));
+    const added = items.map((item) => {
+      const id = item.id ?? randomUUID();
+      return {
+        image: null,
+        saved: false,
+        offTopic: false,
+        ...item,
+        id,
+        threadId: item.threadId === undefined || item.threadId === '' ? id : item.threadId,
+      };
+    });
     // One transaction: a check's stories arrive together or not at all, and a
     // single commit is also what makes a sweep's writes cheap.
     this.db.exec('BEGIN');

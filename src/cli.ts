@@ -105,6 +105,11 @@ async function main(): Promise<void> {
       `newsmonger: swept ${String(orphaned.items)} story/ies and ${String(orphaned.runs)} run(s) left by a deleted topic`,
     );
   }
+  // Group already-stored stories into threads (NEWS-280). After the prunes, so
+  // it never threads a story that is about to be deleted. Idempotent, so this
+  // costs nothing on every subsequent start — the second run finds nothing to do.
+  const threaded = store.backfillThreads();
+  if (threaded > 0) console.error(`newsmonger: grouped ${String(threaded)} story/ies into threads`);
   // Reclaim any orphaned cached images at startup — from a topic deleted in a
   // previous run, a crash mid-download, or an older version (NEWS-36).
   const pruned = pruneImageCache(options.dataDir, liveImageHashes(store.listItems()));

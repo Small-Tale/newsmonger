@@ -2,6 +2,15 @@
 
 Status markers: **Shipped** · **Partial** · **Design only** · **Deferred**. Source docs win on conflict.
 
+## [29 — Story Threads](../29-story-threads.md) — **Shipped** (NEWS-280; UI + API route follow up in NEWS-281/282)
+
+- Every story carries `threadId` — the id of its thread's **first** story, defaulting to its own, so *a thread of one* is the ordinary case and nothing downstream handles "unthreaded". Column `items.thread_id` (schema v5, migration fills `= id`), read through `NewsItemSchema`'s object-level transform (a field default cannot see a sibling).
+- **Deliberately not `dedupeKey`.** That is a URL identity ("same article?"); this is subject identity ("same story unfolding?"). Two outlets on one event yield two dedupe keys — which is why both are stored — so relatedness has to be *computed*. Dedup drops, threading groups; dedup runs first.
+- Signals are **all local and free** (`src/threads.ts`, pure): content-token overlap with the **topic's own name subtracted** (the single biggest precision win — inside a topic its words are shared by everything), capitalized-entity overlap that only *lowers* the bar (never authorizes a join alone — a headline's first word is capitalized whatever it is), shared source host as a **tie-break only**, and a **30-day** pairwise recency window.
+- **Three decisions recorded:** thresholds tuned low-recall (3 shared content words, or 2 with a shared entity, plus ≥40% of the shorter title) because a false join is worse than a miss; **pairwise-nearest with no merging** — chains form transitively by emergence, but two threads are never welded, which is where union-find clustering drifts; **flagged (`offTopic`) stories don't participate** at either end.
+- Assigned **at check time** (`CheckRunner`, after `filterNewItems`, ids minted there so a batch's stories can name each other) and **backfilled at startup** (`Store.backfillThreads`) — deterministic (chronological replay per topic, never matching forward) and idempotent (`thread_id = id` is the "not grouped" marker; a second pass is a no-op).
+- Not done here: model-reported linking (NEWS-284), and any UI — `threadId` rides `/api/items` as part of `NewsItem`, which is what makes it E2E-assertable. `Store.threadForItem(id)` returns a thread oldest-first for NEWS-282 to serve.
+
 ## [28 — Demo Capture](../28-demo-capture.md) — **Shipped** (NEWS-212, NEWS-214)
 
 - The README's images are **photographs of the running app**, driven with Playwright against a `--demo` server. Two separate pipelines on purpose: `npm run demo:capture` → the animated hero (`assets/demo.svg`), `npm run demo:stills` → seven flat screenshots (`assets/stills/<scene>.{png,svg}`).

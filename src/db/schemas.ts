@@ -131,8 +131,15 @@ export const NewsSourceSchema = z.object({
 });
 export type NewsSource = z.infer<typeof NewsSourceSchema>;
 
-/** A news story found for a topic. */
-export const NewsItemSchema = z.object({
+/**
+ * A news story found for a topic.
+ *
+ * Exported as the plain object so callers can reach one field's schema
+ * (`NewsItemFieldsSchema.shape.title`, used by the prompt's title list).
+ * `NewsItemSchema` wraps it in the `threadId` fallback below, which a `ZodObject`
+ * cannot express on its own — the fallback needs a sibling field.
+ */
+export const NewsItemFieldsSchema = z.object({
   id: z.string(),
   topicId: z.string(),
   // Sanitized on read as well as on write: items stored before the parse-time
@@ -161,8 +168,33 @@ export const NewsItemSchema = z.object({
     .default(null),
   /** Normalized key used to deduplicate against stories already seen. */
   dedupeKey: z.string(),
+  /**
+   * Which **thread** this story belongs to — the set of earlier stories in the
+   * same topic about the same developing subject (NEWS-280). The id of the
+   * thread's first story, so a story that joined nothing carries **its own id**
+   * and is a thread of one.
+   *
+   * Emphatically *not* `dedupeKey`, which asks a different question: that is a
+   * URL identity ("is this the same article?"), this is subject identity ("is
+   * this the same story unfolding?"). See `src/threads.ts` and
+   * [docs/29-story-threads.md](../../docs/29-story-threads.md).
+   *
+   * Empty means "not recorded" — a row from a backup or a `data.json` written
+   * before this existed — and the transform below reads that as a thread of one
+   * rather than rejecting the row. The backfill then threads it for real.
+   */
+  threadId: z.string().default(''),
   foundAt: z.string(),
 });
+
+export const NewsItemSchema = NewsItemFieldsSchema.transform((item) => ({
+  ...item,
+  // Defaulting to the item's own id has to happen here rather than in the field:
+  // "a thread of one" is defined in terms of a sibling, which a field-level
+  // `.default()` cannot see. Applied on read as well as write, so nothing
+  // downstream ever has to handle an empty thread id.
+  threadId: item.threadId === '' ? item.id : item.threadId,
+}));
 export type NewsItem = z.infer<typeof NewsItemSchema>;
 
 export const SettingsSchema = z.object({

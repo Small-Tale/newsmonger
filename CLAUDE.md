@@ -16,7 +16,7 @@ Topic-based news tracker. The user enters topics; on a configurable interval (de
 
 `src/cli.ts` parses flags → constructs `Store` (SQLite), a `ProviderResolver` (resolves the active AI provider per check from settings, or the forced mock under `--ai-test`), and a `CheckRunner` → starts the Hono server (`src/server.ts`, DI via middleware) and the minute-tick scheduler (`src/scheduler.ts`). The client (`src/client/app.tsx`) is a kerf app polling `/api/state` every 4 s. AI providers live behind `NewsProvider` in `src/ai/providers/` (see `docs/6-providers.md`).
 
-**Start every fresh session by reading `docs/ai/code-summary.md` and `docs/ai/requirements-summary.md`.** Requirements docs are numbered `docs/N-topic.md` (1–28).
+**Start every fresh session by reading `docs/ai/code-summary.md` and `docs/ai/requirements-summary.md`.** Requirements docs are numbered `docs/N-topic.md` (1–29).
 
 ## Conventions
 
@@ -24,7 +24,7 @@ Topic-based news tracker. The user enters topics; on a configurable interval (de
 - **kerf client rules** (enforced by `eslint-plugin-kerfjs`, documented in `docs/3-ui.md`): state in `defineStore`/signals; events via `delegate()` with `data-*` attributes (never `addEventListener`/inline handlers); `data-key` on list rows; `.map()` not `each()` for static structural arrays. Plus two structural rules (see `docs/3-ui.md`): wrap conditional siblings (banners) in an always-present container, and keep `each()` containers structurally stable. **KF-377 — the kerfjs ≤2.0.1 bug these were written for — is fixed as of 3.0.0**, but the containers stay (NEWS-99): `#banners`/`#toast-slot` are ARIA live regions, which must exist *before* their content or the announcement is lost, and `#topics-panel` is the target of `aria-controls` (removing it fails the axe suite). They are ordinary good structure now, not scar tissue.
 - The server readiness line `newsmonger running at <url>` is watched by `src-tauri/src/lib.rs` — keep the `running at ` marker in sync.
 - Tests must never touch `~/.newsmonger` — use `tests/helpers/tmp.ts` (unit) or the Playwright-managed temp dir (E2E).
-- The mock news service keys off topic names: containing "fail" → throws, "empty" → no items; anything else → the same two deterministic stories every call (that's what makes dedup testable).
+- The mock news service keys off topic names: containing "fail" → throws, "empty" → no items, "thread" → two outlets covering one subject (what makes story threading testable — NEWS-280); anything else → the same two deterministic stories every call (that's what makes dedup testable).
 
 ## Git
 
@@ -89,7 +89,7 @@ Maintain two synthesis docs an AI assistant reads at the start of a fresh sessio
 <!-- hotsheet:begin specifics=requirements-documentation v=1 -->
 ### This project's docs layout
 
-- Requirements docs: numbered `docs/N-topic.md` (currently 1–28), FR-N.M requirement ids, cross-referenced with relative links. New functional area → next number.
+- Requirements docs: numbered `docs/N-topic.md` (currently 1–29), FR-N.M requirement ids, cross-referenced with relative links. New functional area → next number.
 - Codebase map: `docs/ai/code-summary.md` · Requirements summary (with status markers): `docs/ai/requirements-summary.md` — update both in the same change as the code they describe.
 - Manual test plan: `docs/manual-test-plan.md`.
 <!-- hotsheet:end specifics=requirements-documentation -->

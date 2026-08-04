@@ -30,15 +30,15 @@ const { DatabaseSync } = createRequire(import.meta.url)('node:sqlite') as {
  * `ExperimentalWarning`; `src/cli.ts` silences that one warning and nothing else.
  */
 
-/** Bumped when `SCHEMA` changes in a way an existing database must be migrated for. */
-export const SCHEMA_VERSION = 4;
+/** Bumped when `TABLES` changes in a way an existing database must be migrated for. */
+export const SCHEMA_VERSION = 5;
 
 /**
  * Upgrades for a database created by an older `SCHEMA_VERSION`.
  *
  * Indexed by the version being upgraded *from*: `MIGRATIONS[1]` takes a v1
- * database to v2. A brand-new database gets the current `SCHEMA` directly and
- * skips all of these, which is why `SCHEMA` below must always describe the
+ * database to v2. A brand-new database gets the current `TABLES` directly and
+ * skips all of these, which is why `TABLES` below must always describe the
  * latest shape rather than the original one plus a trail of migrations.
  */
 const MIGRATIONS: Partial<Record<number, (db: DatabaseSyncType) => void>> = {
@@ -61,6 +61,15 @@ const MIGRATIONS: Partial<Record<number, (db: DatabaseSyncType) => void>> = {
   // quietly poison the comparison this column exists to make possible.
   3: (db) => {
     db.exec(`ALTER TABLE runs ADD COLUMN effort TEXT`);
+  },
+  // v4 → v5: story threads (NEWS-280). Every existing story becomes a thread of
+  // one, which is exactly what it was: nothing had been grouped yet. Filling the
+  // column with the row's own id rather than leaving it empty means the invariant
+  // "a thread id names a story" holds from the first read, and `Store.backfillThreads`
+  // can then treat `thread_id = id` as "not yet considered" and group them for real.
+  4: (db) => {
+    db.exec(`ALTER TABLE items ADD COLUMN thread_id TEXT NOT NULL DEFAULT ''`);
+    db.exec(`UPDATE items SET thread_id = id`);
   },
 };
 
@@ -86,7 +95,7 @@ const MIGRATIONS: Partial<Record<number, (db: DatabaseSyncType) => void>> = {
  * - **No `WITHOUT ROWID`**: the implicit rowid is the insertion order that
  *   `listTopics` and `listRuns` return, and `runs` truncation relies on it.
  */
-const SCHEMA = `
+const TABLES = `
 CREATE TABLE IF NOT EXISTS topics (
   id                 TEXT PRIMARY KEY,
   name               TEXT NOT NULL,
@@ -103,11 +112,6 @@ CREATE TABLE IF NOT EXISTS topics (
   retry_after        TEXT
 );
 
--- Backstop for the case-insensitive uniqueness addTopic enforces in code. The
--- code check stays, because it produces the message the API surfaces; this
--- makes a duplicate impossible even if a future writer forgets to check.
-CREATE UNIQUE INDEX IF NOT EXISTS topics_name_nocase ON topics(name COLLATE NOCASE);
-
 CREATE TABLE IF NOT EXISTS items (
   id         TEXT PRIMARY KEY,
   topic_id   TEXT NOT NULL,
@@ -116,18 +120,11 @@ CREATE TABLE IF NOT EXISTS items (
   sources    TEXT NOT NULL,
   image      TEXT,
   dedupe_key TEXT NOT NULL,
+  thread_id  TEXT NOT NULL DEFAULT '',
   found_at   TEXT NOT NULL,
   saved      INTEGER NOT NULL DEFAULT 0,
   off_topic  INTEGER NOT NULL DEFAULT 0
 );
-
--- The feed's sort order, so a page is a range scan rather than a sort of every
--- row the filters left behind.
-CREATE INDEX IF NOT EXISTS items_feed ON items(found_at DESC, id DESC);
-CREATE INDEX IF NOT EXISTS items_topic ON items(topic_id);
--- Dedupe lookups and the flagged-count aggregate are both per-topic.
-CREATE INDEX IF NOT EXISTS items_topic_dedupe ON items(topic_id, dedupe_key);
-CREATE INDEX IF NOT EXISTS items_off_topic ON items(off_topic) WHERE off_topic = 1;
 
 CREATE TABLE IF NOT EXISTS runs (
   id          TEXT PRIMARY KEY,
@@ -143,12 +140,42 @@ CREATE TABLE IF NOT EXISTS runs (
   effort      TEXT
 );
 
-CREATE INDEX IF NOT EXISTS runs_started ON runs(started_at);
-
 CREATE TABLE IF NOT EXISTS meta (
   key   TEXT PRIMARY KEY,
   value TEXT NOT NULL
 );
+`;
+
+/**
+ * Indexes, created **after** the migrations rather than with the tables.
+ *
+ * An index names columns, so an index on a column a migration is about to add
+ * cannot be created before that migration runs — and `TABLES` runs first,
+ * because a migration may need a table that a fresh database has just been
+ * given. Creating `items_topic_thread` alongside the tables made every
+ * pre-NEWS-280 database fail to open with `no such column: thread_id`, which
+ * `Store` correctly reads as corruption and answers by starting fresh: a schema
+ * addition that silently discarded the user's stories. Ordering these last is
+ * the fix, and it holds for every future column too.
+ */
+const INDEXES = `
+-- Backstop for the case-insensitive uniqueness addTopic enforces in code. The
+-- code check stays, because it produces the message the API surfaces; this
+-- makes a duplicate impossible even if a future writer forgets to check.
+CREATE UNIQUE INDEX IF NOT EXISTS topics_name_nocase ON topics(name COLLATE NOCASE);
+
+-- The feed's sort order, so a page is a range scan rather than a sort of every
+-- row the filters left behind.
+CREATE INDEX IF NOT EXISTS items_feed ON items(found_at DESC, id DESC);
+CREATE INDEX IF NOT EXISTS items_topic ON items(topic_id);
+-- Dedupe lookups and the flagged-count aggregate are both per-topic.
+CREATE INDEX IF NOT EXISTS items_topic_dedupe ON items(topic_id, dedupe_key);
+-- Reading a whole thread back (NEWS-280) is per-topic too: a thread never spans
+-- topics, and the topic column keeps the scan off other topics' rows.
+CREATE INDEX IF NOT EXISTS items_topic_thread ON items(topic_id, thread_id);
+CREATE INDEX IF NOT EXISTS items_off_topic ON items(off_topic) WHERE off_topic = 1;
+
+CREATE INDEX IF NOT EXISTS runs_started ON runs(started_at);
 `;
 
 /**
@@ -165,16 +192,18 @@ export function openDb(file: string): DatabaseSyncType {
     // WAL lets a read run while a write is in flight and, more to the point
     // here, stops every commit from rewriting the whole database header page.
     db.exec('PRAGMA journal_mode = WAL');
-    // Read *before* `SCHEMA` runs: a brand-new file reports 0, and `SCHEMA`
+    // Read *before* `TABLES` runs: a brand-new file reports 0, and `TABLES`
     // already describes the latest shape, so it needs no migrations. Anything
     // >0 was created by an older build and does.
     const from = Number((db.prepare('PRAGMA user_version').get() as { user_version: unknown }).user_version ?? 0);
-    db.exec(SCHEMA);
+    db.exec(TABLES);
     for (let v = from; v > 0 && v < SCHEMA_VERSION; v++) {
       const migrate = MIGRATIONS[v];
       if (migrate === undefined) throw new Error(`no migration from schema v${String(v)}`);
       migrate(db);
     }
+    // Last: see the note on `INDEXES`.
+    db.exec(INDEXES);
     db.exec(`PRAGMA user_version = ${String(SCHEMA_VERSION)}`);
     // A statement that touches real data: `DatabaseSync` opens lazily enough
     // that a corrupt file can survive everything above and only fail on first

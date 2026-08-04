@@ -91,7 +91,9 @@ function mockSuggestions(request: SuggestRequest): TopicSuggestion[] {
  *
  * Returns the same two stories for a topic on every call, so a second check
  * exercises the dedupe path. Topics whose name contains "empty" return no
- * stories; topics containing "fail" throw. It never touches the network.
+ * stories; topics containing "fail" throw; topics containing "thread" return two
+ * outlets' coverage of a single subject, which is what makes story threading
+ * (NEWS-280) reachable in E2E. It never touches the network.
  *
  * `suggestTopics` (NEWS-124) follows the same convention keyed off the request
  * seed — see `requestSeed` and `mockSuggestions`. It adds one keyword of its
@@ -176,6 +178,29 @@ export function createMockProvider(
       if (lower.includes('empty'))
         return Promise.resolve({ items: [], usage, classification: classify(lower, context.categoryOptions ?? []) });
       const slug = lower.replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+      // "thread" → two outlets covering *one* subject, so story threading
+      // (NEWS-280) is reachable end to end. The default pair below deliberately
+      // shares nothing but the topic's own name, which threading discounts, so
+      // without this keyword no E2E flow could ever produce a thread of two.
+      if (lower.includes('thread'))
+        return Promise.resolve({
+          usage,
+          classification: classify(lower, context.categoryOptions ?? []),
+          items: [
+            {
+              title: 'Riverside Dam collapse floods three towns',
+              summary:
+                'The Riverside Dam gave way overnight, flooding three towns downstream. Officials have ordered evacuations. Damage assessments are under way.',
+              sources: [{ title: 'Example News', url: `https://news.example.com/${slug}/riverside-dam-collapse` }],
+            },
+            {
+              title: 'Rescue teams reach Riverside Dam flood zone',
+              summary:
+                'Rescue teams have reached the Riverside Dam flood zone and begun searching the worst-hit streets. A relief centre has opened nearby.',
+              sources: [{ title: 'Example Times', url: `https://times.example.com/${slug}/riverside-rescue` }],
+            },
+          ],
+        });
       return Promise.resolve({
         usage,
         classification: classify(lower, context.categoryOptions ?? []),
