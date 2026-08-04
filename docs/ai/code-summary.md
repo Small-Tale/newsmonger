@@ -87,6 +87,8 @@ src-tauri/            Tauri v2 shell; one spawn path, dev runs tsx + release run
 scripts/
   build-sidecar.sh    builds/stages the above, then boots it from a temp dir to verify
   e2e-preflight.mjs   clears the derived E2E ports before Playwright's own check: reclaims an orphaned server from a crashed run, refuses a live one with a sentence (NEWS-287)
+  rust-changed.sh     "does the local change touch Rust?" — exit 0 = run the gates (NEWS-294)
+  gate-quick.sh       the inner loop: typecheck + lint + unit, no coverage/Rust/E2E (NEWS-294)
 .github/              CI: gate job (test:all) + rust job (fmt + clippy, BOTH profiles); dependabot
 tests/
   helpers/            tmp.ts (tmp data dirs), provider.ts (asResolver/fakeProvider), e2e-port.ts (per-checkout E2E port window — NEWS-287)
@@ -113,13 +115,15 @@ Data dir: `--data-dir` flag → `NEWSMONGER_DATA_DIR` → `~/.newsmonger`. Also 
 - `npm run build` — tsup → `dist/cli.js`; `npm run build:client` → `dist/client/`
 - `npm run tauri:dev` — desktop dev shell (needs Rust; verified on macOS)
 - `npm run tauri:build` — release app + dmg; runs `scripts/build-sidecar.sh` via `beforeBuildCommand`
-- `npm test` (vitest+coverage) · `npm run test:e2e` (playwright) · `npm run test:all` (typecheck+lint+unit+e2e)
+- `npm test` (vitest+coverage) · `npm run test:e2e` (playwright) · `npm run test:all` (typecheck+lint+rust+unit+e2e)
+- `npm run gate:quick` (`scripts/gate-quick.sh`, NEWS-294) — the inner loop: typecheck + lint + client build + unit tests, **no coverage, no Rust, no E2E**. ~21 s vs ~5 min. It prints what it skipped and that `test:all` is still the commit requirement
 - **The unit suite depends on both builds.** `scripts/test-all.sh` runs `build:client` (several tests fetch `/static/…` through the real route — NEWS-191) *and* `build` (`tests/unit/npm-package.test.ts` spawns `node dist/cli.js` — NEWS-295) before vitest. Handled differently on purpose: the CLI test rebuilds `dist/cli.js` itself when it is missing or older than `src/`, so a bare `npm test` works on a clean checkout, while `api.test.ts` fails with the command to run for `dist/client/`
 - `npm run record:cli-sessions` — capture real CLI transcripts to `tests/fixtures/cli-sessions/` (NEWS-277). Replayed by `tests/unit/cli-session-replay.test.ts` through `spawnRunner(name, exec)`, the process-boundary seam in `src/ai/providers/cli-exec.ts`, so argv/schema/parsing/error-formatting all run for real offline. Two fixtures are deliberate failures
 - `npm run test:e2e:real` — the **real** Claude/Codex subscriptions (NEWS-276), opt-in via `NEWSMONGER_E2E_REAL=1`, excluded from `test:all` by `testIgnore` in `playwright.config.ts`. Own server on the second port of this checkout's derived window (NEWS-287), no `--ai-test`. Guards the class of bug the mock cannot see: a vendor CLI flag disappearing, a schema strict mode rejects (NEWS-272), and the populated effort comparison the mock's single effort level makes unreachable (NEWS-227)
 - `npm run commit:msg` — gitgist drafts a commit message from the staged diff. Output is Conventional Commits and must be reshaped to this project's style; see CLAUDE.md → Git
 - Lint/typecheck: `npm run lint` / `npm run typecheck` (eslint strictTypeChecked + eslint-plugin-kerfjs)
 - Rust: `cd src-tauri && cargo fmt --check && cargo clippy --all-targets -- -D warnings`, **and the same with `--release`** — the dev/release spawn paths are `cfg`-gated, so a debug-only check never compiles the release branch
+- `npm run gates:rust` (`scripts/gates-rust.sh`) runs all four exactly as CI does, and **path-gates itself** (NEWS-294): `scripts/rust-changed.sh` exits 1 when nothing under `src-tauri/` nor a Rust-adjacent script differs from the upstream, and the gates skip with a loud notice. `RUST_GATES=required` forces them; `RUST_GATES=skip` suppresses them (ci.yml's gate job); `CI` being set disables the auto-skip entirely
 - CI (`.github/workflows/ci.yml`) runs all of the above; **never executed — the repo has no remote yet** (NEWS-6)
 
 ## Where do I look for X?
@@ -223,6 +227,7 @@ Data dir: `--data-dir` flag → `NEWSMONGER_DATA_DIR` → `~/.newsmonger`. Also 
 | Whether a CI job can block a release | `needs:` + absence of `continue-on-error` in `.github/workflows/release-candidate.yml`, pinned by `tests/unit/release-scripts.test.ts`. `test-e2e-windows` is **blocking** as of NEWS-235 — a job another job `needs` must never be `continue-on-error`, since it would go green with failing steps |
 | Socket churn / `ERR_NO_BUFFER_SPACE` on a Windows runner | Shared browser context in `tests/e2e/fixtures.ts` + `KEEP_ALIVE_TIMEOUT_MS` in `src/server.ts` (Node's 5 s default sat 1 s above the client's 4 s poll). Measure with `netstat -an -p tcp \| grep "\.$(the derived E2E port) "`. NEWS-246 |
 | The E2E port / two checkouts colliding on it | `tests/helpers/e2e-port.ts` — SHA-256 of the checkout path → a 2-port window in 4200–4999 (`E2E_SERVER`, `E2E_REAL_SERVER`). Used by `playwright.config.ts` and `tests/e2e/real-providers.spec.ts`; **nothing may hardcode a port**, pinned by `tests/unit/e2e-port.test.ts`. `scripts/e2e-preflight.mjs` runs at config load (guarded to the main process — workers re-import the config) and reclaims an orphaned server or refuses a live one. NEWS-287 |
+| Why the Rust gates did or did not run | `scripts/rust-changed.sh` prints its reasoning — uncommitted work, then commits not yet on the upstream. Overrides: `RUST_GATES=required` (always run), `RUST_GATES=skip` (never), `CI` set (auto-skip disabled). Pinned by `tests/unit/rust-changed.test.ts`, which drives the real scripts against a stubbed `git`/`cargo` because a wrong skip produces a **green** run, not a red one. NEWS-294 |
 | A background sweep interfering with a test | `NEWSMONGER_SCHEDULER_TICK_MS` (`schedulerTickMs` in `src/scheduler.ts`), set beyond a run's length in `playwright.config.ts`. Every E2E spec shares one server, and a scheduled check writes into the state they assert on. See `docs/4-cli-server-storage.md` FR-4.4a |
 | Orphaned stories/runs after a topic delete | `Store.pruneOrphans()` in `db/store.ts`, called from `pruneAfterCheck` (`checks.ts`) and at startup (`cli.ts`). See `docs/4-cli-server-storage.md` FR-4.8c |
 | Wide-window layout / column count | `.shell` (no max-width) and `.day` (`auto-fill, minmax(400px, 1fr)`) in `styles.scss`. Guarded by `tests/e2e/layout.spec.ts`. See `docs/3-ui.md` FR-3.36–3.39 |

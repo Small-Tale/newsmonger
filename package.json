@@ -37,6 +37,7 @@
     "record:cli-sessions": "tsx scripts/record-cli-sessions.ts",
     "test:e2e:real": "NEWSMONGER_E2E_REAL=1 npx playwright test real-providers",
     "test:all": "bash scripts/test-all.sh",
+    "gate:quick": "bash scripts/gate-quick.sh",
     "gates:rust": "bash scripts/gates-rust.sh",
     "release": "bash scripts/release.sh",
     "release:beta": "bash scripts/release.sh --beta",
