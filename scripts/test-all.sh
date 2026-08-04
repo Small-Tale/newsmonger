@@ -30,6 +30,21 @@ bash scripts/gates-rust.sh
 echo "== client assets (unit tests fetch them through the real route) =="
 npm run build:client
 
+# The server bundle, for the same reason one step later (NEWS-295).
+#
+# tests/unit/npm-package.test.ts spawns the CLI to assert what an installed user
+# meets — the usage line, the exit codes, `--help` on stdout. It used to do that
+# as `npx tsx src/cli.ts`, which cost a cold resolve-and-transpile per spawn and
+# **cannot run inside a command sandbox at all**: tsx opens an IPC socket and gets
+# `listen EPERM`. It now runs `node dist/cli.js`, which is also the artifact those
+# assertions are actually about.
+#
+# The test rebuilds on demand when the bundle is missing or stale, so `npm test`
+# alone still works. This line is here to make the dependency explicit rather
+# than a side effect discovered by whoever next reads a confusing failure.
+echo "== server bundle (unit tests spawn the packaged CLI) =="
+npm run build
+
 echo "== unit tests (vitest, coverage -> coverage/unit) =="
 rm -rf coverage .coverage-tmp
 npx vitest run --coverage

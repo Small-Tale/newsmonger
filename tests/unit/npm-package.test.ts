@@ -4,7 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { describe, expect, it } from 'vitest';
+import { beforeAll, describe, expect, it } from 'vitest';
 import { z } from 'zod';
 
 import { PROVIDER_NAMES } from '../../src/ai/types.js';
@@ -20,6 +20,98 @@ import { PROVIDER_NAMES } from '../../src/ai/types.js';
  */
 
 const root = path.join(path.dirname(fileURLToPath(import.meta.url)), '../..');
+
+/**
+ * The CLI is spawned as `node dist/cli.js`, not `npx tsx src/cli.ts` (NEWS-295).
+ *
+ * Two reasons, and the second one is why this stopped being optional.
+ *
+ * **It is the artifact these tests are about.** Every assertion in this file is
+ * about the *packaged* CLI — the `bin` entry, the usage line an installed user
+ * sees, the exit code a script gets. `dist/cli.js` is literally what
+ * `npm i -g newsmonger` puts on the PATH; `tsx src/cli.ts` is a different
+ * program that happens to be built from the same source.
+ *
+ * **`npx tsx` cannot run in a sandbox.** tsx opens an IPC socket per invocation
+ * (`createIpcServer`), and a sandbox that does not hand out `/tmp` denies it:
+ * `listen EPERM ... /tmp/claude-501/tsx-501/NNNN.pipe`. Five of the fifteen tests
+ * here died that way, and because `test:all` is sequential the unit failure
+ * aborted the run before E2E — a red gate that says nothing about the change
+ * being tested. `node` on a bundle needs no pipe. It is also several times
+ * faster: no package resolve and no transpile of the whole server entry, per
+ * spawn, fifteen times.
+ *
+ * The cost is a build dependency, and it is made explicit rather than implicit:
+ * `scripts/test-all.sh` runs `npm run build` before the unit leg (beside the
+ * `npm run build:client` that NEWS-191 added for the same class of reason), and
+ * `ensureBuilt` below rebuilds on demand so a bare `npm test` on a clean
+ * checkout still works.
+ */
+const CLI_BIN = path.join(root, 'dist/cli.js');
+
+/** The newest mtime anywhere under `dir`, so a stale bundle can be spotted. */
+function newestMtimeMs(dir: string): number {
+  let newest = 0;
+  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+    const full = path.join(dir, entry.name);
+    newest = Math.max(newest, entry.isDirectory() ? newestMtimeMs(full) : fs.statSync(full).mtimeMs);
+  }
+  return newest;
+}
+
+/**
+ * Build `dist/cli.js` if it is missing or older than any source file.
+ *
+ * Cached rather than unconditional — tsup takes about half a second, which is
+ * not free when the answer is usually "already current". The comparison errs
+ * toward rebuilding: anything but a bundle strictly newer than every file under
+ * `src/` triggers one, because testing a stale artifact is the one outcome that
+ * would make this whole file lie.
+ */
+function ensureBuilt(): void {
+  const built = fs.existsSync(CLI_BIN) ? fs.statSync(CLI_BIN).mtimeMs : 0;
+  if (built > newestMtimeMs(path.join(root, 'src'))) return;
+  execFileSync('npm', ['run', 'build'], { cwd: root, stdio: 'pipe' });
+}
+
+/**
+ * What the last `runCli` actually spawned.
+ *
+ * Recorded rather than assumed, so the guard test below asserts on the spawn
+ * that happened instead of on this file's source text. A refactor that reaches
+ * for a source entry point again fails there.
+ */
+let lastSpawn: { command: string; argv: string[] } | undefined;
+
+/** Runs the packaged CLI the way a shell does, and returns stdout, stderr and the code. */
+function runCli(...args: string[]): { stdout: string; stderr: string; code: number } {
+  lastSpawn = { command: process.execPath, argv: [CLI_BIN, ...args] };
+  try {
+    const stdout = execFileSync(lastSpawn.command, lastSpawn.argv, {
+      cwd: root,
+      encoding: 'utf8',
+      stdio: 'pipe',
+    });
+    return { stdout, stderr: '', code: 0 };
+  } catch (err) {
+    const e = err as { stdout?: string; stderr?: string; status?: number };
+    return { stdout: e.stdout ?? '', stderr: e.stderr ?? '', code: e.status ?? 1 };
+  }
+}
+
+beforeAll(ensureBuilt, 120_000);
+
+/**
+ * Every test that spawns the CLI gets far more than vitest's 5 s default.
+ *
+ * A `node dist/cli.js` start is fast — a fraction of the `npx tsx` cold start
+ * this used to pay per spawn (NEWS-295) — but "fast" is not the claim being
+ * made. Inside the full suite, competing with every other file for CPU, a
+ * spawn-based test can still be slow enough to fail on load rather than on
+ * behaviour. The number is deliberately generous: it exists to stop a false red,
+ * not to assert anything about speed.
+ */
+const SPAWN_TIMEOUT_MS = 60_000;
 
 const pkg = (): { files: string[]; bin: Record<string, string>; scripts: Record<string, string> } =>
   z
@@ -68,19 +160,29 @@ describe('the npm package would ship something usable (NEWS-204)', () => {
       ).toBe(true);
     }
   });
-});
 
-/**
- * Every test that spawns the CLI needs far more than vitest's 5 s default.
- *
- * Each `run()` is an `npx tsx` cold start — resolving the package, then
- * compiling the whole server entry — and one test does three of them. Alone
- * that is comfortably under the default; inside the full suite, competing with
- * every other file for CPU, it is not, and the test failed on load rather than
- * on behaviour. The number is deliberately generous: it exists to stop a false
- * red, not to assert anything about speed.
- */
-const SPAWN_TIMEOUT_MS = 60_000;
+  it('is exercised through that same built binary, not a source entry point (NEWS-295)', { timeout: SPAWN_TIMEOUT_MS }, () => {
+    // The guard on the fix. Running the CLI as `npx tsx src/cli.ts` carried two
+    // problems at once — tsx's IPC socket is denied inside a sandbox (five tests
+    // here died with `listen EPERM`, and a sequential gate then aborts before
+    // E2E ever starts), and a cold resolve-and-transpile per spawn is a real
+    // share of unit wall time. Neither is visible in the assertions: they all
+    // pass either way on a machine with a permissive /tmp, which is exactly how
+    // a refactor could put it back without anyone noticing.
+    //
+    // So this asserts on the spawn that actually happened: node itself, running
+    // the very file `bin` publishes.
+    expect(runCli('--version').code).toBe(0);
+    expect(lastSpawn?.command, 'the CLI must be run by node, with no loader in front of it').toBe(process.execPath);
+    expect(lastSpawn?.argv[0], 'the spawned script must be the binary `bin` names').toBe(
+      path.join(root, pkg().bin['newsmonger'] ?? ''),
+    );
+    // And that file must be the *build output*, not a copy of the source: the
+    // bundle inlines every local import, so a surviving relative one would mean
+    // node was handed something tsup had not processed.
+    expect(fs.readFileSync(CLI_BIN, 'utf8')).not.toMatch(/from '\.\/[\w-]+\.js'/);
+  });
+});
 
 describe('the CLI usage line stays true (NEWS-204)', () => {
   // The usage line and the help text live in `src/config.ts` since NEWS-216, so
@@ -106,17 +208,10 @@ describe('the CLI usage line stays true (NEWS-204)', () => {
 
   it('prints every real provider when it rejects a bad flag', { timeout: SPAWN_TIMEOUT_MS }, () => {
     // Through the actual binary, since that is where the string is assembled.
-    let out = '';
-    try {
-      execFileSync('npx', ['tsx', path.join(root, 'src/cli.ts'), '--bogus'], {
-        cwd: root,
-        encoding: 'utf8',
-        stdio: 'pipe',
-      });
-    } catch (err) {
-      const e = err as { stdout?: string; stderr?: string };
-      out = `${e.stdout ?? ''}${e.stderr ?? ''}`;
-    }
+    // One spawn path for the whole file (`runCli`), so the guard above covers
+    // every invocation rather than the ones that happened to go through it.
+    const { stdout, stderr } = runCli('--bogus');
+    const out = `${stdout}${stderr}`;
     expect(out).toContain('usage: newsmonger');
     for (const name of PROVIDER_NAMES) {
       expect(out, `usage line omits ${name}`).toContain(name);
@@ -126,20 +221,7 @@ describe('the CLI usage line stays true (NEWS-204)', () => {
 });
 
 describe('the installed binary answers the first two things anyone types (NEWS-216)', () => {
-  /** Runs the CLI the way a shell does, and returns stdout, stderr and the code. */
-  const run = (...args: string[]): { stdout: string; stderr: string; code: number } => {
-    try {
-      const stdout = execFileSync('npx', ['tsx', path.join(root, 'src/cli.ts'), ...args], {
-        cwd: root,
-        encoding: 'utf8',
-        stdio: 'pipe',
-      });
-      return { stdout, stderr: '', code: 0 };
-    } catch (err) {
-      const e = err as { stdout?: string; stderr?: string; status?: number };
-      return { stdout: e.stdout ?? '', stderr: e.stderr ?? '', code: e.status ?? 1 };
-    }
-  };
+  const run = runCli;
 
   it('prints help on stdout and exits 0', { timeout: SPAWN_TIMEOUT_MS }, () => {
     // It used to exit 1 with "unknown argument: --help" — after `npm install -g
