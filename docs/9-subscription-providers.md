@@ -57,7 +57,7 @@ Claude Code reports `total_cost_usd` (a measured run: $1.35 across 21 turns). Fo
     --output-schema <temp file> --output-last-message <temp file> "<prompt>"
   ```
 
-- **FR-9.12a** *(Fixed, NEWS-272)* **Web search rides `-c tools.web_search=true`, because `--search` was removed from the CLI.**
+- **FR-9.12a** *(Shipped, fixed in NEWS-272)* **Web search rides `-c tools.web_search=true`, because `--search` was removed from the CLI.**
 
   Every check on a ChatGPT subscription failed with `Codex CLI exited with code 2: codex exec [OPTIONS] <COMMAND> [ARGS]` — codex's usage text, meaning it rejected our argv. `codex exec --help` on 0.145.0 mentions "search" nowhere; `--search` is simply gone. Everything else we pass (`-s`, `--skip-git-repo-check`, `--output-schema`, `--output-last-message`) still exists.
 
@@ -67,7 +67,7 @@ Claude Code reports `total_cost_usd` (a measured run: $1.35 across 21 turns). Fo
 
   A vendor CLI can drop a flag under us again and no test here can prevent that. What changed is that the flags are now visible to the suite and stated in one place.
 
-- **FR-9.12b** *(Fixed, NEWS-272)* **Every declared property in the shared JSON schemas is listed in `required`**, because OpenAI's strict structured outputs reject a schema where one is not:
+- **FR-9.12b** *(Shipped, fixed in NEWS-272)* **Every declared property in the shared JSON schemas is listed in `required`**, because OpenAI's strict structured outputs reject a schema where one is not:
 
   ```
   invalid_json_schema: 'required' is required to be supplied and to be an array

@@ -12,7 +12,7 @@ The feed renders a bounded number of stories with a "Show more" button, rather t
 
 - **FR-16.3** *(Shipped)* The page **resets to 100 whenever the view changes** — toggling Solo/Saved/Search/Review is a different list, shown from the top. The reset is folded into those four view-changing store actions.
 
-- **FR-16.4** *(Evaluated, rejected)* **Virtualized scrolling** was considered and rejected: capping the render at 100 already keeps the DOM small (that's the point of the cap), and virtual lists handle our variable-height, grid-laid-out, day-grouped cards worst while fighting kerf's keyed `each()` + morph. A cap + "Show more" is simpler and sufficient.
+- **FR-16.4** *(Rejected)* **Virtualized scrolling** was considered and rejected: capping the render at 100 already keeps the DOM small (that's the point of the cap), and virtual lists handle our variable-height, grid-laid-out, day-grouped cards worst while fighting kerf's keyed `each()` + morph. A cap + "Show more" is simpler and sufficient.
 
 ### Server-side pagination (shipped — NEWS-73/74/75/76)
 

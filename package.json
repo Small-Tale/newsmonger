@@ -36,6 +36,7 @@
     "test:e2e": "npx playwright test",
     "record:cli-sessions": "tsx scripts/record-cli-sessions.ts",
     "test:e2e:real": "NEWSMONGER_E2E_REAL=1 npx playwright test real-providers",
+    "docs:requirements": "node scripts/build-requirements-summary.mjs",
     "test:all": "bash scripts/test-all.sh",
     "gate:quick": "bash scripts/gate-quick.sh",
     "gates:rust": "bash scripts/gates-rust.sh",
