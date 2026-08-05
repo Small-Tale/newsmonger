@@ -322,6 +322,22 @@ Get this checkout's port with `node -e "import('./tests/helpers/e2e-port.ts')"`-
 
 Note two sandbox facts found while verifying this: `ps` is denied inside a command sandbox (hence `lsof -FpR` for the parent pid), and so is signalling a process spawned outside it — state 3 reports *"could not send SIGTERM ... EPERM"* and stops rather than hanging.
 
+## The "this run is void" banner (NEWS-298)
+
+When the shared E2E server dies mid-file, every later assertion in that file is testing nothing and Playwright reports whichever one came next. During NEWS-280/281 that was a **dirty-select assertion for a feature nobody had touched**, and the investigation went there. The page fixture now probes `/healthz` on every failure and prints a banner when it does not answer.
+
+The decision and **every phrase in the banner** are unit-tested (`tests/unit/server-alive.test.ts`) — the wording is the deliverable, and it is what would rot silently. What cannot be tested there is that the probe is wired to the real failure path, so:
+
+1. Start a run: `npm run test:e2e -- app.spec.ts`.
+2. While it is running, kill the server: `pkill -f "src/cli.ts --no-open --strict-port --ai-test"`.
+3. The next test to fail must print, above its own failure:
+
+   > `THE E2E SERVER WENT AWAY — THIS RUN IS VOID.`
+   > … `Every later failure in this file is a consequence, not a cause.` … `Do not debug them.`
+
+4. `test-results/<test>/server-alive.txt` holds the same text, and the test carries a `void-run` annotation in the HTML report.
+5. Sanity check the other direction — a **normal** failure (break one assertion, leave the server up) must print **no** banner. A warning on every failure is one nobody reads.
+
 ## Automated Coverage Summary
 
 - Topics CRUD, scheduling logic, dedup, parsing, API validation, and full UI flows are covered by `npm test` + `npm run test:e2e` (mock AI service).

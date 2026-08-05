@@ -65,6 +65,22 @@ export default defineConfig({
   testIgnore: realRun ? [] : ['**/real-providers.spec.ts'],
   // Serial: all tests share one server + one data file.
   workers: 1,
+  // **Kept at 1, reconsidered rather than assumed** (NEWS-298).
+  //
+  // The worry is real in general: a retry cannot restore state a *later* test
+  // created, so retrying a state-dependent test can produce a third failure mode
+  // instead of a signal. Two things already blunt it here. Every spec file is
+  // `mode: 'serial'`, so Playwright replays the **whole group from the top**
+  // rather than one test in isolation; and `resetTopics` in each file's
+  // `beforeAll` gives that replay the same empty server the first attempt had
+  // (NEWS-101) — which is precisely the fix for "a retry cannot restore state".
+  //
+  // What a retry still cannot reset is settings and run history. That is the
+  // residual risk, and it is smaller than the cost of dropping retries: the
+  // suite drives a real browser against a real server, and genuine timing flakes
+  // on a loaded machine would then fail the commit gate outright. A retry that
+  // passes is still evidence; a retry that fails differently now says so, via
+  // the `state-dependent` annotation the page fixture attaches on failure.
   retries: 1,
   timeout: 30_000,
   reporter: [['list'], ['html', { open: 'never' }]],

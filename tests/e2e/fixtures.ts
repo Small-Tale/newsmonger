@@ -5,6 +5,8 @@ import { fileURLToPath } from 'node:url';
 import type { BrowserContext, Locator, Page } from '@playwright/test';
 import { expect, request as playwrightRequest, test as base } from '@playwright/test';
 
+import { serverAlive } from '../helpers/server-alive.js';
+
 export { expect } from '@playwright/test';
 
 /**
@@ -199,7 +201,7 @@ export const test = base.extend<TestFixtures, WorkerFixtures>({
     await use(sharedContext);
   },
 
-  page: async ({ sharedContext }, use) => {
+  page: async ({ sharedContext, baseURL }, use) => {
     const page = await sharedContext.newPage();
 
     const collect = process.env['E2E_COVERAGE'] === '1';
@@ -276,6 +278,45 @@ export const test = base.extend<TestFixtures, WorkerFixtures>({
 
     const info = test.info();
     if (info.status !== info.expectedStatus) {
+      // Is the failure even real? (NEWS-298.)
+      //
+      // Asked first, and printed loudest, because it decides whether anything
+      // below is worth reading. When the shared server dies mid-file, every
+      // later assertion in that file is testing nothing and Playwright reports
+      // whichever one came next — during NEWS-280/281 that was a dirty-select
+      // assertion for a feature nobody had touched, and the investigation went
+      // there. One probe converts that whole class into a sentence.
+      //
+      // `console.error` and an annotation rather than a thrown error: this test
+      // has already failed and its own message is the one a reader should see
+      // first. Adding a second *error* would bury it.
+      const verdict = await serverAlive(baseURL ?? '', {
+        probe: async (url: string) => {
+          const res = await page.request.get(url, { timeout: 5_000 });
+          return { ok: res.ok(), status: res.status() };
+        },
+      });
+      if (verdict.message !== '') {
+        console.error(verdict.message);
+        info.annotations.push({
+          type: verdict.alive ? 'server-note' : 'void-run',
+          description: verdict.alive ? verdict.message : 'the E2E server went away — later failures are not real',
+        });
+        writeDiagnostic('server-alive.txt', verdict.message);
+      }
+
+      // The file-level dependency, said *here* rather than only at the top of a
+      // 2,000-line spec (NEWS-298). Someone reading one failing test in the HTML
+      // report is 1,500 lines from that prose note and has no reason to look for
+      // it. Attached on failure only: on every test it would be noise, and noise
+      // is how a warning stops being read.
+      info.annotations.push({
+        type: 'state-dependent',
+        description:
+          'This file is mode: serial against one shared server, and its specs build on each other. ' +
+          'If an earlier test in the file also failed, check that one first — this may be its consequence.',
+      });
+
       // Best-effort: the page may already be closing, and a diagnostic must
       // never turn a real failure into a confusing one of its own.
       const visibility = await page
