@@ -878,14 +878,36 @@ export class Store {
     const pageParams = [...params];
     const c = query.before;
     if (c !== undefined && c !== null) {
-      pageWhere.push('(i.found_at < ? OR (i.found_at = ? AND i.id < ?))');
+      // The cursor still travels as `{foundAt, id}` — the client's contract is
+      // unchanged — but the comparison is on **`rowid`**, resolved from that id
+      // here (NEWS-292). It has to match the ORDER BY below or pagination skips
+      // or repeats rows, and the ordering had to change: see the note there.
+      //
+      // A cursor whose story has since been pruned (FR-1.x retention) resolves
+      // to `NULL`, which would make the whole predicate `NULL` and end the feed
+      // early. `coalesce(…, 0)` instead falls through to the `found_at <` half,
+      // so the reader loses at most the tail of one second's stories rather than
+      // the rest of their history. Skipping beats repeating: a duplicate card is
+      // a visible bug, and this case needs a story deleted mid-scroll.
+      pageWhere.push('(i.found_at < ? OR (i.found_at = ? AND i.rowid < coalesce((SELECT rowid FROM items WHERE id = ?), 0)))');
       pageParams.push(c.foundAt, c.foundAt, c.id);
     }
     // One row more than the page, so "are there more?" is answered by the query
     // rather than by a second count.
+    //
+    // `rowid`, not `id`, as the tie-break (NEWS-292). Every story from one check
+    // shares a `found_at` second, so the tie decides the order of most of what a
+    // reader sees, and `id` is a UUID — stable, but meaningless. `rowid` is
+    // insertion order, which is the order the check reported them.
+    //
+    // It must agree with `threadForItem`/`threadSummaries`, which order the same
+    // stories *ascending*. When the feed broke ties on `id` and a thread on
+    // `rowid` the two disagreed, and the story at the top of the feed was not
+    // the last instalment of its own thread — caught by the NEWS-283 E2E, which
+    // is the assertion that says a badge and the feed tell one story.
     const rows = this.db
       .prepare(
-        `SELECT i.* ${from} WHERE ${pageWhere.join(' AND ')} ORDER BY i.found_at DESC, i.id DESC LIMIT ?`,
+        `SELECT i.* ${from} WHERE ${pageWhere.join(' AND ')} ORDER BY i.found_at DESC, i.rowid DESC LIMIT ?`,
       )
       .all(...pageParams, query.limit + 1) as Record<string, unknown>[];
 
@@ -921,9 +943,21 @@ export class Store {
     const threadId = typeof head.th === 'string' && head.th !== '' ? head.th : id;
     const rows = this.db
       .prepare(
+        // `rowid`, not `id`, as the tie-break (NEWS-292). Every story from one
+        // check shares a `found_at` second, and a thread formed inside a single
+        // check is the *common* case — so the tie decided the reading order of
+        // most timelines, and `id` is a UUID, which sorts meaninglessly. The
+        // README still made it plain: six instalments of one story, in the order
+        // 1st, 5th, 6th, 4th. `rowid` is insertion order, which is the order the
+        // check reported them, which is the order they happened.
+        //
+        // Must stay in step with `threadSummaries` below: that computes the
+        // `position` a badge shows ("6th update"), and if the two orderings
+        // disagreed the badge would name a place the timeline does not put the
+        // story in.
         `SELECT * FROM items
           WHERE topic_id = ? AND thread_id = ? AND (off_topic = 0 OR id = ?)
-          ORDER BY found_at, id`,
+          ORDER BY found_at, rowid`,
       )
       .all(head.t, threadId, id) as Record<string, unknown>[];
     return rows.map((r) => Store.rowToItem(r));
@@ -962,7 +996,9 @@ export class Store {
           WHERE off_topic = 0
             AND topic_id IN (${topicIds.map(() => '?').join(',')})
             AND thread_id IN (${threadIds.map(() => '?').join(',')})
-          ORDER BY found_at, id`,
+          -- Same tie-break as \`threadForItem\`, and for the same reason; the two
+          -- must agree or a badge names a position the timeline contradicts.
+          ORDER BY found_at, rowid`,
       )
       .all(...topicIds, ...threadIds) as Record<string, unknown>[];
 
@@ -1070,7 +1106,10 @@ export class Store {
    */
   latestItemIds(n = 50): string[] {
     const rows = this.db
-      .prepare('SELECT id FROM items ORDER BY found_at DESC, id DESC LIMIT ?')
+      // Same tie-break as the feed (NEWS-292): this is a *set* used to spot new
+      // stories, so the order barely matters — but two orderings of the same
+      // rows in one file is how they drift apart.
+      .prepare('SELECT id FROM items ORDER BY found_at DESC, rowid DESC LIMIT ?')
       .all(n) as { id: string }[];
     return rows.map((r) => r.id);
   }

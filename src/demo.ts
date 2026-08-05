@@ -102,6 +102,74 @@ export const DEMO_TOPICS: DemoTopic[] = [
     ],
   },
   {
+    /**
+     * The one topic whose stories are **one unfolding subject** (NEWS-292).
+     *
+     * Every other fixture here is a set of unrelated developments, which is what
+     * makes the feed look like a feed — and it meant the demo produced **no
+     * threads at all**, so the "story so far" timeline and the "4th update"
+     * badge (NEWS-282/283) were invisible in every README image. Measured with
+     * `planThreadIds` before it was written, not hoped for: these six land in a
+     * single thread, and the other three topics stay three threads of one.
+     *
+     * **The topic's name must not contain the series' own words.** A topic's
+     * words are stopwords inside it (FR-29.10), so calling this "Dogger Bank"
+     * would subtract exactly the words the series threads on and every story
+     * would be a thread of one — the feature looking broken rather than working.
+     *
+     * **Three and three**, unlike the two-and-one elsewhere: `second` answers
+     * every check after the first, so a topic's whole output is its `first` plus
+     * its `second`, and the timeline is only worth photographing past
+     * `THREAD_ROW_CAP` (4), where "Show all 6 stories" appears.
+     */
+    name: 'Offshore wind',
+    category: 'Science',
+    subcategory: 'Energy',
+    first: [
+      {
+        title: 'Dogger Bank cable fault takes 1.2GW off the grid',
+        summary:
+          'A subsea export cable failed overnight, disconnecting roughly a third of the site’s capacity. The operator says generation is unaffected — the turbines are turning, with nowhere to send the power.',
+        sources: [
+          { title: 'Illustrative Energy Wire', url: 'https://example.org/wind/cable-fault' },
+          { title: 'Illustrative Grid Monitor', url: 'https://example.org/wind/grid-impact' },
+        ],
+      },
+      {
+        title: 'Dogger Bank operator says the cable repair will take eight weeks',
+        summary:
+          'The estimate covers survey, vessel mobilisation and jointing. Two of those eight weeks are waiting for a repair ship, which is the part of the timeline nobody can compress.',
+        sources: [{ title: 'Illustrative Energy Wire', url: 'https://example.org/wind/repair-estimate' }],
+      },
+      {
+        title: 'Regulator opens an inquiry into the Dogger Bank cable fault',
+        summary:
+          'The review will look at installation records rather than at the operator’s response, which regulators have described as prompt. Findings are expected within the quarter.',
+        sources: [{ title: 'Illustrative Policy Desk', url: 'https://example.org/wind/inquiry-opens' }],
+      },
+    ],
+    second: [
+      {
+        title: 'Dogger Bank cable repair ship reaches the site',
+        summary:
+          'The vessel arrived four days ahead of the published schedule after a charter freed up early. Jointing work begins once a survey confirms the fault location.',
+        sources: [{ title: 'Illustrative Marine Report', url: 'https://example.org/wind/repair-ship' }],
+      },
+      {
+        title: 'Dogger Bank returns to full output as the cable repair completes',
+        summary:
+          'The link came back into service a fortnight inside the original estimate. The operator put lost generation over the outage at about 0.4TWh.',
+        sources: [{ title: 'Illustrative Grid Monitor', url: 'https://example.org/wind/full-output' }],
+      },
+      {
+        title: 'Inquiry blames an installation error for the Dogger Bank cable fault',
+        summary:
+          'The report finds the cable was laid at a bend radius tighter than its specification allowed, and recommends independent sign-off on burial surveys before energisation.',
+        sources: [{ title: 'Illustrative Policy Desk', url: 'https://example.org/wind/inquiry-findings' }],
+      },
+    ],
+  },
+  {
     name: 'Semiconductor supply chain',
     category: 'Business',
     subcategory: 'Technology',
@@ -132,6 +200,17 @@ export const DEMO_TOPICS: DemoTopic[] = [
 
 /** Topic names in the order the demo adds them. */
 export const DEMO_TOPIC_NAMES = DEMO_TOPICS.map((t) => t.name);
+
+/**
+ * How many stories exist after every topic's **first** check.
+ *
+ * Derived rather than `topics × 2` (NEWS-292): the thread fixture answers with
+ * three, so the arithmetic that held for three symmetric topics silently
+ * under-counted the moment a fourth arrived. A capture that waits for too few
+ * stories photographs a feed still filling in, which is exactly the kind of
+ * flake a manual, rarely-run pipeline does not catch.
+ */
+export const DEMO_FIRST_CHECK_STORIES = DEMO_TOPICS.reduce((n, t) => n + t.first.length, 0);
 
 /** Look up a demo topic by name, case-insensitively. */
 export function findDemoTopic(name: string): DemoTopic | undefined {

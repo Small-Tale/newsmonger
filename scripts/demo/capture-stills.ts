@@ -61,8 +61,9 @@ import {
 } from 'domotion-svg';
 
 import { BUILTIN_CATEGORIES } from '../../src/categories.js';
+import { THREAD_ROW_CAP } from '../../src/client/thread-view.js';
 import type { DemoTopic } from '../../src/demo.js';
-import { DEMO_TOPICS } from '../../src/demo.js';
+import { DEMO_FIRST_CHECK_STORIES, DEMO_TOPICS } from '../../src/demo.js';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const OUT_DIR = resolve(ROOT, 'assets/stills');
@@ -243,12 +244,26 @@ if (DISCOVER_SECTION === undefined || DISCOVER_CHIP === undefined) {
  */
 const ALL_BUT_DISCOVERABLE = DEMO_TOPICS.slice(0, -1);
 
+/**
+ * The one demo topic whose stories are a single unfolding subject (NEWS-292).
+ *
+ * Found by shape rather than named by index: the thread scene is about the
+ * topic that *has* a thread, and a positional lookup would silently photograph
+ * the wrong topic the moment the fixture list is reordered — which it was, when
+ * this topic had to go second-to-last so the discover scene keeps holding back
+ * the one it already held back.
+ */
+const THREAD_TOPIC = DEMO_TOPICS.find((t) => t.first.length + t.second.length > THREAD_ROW_CAP);
+if (THREAD_TOPIC === undefined) {
+  throw new Error('scene "thread": no demo topic produces more than THREAD_ROW_CAP stories');
+}
+
 const SCENES: Scene[] = [
   {
     name: 'feed',
     alt: 'The Newsmonger feed: watched topics in the sidebar, and summarized stories with links to their sources.',
     setup: async (page) => {
-      await waitForStories(page, DEMO_TOPICS.length * 2);
+      await waitForStories(page, DEMO_FIRST_CHECK_STORIES);
       await sleep(600);
     },
   },
@@ -280,7 +295,7 @@ const SCENES: Scene[] = [
       });
     },
     setup: async (page) => {
-      await waitForStories(page, DEMO_TOPICS.length * 2);
+      await waitForStories(page, DEMO_FIRST_CHECK_STORIES);
       await sleep(800);
     },
   },
@@ -321,7 +336,7 @@ const SCENES: Scene[] = [
     name: 'review',
     alt: 'Review mode: the stories flagged off-topic, gathered so the topic can be corrected.',
     setup: async (page) => {
-      await waitForStories(page, DEMO_TOPICS.length * 2);
+      await waitForStories(page, DEMO_FIRST_CHECK_STORIES);
       // Flag a story off-topic through its own menu, then open review for its
       // topic — the same two steps a person takes.
       const card = page.locator('.item').first();
@@ -338,6 +353,50 @@ const SCENES: Scene[] = [
       await sleep(600);
       await menuAction(page, `[data-topic-row]:has-text("${topic}")`, 'review-flagged');
       await sleep(800);
+    },
+  },
+  {
+    name: 'thread',
+    alt: 'An expanded story card showing the story so far: every earlier instalment on the same subject, dated and attributed, with a way to see the whole run.',
+    // The card alone. The timeline is a detail *inside* one card in a two-column
+    // feed, so a 1440px frame would make the thing this scene is about a few
+    // hundred pixels in the middle of a page of other stories — the same reason
+    // `export` and `topics` crop.
+    clipTo: '.item.expanded',
+    clipPad: 20,
+    // A second check, so the thread outgrows THREAD_ROW_CAP (4) and the pane
+    // shows what it is holding back. Six is the smallest number that makes
+    // "Show all 6 stories" appear, and that affordance is half of what the
+    // feature does — a capped list that never says it is capped looks like a
+    // list. Through the API rather than the row's menu, per FR-28.5, and because
+    // right-clicking a row leaves a selection highlight in the picture.
+    arrange: async (base) => {
+      const res = await fetch(`${base}/api/state`);
+      const state = (await res.json()) as { topics: { id: string; name: string }[] };
+      const topic = state.topics.find((t) => t.name === THREAD_TOPIC.name);
+      if (topic === undefined) throw new Error(`scene "thread": ${THREAD_TOPIC.name} was not added`);
+      await fetch(`${base}/api/check`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ topicId: topic.id }),
+      });
+    },
+    setup: async (page) => {
+      // Every story from both checks, so the pane cannot be photographed while
+      // the thread is still arriving — a timeline caught mid-fill would ship a
+      // screenshot of the wrong number.
+      await waitForStories(page, DEMO_FIRST_CHECK_STORIES + THREAD_TOPIC.second.length);
+      // The newest instalment, which is the card a reader would open: it is the
+      // one with the most history behind it, and its badge reads "6th update".
+      const card = page
+        .locator('.item:not(.flagged-row)', { has: page.locator('.item-topic', { hasText: THREAD_TOPIC.name }) })
+        .first();
+      await card.locator('[data-expand-item]').click();
+      // Wait on the rows themselves: the timeline is a second request made on
+      // expand (FR-29.30), so the pane is briefly open and empty.
+      await page.waitForSelector('.item.expanded .thread-row', { timeout: 15_000 });
+      await page.waitForSelector('.item.expanded [data-action=show-all-thread]', { timeout: 15_000 });
+      await sleep(600);
     },
   },
   {
@@ -360,7 +419,7 @@ const SCENES: Scene[] = [
     clipTo: '.export-dialog',
     clipPad: 24,
     setup: async (page) => {
-      await waitForStories(page, DEMO_TOPICS.length * 2);
+      await waitForStories(page, DEMO_FIRST_CHECK_STORIES);
       await page.click('[data-action=open-settings]');
       await page.waitForSelector('.dialog', { timeout: 10_000 });
       await page.locator('.settings-tab').filter({ hasText: 'Data' }).click();

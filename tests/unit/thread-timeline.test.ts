@@ -82,6 +82,53 @@ describe('Store.threadSummaries (NEWS-282)', () => {
     expect(summaries[ids.fourth]).toEqual({ position: 4, size: 4, startedAt: at(0) });
   });
 
+  it('orders a same-second thread by insertion, not by id (NEWS-292)', () => {
+    // The common case, not an edge one: every story from a single check shares
+    // a `found_at` second, so the tie-break decides the reading order of most
+    // timelines — and `id` is a UUID, which sorts meaninglessly. The README
+    // still showed it: six instalments of one story, ordered 1st, 5th, 6th, 4th.
+    const store = new Store(tmpDataDir());
+    const topic = store.addTopic('Offshore wind');
+    const titles = ['Cable fault', 'Repair estimate', 'Inquiry opens', 'Repair ship', 'Full output', 'Findings'];
+    const same = at(0);
+    let threadId: string | undefined;
+    for (const [i, title] of titles.entries()) {
+      const stored = store.addItems([
+        {
+          topicId: topic.id,
+          title,
+          summary: `${title}.`,
+          sources: [
+            {
+              title: 'Example News',
+              url: `https://news.example.com/tie-${String(i)}`,
+              outlet: 'Example News',
+              publishedAt: null,
+              favicon: null,
+            },
+          ],
+          dedupeKey: `tie-${String(i)}`,
+          // The whole point — one timestamp, as one check produces.
+          foundAt: same,
+          ...(threadId === undefined ? {} : { threadId }),
+        },
+      ])[0];
+      threadId ??= stored.id;
+    }
+
+    const thread = store.threadForItem(threadId ?? '');
+    expect(thread.map((i) => i.title)).toEqual(titles);
+
+    // And the badge agrees with the timeline. These are two separate queries;
+    // if their tie-breaks drift, a card says "6th update" and the pane puts that
+    // story fourth — which is exactly what the old ordering did.
+    const page = store.queryItems({ mode: 'normal', limit: 100 });
+    const summaries = store.threadSummaries(page.items);
+    thread.forEach((item, i) => {
+      expect(summaries[item.id].position, `${item.title} should be #${String(i + 1)}`).toBe(i + 1);
+    });
+  });
+
   it('says nothing at all about a thread of one', () => {
     // The ordinary case (FR-29.6), and the reason the map does not grow the feed
     // payload: no entry, so no badge and nothing to fetch.

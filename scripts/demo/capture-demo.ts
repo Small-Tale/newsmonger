@@ -51,7 +51,7 @@ import {
   setRenderTextMode,
 } from 'domotion-svg';
 
-import { DEMO_TOPICS } from '../../src/demo.js';
+import { DEMO_FIRST_CHECK_STORIES, DEMO_TOPICS } from '../../src/demo.js';
 import { CANVAS_H, CANVAS_W, chromeWrap, CONTENT_H, CONTENT_W, endCard } from './chrome.js';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
@@ -247,7 +247,7 @@ async function main(): Promise<void> {
 
     // Adding a topic fires an immediate first check (FR-1.12), so by now stories
     // are arriving on their own — two per topic from the demo fixtures.
-    await waitForStories(page, DEMO_TOPICS.length * 2);
+    await waitForStories(page, DEMO_FIRST_CHECK_STORIES);
     await sleep(600);
 
     await grab('Newsmonger', 'Follow topics, not feeds', 3200, 'feed');

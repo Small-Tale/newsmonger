@@ -11,7 +11,9 @@ import { describe, expect, it } from 'vitest';
 
 import { createDemoProvider } from '../../src/ai/providers/demo.js';
 import type { CategoryOption } from '../../src/ai/types.js';
+import { THREAD_ROW_CAP } from '../../src/client/thread-view.js';
 import { DEMO_TOPICS, findDemoTopic } from '../../src/demo.js';
+import { planThreadIds } from '../../src/threads.js';
 
 const OPTIONS: CategoryOption[] = [
   { slug: 'science', label: 'Science', subcategories: [{ slug: 'energy', label: 'Energy' }, { slug: 'climate', label: 'Climate' }] },
@@ -24,6 +26,63 @@ describe('demo fixtures', () => {
     for (const t of DEMO_TOPICS) {
       expect(t.first.length, `${t.name} first`).toBeGreaterThan(0);
       expect(t.second.length, `${t.name} second`).toBeGreaterThan(0);
+    }
+  });
+
+  it('has exactly one topic whose stories are a single unfolding subject (NEWS-292)', () => {
+    // The `thread` still is a photograph of a real thread, so the fixture has to
+    // actually *form* one — and the threading rules are content-sensitive, so an
+    // innocent rewording ("Dogger Bank" → "the North Sea site") would quietly
+    // split it and the scene would photograph a card with no timeline. Asserted
+    // through `planThreadIds`, the same function the check pipeline uses, rather
+    // than by trusting the titles to look related.
+    const threadCount = (t: (typeof DEMO_TOPICS)[number]): number => {
+      const stories = [...t.first, ...t.second];
+      const stored = stories.map((s, i) => ({
+        id: `s${String(i)}`,
+        title: s.title,
+        foundAt: new Date(Date.parse('2026-07-01T00:00:00.000Z') + i * 86_400_000).toISOString(),
+        sources: s.sources,
+      }));
+      return new Set(planThreadIds(stored, { topicName: t.name })).size;
+    };
+
+    const threaded = DEMO_TOPICS.filter((t) => threadCount(t) < t.first.length + t.second.length);
+    expect(threaded.map((t) => t.name)).toEqual(['Offshore wind']);
+
+    const series = threaded[0];
+    // One thread, and long enough that the pane holds some of it back — "Show
+    // all N stories" is half of what the timeline does, and a thread at or under
+    // the cap never shows it.
+    expect(threadCount(series)).toBe(1);
+    expect(series.first.length + series.second.length).toBeGreaterThan(THREAD_ROW_CAP);
+
+    // And the topic's name must not contain the series' own words: a topic's
+    // words are stopwords inside it (FR-29.10), so naming this topic after the
+    // subject would subtract exactly what it threads on.
+    const words = new Set(series.name.toLowerCase().split(/\W+/).filter(Boolean));
+    for (const s of [...series.first, ...series.second]) {
+      const shared = s.title
+        .toLowerCase()
+        .split(/\W+/)
+        .filter((w) => words.has(w));
+      expect(shared, `"${s.title}" reuses the topic's own words`).toEqual([]);
+    }
+  });
+
+  it('leaves every other topic as unrelated stories, so the feed looks like a feed', () => {
+    // The counterweight: if everything threaded, the feed still would be one
+    // subject repeated and the dedup beat in the hero would lose its contrast.
+    for (const t of DEMO_TOPICS) {
+      if (t.name === 'Offshore wind') continue;
+      const stories = [...t.first, ...t.second];
+      const stored = stories.map((s, i) => ({
+        id: `s${String(i)}`,
+        title: s.title,
+        foundAt: new Date(Date.parse('2026-07-01T00:00:00.000Z') + i * 86_400_000).toISOString(),
+        sources: s.sources,
+      }));
+      expect(new Set(planThreadIds(stored, { topicName: t.name })).size, t.name).toBe(stories.length);
     }
   });
 
