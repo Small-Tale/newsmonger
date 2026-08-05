@@ -1682,8 +1682,13 @@ function settingsPanelJsx(s: AppState): SafeHtml {
             {icon('database', 15)} Back up now
           </button>
         </div>
+        {/* Why it is disabled, said where it is disabled (NEWS-309 §4). The
+            state was correct and the reason was nowhere — a disabled control
+            with no adjacent explanation is a dead end, which is the NEWS-40 /
+            NEWS-260 failure mode. */}
         <p class="field-hint">
           Point this at an iCloud Drive, OneDrive or Google Drive folder; empty turns backups off.
+          {s.settings.backupDir === '' ? ' Name a folder and “Back up now” turns on.' : ''}
         </p>
         {/* The trust statement keeps note weight while the explanations around
             it drop to hints (NEWS-306). It is not an explanation — it is the
@@ -1729,12 +1734,17 @@ function settingsPanelJsx(s: AppState): SafeHtml {
             tuned for the Diagnostics block at the foot of a tab; sharing one is
             the splice NEWS-161's test exists to catch.
 
-            The wording is unchanged on purpose. **NEWS-309 §3 is open against
-            it** — `data.json` is the legacy import path, so the instruction may
-            well be right, but it names two formats and three filenames in two
-            sentences and needs verifying against the current SQLite store.
-            Rewriting it here would have buried that question rather than
-            answering it. */}
+            **The old wording pointed at a dead end** (NEWS-309 §3). It said to
+            put `newsmonger-backup.json` in an empty data folder as `data.json`
+            and start the app. That is the legacy importer (FR-4.8a), and it runs
+            **only into an empty database** — verified: dropping the file into a
+            folder the app has already opened imports nothing at all, silently.
+            Which is everyone doing a restore, since you have to run the app to
+            discover you need one.
+
+            It is also the exact trap FR-27.10 identified and replaced with a
+            real Restore workflow, so the copy was still advertising the path
+            that ticket exists to retire. It now points at the button. */}
         <details class="why">
           <summary>
             {icon('chevron', 12)}
@@ -1742,16 +1752,39 @@ function settingsPanelJsx(s: AppState): SafeHtml {
           </summary>
           <p class="note">
             A live SQLite file inside a folder a sync client rewrites is a known way to corrupt it, so the database
-            stays on this machine. To restore, put <code>newsmonger-backup.json</code> in an empty data folder as{' '}
-            <code>data.json</code> and start the app.
+            stays on this machine and the snapshot is a single JSON file instead. To restore one, point the folder
+            above at it — <strong>Restore from backup</strong> appears here when a snapshot is found.
           </p>
         </details>
 
+        {/* The feed URL as a field you can copy, not prose to select by hand
+            (NEWS-309 §2). This group had no control at all — a heading over a
+            paragraph containing the one string the whole section exists to hand
+            over, which the reader was expected to drag-select out of a sentence.
+            The dialog already had the clipboard pattern (`Copy diagnostics`).
+
+            Read-only rather than disabled: a disabled input is unfocusable and
+            unselectable, so keyboard and screen-reader users would lose the very
+            thing this section is for. Read-only still takes focus, still selects,
+            and `select()` on focus makes one click enough without the button. */}
         <h3 class="eyebrow">Feed</h3>
-        <p class="note">
-          Subscribe in any feed reader: <code>{`${location.origin}/feed.xml`}</code> (add{' '}
-          <code>?scope=saved</code> for bookmarks only). It works from this machine — the app listens on
-          localhost, so a reader on another device can’t reach it.
+        <div class="feed-url">
+          <input
+            type="text"
+            class="feed-url-input"
+            data-action="feed-url"
+            readOnly={true}
+            value={`${location.origin}/feed.xml`}
+            aria-label="Atom feed URL"
+            spellCheck="false"
+          />
+          <button class="btn subtle" type="button" data-action="copy-feed-url">
+            Copy
+          </button>
+        </div>
+        <p class="field-hint">
+          Subscribe in any feed reader; add <code>?scope=saved</code> for bookmarks only. It works from this
+          machine — the app listens on localhost, so a reader on another device can’t reach it.
         </p>
 
         {/* Clear all stories (NEWS-255). Stories only — topics, settings and
@@ -1783,6 +1816,9 @@ function settingsPanelJsx(s: AppState): SafeHtml {
               third sentence — each topic resuming from a sensible window — went
               to FR-27.11, where it was already written. */}
           <p class="note">
+            {s.feedTotal === 0
+              ? 'Nothing to clear — there are no stories yet.'
+              : ''}{' '}
             Deletes every story from every topic. <strong>Your topics, settings and API keys stay</strong>, and each
             one starts covering news again on its next check.
           </p>
@@ -1889,7 +1925,14 @@ function settingsDialogJsx(): SafeHtml {
 
   return (
     <div class="dialog-backdrop" data-action="settings-backdrop">
-      <div class="dialog" role="dialog" aria-modal="true" aria-labelledby="settings-title">
+      {/* `settings-dialog`, its own class (NEWS-309): this is the one dialog
+          whose content can outgrow the viewport — Data measures 982px against a
+          900px window — and it needs a bounded height with the *panel* scrolling
+          inside it. Scoped rather than added to `.dialog`, which every other
+          dialog shares and none of which needs this (docs/3-ui.md on preferring
+          a new block; NEWS-161's test exists because a shared selector once gave
+          the export button a box's padding). */}
+      <div class="dialog settings-dialog" role="dialog" aria-modal="true" aria-labelledby="settings-title">
         <div class="dialog-head">
           <h2 id="settings-title">Settings</h2>
           <button class="btn icon" type="button" data-action="close-settings" aria-label="Close settings">
@@ -3457,6 +3500,24 @@ function wireEvents(root: HTMLElement): void {
         showToast('Could not copy — clipboard unavailable');
       }
     })();
+  });
+
+  // The feed URL, copied rather than drag-selected out of a sentence
+  // (NEWS-309). Reads the field rather than rebuilding the string, so the button
+  // cannot copy something different from what is on screen.
+  void delegate(root, 'click', '[data-action=copy-feed-url]', () => {
+    const field = root.querySelector<HTMLInputElement>('[data-action=feed-url]');
+    if (field === null) return;
+    field.select();
+    void navigator.clipboard.writeText(field.value).then(
+      () => { showToast('Feed URL copied'); },
+      () => { showToast('Could not copy — select the field and copy it manually.'); },
+    );
+  });
+
+  // One click is enough without reaching for the button.
+  void delegate(root, 'focus', '[data-action=feed-url]', (_e, el) => {
+    if (el instanceof HTMLInputElement) el.select();
   });
 
   // --- first-run flow (NEWS-78) ---------------------------------------------

@@ -175,6 +175,18 @@ There are now three weights, and the middle one is the new part:
 
 **`tests/unit/button-variants.test.ts` reads the variants out of `app.tsx` and requires each to be styled somewhere it can reach a button.** "Appears in the stylesheet" is the obvious check and is wrong in exactly the way that hid this: `danger` *did* appear — as `.menu-item.danger`, and as `&.danger` inside `.chip`. Both style a `danger` that is not a button's. The test is pinned against the pre-fix stylesheet, where it fails on `danger` and passes on all five other variants.
 
+### A dialog that outgrows the window scrolls its panel, not itself (NEWS-309)
+
+The settings dialog is the only one whose content can exceed the viewport. It already *worked* — the backdrop is `overflow-y: auto` — but scrolling took the title and the tab strip off screen with the content, and nothing on the panel's bottom edge said there was more below.
+
+`.settings-dialog` (its own class, not `.dialog`, which every other dialog shares and none of which needs this) bounds the height at `86vh` and lets `#settings-panel` scroll inside it. The header and tabs stay put, and the panel's own scrollbar *is* the affordance that was missing.
+
+**The finding outlived the tab it named**, which is why the test asserts geometry rather than a tab. The review reported this against `DIAGNOSTICS` on **App**; measured afterwards, App ends at ~464px in a 900px window — NEWS-306 thinned the prose and NEWS-307 reorganised it — while **Data measures ~982px**. The symptom migrates between tabs as content changes; the property (the dialog fits, the panel takes the overflow, the tabs do not move) does not.
+
+### Say why a control is disabled, beside the control (NEWS-309)
+
+`Back up now` is disabled until a backup folder is named; `Clear all stories` is disabled when there are no stories. Both states were correct and neither said so, which is the NEWS-40 / NEWS-260 failure mode — a dead end with no adjacent explanation. Each now carries one conditional line in the hint it already had, shown only while the control is actually disabled, so the reason appears and disappears with the state rather than sitting there permanently as a caption.
+
 ### New controls must reuse the established classes (NEWS-133/134/135)
 
 Three visual bugs shipped in the discovery dialog at once, and all three were the same mistake: inventing markup instead of reusing what the rest of the app already has.

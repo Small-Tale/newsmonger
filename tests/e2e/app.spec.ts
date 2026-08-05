@@ -2408,3 +2408,65 @@ test('the effort comparison explains itself before it has data (NEWS-227)', asyn
 
   await page.locator('.dialog [data-action=close-settings]').click();
 });
+
+test('the settings dialog scrolls its panel, not itself (NEWS-309)', async ({ page }) => {
+  // The design review reported DIAGNOSTICS below the fold with no scroll cue, on
+  // the App tab. **Measured, that had moved**: App now ends at ~464px in a 900px
+  // window (NEWS-306 thinned the prose, NEWS-307 reorganised it), while **Data
+  // measures ~982px** — so the finding was real and had outlived the tab it
+  // named. Asserted by geometry for that reason: the symptom migrates, the
+  // property does not.
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.goto('/');
+  await openSettingsTab(page, 'Data');
+
+  const m = await page.evaluate(() => {
+    const dialog = document.querySelector('.dialog.settings-dialog');
+    const panel = document.querySelector('#settings-panel');
+    const tabs = document.querySelector('.settings-tabs');
+    if (!dialog || !panel || !tabs) throw new Error('settings dialog not rendered as expected');
+    return {
+      dialogBottom: dialog.getBoundingClientRect().bottom,
+      viewport: window.innerHeight,
+      panelScrolls: panel.scrollHeight > panel.clientHeight,
+      tabsTop: tabs.getBoundingClientRect().top,
+    };
+  });
+
+  // The dialog fits the window — that is what makes the header and tabs stay put
+  // instead of scrolling away with the content.
+  expect(m.dialogBottom, 'the dialog must fit the viewport').toBeLessThanOrEqual(m.viewport);
+  // …and the overflow went somewhere: the panel scrolls, which is also the
+  // affordance the review said was missing.
+  expect(m.panelScrolls, 'the panel takes the overflow').toBe(true);
+
+  // Scrolling the panel must not move the tab strip.
+  await page.locator('#settings-panel').evaluate((el) => { el.scrollTop = el.scrollHeight; });
+  const tabsAfter = await page.locator('.settings-tabs').evaluate((el) => el.getBoundingClientRect().top);
+  expect(Math.abs(tabsAfter - m.tabsTop), 'the tabs stay put while the panel scrolls').toBeLessThan(1);
+
+  await closeSettings(page);
+});
+
+test('the feed URL is a field you can copy (NEWS-309)', async ({ page, context }) => {
+  // It was a bare paragraph under a section heading — the one string the whole
+  // group exists to hand over, to be drag-selected out of a sentence.
+  await context.grantPermissions(['clipboard-read', 'clipboard-write']);
+  await page.goto('/');
+  await openSettingsTab(page, 'Data');
+
+  const field = page.locator('[data-action=feed-url]');
+  await expect(field).toHaveValue(/\/feed\.xml$/);
+  // Read-only, **not disabled**: a disabled input cannot be focused or selected,
+  // which would take the URL away from exactly the keyboard and screen-reader
+  // users this field exists to serve.
+  await expect(field).toHaveAttribute('readonly', '');
+  await expect(field).toBeEnabled();
+
+  await page.locator('[data-action=copy-feed-url]').click();
+  await expect(page.locator('.toast')).toContainText('Feed URL copied');
+  const clip = await page.evaluate(() => navigator.clipboard.readText());
+  expect(clip, 'the clipboard holds what the field shows').toBe(await field.inputValue());
+
+  await closeSettings(page);
+});
