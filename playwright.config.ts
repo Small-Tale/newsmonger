@@ -77,8 +77,32 @@ export default defineConfig({
   // the render that caused it instead of surfacing as a confusing assertion
   // several steps later (NEWS-100). The `pageerror` guard in fixtures.ts is
   // what makes that throw visible.
+  // `node --import tsx/esm`, not `npx tsx` (NEWS-299).
+  //
+  // Same loader, same source, same coverage — `tsx/esm` only registers the
+  // resolve/load hooks, where the `tsx` **CLI** additionally opens a unix-domain
+  // socket (`createIpcServer`) to coordinate with its own child process. That
+  // socket is what made `npm run test:all` impossible inside an agent's command
+  // sandbox: `listen EPERM … /tmp/claude-501/tsx-501/<pid>.pipe`, every run.
+  //
+  // The two options the ticket proposed were both measured and both fail here:
+  //
+  //   - **Redirect tsx's pipe to a writable directory.** The sandbox denies
+  //     `bind()` on a unix socket *anywhere*, `$TMPDIR` included — verified with
+  //     a two-line `net.createServer().listen()` probe. It restricts the syscall,
+  //     not the path, so no directory setting can help.
+  //   - **Node's native type stripping** (`--experimental-strip-types`). Node
+  //     22.14's ESM resolver does not map a `.js` specifier onto a `.ts` file,
+  //     which is how this codebase imports, so `src/cli.ts` fails at its first
+  //     import. Type stripping was never the missing piece — resolution was, and
+  //     that is precisely what tsx's loader hooks supply.
+  //
+  // Switching to the bundle (`dist/cli.js`) would have cost the server's E2E
+  // coverage contribution or a sourcemap-remapping step in
+  // `scripts/merge-coverage.mjs`. This keeps `NODE_V8_COVERAGE` pointed at
+  // `src/**` exactly as before, because it *is* the same execution.
   webServer: {
-    command: `npm run build:client:dev && npx tsx src/cli.ts --no-open --strict-port --ai-test --port ${PORT} --data-dir ${dataDir}`,
+    command: `npm run build:client:dev && node --import tsx/esm src/cli.ts --no-open --strict-port --ai-test --port ${PORT} --data-dir ${dataDir}`,
     url: `http://127.0.0.1:${PORT}/healthz`,
     reuseExistingServer: false,
     timeout: 60_000,
