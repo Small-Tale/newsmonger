@@ -37,7 +37,6 @@ export type IconName =
   | 'search'
   | 'guidance'
   | 'flag'
-  | 'bug'
   | 'shield'
   | 'clock'
   | 'key'
@@ -77,22 +76,6 @@ function paths(name: IconName): SafeHtml {
         <g>
           <circle cx="12" cy="12" r="10" />
           <path d="m16.24 7.76-1.804 5.411a2 2 0 0 1-1.265 1.265L7.76 16.24l1.804-5.411a2 2 0 0 1 1.265-1.265z" />
-        </g>
-      );
-    case 'bug':
-      return (
-        <g>
-          <path d="M12 20v-9" />
-          <path d="M14 7a4 4 0 0 1 4 4v3a6 6 0 0 1-12 0v-3a4 4 0 0 1 4-4z" />
-          <path d="M14.12 3.88 16 2" />
-          <path d="M21 21a4 4 0 0 0-3.81-4" />
-          <path d="M21 5a4 4 0 0 1-3.55 3.97" />
-          <path d="M22 13h-4" />
-          <path d="M3 21a4 4 0 0 1 3.81-4" />
-          <path d="M3 5a4 4 0 0 0 3.55 3.97" />
-          <path d="M6 13H2" />
-          <path d="m8 2 1.88 1.88" />
-          <path d="M9 7.13V6a3 3 0 1 1 6 0v1.13" />
         </g>
       );
     case 'shield':

@@ -2184,6 +2184,14 @@ function settingsPanelJsx(s: AppState): SafeHtml {
     case 'schedule':
       return (
         <div>
+        {/* Every group on every tab carries an eyebrow (NEWS-307). Three tabs
+            used to open with an anonymous cluster and only *start* labelling at
+            the second group, which said "the first group is not a group" about a
+            group — and left the controls most people touch as the one region of
+            the dialog with no landmark to scan back to. Schedule had no eyebrows
+            at all, so it was internally consistent and externally the odd one
+            out; naming its two groups is what makes the rule a rule. */}
+        <h3 class="eyebrow">Cadence</h3>
         <label class="field">
           <span class="field-label">Schedule</span>
           <select data-action="schedule-mode">
@@ -2242,6 +2250,10 @@ function settingsPanelJsx(s: AppState): SafeHtml {
         <p class="field-hint">
           Kept at or below the default interval — changing either adjusts the other to keep that true.
         </p>
+        {/* Its own group, not a third row of Cadence: how *often* to check and
+            how many to run *at once* are different questions, and naming the
+            first group is what surfaced that. */}
+        <h3 class="eyebrow">Concurrency</h3>
         <label class="field">
           <span class="field-label">Check at once</span>
           <select data-action="concurrency">
@@ -2261,6 +2273,13 @@ function settingsPanelJsx(s: AppState): SafeHtml {
     case 'source':
       return (
         <div>
+        {/* Named for its lead control, which repeats the first field's label
+            (NEWS-307). Considered and kept: every alternative was either a
+            synonym this project does not use anywhere else — the vocabulary is
+            "provider", in `PROVIDER_NAMES` and docs/6-providers.md — or a phrase
+            too long for a mono eyebrow. A section named after the control it is
+            built around is ordinary; inventing a word for it is not. */}
+        <h3 class="eyebrow">Provider</h3>
         <label class="field">
           <span class="field-label">Provider</span>
           <select data-action="provider" title="Which AI finds and summarizes news">
@@ -2429,6 +2448,11 @@ function settingsPanelJsx(s: AppState): SafeHtml {
     case 'data':
       return (
         <div>
+        {/* Two groups, not one (NEWS-307). Retention and export shared the tab's
+            anonymous opening cluster, and naming it is what showed they are
+            unrelated: one decides what the app throws away, the other takes a
+            copy out. */}
+        <h3 class="eyebrow">Stories</h3>
         <label class="field">
           <span>Keep stories for</span>
           <select data-action="retention">
@@ -2443,6 +2467,7 @@ function settingsPanelJsx(s: AppState): SafeHtml {
           Older stories are dropped so the data file doesn’t grow without bound. Bookmarked stories are always
           kept, and so are ones you flagged off-topic — those still teach each topic what you meant.
         </p>
+        <h3 class="eyebrow">Export</h3>
         {/* One button, one dialog (NEWS-158). Three fixed buttons covered three
             of the four scope × format combinations — "Saved only (.json)" simply
             had no way to be asked for — and adding the fourth would have made a
@@ -2559,6 +2584,7 @@ function settingsPanelJsx(s: AppState): SafeHtml {
     case 'app':
       return (
         <div>
+        <h3 class="eyebrow">Notifications</h3>
         <label class="field checkbox-field">
           <input
             type="checkbox"
@@ -2585,6 +2611,11 @@ function settingsPanelJsx(s: AppState): SafeHtml {
             {s.testNotifyMessage !== null ? <p class="note">{s.testNotifyMessage}</p> : ''}
           </div>
         </div>
+        {/* "Show the setup guide again" was inside the notifications cluster
+            with nothing to do with it (NEWS-307). Its own group, because the
+            alternative — folding it under Notifications — is what made the
+            anonymous cluster look deliberate in the first place. */}
+        <h3 class="eyebrow">Setup</h3>
         <p class="note">
           <button class="btn subtle" type="button" data-action="rerun-onboarding">
             Show the setup guide again
@@ -2593,9 +2624,14 @@ function settingsPanelJsx(s: AppState): SafeHtml {
         {/* Updates (NEWS-89). Desktop-only: the browser build is served by a
             server the user already controls, so there is no app binary here to
             replace and the button would be a lie. Always-present slot so the
-            result line is announced when it arrives (see #banners, NEWS-99). */}
+            result line is announced when it arrives (see #banners, NEWS-99).
+
+            The eyebrow is *inside* the conditional (NEWS-307): a heading left
+            outside it would render over nothing in the browser build, which is
+            the same defect NEWS-309 reports for DIAGNOSTICS. */}
         {isTauri() ? (
           <div class="update-check">
+            <h3 class="eyebrow">Updates</h3>
             <button
               class="btn subtle"
               type="button"
@@ -2617,9 +2653,19 @@ function settingsPanelJsx(s: AppState): SafeHtml {
             tab *and* collapsed, so it takes two deliberate steps — but it stays
             nameable in support ("open Settings → App and expand Diagnostics")
             rather than hidden behind a gesture nobody can be talked through. */}
+        {/* A chevron, not the bug glyph it used to carry (NEWS-307).
+            DIAGNOSTICS was the only heading-ranked thing in the dialog with an
+            icon, which read as an arbitrary decoration on one of five section
+            headings. The rule settled here is **eyebrows take no icon** — but
+            this one is not an eyebrow, it is a `<summary>` styled like one, and
+            `list-style: none` had already taken its disclosure marker away. So
+            the mark stays and starts meaning something: a chevron says "this
+            opens", which is the one thing that actually distinguishes it from
+            the headings beside it. It rotates on open, matching the story
+            card's expander. */}
         <details class="advanced">
           <summary>
-            {icon('bug', 13)}
+            {icon('chevron', 13)}
             <span>Diagnostics</span>
           </summary>
           {diagnosticsJsx(s)}

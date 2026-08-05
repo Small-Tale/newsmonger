@@ -367,11 +367,30 @@ body {
     &:hover {
       color: var(--ink);
     }
+
+    // The disclosure marker (NEWS-307). `list-style: none` above removes the
+    // browser's own triangle, so without this the summary has no affordance at
+    // all — which is how it ended up wearing a bug glyph that read as a heading
+    // icon. Rotation matches the story card's expander so the app has one
+    // disclosure gesture, not two.
+    .icon {
+      transition: transform 140ms ease;
+    }
   }
 
   &[open] > summary {
     margin-bottom: 12px;
     color: var(--ink);
+
+    .icon {
+      transform: rotate(180deg);
+    }
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .advanced > summary .icon {
+    transition: none;
   }
 }
 
@@ -1363,6 +1382,20 @@ h2.eyebrow {
     padding-top: 16px;
     border-top: 1px solid var(--line);
   }
+}
+
+// The first eyebrow on a settings tab (NEWS-307).
+//
+// Every group now has one, which means one of them is the first thing in the
+// panel — and the rule above it would sit a few pixels under the tab bar's own
+// border, reading as a doubled line and fencing the panel off from the tabs that
+// select it. Same correction as NEWS-154/183 made to the sidebar and day
+// headings: the rule separates *groups*, and there is nothing above the first
+// one to separate it from.
+#settings-panel > div > h3.eyebrow:first-child {
+  margin-top: 4px;
+  padding-top: 0;
+  border-top: 0;
 }
 
 .dialog-head {

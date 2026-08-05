@@ -393,6 +393,24 @@ Both are measured in `tests/e2e/layout.spec.ts` rather than eyeballed, and both 
 
 - **FR-3.48** *(Shipped, NEWS-117)* The high-priority interval is labelled just **"High-priority"**. It read "High-priority topics every", which restated the column it sits in — directly under "Check every" — and wrapped to a second line to do it.
 
+- **FR-3.68** *(Shipped, NEWS-307)* **Every group on every tab carries a section eyebrow, and the first one carries no rule.**
+
+  Three tabs used to open with an anonymous cluster of controls and only *start* labelling at the second group — Data went unnamed → `BACKUP` → `FEED`, Source unnamed → `API KEYS`, App unnamed → the Diagnostics disclosure. That says "the first group is not a group" about a group, and it costs the reader the one landmark they most need: the controls at the top of a tab are the ones most people came for, and they were the only region with no name to scan back to. Schedule had no eyebrows at all, which made it internally consistent and externally the odd one out.
+
+  The groups are now: Schedule → **Cadence** / **Concurrency**; Source → **Provider** / **API keys**; Data → **Stories** / **Export** / **Backup** / **Feed** / **Reset** (FR-27.11); App → **Notifications** / **Setup** / **Updates** (desktop only) / Diagnostics.
+
+  Naming them settled two things that had been hiding inside the anonymous clusters. Data's opening group was **two** groups — how long stories are kept and how to take a copy out are unrelated questions. So was Schedule's *Check at once*: how often to check and how many to run at a time are different decisions, and only one of them is a cadence.
+
+  **Source's eyebrow repeats its first field's label**, considered and kept. Every alternative was either a synonym this project uses nowhere else — the vocabulary is "provider", in `PROVIDER_NAMES` and [6 — AI Providers](6-providers.md) — or a phrase too long for a mono eyebrow. A section named after the control it is built around is an ordinary pattern; inventing a word for it is not.
+
+  **The `Updates` eyebrow lives inside the `isTauri()` conditional**, not above it. Outside, the browser build would render a heading over nothing — which is the defect NEWS-309 reports for `DIAGNOSTICS`, and there is no reason to add a second instance of it while fixing the class.
+
+  **No rule above the first heading.** Every later eyebrow has a `border-top` separating it from the group before; the first has nothing above it to separate from, and a border there sits a few pixels under the tab bar's own and reads as a doubled line. Same correction FR-3.54 and the day headings made, for the same reason.
+
+  **Eyebrows take no icon** — the other half of the report. `DIAGNOSTICS` was the only heading-ranked thing in the dialog carrying one (a bug glyph), which read as arbitrary decoration on one of five headings. But it is not an eyebrow: it is a `<summary>`, and `list-style: none` had already removed its disclosure marker, so deleting the icon would have left a control with no affordance at all. It now carries a **chevron** that rotates on open, matching the story card's expander (FR-3.63) — so the one heading-shaped thing that is really a control says so, and the app has one disclosure gesture rather than two. The `bug` icon was the only user of that entry in `icons.tsx` and was removed with it.
+
+  Pinned per tab in `tests/e2e/app.spec.ts` — positionally, since the defect was that a heading existed but was not *first*. A count of headings would have passed on all four tabs while three of them opened anonymously.
+
 ## Section filter bar (NEWS-97)
 
 The bar under the masthead is documented in [docs/22-topic-categories.md](./22-topic-categories.md) (FR-22.9–22.12). Two structural points belong here with the other kerf conventions:

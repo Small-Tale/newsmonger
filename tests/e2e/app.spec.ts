@@ -286,7 +286,11 @@ test('the Source panel has no void below its controls (NEWS-308)', async ({ page
   const box = await page.evaluate(() => {
     const panel = document.querySelector('#settings-panel');
     const effort = panel?.querySelector('[data-action=effort]')?.closest('.field');
-    const keys = panel?.querySelector('h3.eyebrow');
+    // By name, not by position: since NEWS-307 the tab opens with a `Provider`
+    // eyebrow, so the *first* one is above these controls rather than below them.
+    const keys = [...(panel?.querySelectorAll('h3.eyebrow') ?? [])].find(
+      (h) => h.textContent.trim() === 'API keys',
+    );
     const line = panel?.querySelector('.source-status');
     if (!effort || !keys || !line) throw new Error('Source panel not rendered as expected');
     const spent = (sel: string): number => {
@@ -1749,6 +1753,48 @@ test('settings is organised into tabs (NEWS-118)', async ({ page }) => {
   await openSettings(page);
   await expect(page.locator('.settings-tab.active')).toHaveText('Schedule');
   await closeSettings(page);
+});
+
+test('no settings tab opens with an unnamed group (NEWS-307)', async ({ page }) => {
+  // Three tabs used to open with an anonymous cluster of controls and only
+  // *start* labelling at the second group — saying "the first group is not a
+  // group" about a group, and leaving the controls most people touch as the one
+  // region of the dialog with no landmark. Schedule had no eyebrows at all, so
+  // it was internally consistent and externally the odd one out.
+  //
+  // Asserted per tab rather than by counting headings: the defect is positional
+  // — a heading exists, it is just not the *first* thing — so a count would have
+  // passed on all four tabs while three of them opened anonymously.
+  await page.goto('/');
+
+  for (const tab of ['Schedule', 'Source', 'Data', 'App'] as const) {
+    await openSettingsTab(page, tab);
+    const first = await page.evaluate(() => {
+      const panel = document.querySelector('#settings-panel > div');
+      const el = panel?.firstElementChild;
+      return el === null || el === undefined ? null : { tag: el.tagName, cls: el.className };
+    });
+    expect(first, `${tab}: panel renders`).not.toBeNull();
+    expect(first?.tag, `${tab} must open with a section heading`).toBe('H3');
+    expect(first?.cls, `${tab}'s heading is the mono eyebrow the other groups use`).toContain('eyebrow');
+
+    // The first heading carries no rule above it; every later one does. The rule
+    // separates groups, and there is nothing above the first to separate it from
+    // — a border there sits a few pixels under the tab bar's own and reads as a
+    // doubled line. Same correction as NEWS-154/183 made to the sidebar and day
+    // headings.
+    const borders = await page.evaluate(() => {
+      const heads = [...document.querySelectorAll('#settings-panel > div > h3.eyebrow')];
+      return heads.map((h) => getComputedStyle(h).borderTopWidth);
+    });
+    expect(borders.length, `${tab} has at least two groups`).toBeGreaterThan(1);
+    expect(borders[0], `${tab}: no rule above the first group`).toBe('0px');
+    expect(borders[1], `${tab}: a rule above every later group`).not.toBe('0px');
+
+    // Closed each time round: `openSettingsTab` presses the gear, and with the
+    // dialog already open that press waits on a backdrop that never clears.
+    await page.locator('.dialog [data-action=close-settings]').click();
+  }
 });
 
 test('diagnostics is collapsed and out of the way (NEWS-120)', async ({ page }) => {
