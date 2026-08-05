@@ -24,6 +24,16 @@ The README's images are **photographs of the real application**, produced by dri
 - **FR-28.6** *(Shipped)* **Trees are captured live and rendered to SVG after teardown.** domotion's macOS glyph-path extraction is flaky under contention and falls back *silently* to CSS `<text>`, which renders as tofu on any machine without the font. Rendering once the browser and server are gone makes it reliable, and an **`@font-face` assertion** on the output is what stops a silent regression.
 - **FR-28.7** *(Shipped)* Both must run **outside the command sandbox** — Chromium needs Mach ports.
 
+### The capture photographs the app, not the machine (NEWS-315)
+
+- **FR-28.21** *(Shipped, NEWS-315)* **`--demo` answers `GET /api/providers` and `GET /api/keys` from a fixture**, so a still does not depend on who regenerated it. `demoProbeProviders` reports `anthropic` available and everything else not; `demoKeysResponse` reports no key configured, a working credential store, and the label `Keychain`. Both are injected into `createApp` (`probe`, `demoKeys`) rather than switched on inside the routes, and **only** `--demo` gets them — `--ai-test` keeps the real probe, because the E2E suite asserts on provider availability and a canned answer would assert nothing.
+
+  These were the last two things in `--demo` that read the capturing machine. `assets/stills/settings-source.png` said *"ready — via Claude subscription (Claude Code)"* on the owner's laptop and would say *"no provider is signed in or keyed"* on a machine with nothing configured; the two key rows and the sentence beneath them varied the same way, and the sentence names the OS's store, so it read "System Keyring" on Linux. A tracked binary that documents the UI cannot vary with the photographer, and a public repo should not carry a small statement about what its author has signed in to.
+
+  **It was deterministic by accident until NEWS-308**, which is the reason nothing caught it: before then the status line rendered blank on the default `auto` setting, so there was nothing to vary. The property had held for a year with nothing asserting it, and stopped holding because of a change to a different file. `tests/unit/demo-determinism.test.ts` now asserts it directly — the same request answered identically with and without `ANTHROPIC_API_KEY` exported, plus the opposite direction, that an ordinary server still reports a real key as configured.
+
+  `anthropic` rather than a signed-in CLI because it is this project's documented default, so the screenshot shows the ordinary case; and because the status line's most informative state — `auto` resolving to a *named* provider — needs exactly one entry of `AUTO_ORDER` available. Still a probe rather than a hardcoded route response, so the picker's shape, ordering and `mock` entry stay real.
+
 ### The dark-mode beat (NEWS-263)
 
 - **FR-28.16** *(Shipped, NEWS-263)* The hero ends its walkthrough by **switching to dark mode**, revealed by a left-to-right **wipe** rather than the crossfade every other beat uses.

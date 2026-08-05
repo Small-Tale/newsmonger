@@ -99,11 +99,28 @@ export async function resolveProvider(
   return provider;
 }
 
+/** One provider's row in the settings picker: static metadata plus a live probe. */
+export interface ProbedProvider {
+  name: ConcreteProviderName;
+  endpointConfigurable: boolean;
+  label: string;
+  available: boolean;
+}
+
+/**
+ * What `GET /api/providers` calls to fill the picker.
+ *
+ * Named so the route can take it as a dependency (NEWS-315): `--demo` answers
+ * with a fixed set instead, since a probe of the capturing machine is the one
+ * thing in demo mode that reads the real world.
+ */
+export type ProviderProbe = (cfg: Pick<ResolveConfig, 'model' | 'endpoint'>) => Promise<ProbedProvider[]>;
+
 /** Static + probed metadata for each concrete provider, for the settings UI. */
 export async function probeProviders(
   cfg: Pick<ResolveConfig, 'model' | 'endpoint'>,
   factories: Record<ConcreteProviderName, ProviderFactory> = FACTORIES,
-): Promise<{ name: ConcreteProviderName; endpointConfigurable: boolean; label: string; available: boolean }[]> {
+): Promise<ProbedProvider[]> {
   const names: ConcreteProviderName[] = ['claude-cli', 'codex-cli', 'anthropic', 'openai', 'mock'];
   return Promise.all(
     names.map(async (name) => {

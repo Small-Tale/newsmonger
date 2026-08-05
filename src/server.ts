@@ -6,8 +6,11 @@ import { fileURLToPath } from 'node:url';
 import { serve } from '@hono/node-server';
 import { Hono } from 'hono';
 
+import type { ProviderProbe } from './ai/providers/index.js';
+import { probeProviders } from './ai/providers/index.js';
 import type { KeyVerifier } from './ai/verify-key.js';
 import { verifyApiKey } from './ai/verify-key.js';
+import type { KeysResp } from './api/schemas.js';
 import { Attendance } from './attendance.js';
 import type { Backups } from './backup.js';
 import type { CheckRunner } from './checks.js';
@@ -93,6 +96,18 @@ export function createApp(deps: {
    * "back up now" route reports the feature as unconfigured rather than throwing.
    */
   backups?: Backups;
+  /**
+   * What fills the settings provider picker (NEWS-315). Defaults to the real
+   * probe; `--demo` passes a fixed one so a capture photographs the app rather
+   * than the capturing machine's signed-in CLIs.
+   */
+  probe?: ProviderProbe;
+  /**
+   * A fixed API-key panel for `--demo` (NEWS-315). The real route reports which
+   * keys are configured, where each came from, and what the OS calls its
+   * credential store — all facts about the capturing machine.
+   */
+  demoKeys?: KeysResp;
 }): Hono<AppEnv> {
   const app = new Hono<AppEnv>();
   // Same instance the CheckRunner consults, when the caller passes one; tests
@@ -110,6 +125,8 @@ export function createApp(deps: {
     c.set('discovery', deps.discovery ?? null);
     c.set('undo', undo);
     c.set('backups', deps.backups ?? null);
+    c.set('probe', deps.probe ?? probeProviders);
+    c.set('demoKeys', deps.demoKeys ?? null);
     // Debug aid (e.g. verifying the Tauri webview actually hits the server).
     if (process.env['NEWSMONGER_LOG_REQUESTS'] === '1') {
       console.error(`[req] ${c.req.method} ${c.req.path}`);

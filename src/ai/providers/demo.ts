@@ -17,10 +17,12 @@
  * they are, and why the sources are transparently illustrative.
  */
 
+import type { KeysResp } from '../../api/schemas.js';
 import { DEMO_TOPICS, findDemoTopic } from '../../demo.js';
 import type {
   CategoryOption,
   CheckResult,
+  ConcreteProviderName,
   KnownItem,
   NewsProvider,
   SuggestRequest,
@@ -29,6 +31,8 @@ import type {
   TopicClassification,
   TopicContext,
 } from '../types.js';
+import { KEY_ENV_VARS, KEYED_PROVIDERS, PROVIDER_INFO } from '../types.js';
+import type { ProbedProvider } from './index.js';
 
 /** Plausible-looking spend, so the diagnostics/usage surfaces aren't all zeroes. */
 const USAGE: TokenUsage = {
@@ -63,6 +67,81 @@ function classify(name: string, options: CategoryOption[]): TopicClassification 
       ? undefined
       : match.subcategories.find((s) => s.label.toLowerCase() === topic.subcategory?.toLowerCase());
   return { category: match.slug, subcategory: sub?.slug ?? null };
+}
+
+/**
+ * The provider the demo capture pretends is configured (NEWS-315).
+ *
+ * `anthropic`, and nothing else. It is this project's documented default, so a
+ * screenshot showing it is showing the ordinary case rather than an unusual
+ * setup.
+ *
+ * The value has to be *some* provider, and the status line's most informative
+ * state — `auto` resolving to a named provider — needs exactly one entry of
+ * `AUTO_ORDER` to be available. Every alternative encodes the same arbitrariness
+ * somewhere; this puts it in one named constant.
+ */
+const DEMO_AVAILABLE: ConcreteProviderName = 'anthropic';
+
+/**
+ * A provider probe that reads the fixture instead of the machine (NEWS-315).
+ *
+ * `--demo` exists so the README's images can be photographs of the real app. The
+ * one thing left in it that read the *capturing machine* was `GET /api/providers`,
+ * which probes for signed-in CLIs and present keys. So `assets/stills/settings-source.png`
+ * said "ready — via Claude subscription (Claude Code)" on the owner's laptop and
+ * "no provider is signed in or keyed" on a machine with nothing configured —
+ * a tracked binary whose content depended on who regenerated it, and a small leak
+ * of the capturer's environment into a public repo.
+ *
+ * It was deterministic by accident before NEWS-308, which is why nothing caught
+ * it: the line rendered blank on the default `auto` setting, so there was nothing
+ * to vary.
+ *
+ * Deliberately still a *probe* rather than a hardcoded response in the route:
+ * the shape, the ordering and the `mock` entry all stay real, so the picker in a
+ * capture is the picker users see.
+ */
+export function demoProbeProviders(): Promise<ProbedProvider[]> {
+  const names: ConcreteProviderName[] = ['claude-cli', 'codex-cli', 'anthropic', 'openai', 'mock'];
+  return Promise.resolve(
+    names.map((name) => ({
+      name,
+      endpointConfigurable: PROVIDER_INFO[name].endpointConfigurable,
+      label: PROVIDER_INFO[name].label,
+      available: name === DEMO_AVAILABLE,
+    })),
+  );
+}
+
+/**
+ * The API-key panel a capture photographs — **also** fixed (NEWS-315).
+ *
+ * The ticket named the provider probe. The same screenshot has a second
+ * environmental input nobody had noticed: `GET /api/keys` reports, per keyed
+ * provider, whether a key is configured and *where it came from*, plus whether a
+ * credential store exists and what the platform calls it. So the two key rows
+ * read "Paste API key" on a machine with none and announce a configured key on
+ * a machine with `ANTHROPIC_API_KEY` exported — and the sentence under them says
+ * "Keychain", "System Keyring" or "Credential Manager" depending on the OS.
+ *
+ * Empty and macOS-shaped, deliberately: the empty state is the one a reader
+ * arrives at, it is what the panel is *for*, and a screenshot advertising that
+ * someone's key is configured says nothing useful about the app. It reports
+ * neither a real key nor a real absence — it reports the fixture.
+ */
+export function demoKeysResponse(): KeysResp {
+  return {
+    keys: KEYED_PROVIDERS.map((provider) => ({
+      provider,
+      label: PROVIDER_INFO[provider].label,
+      configured: false,
+      source: null,
+      envVar: KEY_ENV_VARS[provider],
+    })),
+    keychainAvailable: true,
+    keychainLabel: 'Keychain',
+  };
 }
 
 export function createDemoProvider(): NewsProvider {

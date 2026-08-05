@@ -1,6 +1,6 @@
 import v8 from 'node:v8';
 
-import { createDemoProvider } from './ai/providers/demo.js';
+import { createDemoProvider, demoKeysResponse, demoProbeProviders } from './ai/providers/demo.js';
 import { createMockProvider, resolveProvider } from './ai/providers/index.js';
 import { probeLink } from './ai/verify-links.js';
 import { Attendance } from './attendance.js';
@@ -141,6 +141,11 @@ async function main(): Promise<void> {
     // Under --ai-test nothing talks to a vendor, so a live key check would only
     // reject the obviously-fake keys the E2E suite saves on purpose.
     verifyKey: options.aiTest ? null : undefined,
+    // A capture must photograph the app, not the machine holding the camera
+    // (NEWS-315). `--ai-test` keeps the real probe: the E2E suite asserts on
+    // provider availability, and a canned answer would assert nothing.
+    probe: options.demo ? demoProbeProviders : undefined,
+    demoKeys: options.demo ? demoKeysResponse() : undefined,
   });
 
   const server = await startServer(app, {

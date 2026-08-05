@@ -5,7 +5,6 @@ import type { Context, Hono } from 'hono';
 import type { z } from 'zod';
 
 import { deleteApiKey, resolveApiKey, saveApiKey } from '../ai/api-keys.js';
-import { probeProviders } from '../ai/providers/index.js';
 import { isKeyedProvider, KEY_ENV_VARS, KEYED_PROVIDERS, PROVIDER_INFO } from '../ai/types.js';
 import type { ItemsResp, KeysResp, ProvidersResp, StateResp, ThreadResp } from '../api/schemas.js';
 import {
@@ -124,9 +123,13 @@ export function registerApi(app: Hono<AppEnv>): void {
 
   // Providers + availability, for the settings picker. Probing is cheap today
   // (key presence), but kept out of the 4s /api/state poll on purpose.
+  //
+  // The probe is injected rather than imported (NEWS-315): it is the one thing
+  // in `--demo` that read the capturing machine, so the demo swaps in a fixed
+  // one and the still stops depending on who regenerated it.
   app.get('/api/providers', async (c) => {
     const { model, endpoint } = c.get('store').getSettings();
-    const probed = await probeProviders({ model, endpoint });
+    const probed = await c.get('probe')({ model, endpoint });
     const resp: ProvidersResp = {
       providers: [
         { name: 'auto', label: 'Auto', endpointConfigurable: false, available: null },
@@ -521,6 +524,12 @@ export function registerApi(app: Hono<AppEnv>): void {
   // API keys. Values are write-only: they go in on PUT and are never returned
   // by any route here, so a key can't leak back through the polling client.
   app.get('/api/keys', async (c) => {
+    // Every field below is a fact about this machine, which is why `--demo`
+    // answers with a fixture instead (NEWS-315). Only the GET: saving and
+    // deleting still go to the real keychain, so the flow stays real if anyone
+    // exercises it during a capture.
+    const demoKeys = c.get('demoKeys');
+    if (demoKeys !== null) return c.json(demoKeys);
     const [available, keys] = await Promise.all([
       isKeychainAvailable(),
       Promise.all(
