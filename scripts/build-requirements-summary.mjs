@@ -328,7 +328,25 @@ export function renderStatusBlock(docs) {
     );
   }
 
-  const reused = docs
+  return lines.join('\n');
+}
+
+/**
+ * Ids declared more than once in the same document.
+ *
+ * A **hard failure** since NEWS-302, where it used to be a tabulated note. The
+ * report was the right call when it was written — six ids were already colliding
+ * and renumbering them is its own change, not something to do inside a
+ * docs-automation ticket — but a permanent list of known-broken ids is a list
+ * everyone learns to scroll past. Now that the six are fixed, the next collision
+ * fails the gate at the moment someone creates it, which is the only time it is
+ * cheap to fix.
+ *
+ * The failure names the id and the doc, because "duplicate id" without them
+ * sends the reader to grep 29 files.
+ */
+function reusedIds(docs) {
+  return docs
     .map((doc) => {
       const seen = new Set();
       const twice = new Set();
@@ -339,18 +357,20 @@ export function renderStatusBlock(docs) {
       return { doc, ids: [...twice] };
     })
     .filter((e) => e.ids.length > 0);
-  if (reused.length > 0) {
-    lines.push(
-      '',
-      '### Ids used twice',
-      '',
-      'One id, two different requirements. Reported rather than resolved: renumbering would break every cross-reference that cites the id, so it is its own change. Each declaration is counted separately above.',
-      '',
-      ...reused.map((e) => `- ${link(e.doc)} — ${e.ids.join(', ')}`),
-    );
-  }
+}
 
-  return lines.join('\n');
+/** Throw if any document declares one id twice (NEWS-302). */
+function assertNoReusedIds(docs) {
+  const reused = reusedIds(docs);
+  if (reused.length === 0) return;
+  const where = reused.map((e) => `  ${e.doc.file} — ${e.ids.join(', ')}`).join('\n');
+  throw new Error(
+    `build-requirements-summary: an id is declared twice for two different requirements.\n\n${where}\n\n` +
+      `An id is how everything else cites a requirement, so one that resolves to two things is worse ` +
+      `than one that resolves to nothing. Give the later-added requirement the next free number in ` +
+      `that document — check which are already taken, they are not always contiguous — and update ` +
+      `every reference to it. NEWS-302 did this for six ids and left a pointer in each doc.`,
+  );
 }
 
 /** Everything above the generated block — constant, so the generator owns it. */
@@ -376,6 +396,10 @@ function region(text, begin, end, what) {
 
 /** The whole file: preamble + generated status + the existing notes, verbatim. */
 export function renderSummary(existing, docs) {
+  // Before anything is rendered: a colliding id makes every count and every
+  // cross-reference in the block below ambiguous, so there is nothing worth
+  // emitting until it is resolved (NEWS-302).
+  assertNoReusedIds(docs);
   const notes =
     existing === null
       ? '\n\n<!-- Hand-written synthesis goes here. -->\n\n'

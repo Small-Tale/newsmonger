@@ -96,6 +96,7 @@ Maintain two synthesis docs an AI assistant reads at the start of a fresh sessio
 ### This project's docs layout
 
 - Requirements docs: numbered `docs/N-topic.md` (currently 1–29), FR-N.M requirement ids, cross-referenced with relative links. New functional area → next number.
+- **An FR id is declared once, ever** (NEWS-302). A new requirement takes the next free `M` in that document — **grep for what is taken rather than reading the last bullet**, since sections are appended out of order and the numbers are not contiguous. `scripts/build-requirements-summary.mjs` fails the run on a collision, naming the id and the doc; it used to tabulate them, which is how six ids came to name two requirements each.
 - Manual test plan: `docs/manual-test-plan.md`.
 - **The two AI summaries are not maintained the same way, and the bullets above are the generic rule, not this project's** (NEWS-310):
   - `docs/ai/code-summary.md` — the codebase map. **Hand-written, and staying that way**: it is a judgement about what matters, and generating it would flatten it into a directory listing worth nothing. Update it in the same change as the code, per the general bullet above.

@@ -65,13 +65,6 @@ Every requirement whose marker says anything other than Shipped.
 - [24 — Topic Discovery](../24-topic-discovery.md) — FR-24.1–24.13, FR-24.16–24.17 (15)
 - [29 — Story Threads](../29-story-threads.md) — FR-29.1–29.36 (36)
 
-### Ids used twice
-
-One id, two different requirements. Reported rather than resolved: renumbering would break every cross-reference that cites the id, so it is its own change. Each declaration is counted separately above.
-
-- [2 — News Checks and Deduplication](../2-news-checks-and-dedup.md) — FR-2.6, FR-2.7, FR-2.8, FR-2.9, FR-2.10
-- [27 — Where Data Is Stored](../27-data-location.md) — FR-27.10
-
 <!-- END GENERATED STATUS -->
 
 <!-- BEGIN NOTES -->
@@ -110,7 +103,7 @@ One rule: **don't restate status here**. Whether a requirement shipped belongs i
 - **Locations are probed, never assumed** (`src/backup-locations.ts`, `GET /api/backup/locations` — its own route because `/api/state` polls every 4 s and this touches the filesystem). macOS needs a **prefix scan** of `~/Library/CloudStorage` since mounts carry the account in the folder name. A machine with no sync client still gets the dialog, with an empty field.
 - **API keys are structurally absent** (keychain, not `Settings` — FR-7.x); asserted on the serialised bytes in unit *and* E2E tests, and the E2E suite also asserts the copy never says "move your data".
 - Why not A (relocate the live data dir): a **live WAL-mode SQLite database inside a directory a sync daemon rewrites** is a documented corruption route. `--data-dir` on a synced path is still possible; the UI just doesn't offer it.
-- **A typed path is normalized server-side before storing (FR-27.10, NEWS-237):** `~` expanded, whitespace = off, relative **refused**. Stored verbatim, `~/...` made `mkdirSync` create a literal `~` directory and the backup *succeeded* into it — success reported, data elsewhere, discovered only when needed.
+- **A typed path is normalized server-side before storing (FR-27.12, NEWS-237):** `~` expanded, whitespace = off, relative **refused**. Stored verbatim, `~/...` made `mkdirSync` create a literal `~` directory and the backup *succeeded* into it — success reported, data elsewhere, discovered only when needed.
 - **Still open:** the path is **typed, not picked** — the browser build cannot produce a filesystem path the Node server can open, and the desktop shell has no dialog plugin yet (NEWS-233).
 - **Testing note:** the offer fires on the third topic, so `resetTopics` suppresses it for every spec but `backup-prompt.spec.ts`. In the harness — the app has no test-only branch.
 
@@ -226,7 +219,7 @@ Spend estimation, the monthly budget cap and the updatable price table are gone,
 - Digest-size bound in the shared system prompt (wider span, not longer list) — portable across all providers, since only `anthropic` has a tool-level cap: **Shipped**
 - FR-1.10 `coveredThroughAt` separate from `lastCheckedAt` so a failure can't discard pending news: **Shipped**. Now **three** clocks — `clearedAt` joined them in NEWS-291 as the fallback due-ness baseline
 - FR-2.13 **what a clear resets** (NEWS-291). `items` *is* the ledger — the dedupe keys, the off-topic prompt examples, the sidebar counts and (since NEWS-280) the thread ids all derive from rows the clear deletes, so there is no hidden "stories we've seen" store to miss. The run history is the one thing that survives on purpose, which is the single respect in which a clear differs from delete-and-re-add. Also corrected here: a **cancelled** check used to run the failure bookkeeping on its way out, giving the topic a phantom streak + cooldown that arrived a microtask after a clear's reset and undid it
-- FR-2.6–2.10 **citation verification** (HEAD → ranged GET, dedup'd + bounded, SSRF-vetted): dead sources pruned, story dropped only if nothing resolves, run **before** dedup so a dropped story can't burn its key; best-effort — NEWS-83: **Shipped**
+- FR-2.14–2.18 **citation verification** (HEAD → ranged GET, dedup'd + bounded, SSRF-vetted): dead sources pruned, story dropped only if nothing resolves, run **before** dedup so a dropped story can't burn its key; best-effort — NEWS-83: **Shipped**
 
 Default Anthropic provider (`claude-opus-4-8` + web search), prompt-level exclusion of known stories, fenced-JSON result parsing, URL/title dedupe keys, per-topic scope, mid-check-deletion safety, `--ai-test` mock — now behind the provider abstraction (see [6 — AI Providers](../6-providers.md)). **Caveat:** the live Anthropic/OpenAI request paths have not been exercised against the real APIs (no keys in the dev environment) — `parseNewsResult` and everything downstream is tested; the requests are follow-up verification (NEWS-3, manual test plan).
 

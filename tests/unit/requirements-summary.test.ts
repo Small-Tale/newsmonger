@@ -206,16 +206,40 @@ describe('the rollup can never read better than its requirements', () => {
 });
 
 describe('ids used twice', () => {
-  it('are reported rather than silently merged or crashed on', () => {
+  // Promoted from a tabulated note to a hard failure in NEWS-302.
+  //
+  // The report was right when it was written: six ids were already colliding,
+  // and renumbering them means finding every citation across 29 docs, the AI
+  // summaries and the test comments — its own change, not something to do inside
+  // a docs-automation ticket. But a permanent list of known-broken ids is a list
+  // everyone learns to scroll past. With the six fixed, the next collision fails
+  // at the moment someone creates it, which is the only time it is cheap.
+  it('fail the run instead of being tabulated', () => {
     const result = generate({
       '2-checks.md': '# 2 — Checks\n\n- **FR-2.6** A refusal fails the check.\n- **FR-2.6** *(Shipped)* Citations are verified.\n',
     });
-    expect(result.status).toBe(0);
-    const text = result.text();
-    expect(text).toContain('### Ids used twice');
-    expect(text).toContain('- [2 — Checks](../2-checks.md) — FR-2.6');
-    // Counted separately: two declarations are two requirements' worth of status.
-    expect(text).toContain('| 2 — 1 Shipped, 1 no marker |');
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain('declared twice');
+  });
+
+  it('name the id and the document, not just the fact', () => {
+    // "duplicate id" on its own sends the reader to grep 29 files.
+    const result = generate({
+      '2-checks.md': '# 2 — Checks\n\n- **FR-2.6** One.\n- **FR-2.6** Two.\n',
+      '3-ui.md': '# 3 — UI\n\n- **FR-3.1** *(Shipped)* Fine.\n',
+    });
+    expect(result.stderr).toContain('2-checks.md');
+    expect(result.stderr).toContain('FR-2.6');
+    expect(result.stderr).not.toContain('3-ui.md');
+  });
+
+  it('write nothing when they fail, rather than a half-true file', () => {
+    // Every count and cross-reference in the block is ambiguous while an id
+    // resolves to two requirements, so there is nothing worth emitting.
+    const result = generate({
+      '2-checks.md': '# 2 — Checks\n\n- **FR-2.6** One.\n- **FR-2.6** Two.\n',
+    });
+    expect(result.text()).toBe('');
   });
 });
 

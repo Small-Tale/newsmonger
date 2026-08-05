@@ -102,15 +102,17 @@ A bare "focus on developments since `<timestamp>`" reads identically whether the
 
 Source URLs come from the model. The live-API check on 2026-07-24 found every citation resolved, but that is one good run on one provider — and a dead or hallucinated link is the failure mode that most damages trust in an AI news product.
 
-- **FR-2.6** *(Shipped)* Before anything is stored, each source URL is probed: `HEAD` first, falling back to a **ranged `GET`**, because a surprising number of news sites answer HEAD with 403 or 405 while serving the page perfectly well — treating those as dead would delete good stories, which is worse than the problem being solved. 6-second timeout, at most 4 probes in flight, and each distinct URL probed **once per batch** (several stories routinely cite the same outlet).
+> **These were FR-2.6–2.10 until NEWS-302**, which is what FR-2.6–2.10 at the top of this document also say — five ids naming two unrelated sets of requirements each. The originals keep their numbers because they are the more widely cited; this block moved to **FR-2.14–2.18**. Not 2.11–2.15 as the ticket proposed: 2.11–2.13 were taken by NEWS-257 and NEWS-291 in the interval. An old citation of "FR-2.6–2.10 citation verification" means the block below.
 
-- **FR-2.7** *(Shipped)* **A dead source is pruned; a story is dropped only when *nothing* it cites resolves.** A story with three citations where one 404s is still a real story. A story that cites nothing reachable is the one that shouldn't be shown.
+- **FR-2.14** *(Shipped)* Before anything is stored, each source URL is probed: `HEAD` first, falling back to a **ranged `GET`**, because a surprising number of news sites answer HEAD with 403 or 405 while serving the page perfectly well — treating those as dead would delete good stories, which is worse than the problem being solved. 6-second timeout, at most 4 probes in flight, and each distinct URL probed **once per batch** (several stories routinely cite the same outlet).
 
-- **FR-2.8** *(Shipped)* Verification runs **before** deduplication, not after. If a dropped story still claimed its dedupe key, the real version of the same story would be filtered out as a duplicate on the next check and never appear at all.
+- **FR-2.15** *(Shipped)* **A dead source is pruned; a story is dropped only when *nothing* it cites resolves.** A story with three citations where one 404s is still a real story. A story that cites nothing reachable is the one that shouldn't be shown.
 
-- **FR-2.9** *(Shipped)* It **reuses the image pipeline's SSRF vetting** (`src/images/safety.ts`) rather than opening a second fetch path — these URLs come from a model, so the same protocol / hostname / post-DNS-address rules apply.
+- **FR-2.16** *(Shipped)* Verification runs **before** deduplication, not after. If a dropped story still claimed its dedupe key, the real version of the same story would be filtered out as a duplicate on the next check and never appear at all.
 
-- **FR-2.10** *(Shipped)* Best-effort, like image fetching: if the verifier itself throws, stories go through **unverified** rather than the check failing. No news at all is a worse outcome than a story with an unchecked link. A story that arrived with *no* sources is passed through untouched — that is a prompt-compliance problem, not something to silently delete here.
+- **FR-2.17** *(Shipped)* It **reuses the image pipeline's SSRF vetting** (`src/images/safety.ts`) rather than opening a second fetch path — these URLs come from a model, so the same protocol / hostname / post-DNS-address rules apply.
+
+- **FR-2.18** *(Shipped)* Best-effort, like image fetching: if the verifier itself throws, stories go through **unverified** rather than the check failing. No news at all is a worse outcome than a story with an unchecked link. A story that arrived with *no* sources is passed through untouched — that is a prompt-compliance problem, not something to silently delete here.
 
   The probe is injected (`CheckRunner`'s 5th argument); `--ai-test` passes null, since the mock's URLs are fictional and every story would otherwise be dropped.
 
