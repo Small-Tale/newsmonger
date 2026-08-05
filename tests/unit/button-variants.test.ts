@@ -30,7 +30,26 @@ import { describe, expect, it } from 'vitest';
 
 const root = path.join(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const scss = fs.readFileSync(path.join(root, 'src/client/styles.scss'), 'utf8');
-const tsx = fs.readFileSync(path.join(root, 'src/client/app.tsx'), 'utf8');
+
+/**
+ * Every `.ts`/`.tsx` file under `src/client`, concatenated.
+ *
+ * **Every file, not `app.tsx`** (NEWS-297). It read only `app.tsx`, which was
+ * true when written — every view lived there — and stopped being true the moment
+ * the settings dialog moved to `settings.tsx`, taking `btn danger` with it. The
+ * scan silently found one fewer variant, which is the same shape of failure this
+ * whole file exists to prevent: a guard that quietly checks less than it claims.
+ *
+ * A directory read rather than a list of files, so the next seam is covered
+ * without anyone remembering to add it.
+ */
+function clientSource(): string {
+  return fs
+    .readdirSync(path.join(root, 'src/client'), { withFileTypes: true })
+    .filter((e) => e.isFile() && /\.tsx?$/.test(e.name))
+    .map((e) => fs.readFileSync(path.join(root, 'src/client', e.name), 'utf8'))
+    .join('\n');
+}
 
 /**
  * Every modifier used alongside `btn` in a `class="btn …"` attribute.
@@ -41,7 +60,7 @@ const tsx = fs.readFileSync(path.join(root, 'src/client/app.tsx'), 'utf8');
  */
 function variantsInUse(): Set<string> {
   const found = new Set<string>();
-  for (const m of tsx.matchAll(/class=(?:"[^"]*"|\{`[^`]*`\})/g)) {
+  for (const m of clientSource().matchAll(/class=(?:"[^"]*"|\{`[^`]*`\})/g)) {
     const raw = m[0].replace(/^class=\{?[`"]/, '').replace(/[`"]\}?$/, '');
     // Drop `${…}` interpolations: a computed class cannot be checked statically.
     const classes = raw.replace(/\$\{[^}]*\}/g, ' ').split(/\s+/).filter(Boolean);
@@ -95,6 +114,6 @@ describe('button variants (NEWS-304)', () => {
   });
 
   it.each(variants)('.btn.%s is defined in the stylesheet', (variant) => {
-    expect(reachesAButton(variant), `.btn.${variant} is applied in app.tsx but never styled`).toBe(true);
+    expect(reachesAButton(variant), `.btn.${variant} is applied in src/client but never styled`).toBe(true);
   });
 });
