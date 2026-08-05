@@ -4230,8 +4230,29 @@ function wireEvents(root: HTMLElement): void {
       return;
     }
     appStore.actions.setBackupOffer(null);
+    // Two failures, two messages, and **both handled** (NEWS-312).
+    //
+    // The second argument to `.then()` catches rejections of
+    // `updateBackupDir` — not of the promise its success handler returns. So
+    // `backupNow()` failing was an **unhandled rejection**, and the toast this
+    // code plainly intends never appeared.
+    //
+    // Not a theoretical gap. The two calls fail independently: a folder can
+    // save fine and then refuse the write — an unmounted drive, a sync client
+    // that owns the directory, a full disk — and the server answers 500 with
+    // "backup failed; see the server log". A user saw nothing at all.
+    //
+    // It surfaced as an E2E flake, which is how it was found: an uncaught page
+    // error is asserted in the fixture teardown, so it failed whichever test was
+    // running when the rejection landed rather than the one that caused it.
     void updateBackupDir(dir).then(
-      () => backupNow().then((at) => { showToast(`Backing up to ${at}`); }),
+      () =>
+        backupNow().then(
+          (at) => { showToast(`Backing up to ${at}`); },
+          (err: unknown) => {
+            showToast(`Folder saved, but the first backup failed: ${err instanceof Error ? err.message : String(err)}`);
+          },
+        ),
       (err: unknown) => { showToast(`Couldn’t save that folder: ${err instanceof Error ? err.message : String(err)}`); },
     );
   });

@@ -149,13 +149,23 @@ test('a typed ~ path is resolved, not taken literally (NEWS-237)', async ({ page
   expect(settings.settings.backupDir).toContain('nm-tilde-e2e');
   expect(path.isAbsolute(settings.settings.backupDir)).toBe(true);
 
-  // Clean up the folder the save actually created, and turn backups off again.
-  fs.rmSync(settings.settings.backupDir, { recursive: true, force: true });
+  // Turn backups off **before** deleting the folder (NEWS-312).
+  //
+  // Saving a folder also writes a first snapshot into it (FR-27.4), and that
+  // write is still in flight here. Deleting first raced it: the backup failed,
+  // the server answered 500, and the client's unhandled rejection surfaced as an
+  // uncaught page error in whichever test was running when it landed — a failure
+  // that moved between runs and named an innocent spec.
+  //
+  // The client bug is fixed and guarded (`tests/unit/unhandled-rejection.test.ts`),
+  // so this ordering is no longer load-bearing for *correctness*. It stays because
+  // a test should not deliberately provoke a failure it is not asserting on.
   await fetch(`${baseURL()}/api/settings`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ backupDir: '' }),
   });
+  fs.rmSync(settings.settings.backupDir, { recursive: true, force: true });
 });
 
 test('choosing a folder saves it and writes a backup (FR-27.2, FR-27.6)', async ({ page }) => {
