@@ -59,6 +59,16 @@ let stateApplied = 0;
 let feedSeq = 0;
 let feedApplied = 0;
 
+/**
+ * Thread ids with a request out (NEWS-293).
+ *
+ * Not derivable from the store: a *refresh* of an open pane deliberately leaves
+ * the pane's status `ready` so the old rows stay on screen, so "is one in
+ * flight" and "is the pane showing a spinner" stopped being the same question
+ * the moment the poll started calling `loadThread`.
+ */
+const threadsInFlight = new Set<string>();
+
 export async function refreshState(): Promise<void> {
   const seq = ++stateSeq;
   try {
@@ -122,6 +132,14 @@ export async function refreshFeed(): Promise<void> {
     if (seq < feedApplied) return;
     feedApplied = seq;
     appStore.actions.setFeed({ items: resp.items, total: resp.total, threads: resp.threads });
+    // An open pane follows its thread (NEWS-293). The badge shape in `threads`
+    // has just been refreshed, so this is the one moment the client can know a
+    // thread grew — and `loadThread` compares the new size against what the
+    // pane holds and returns without a request when they agree, so the poll
+    // costs nothing on the overwhelmingly common unchanged tick. No new
+    // reactive edge: the existing guard *is* the mechanism.
+    const expanded = appStore.state.value.expandedItemId;
+    if (expanded !== null) void loadThread(expanded);
   } catch (err) {
     if (seq < feedApplied) return;
     feedApplied = seq;
@@ -152,6 +170,19 @@ export async function refreshFeed(): Promise<void> {
  * card is not something to raise a red banner across the app over, and the pane
  * is where the reader is looking. It offers a retry rather than clearing itself,
  * and is never cached — re-opening the card tries again.
+ *
+ * **A pane that already has rows is refreshed in place** (NEWS-293), which is
+ * the whole difference between this being a fix and being a flicker. `refreshFeed`
+ * calls this for the open card on every 4-second poll, so the first-load path —
+ * `status: 'loading'`, which the pane renders as "Looking up the story so far…"
+ * — would replace a correct timeline with a placeholder each time the thread
+ * grew. The old rows stay on screen until the new ones land: they are still
+ * true, just one instalment short for a moment.
+ *
+ * For the same reason a **failed refresh keeps what is on screen** rather than
+ * swapping a good timeline for an error with a retry button. The reader did not
+ * ask for anything; a background refresh that fails should be silent, and the
+ * next poll tries again anyway.
  */
 export async function loadThread(id: string): Promise<void> {
   const state = appStore.state.value;
@@ -162,15 +193,24 @@ export async function loadThread(id: string): Promise<void> {
     if (cached.status === 'loading') return;
     if (cached.status === 'ready' && cached.size === summary.size) return;
   }
-  appStore.actions.setThreadPane(id, { status: 'loading' });
+  // Tracked here rather than inferred from `status: 'loading'`, because a
+  // refresh deliberately does not set that status — without this, every poll
+  // during a slow request would start another one.
+  if (threadsInFlight.has(id)) return;
+  const refreshing = cached?.status === 'ready';
+  if (!refreshing) appStore.actions.setThreadPane(id, { status: 'loading' });
+  threadsInFlight.add(id);
   try {
     const resp = ThreadRespSchema.parse(await request(`/api/items/${encodeURIComponent(id)}/thread`));
     appStore.actions.setThreadPane(id, { status: 'ready', items: resp.items, size: resp.items.length });
   } catch (err) {
+    if (refreshing) return;
     appStore.actions.setThreadPane(id, {
       status: 'error',
       message: err instanceof Error ? err.message : String(err),
     });
+  } finally {
+    threadsInFlight.delete(id);
   }
 }
 

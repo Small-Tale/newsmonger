@@ -270,6 +270,70 @@ test('a collapsed card advertises its thread, without crowding the header (NEWS-
   await expect(page.locator('.topic', { hasText: 'badge thread topic' })).toHaveCount(0);
 });
 
+test('a thread that grows while its pane is open refreshes itself (NEWS-293)', async ({ page }) => {
+  // The sequence NEWS-282 left uncovered, and the reason this is an E2E rather
+  // than only a unit test: it needs the real poll. A unit test can prove
+  // `refreshFeed` calls `loadThread`; only this can prove the poll fires, the
+  // server reports the bigger thread, and the open pane redraws — without the
+  // reader touching anything.
+  const threadRequests: string[] = [];
+  page.on('request', (req) => {
+    if (req.url().includes('/thread')) threadRequests.push(req.url());
+  });
+  await page.goto('/');
+  const topicId = await addTopic(page, 'Growing Thread Probe');
+  const row = page.locator('.topic', { hasText: 'Growing Thread Probe' });
+  await expect(row).toBeVisible();
+  const cards = page.locator('.item:not(.flagged-row)', {
+    has: page.locator('.item-topic', { hasText: 'Growing Thread Probe' }),
+  });
+  await expect(cards).toHaveCount(2, { timeout: 20_000 });
+
+  // Open the pane on the newest story of a two-instalment thread, and hold on
+  // to **that** card by id. `cards.first()` would not do: a check pushes newer
+  // stories above it, so the same locator would resolve to a different,
+  // collapsed card and the test would report a failure the app does not have.
+  const openId = await cards.first().getAttribute('data-item-id');
+  expect(openId).not.toBeNull();
+  const card = page.locator(`.item[data-item-id="${String(openId)}"]`);
+  await card.locator('h3').click();
+  const pane = card.locator('.item-pane');
+  await expect(pane.locator('.thread-row')).toHaveCount(2);
+  const afterOpen = threadRequests.length;
+  expect(afterOpen).toBe(1);
+
+  // A check adds two more instalments to the same subject. The pane stays open
+  // throughout — no click between here and the assertions below.
+  await page.request.post('/api/check', { data: { topicId } });
+
+  // It grows on its own. The badge is what tells the client, and it arrives on
+  // the ordinary 4-second poll, so this is a wait rather than a click.
+  await expect(pane.locator('.thread-row')).toHaveCount(4, { timeout: 20_000 });
+  // Exactly at the cap, so nothing is held back yet.
+  await expect(pane.locator('[data-action=show-all-thread]')).toHaveCount(0);
+
+  // A second check takes it past the cap, and the count in the affordance is
+  // read from the refreshed timeline rather than from the one fetched on open.
+  await page.request.post('/api/check', { data: { topicId } });
+  await expect(pane.locator('[data-action=show-all-thread]')).toHaveText('Show all 6 stories', { timeout: 20_000 });
+  await expect(pane.locator('.thread-row')).toHaveCount(4);
+  // Still the same open card — it did not collapse and reopen underneath us.
+  await expect(pane).toBeVisible();
+
+  // And it did not cost a request per poll. Several polls have gone by; the
+  // refetches are the ones where the thread actually changed, not one per tick.
+  const refetches = threadRequests.length - afterOpen;
+  // Two size changes happened, so two refetches are expected; the ceiling is
+  // what would catch a fix that refetched on every tick instead.
+  expect(refetches).toBeGreaterThanOrEqual(2);
+  expect(refetches, `one refetch per size change, not one per 4s poll (saw ${String(refetches)})`).toBeLessThanOrEqual(
+    4,
+  );
+
+  await topicAction(page, row, 'delete');
+  await expect(page.locator('.topic', { hasText: 'Growing Thread Probe' })).toHaveCount(0);
+});
+
 test('unrelated stories in one topic stay separate threads', async ({ page }) => {
   await page.goto('/');
   // The mock's default pair shares only the topic's own name, which threading
