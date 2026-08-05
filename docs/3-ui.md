@@ -542,6 +542,16 @@ The bundle is built by a pure function (`src/client/diagnostics.ts`) so it is un
 
 - **FR-3.32** *(Shipped)* The date is shown **only when it differs from the day the story was found**, which is exactly when the day heading is misleading. Same day → nothing (the heading already says it). Under a week → "published 3 days earlier". A week or more → the absolute date, because "published 23 days earlier" is arithmetic the reader shouldn't have to do. A date *after* the found date is nonsense from the model and renders as nothing rather than a negative count.
 
+- **FR-3.70** *(Shipped, NEWS-279)* **The attribution line sits in the link's text column, aligned with the headline, and is part of the same link.**
+
+  It was a sibling of the anchor carrying `margin-left: 8px`, which put its left edge under the *middle of the 14px favicon* — a ragged second column down the whole card. A hand-picked indent beside a fixed-width mark is only ever right for one mark at one size, and it was not right for that one. The headline and the attribution now stack in a flex column beside the mark, so the two left edges are **the same edge** rather than two numbers that agree.
+
+  Structural rather than tuned, for the same reason as FR-3.49's baseline alignment: it keeps being true if the favicon is ever resized.
+
+  **And the whole row is one link.** The outlet names the destination the headline names, so having only half of it clickable was an arbitrary split of one target — and the attribution is the part a reader looks at when deciding whether to follow it. The hover underline stays on the headline alone: the colour change already covers the whole block, and underlining a publication date reads as emphasis on the date rather than as an affordance.
+
+  The card-expand delegate already bails inside `ul.sources`, so the enlarged target does not swallow the expand gesture (FR-3.63). The E2E asserts that as well as the alignment, because growing a click target is exactly how that would regress.
+
 `outletFor` and `publishedLabel` live in `src/client/attribution.ts` rather than `app.tsx` — they are pure, and `app.tsx` touches `document` at import time, so keeping them there would make them untestable outside a browser (same reason `search.ts` / `share.ts` / `schedule.ts` are separate).
 
 ## kerf development diagnostics (NEWS-100)

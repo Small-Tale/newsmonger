@@ -773,18 +773,31 @@ function itemJsx(
                 // feed mixes the two constantly.
                 icon('arrow', 14)
               )}
-              {source.title !== '' ? source.title : source.url}
-            </a>
-            <span class="source-meta">
-              <span class="source-outlet">{outletFor(source)}</span>
-              {source.publishedAt !== null ? (
-                <span class="source-date" title={`Published ${source.publishedAt}`}>
-                  {publishedLabel(source.publishedAt, item.foundAt)}
+              {/* Headline and attribution in one column beside the mark
+                  (NEWS-279). The attribution used to be a sibling of the link
+                  with `margin-left: 8px`, which put it under the *middle of the
+                  favicon* — a hand-tuned number that could only ever be right
+                  for one icon width, and was not right for that one. A column
+                  aligns it with the headline structurally, so it stays aligned
+                  if the mark is ever resized.
+
+                  It is also *inside* the anchor now: the outlet names the same
+                  destination the headline does, so having only half of it be a
+                  link was an arbitrary split of one target. */}
+              <span class="source-text">
+                <span class="source-title">{source.title !== '' ? source.title : source.url}</span>
+                <span class="source-meta">
+                  <span class="source-outlet">{outletFor(source)}</span>
+                  {source.publishedAt !== null ? (
+                    <span class="source-date" title={`Published ${source.publishedAt}`}>
+                      {publishedLabel(source.publishedAt, item.foundAt)}
+                    </span>
+                  ) : (
+                    ''
+                  )}
                 </span>
-              ) : (
-                ''
-              )}
-            </span>
+              </span>
+            </a>
           </li>
         ))}
       </ul>

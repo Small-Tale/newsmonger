@@ -1753,6 +1753,47 @@ test('stories show the outlet they came from (NEWS-82)', async ({ page }) => {
   // which is the branch that runs for most real sources too.
   await expect(outlet).toHaveText(/example\.com/);
 
+  // The attribution lines up with the headline, and is part of the same link
+  // (NEWS-279). It used to be a sibling of the anchor with `margin-left: 8px`,
+  // which put its left edge under the *middle of the favicon* — visible as a
+  // ragged second column down the whole card.
+  //
+  // Measured, because "aligned" is a pixel fact no functional assertion reaches:
+  // the old markup rendered the right words in the right order, and looked wrong.
+  const geometry = await page.evaluate(() => {
+    const meta = document.querySelector('.item .source-meta');
+    if (meta === null) throw new Error('no source attribution rendered');
+    const link = meta.closest('a');
+    // Deliberately not a hard throw: pre-NEWS-279 the attribution was a *sibling*
+    // of the anchor, so this is null there and the assertion below reports the
+    // half of the bug it is about rather than an unrelated missing-element error.
+    if (link === null) return { insideLink: false, metaLeft: 0, headlineLeft: 0, href: '' };
+    // The headline's left edge measured from the text itself, not from a
+    // wrapper, so it means the same thing whatever markup surrounds it.
+    const headline = link.querySelector('.source-title') ?? link;
+    const range = document.createRange();
+    range.selectNodeContents(headline);
+    return {
+      insideLink: true,
+      metaLeft: meta.getBoundingClientRect().left,
+      headlineLeft: range.getBoundingClientRect().left,
+      href: link.getAttribute('href') ?? '',
+    };
+  });
+  expect(geometry.insideLink, 'the attribution is inside the link').toBe(true);
+  expect(
+    Math.abs(geometry.metaLeft - geometry.headlineLeft),
+    'attribution aligns with the headline',
+  ).toBeLessThan(1);
+  expect(geometry.href).toMatch(/^https?:/);
+
+  // …and clicking it really does follow the link rather than falling through to
+  // the card. The click delegate bails inside `ul.sources`, so this also pins
+  // that the enlarged target did not start swallowing the expand gesture.
+  await expect(page.locator('.item.expanded')).toHaveCount(0);
+  await page.locator('.item .source-meta').first().click({ modifiers: ['Alt'] });
+  await expect(page.locator('.item.expanded'), 'the card must not expand').toHaveCount(0);
+
   await topicAction(page, row, 'delete');
   await expect(row).toHaveCount(0);
 });

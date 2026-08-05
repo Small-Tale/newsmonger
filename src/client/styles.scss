@@ -1252,9 +1252,26 @@ h2.eyebrow {
       background: var(--pine-soft);
     }
 
+    // Headline and attribution stack in one column beside the mark (NEWS-279),
+    // so the attribution's left edge *is* the headline's rather than being a
+    // number someone chose. It was `margin-left: 8px` on a sibling of the link,
+    // which landed it under the middle of the 14px favicon.
+    .source-text {
+      display: flex;
+      flex-direction: column;
+      min-width: 0;
+    }
+
     &:hover {
       color: var(--pine);
-      text-decoration: underline;
+
+      // The underline stays on the headline alone. The whole block is one link
+      // now and the colour change says so across all of it, but underlining a
+      // publication date reads as emphasis on the date rather than as an
+      // affordance.
+      .source-title {
+        text-decoration: underline;
+      }
     }
   }
 }
@@ -2180,10 +2197,15 @@ h2.eyebrow {
 
 // Source attribution: outlet and, when it differs from the day the story was
 // found, the publication date (NEWS-82). Quiet — it's provenance, not headline.
+// The attribution line under a source headline (NEWS-82).
+//
+// No `margin-left` since NEWS-279 — it lives in the link's text column now, so
+// its left edge is the headline's by construction. The 8px it used to carry put
+// it under the middle of the favicon, which is the reported bug and is what a
+// hand-picked indent next to a fixed-width mark will always eventually be.
 .source-meta {
   display: inline-flex;
   gap: 6px;
-  margin-left: 8px;
   font-size: 11.5px;
   color: var(--ink-soft);
 }
