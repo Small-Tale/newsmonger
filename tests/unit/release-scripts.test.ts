@@ -929,15 +929,56 @@ describe('the notarization watcher (NEWS-197)', () => {
    * first poll, and under a loaded parallel suite that lands past the deadline.
    * Polling for the condition keeps the test fast when the machine is idle and
    * correct when it is not.
+   *
+   * **It throws when the deadline passes** (NEWS-323), which it did not, and the
+   * omission cost an investigation. It used to fall out of the loop and return
+   * *normally*, so a machine too loaded to produce the log line in time reported
+   * a successful wait — and the caller then failed on its timestamp-format
+   * assertion, blaming the format for a timeout. The error named an assertion
+   * three lines from the actual cause.
+   *
+   * A bounded wait that cannot fail is worse than no wait at all: it converts a
+   * legible timeout into an arbitrary downstream failure, and which assertion
+   * takes the blame depends on what the caller happens to check first.
+   *
+   * The timeout is generous rather than tight for the same reason the loop
+   * exists. This spawns a bash script that sleeps a second before its first
+   * poll, and the unit suite shares a machine with whatever else is running —
+   * when this was hit, that was a browser. Waiting is condition-based, so a
+   * longer ceiling costs an idle machine nothing and buys patience on a busy one.
    */
-  async function waitForPoll(stateDir: string, timeoutMs = 15_000): Promise<void> {
+  async function waitForPoll(stateDir: string, timeoutMs = 45_000): Promise<void> {
     const log = path.join(stateDir, 'notary-watch.log');
     const deadline = Date.now() + timeoutMs;
-    while (Date.now() < deadline) {
+    for (;;) {
       if (fs.existsSync(log) && fs.readFileSync(log, 'utf8').includes('recent submissions')) return;
+      if (Date.now() >= deadline) {
+        // What was actually there, so the next reader does not have to re-run it
+        // to learn whether the poller wrote nothing or wrote something else.
+        const seen = fs.existsSync(log) ? JSON.stringify(fs.readFileSync(log, 'utf8').slice(0, 400)) : '(no log file)';
+        throw new Error(
+          `waitForPoll: notary-watch.log never said "recent submissions" within ${String(timeoutMs)}ms. Saw: ${seen}`,
+        );
+      }
       await new Promise((r) => setTimeout(r, 100));
     }
   }
+
+  it('waitForPoll fails loudly rather than pretending it waited (NEWS-323)', async () => {
+    // A test for a test helper, which is unusual and earned: this helper's whole
+    // job is to fail when the condition never arrives, it silently did the
+    // opposite for as long as it existed, and nothing about the tests that use
+    // it could have revealed that — they just failed somewhere else.
+    const empty = fs.mkdtempSync(path.join(os.tmpdir(), 'newsmonger-waitpoll-'));
+    try {
+      await expect(waitForPoll(empty, 200)).rejects.toThrow(/never said "recent submissions"/);
+      // And it says what it found, so a real timeout is diagnosable from the
+      // failure alone rather than by re-running it.
+      await expect(waitForPoll(empty, 200)).rejects.toThrow(/no log file/);
+    } finally {
+      fs.rmSync(empty, { recursive: true, force: true });
+    }
+  });
 
   it('records what the queue was doing, with timestamps', async () => {
     // The whole point: Tauri prints one "Notarizing …" line and then nothing, so
