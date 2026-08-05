@@ -44,6 +44,25 @@ export const TOPIC_SORT_LABELS: Record<TopicSort, string> = {
 };
 
 /** Steps of the first-run flow, in order (NEWS-78). */
+/**
+ * The check-interval presets, in the order the pickers offer them.
+ *
+ * Here rather than in `app.tsx` because **two views render it** (NEWS-297):
+ * Settings → Schedule and onboarding's Schedule step. Its sibling
+ * `RETENTION_OPTIONS` stays in `app.tsx`, which is not an inconsistency — only
+ * Settings shows that one, and a constant moves when it is shared, not when a
+ * neighbour moves.
+ */
+export const INTERVAL_OPTIONS: { label: string; ms: number }[] = [
+  { label: 'Every hour', ms: 60 * 60 * 1000 },
+  { label: 'Every 3 hours', ms: 3 * 60 * 60 * 1000 },
+  { label: 'Every 6 hours', ms: 6 * 60 * 60 * 1000 },
+  { label: 'Every 12 hours', ms: 12 * 60 * 60 * 1000 },
+  { label: 'Every day', ms: 24 * 60 * 60 * 1000 },
+  { label: 'Every 2 days', ms: 48 * 60 * 60 * 1000 },
+  { label: 'Every week', ms: 7 * 24 * 60 * 60 * 1000 },
+];
+
 export const ONBOARDING_STEPS = ['welcome', 'source', 'topics', 'schedule'] as const;
 export type OnboardingStep = (typeof ONBOARDING_STEPS)[number];
 
