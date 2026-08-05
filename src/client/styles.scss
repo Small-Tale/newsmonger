@@ -1575,6 +1575,19 @@ h2.eyebrow {
   margin-top: 10px;
 }
 
+// The Source tab's other two always-present containers (NEWS-99, NEWS-308).
+//
+// They hold nothing on the default settings — `auto` has no model field and no
+// endpoint field, and a usable effort control has no explanatory note — and they
+// carry no box, so today they already collapse to zero. This makes that a rule
+// rather than an accident: the containers exist for morph stability and are not
+// going anywhere, so the first padding or margin added to either would reopen a
+// hole in the middle of the tab with nothing pointing at the cause.
+.source-fields:empty,
+.effort-note:empty {
+  display: none;
+}
+
 .key-notes .banner {
   margin: 14px 0 0;
 }

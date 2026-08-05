@@ -109,6 +109,7 @@ import { itemMatchesQuery } from './search.js';
 import { syncSelects } from './select-sync.js';
 import { shareItem } from './share.js';
 import { isAllSoloed, toggleSolo } from './solo.js';
+import { sourceStatus } from './source-status.js';
 import type { AppState, DiscoverSource, DiscoverState, OnboardingStep, ThreadPane, ToastState } from './stores.js';
 import {
   appStore,
@@ -839,13 +840,20 @@ function sourceStatusJsx(): SafeHtml {
   const s = appStore.state.value;
   // The provider's name is not repeated here — the picker directly above says
   // it. This line carries only what the picker can't: whether it works.
-  const availability = s.providers.find((p) => p.name === s.settings.provider)?.available ?? null;
+  //
+  // Every branch renders something (NEWS-308). It used to render nothing at all
+  // on the default settings — `auto` is reported by the server with
+  // `available: null`, which is correct and unprintable — leaving a blank row
+  // that the design review read once as unexplained empty space and once as the
+  // status line being missing. The rule for which provider `auto` resolves to
+  // lives in `source-status.ts`; see there for why the client computes it.
+  const status = sourceStatus(s.providers, s.settings.provider);
   const lastProvider = s.runs.find((r) => r.provider !== null)?.provider ?? null;
 
   return (
     <p class="source-status">
       <span class="source-state">
-        {availability === false ? (
+        {status.kind === 'unavailable' ? (
           <span class="state warn">
             {icon('warn', 12)}{' '}
             {/* "no API key" is only true of the keyed providers. A subscription
@@ -859,7 +867,25 @@ function sourceStatusJsx(): SafeHtml {
         ) : (
           ''
         )}
-        {availability === true ? <span class="state ok">{icon('ok', 12)} ready</span> : ''}
+        {/* `auto` names what it resolved to. That is the single most useful
+            thing this tab can say — "ready" alone, under a picker reading
+            "Auto", leaves the reader not knowing which subscription or key the
+            next check will spend. */}
+        {status.kind === 'ready' ? (
+          <span class="state ok">
+            {icon('ok', 12)} ready{status.via !== null ? ` — via ${PROVIDER_INFO[status.via].label}` : ''}
+          </span>
+        ) : (
+          ''
+        )}
+        {status.kind === 'none-usable' ? (
+          <span class="state warn">{icon('warn', 12)} no provider is signed in or keyed</span>
+        ) : (
+          ''
+        )}
+        {/* A resting state, not a blank. "Not checked yet" is a fact; an empty
+            row is a rendering fault as far as a reader can tell. */}
+        {status.kind === 'unknown' ? <span class="state">not checked yet</span> : ''}
       </span>
       <span class="source-last">{lastProvider !== null ? `last check via ${lastProvider}` : ''}</span>
     </p>

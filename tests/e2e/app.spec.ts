@@ -260,6 +260,74 @@ test('the Source panel reads provider, model, effort, then the notes (NEWS-256)'
   await closeSettings(page);
 });
 
+test('the Source panel has no void below its controls (NEWS-308)', async ({ page }) => {
+  // The design review reported "roughly 90px of empty space" between Effort and
+  // the API keys rule, and separately that FR-3.1a's status line "is not
+  // visible". One finding, not two: the line was rendering with both its spans
+  // empty, because `auto` — the default — is reported by the server as
+  // `available: null` and the old lookup had no branch for that.
+  //
+  // **The space was never the bug, which is why this asserts content and not
+  // geometry.** `.source-status` carries `min-height: 1.2em`, so the blank row
+  // occupied exactly the height the filled one does — measured at 66.5px before
+  // and after the fix. A gap ceiling would have passed on the broken build. What
+  // a reader met was an unexplained *void*, and "is anything written here" is
+  // the only question that separates the two.
+  await page.goto('/');
+  await openSettingsTab(page, 'Source');
+  await page.selectOption('[data-action=provider]', 'auto');
+
+  // Which thing it says depends on what is signed in on this machine, so assert
+  // that it is not blank rather than pinning the words. Verified against the
+  // pre-fix build: this is the assertion that fails there.
+  const status = page.locator('.source-status .source-state');
+  await expect(status).not.toBeEmpty();
+
+  const box = await page.evaluate(() => {
+    const panel = document.querySelector('#settings-panel');
+    const effort = panel?.querySelector('[data-action=effort]')?.closest('.field');
+    const keys = panel?.querySelector('h3.eyebrow');
+    const line = panel?.querySelector('.source-status');
+    if (!effort || !keys || !line) throw new Error('Source panel not rendered as expected');
+    const spent = (sel: string): number => {
+      const el = panel?.querySelector(sel);
+      if (el === null || el === undefined) throw new Error(`${sel} must stay in the DOM`);
+      const cs = getComputedStyle(el);
+      return (
+        el.getBoundingClientRect().height + parseFloat(cs.marginTop) + parseFloat(cs.marginBottom)
+      );
+    };
+    return {
+      lineTop: line.getBoundingClientRect().top,
+      effortBottom: effort.getBoundingClientRect().bottom,
+      keysTop: keys.getBoundingClientRect().top,
+      fields: spent('.source-fields'),
+      effortNote: spent('.effort-note'),
+    };
+  });
+
+  // The filled line is *in* the band, so "not empty" cannot be satisfied by text
+  // rendered somewhere else on the tab.
+  expect(box.lineTop).toBeGreaterThan(box.effortBottom);
+  expect(box.lineTop).toBeLessThan(box.keysTop);
+
+  // A separate guard for a different regression, and measured per-container
+  // rather than as a gap: the band's height legitimately varies with what the
+  // status line says (once checks have run it also carries "last check via …",
+  // which wraps at this width — 66px alone, 87px later in the suite). What must
+  // not vary is these two. They are always-present containers holding nothing
+  // here, collapsed by `:empty { display: none }`, and the first padding or
+  // margin added to either would open a real hole with nothing naming the cause.
+  expect(box.fields, '.source-fields must collapse when empty').toBe(0);
+  expect(box.effortNote, '.effort-note must collapse when empty').toBe(0);
+  // …and they must not be *deleted* to achieve that, which would reintroduce the
+  // morph bugs docs/3-ui.md keeps them for.
+  await expect(page.locator('.source-fields')).toHaveCount(1);
+  await expect(page.locator('.effort-note')).toHaveCount(1);
+
+  await closeSettings(page);
+});
+
 test('the effort dropdown persists, and is disabled only where it does nothing (NEWS-189)', async ({ page }) => {
   await page.goto('/');
   await openSettingsTab(page, 'Source');
