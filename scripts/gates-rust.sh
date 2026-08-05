@@ -28,6 +28,18 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
+# Tell the caller what we decided, if it asked (NEWS-300).
+#
+# `test-all.sh` prints a per-phase summary, and a summary that says "rust: ran"
+# when this script self-skipped would be the exact lie the summary exists to
+# prevent. One word to a file the caller names — no coupling on our stdout, and
+# nothing happens when the variable is unset.
+rust_verdict() {
+  if [ -n "${RUST_GATE_VERDICT_FILE:-}" ]; then
+    printf '%s' "$1" > "$RUST_GATE_VERDICT_FILE"
+  fi
+}
+
 # Explicit opt-out, for a CI job that has a *sibling* job doing this properly.
 #
 # `ci.yml` runs the Rust gates in a dedicated job that installs the webkit/glib
@@ -39,6 +51,7 @@ cd "$(dirname "$0")/.."
 if [ "${RUST_GATES:-}" = "skip" ]; then
   echo "== rust gates SKIPPED (RUST_GATES=skip) =="
   echo "   Set by a caller that runs them elsewhere — ci.yml's dedicated rust job."
+  rust_verdict "skipped (RUST_GATES=skip)"
   exit 0
 fi
 
@@ -63,6 +76,7 @@ if [ "${RUST_GATES:-}" != "required" ] && [ -z "${CI:-}" ]; then
     echo "!! cargo fmt, clippy (debug), clippy (release) and cargo test did NOT run."
     echo "!! Force them with:  RUST_GATES=required npm run gates:rust"
     echo "!! CI runs them unconditionally in its dedicated rust job, so a violation still surfaces there."
+    rust_verdict "skipped (nothing Rust-adjacent changed)"
     exit 0
   fi
 fi
@@ -74,6 +88,7 @@ if ! command -v cargo >/dev/null 2>&1; then
   fi
   echo "!! cargo not found — SKIPPING the Rust gates."
   echo "!! CI still runs them, so a formatting or clippy error will surface there."
+  rust_verdict "skipped (no cargo on this machine)"
   exit 0
 fi
 
@@ -92,3 +107,5 @@ cargo clippy --manifest-path src-tauri/Cargo.toml --release --all-targets -- -D 
 
 echo "== cargo test =="
 cargo test --manifest-path src-tauri/Cargo.toml
+
+rust_verdict "ran"
