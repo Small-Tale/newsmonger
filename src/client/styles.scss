@@ -615,6 +615,28 @@ h2.eyebrow {
       filter: brightness(1.08);
     }
   }
+
+  // The marked-but-not-final destructive variant (NEWS-304).
+  //
+  // There was nothing between neutral `.btn` and `.btn.danger-solid`, the filled
+  // red the confirm dialog uses for its point of no return. So `Clear all
+  // stories` — which deletes every story in every topic — rendered identically
+  // to `Back up now` directly above it, and `class="btn danger"` on the restore
+  // control was a class the stylesheet had never defined, silently plain.
+  //
+  // Outline rather than fill, deliberately: both users of this *open* a confirm.
+  // They have to read as consequential without matching the weight of the
+  // irreversible button on the other side of that dialog, or the escalation
+  // stops meaning anything.
+  &.danger {
+    color: #b4442f;
+    border-color: rgba(180, 68, 47, 0.45);
+
+    &:hover:not(:disabled) {
+      border-color: #b4442f;
+      background: var(--error-bg);
+    }
+  }
 }
 
 .chip {
@@ -1647,9 +1669,20 @@ h2.eyebrow {
   }
 }
 
+// The danger ink is a light-mode red; on the dark page it drops below a legible
+// contrast, so both controls that carry it lift to the same lighter tint.
 @media (prefers-color-scheme: dark) {
   .menu-item.danger {
     color: #e08a72;
+  }
+
+  .btn.danger {
+    color: #e08a72;
+    border-color: rgba(224, 138, 114, 0.45);
+
+    &:hover:not(:disabled) {
+      border-color: #e08a72;
+    }
   }
 }
 
@@ -2078,7 +2111,8 @@ h2.eyebrow {
 // Clear all stories (NEWS-255). Plain, not boxed like `.restore-row`: it is
 // destructive but far less so — topics, settings and keys all survive — and
 // making every dangerous-ish control shout the same way teaches people to stop
-// reading them.
+// reading them. It gets its weight from its own `Reset` section and the `danger`
+// button variant instead (NEWS-304), which is a level quieter than a box.
 .clear-row {
   margin: 14px 0 0;
 

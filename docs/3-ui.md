@@ -151,6 +151,24 @@ Promoting call sites one at a time is how a variant nobody can press survives, s
 
 Tested in two places because the two halves live in different worlds: the resting edge by computed style in `layout.spec.ts` (a class assertion would pass while the border was gone), and the disabled rule in `tests/unit/subtle-button.test.ts` against the stylesheet — every subtle control that *can* be disabled is desktop-only, so the browser E2E build has none to point a camera at.
 
+### A variant the stylesheet never defined (NEWS-304)
+
+`class="btn danger"` was on the restore-backup control, and **`.btn.danger` did not exist**. The extra class is inert, so the button rendered as a plain `.btn`.
+
+Nothing failed, and nothing could: the markup expressed the intent, the browser ignored it, and the *design review* then recorded the app as already having a danger variant — citing that call site as the evidence — while looking at a neutral button. A class name that reads as a decision in the JSX and is a no-op on screen is worse than the NEWS-133 `icon-btn` case, where the fallback was at least visible.
+
+There are now three weights, and the middle one is the new part:
+
+| | |
+|---|---|
+| `.btn` | neutral |
+| `.btn.danger` | marked — red ink, tinted hairline, no fill. For controls that *open* a confirm |
+| `.btn.danger-solid` | filled red. The confirm dialog's point of no return |
+
+`danger` is outline rather than fill on purpose: both its users open a confirm, so matching the weight of the irreversible button on the other side of that dialog would flatten the escalation to nothing. The ink lifts to a lighter tint in dark mode, the same value `.menu-item.danger` already used.
+
+**`tests/unit/button-variants.test.ts` reads the variants out of `app.tsx` and requires each to be styled somewhere it can reach a button.** "Appears in the stylesheet" is the obvious check and is wrong in exactly the way that hid this: `danger` *did* appear — as `.menu-item.danger`, and as `&.danger` inside `.chip`. Both style a `danger` that is not a button's. The test is pinned against the pre-fix stylesheet, where it fails on `danger` and passes on all five other variants.
+
 ### New controls must reuse the established classes (NEWS-133/134/135)
 
 Three visual bugs shipped in the discovery dialog at once, and all three were the same mistake: inventing markup instead of reusing what the rest of the app already has.

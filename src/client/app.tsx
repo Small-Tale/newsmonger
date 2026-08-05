@@ -2460,19 +2460,6 @@ function settingsPanelJsx(s: AppState): SafeHtml {
           your topics, settings and stories — after a check, at most once an hour. Leave it empty to turn backups
           off. <strong>Your API keys are never included</strong>; they stay in your {s.keychainLabel}.
         </p>
-        {/* Clear all stories (NEWS-255). Stories only — topics, settings and
-            keys all stay, which is what the label has to convey, because
-            "clear data" beside a backup control reads like a factory reset. */}
-        <div class="clear-row">
-          <button class="btn" type="button" data-action="clear-stories" disabled={s.feedTotal === 0}>
-            {icon('clear', 15)} Clear all stories
-          </button>
-          <p class="note">
-            Deletes every story from every topic. <strong>Your topics, settings and API keys stay.</strong> Each topic
-            starts covering news again from a sensible window on its next check, so this is a fresh start rather than a
-            hole in your history.
-          </p>
-        </div>
         {/* Restore (NEWS-252). Always-present container so the panel doesn't
             restructure when a backup is found (docs/3-ui.md). Offered only when
             there is something to restore — an empty folder needs no button, and
@@ -2510,6 +2497,36 @@ function settingsPanelJsx(s: AppState): SafeHtml {
           <code>?scope=saved</code> for bookmarks only). It works from this machine — the app listens on
           localhost, so a reader on another device can’t reach it.
         </p>
+
+        {/* Clear all stories (NEWS-255). Stories only — topics, settings and
+            keys all stay, which is what the label has to convey, because
+            "clear data" beside a backup control reads like a factory reset.
+
+            Its own group at the foot of the tab (NEWS-304). It used to sit
+            *inside* Backup, between the "point this at an iCloud Drive…"
+            paragraph and the "the database stays on this machine" one — two
+            paragraphs about backup with an irreversible delete wedged between
+            them. That cost both directions at once: nobody scans a BACKUP
+            heading looking for how to wipe their stories, and anyone reading
+            about backup met a destructive button whose meaning had to come
+            entirely from its own four words.
+
+            "Reset" rather than "Danger zone": the group holds one action, and
+            that action explicitly keeps your topics, settings and keys. Reset
+            is what someone hunting for it would scan for, and the `danger`
+            variant on the button carries the warning the eyebrow would be
+            overstating. */}
+        <h3 class="eyebrow">Reset</h3>
+        <div class="clear-row">
+          <button class="btn danger" type="button" data-action="clear-stories" disabled={s.feedTotal === 0}>
+            {icon('clear', 15)} Clear all stories
+          </button>
+          <p class="note">
+            Deletes every story from every topic. <strong>Your topics, settings and API keys stay.</strong> Each topic
+            starts covering news again from a sensible window on its next check, so this is a fresh start rather than a
+            hole in your history.
+          </p>
+        </div>
 
         </div>
       );

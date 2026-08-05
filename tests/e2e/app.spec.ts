@@ -1870,7 +1870,35 @@ test('clear all stories, keeping topics and settings (NEWS-255)', async ({ page 
   await expect(page.locator('.item').first()).toBeVisible({ timeout: 15_000 });
 
   await openSettingsTab(page, 'Data');
-  await page.locator('[data-action=clear-stories]').click();
+
+  // Where it lives and what it looks like, before what it does (NEWS-304).
+  //
+  // It used to sit inside the Backup group, between two paragraphs about backup,
+  // styled `class="btn"` — identical to `Back up now` directly above it. Both
+  // halves are asserted here because either one alone leaves the bug: a correctly
+  // sectioned button that looks benign is still stumbled into, and a red button
+  // filed under BACKUP is still unfindable.
+  const clear = page.locator('[data-action=clear-stories]');
+  // The heading immediately above it is its own, not Backup's or Feed's…
+  await expect(page.locator('.clear-row').locator('xpath=preceding-sibling::h3[1]')).toHaveText('Reset');
+  // …and it is the last group on the tab, which is where a destructive action
+  // belongs and, more to the point, is not somewhere a reader passes through.
+  await expect(page.locator('.dialog h3.eyebrow').last()).toHaveText('Reset');
+  // Marked, and distinct from the neutral button it used to be a twin of.
+  // Computed colour rather than class name, for the NEWS-266 reason: the class
+  // `danger` was on the restore control for a release *without the stylesheet
+  // ever defining `.btn.danger`*, so asserting the class proves nothing.
+  const inks = await page.evaluate(() => {
+    const read = (sel: string): string => {
+      const el = document.querySelector(sel);
+      if (el === null) throw new Error(`${sel} not rendered`);
+      return getComputedStyle(el).color;
+    };
+    return { clear: read('[data-action=clear-stories]'), backup: read('[data-action=backup-now]') };
+  });
+  expect(inks.clear, 'the destructive button must not share the neutral ink').not.toBe(inks.backup);
+
+  await clear.click();
   // Names what survives, because the fear this dialog answers is "am I about to
   // lose my topics too".
   const confirmDialog = page.locator('.dialog.confirm');
