@@ -13,10 +13,10 @@ import type { NewsItem } from '../../src/db/schemas.js';
  * still rendering rows whose database rows have been deleted. A clear that
  * visibly leaves a story on screen is the reported bug one layer up.
  */
-function item(id: string): NewsItem {
+function item(id: string, topicId = 't1'): NewsItem {
   return {
     id,
-    topicId: 't1',
+    topicId,
     title: `Story ${id}`,
     summary: 's',
     sources: [],
@@ -107,6 +107,122 @@ describe('clearStoryOverlays (NEWS-291)', () => {
     // the whole state object.
     const before = appStore.state.value;
     appStore.actions.clearStoryOverlays();
+    const after = appStore.state.value;
+    expect(after.topics).toBe(before.topics);
+    expect(after.settings).toBe(before.settings);
+    expect(after.selectedTopicIds).toBe(before.selectedTopicIds);
+  });
+});
+
+/**
+ * The same rule narrowed to one topic (NEWS-303).
+ *
+ * The per-topic clear — rename-with-clear — had no cleanup at all, so the bug
+ * NEWS-273 fixed app-wide survived here at one topic's scale.
+ *
+ * These tests are mostly about what the action must **not** touch. Reusing
+ * `clearStoryOverlays()` would have passed every "the flagged row is gone"
+ * assertion while throwing away state the clear did not invalidate — another
+ * topic's flagged story, a review of a topic that still has flagged stories, an
+ * expanded card belonging somewhere else. Wiping state an action did not
+ * invalidate is the same class of untruth as leaving state it did, so the
+ * negative assertions are the point rather than the padding.
+ */
+describe('clearStoryOverlaysForTopic (NEWS-303)', () => {
+  beforeEach(() => {
+    appStore.actions.update({
+      recentlyFlaggedItems: [],
+      reviewTopicIds: [],
+      feedLimit: FEED_PAGE,
+      feedItems: [],
+      expandedItemId: null,
+      threadShowAll: false,
+      threadPanes: {},
+    });
+  });
+
+  it('drops the cleared topic’s flagged rows and keeps every other topic’s', () => {
+    appStore.actions.addRecentlyFlagged(item('i1', 't1'));
+    appStore.actions.addRecentlyFlagged(item('i2', 't2'));
+
+    appStore.actions.clearStoryOverlaysForTopic('t1');
+
+    expect(appStore.state.value.recentlyFlaggedItems.map((i) => i.id)).toEqual(['i2']);
+  });
+
+  it('leaves review mode only when the cleared topic was the last one under review', () => {
+    appStore.actions.setReviewTopicIds(['t1', 't2']);
+    appStore.actions.clearStoryOverlaysForTopic('t1');
+    expect(appStore.state.value.reviewTopicIds).toEqual(['t2']);
+
+    appStore.actions.clearStoryOverlaysForTopic('t2');
+    expect(appStore.state.value.reviewTopicIds).toEqual([]);
+  });
+
+  it('collapses an expanded card only when the card belonged to the cleared topic', () => {
+    // Membership is read from `feedItems` and the overlay, which both carry
+    // `topicId`. An expanded card the client cannot place is left alone — the
+    // action's job is to stop describing stories it knows are gone, not to guess.
+    appStore.actions.update({ feedItems: [item('i1', 't1'), item('i2', 't2')] });
+
+    appStore.actions.toggleItemExpanded('i2');
+    appStore.actions.showAllThread();
+    appStore.actions.clearStoryOverlaysForTopic('t1');
+    expect(appStore.state.value.expandedItemId, 'other topic’s card stays open').toBe('i2');
+    expect(appStore.state.value.threadShowAll).toBe(true);
+
+    appStore.actions.clearStoryOverlaysForTopic('t2');
+    expect(appStore.state.value.expandedItemId).toBeNull();
+    expect(appStore.state.value.threadShowAll).toBe(false);
+  });
+
+  it('evicts thread panes for the cleared topic’s stories only', () => {
+    appStore.actions.update({ feedItems: [item('i1', 't1'), item('i2', 't2')] });
+    appStore.actions.setThreadPane('i1', { status: 'ready', items: [], size: 2 });
+    appStore.actions.setThreadPane('i2', { status: 'ready', items: [], size: 2 });
+
+    appStore.actions.clearStoryOverlaysForTopic('t1');
+
+    expect(Object.keys(appStore.state.value.threadPanes)).toEqual(['i2']);
+  });
+
+  it('keeps the feed page the user paged to', () => {
+    // Unlike the app-wide clear. "Show more" spans every topic, so one topic's
+    // clear is no reason to collapse a view the user opened across all of them.
+    appStore.actions.showMoreFeed();
+    const paged = appStore.state.value.feedLimit;
+    expect(paged).toBeGreaterThan(FEED_PAGE);
+
+    appStore.actions.clearStoryOverlaysForTopic('t1');
+
+    expect(appStore.state.value.feedLimit).toBe(paged);
+  });
+
+  it('is safe on a topic with nothing on screen, and repeatable', () => {
+    appStore.actions.addRecentlyFlagged(item('i1', 't1'));
+
+    appStore.actions.clearStoryOverlaysForTopic('t9');
+    expect(appStore.state.value.recentlyFlaggedItems).toHaveLength(1);
+
+    appStore.actions.clearStoryOverlaysForTopic('t1');
+    appStore.actions.clearStoryOverlaysForTopic('t1');
+    expect(appStore.state.value.recentlyFlaggedItems).toEqual([]);
+  });
+
+  it('survives flag → clear → flag again on the same topic', () => {
+    // The sequence a wholesale-wipe implementation gets right and a stale-set
+    // one does not: the second flag must land in an overlay the first clear
+    // emptied, not be swallowed by a remembered id.
+    appStore.actions.addRecentlyFlagged(item('i1', 't1'));
+    appStore.actions.clearStoryOverlaysForTopic('t1');
+    appStore.actions.addRecentlyFlagged(item('i3', 't1'));
+
+    expect(appStore.state.value.recentlyFlaggedItems.map((i) => i.id)).toEqual(['i3']);
+  });
+
+  it('does not disturb the topics or settings it sits beside', () => {
+    const before = appStore.state.value;
+    appStore.actions.clearStoryOverlaysForTopic('t1');
     const after = appStore.state.value;
     expect(after.topics).toBe(before.topics);
     expect(after.settings).toBe(before.settings);

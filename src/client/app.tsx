@@ -3708,6 +3708,11 @@ async function loadMoreSuggestions(): Promise<void> {
  */
 async function saveRename(id: string, name: string, clearItems: boolean): Promise<void> {
   try {
+    // Before the request, not after (NEWS-303, following NEWS-291's rule for the
+    // app-wide clear): `renameTopic` refreshes state and feed itself, so
+    // clearing afterwards leaves a frame in which the emptied feed renders with
+    // the stale overlay still merged into it.
+    if (clearItems) appStore.actions.clearStoryOverlaysForTopic(id);
     await renameTopic(id, name, clearItems);
     const cleared = clearItems ? (appStore.state.value.renameItemCount ?? 0) : 0;
     appStore.actions.closeRename();
@@ -3734,6 +3739,23 @@ async function saveRename(id: string, name: string, clearItems: boolean): Promis
  * still showing them, and answering with the red banner reserved for real
  * failures would read as "something broke" rather than "you were too slow". It
  * replaces the toast with a plain one saying so.
+ *
+ * **A restored story that is still flagged does not come back into view, and
+ * that is correct** (NEWS-303). The clear now drops that topic's flagged-story
+ * overlay, so an undo puts the rows back in the database but not on the normal
+ * feed, which excludes off-topic stories everywhere else in the app.
+ *
+ * The alternative — having the undo re-seed the overlay — was rejected on both
+ * counts. It restores the wrong thing: this undoes the *clear*, not the *flag*,
+ * and a story that is still flagged belongs where flagged stories live. Review
+ * mode shows it and the sidebar badge counts it, so nothing is lost, only filed.
+ * And it is not free: `POST /api/topics/:id/restore-cleared` answers with a
+ * count, so the client would need the route to return the items — a server-shape
+ * change to re-show rows the user has since acted on twice.
+ *
+ * What the overlay promises is that the row you *just* flagged stays put so a
+ * misclick is reversible (NEWS-61). It has never promised to survive arbitrary
+ * later actions on the topic.
  */
 async function undoClear(id: string): Promise<void> {
   try {

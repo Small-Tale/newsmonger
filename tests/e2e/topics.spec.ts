@@ -740,6 +740,66 @@ test('a cleared topic can be undone from the toast (NEWS-145)', async ({ page })
   await topicAction(page, page.locator('.topic', { hasText: 'Undone' }), 'delete');
 });
 
+test('clearing a topic takes its just-flagged rows with it (NEWS-303)', async ({ page }) => {
+  // `recentlyFlaggedItems` is a client-owned overlay of stories flagged this
+  // session, merged into the feed so a misclick stays undoable (NEWS-61). The
+  // server does not know it exists, so `refreshState` cannot empty it — and the
+  // per-topic clear never did. Flag a story, clear that topic, and the flagged
+  // row went on rendering over a feed whose database rows were gone.
+  //
+  // NEWS-273 fixed the app-wide clear and left this one, so the shape of the bug
+  // was already known; what needed deciding was the interaction with undo.
+  await page.goto('/');
+  await page.fill('.add-topic input', 'Flag Then Clear');
+  await page.press('.add-topic input', 'Enter');
+  const row = page.locator('.topic', { hasText: 'Flag Then Clear' });
+  await expect(row).toBeVisible();
+
+  const cards = page.locator('.item:not(.flagged-row)', {
+    has: page.locator('.item-topic', { hasText: 'Flag Then Clear' }),
+  });
+  await expect(cards).toHaveCount(2, { timeout: 15_000 });
+
+  await cards.first().click({ button: 'right' });
+  await page.locator('[data-item-menu-action=flag]').click();
+  const flaggedRow = page.locator('.item.flagged-row', { hasText: 'Flag Then Clear' });
+  await expect(flaggedRow, 'the overlay is on screen, or this asserts nothing').toHaveCount(1);
+
+  await topicAction(page, row, 'rename');
+  await page.fill('.dialog.rename input[name=topic-name]', 'Flag Then Cleared');
+  await page.check('.dialog.rename input[name=clear-items]');
+  await page.click('.dialog.rename button[type=submit]');
+  await expect(page.locator('.dialog.rename')).toHaveCount(0);
+
+  // The bug: this row survived the clear.
+  await expect(page.locator('.item.flagged-row')).toHaveCount(0);
+  await expect(page.locator('.item', { hasText: 'Flag Then Cleared' })).toHaveCount(0);
+
+  // The undo decision (NEWS-303), asserted rather than left implied. Restoring
+  // puts the rows back in the database, and the still-flagged one does *not*
+  // return to the normal feed — the undo reverses the clear, not the flag, and
+  // a flagged story is excluded from this view everywhere else in the app.
+  await page.locator('.toast .toast-undo').click();
+  await expect(page.locator('.toast')).toContainText('Stories restored');
+  const restored = page.locator('.item:not(.flagged-row)', {
+    has: page.locator('.item-topic', { hasText: 'Flag Then Cleared' }),
+  });
+  await expect(restored, 'the unflagged story comes back').toHaveCount(1);
+  await expect(page.locator('.item.flagged-row'), 'the flagged one stays filed as flagged').toHaveCount(0);
+
+  // …and it is genuinely restored, not lost: review mode is where flagged
+  // stories live, and it finds it. This is the assertion that makes the decision
+  // defensible rather than a shrug.
+  const cleared = page.locator('.topic', { hasText: 'Flag Then Cleared' });
+  await cleared.click({ button: 'right' });
+  await page.locator('[data-menu-action=review-flagged]').click();
+  await expect(page.locator('.banner.review')).toBeVisible();
+  await expect(page.locator('.item')).toHaveCount(1);
+  await page.locator('[data-action=exit-review]').click();
+
+  await topicAction(page, cleared, 'delete');
+});
+
 test('a plain toast offers no undo, and does not block clicks (NEWS-145)', async ({ page }) => {
   // `.toast` is `pointer-events: none` precisely so a transient notice can't
   // swallow a click meant for the page; only the actionable one opts back in.

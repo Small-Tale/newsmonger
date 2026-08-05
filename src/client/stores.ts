@@ -844,6 +844,44 @@ export const appStore = defineStore({
         threadPanes: {},
       });
     },
+    /**
+     * The same rule as `clearStoryOverlays`, narrowed to one topic (NEWS-303).
+     *
+     * The per-topic clear — rename-with-clear, `PATCH /api/topics/:id` — had no
+     * cleanup at all, so flagging a story and then clearing that topic left the
+     * flagged row rendering over a feed whose database rows were gone. NEWS-273
+     * fixed the app-wide clear and left this one; same bug, one topic's worth.
+     *
+     * **Not `clearStoryOverlays()` with a different name.** A per-topic clear
+     * deletes exactly one topic's stories, so dropping every topic's overlay
+     * would throw away rows the action did not touch: another topic's
+     * just-flagged story, a review of a topic still holding flagged stories, an
+     * expanded card belonging to somewhere else. Wiping state an action did not
+     * invalidate is the same class of untruth as leaving state it did.
+     *
+     * Which is why membership is read from `feedItems` and the overlay rather
+     * than taken from the server: both carry `topicId`, and the question here is
+     * only *which of the stories the client is currently describing belonged to
+     * that topic*. `feedLimit` is deliberately **not** reset — the user's "show
+     * more" spans every topic, and one topic's clear is no reason to undo it.
+     */
+    clearStoryOverlaysForTopic: (topicId: string) => {
+      const s = get();
+      const gone = new Set(
+        [...s.feedItems, ...s.recentlyFlaggedItems].filter((i) => i.topicId === topicId).map((i) => i.id),
+      );
+      const collapsing = s.expandedItemId !== null && gone.has(s.expandedItemId);
+      set({
+        ...s,
+        recentlyFlaggedItems: s.recentlyFlaggedItems.filter((i) => i.topicId !== topicId),
+        // Emptying this list is what leaves review mode, which is right when the
+        // only topic under review has just lost every story it had to show.
+        reviewTopicIds: s.reviewTopicIds.filter((id) => id !== topicId),
+        expandedItemId: collapsing ? null : s.expandedItemId,
+        threadShowAll: collapsing ? false : s.threadShowAll,
+        threadPanes: Object.fromEntries(Object.entries(s.threadPanes).filter(([id]) => !gone.has(id))),
+      });
+    },
     setReviewTopicIds: (reviewTopicIds: string[]) => {
       set({ ...get(), reviewTopicIds, feedLimit: FEED_PAGE, expandedItemId: null });
     },

@@ -38,6 +38,18 @@ Guidance (FR-18) has been editable since it shipped; this doc covers the **name*
 
 - **FR-25.9** *(Shipped)* **The rename is applied before the clear.** A name collision rejects before anything is deleted — a 409 that had already discarded the stories would be the worst outcome this route could produce. Pinned by a test.
 
+- **FR-25.10** *(Shipped, NEWS-303)* **The clear drops that topic's client-only story state, and only that topic's.**
+
+  `recentlyFlaggedItems` holds full copies of stories flagged this session, merged into the feed so a misclick stays reversible ([FR-15.3](15-off-topic-flagging.md), NEWS-61). The *client* owns it, so `refreshState` cannot empty it — flag a story, clear that topic, and the flagged row went on rendering over a feed whose database rows were gone. NEWS-273 fixed this for the app-wide clear (FR-27.11) and left this one; same bug, one topic's worth.
+
+  `clearStoryOverlaysForTopic(topicId)` in `src/client/stores.ts`, called **before** the request — `renameTopic` refreshes state and feed itself, so clearing afterwards leaves a frame in which the emptied feed renders with the stale overlay still merged in.
+
+  **Not the app-wide action under another name.** A per-topic clear deletes exactly one topic's stories, so wiping every topic's overlay would throw away state the action did not invalidate: another topic's just-flagged story, a review of a topic that still holds flagged stories, an expanded card belonging elsewhere. Wiping state an action did not invalidate is the same class of untruth as leaving state it did. Membership comes from `feedItems` and the overlay, which both carry `topicId` — the question is only which of the stories the client is *currently describing* belonged to that topic, so no new server data is needed. `feedLimit` is deliberately not reset: "show more" spans every topic.
+
+  **An undo does not bring a still-flagged story back into view, and that is the decision, not an oversight.** The three options were: accept it, have the undo re-seed the overlay, or filter the overlay to items that still exist. The third is the nicest rule and needs the ids the slimmed `/api/state` does not carry (`latestItemIds` caps at 50) — scoping by topic gets its substance without them.
+
+  The second was rejected on two counts. It restores the wrong thing: an undo reverses the *clear*, not the *flag*, and a story that is still flagged belongs where flagged stories live — review mode shows it and the sidebar badge counts it, so nothing is lost, only filed. And it is not free: `POST /api/topics/:id/restore-cleared` answers with a count, so the route would have to start returning the items — a server-shape change to re-show rows the user has since acted on twice. What the overlay promises is that the row you *just* flagged stays put; it has never promised to survive arbitrary later actions on the topic.
+
 ### What renaming deliberately does *not* do
 
 - **The category is left alone.** A renamed topic keeps the section it was filed under, even though the classifier read the old name to choose it. Re-classifying automatically would silently move topics in the filter bar as a side effect of fixing a typo, and FR-22.7 already says a manual choice must survive. Reclassification is available on its own from the topic menu — see [22 — Topic Categories](22-topic-categories.md).
