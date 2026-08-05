@@ -27,7 +27,8 @@ import type { NewsItem } from '../db/schemas.js';
 import { outletFor, publishedLabel } from './attribution.js';
 import { dayKeyOf, dayLabel, relativeTime } from './dates.js';
 import { icon } from './icons.js';
-import type { ThreadPane } from './stores.js';
+import { menuStyle } from './menu-position.js';
+import type { AppState, ThreadPane } from './stores.js';
 import {
   showAllLabel,
   threadBadge,
@@ -393,4 +394,48 @@ export function feedJsx(
       )}
     </section>
   ));
+}
+
+/**
+ * A story's context menu (NEWS-297).
+ *
+ * Here rather than in `topics-view.tsx` with the *topic* menu, though the two
+ * are siblings in shape and were neighbours in `app.tsx`. This one's items are
+ * the actions of a card — bookmark, share, flag — so it belongs to the view that
+ * draws the card. Grouping the two menus together would have been grouping by
+ * *kind*, which is the thing this split is not doing.
+ */
+/** Right-click menu for a story card: bookmark, share, and the off-topic flag. */
+export function itemMenuJsx(menu: NonNullable<AppState['itemMenu']>, items: NewsItem[]): SafeHtml {
+  const item = items.find((i) => i.id === menu.itemId);
+  if (item === undefined) return <div id="item-menu-empty" />;
+  // A flagged story only offers Unflag — bookmarking or sharing something you've
+  // marked as noise makes no sense (NEWS-70).
+  return (
+    <div class="menu-backdrop" data-action="close-item-menu">
+      <div class="menu" role="menu" style={menuStyle(menu.x, menu.y, window.innerWidth, window.innerHeight)}>
+        {item.offTopic ? (
+          ''
+        ) : (
+          <button class="menu-item" role="menuitem" type="button" data-item-menu-action="bookmark">
+            {icon('bookmark')}
+            <span>{item.saved ? 'Remove bookmark' : 'Bookmark'}</span>
+          </button>
+        )}
+        {item.offTopic ? (
+          ''
+        ) : (
+          <button class="menu-item" role="menuitem" type="button" data-item-menu-action="share">
+            {icon('share')}
+            <span>Share</span>
+          </button>
+        )}
+        {item.offTopic ? '' : <div class="menu-sep" role="separator" />}
+        <button class="menu-item" role="menuitem" type="button" data-item-menu-action="flag">
+          {icon('flag')}
+          <span>{item.offTopic ? 'Unflag off topic' : 'Flag: Off topic'}</span>
+        </button>
+      </div>
+    </div>
+  );
 }
