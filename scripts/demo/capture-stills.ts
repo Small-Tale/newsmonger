@@ -387,24 +387,73 @@ interface Server {
  * answering there. `READY_RE` tracks the marker in `src/cli.ts`, which
  * `src-tauri/src/lib.rs` also depends on.
  */
+/**
+ * A port the OS says is free, and that `fetch` will actually talk to
+ * (NEWS-285).
+ *
+ * The demo servers used to take whatever `--port` fell forward to from 4187.
+ * The stills run holds **two** servers at once — the soaking scene's stays up
+ * while the others shoot — so the second landed on 4190, and every `fetch` to it
+ * died with `bad port`: **4190 is `sieve` on the WHATWG Fetch blocked-port
+ * list**, which undici enforces. A perfectly healthy server that no `fetch` may
+ * address, reported as a network error with no mention of the port.
+ *
+ * Binding to `0` sidesteps the whole class: the OS hands back an ephemeral port,
+ * which on every platform we run sits far above the highest blocked port
+ * (10080). The bind-close-reuse race is theoretical here — one process, two
+ * servers, seconds apart — and `--strict-port` turns a lost race into a loud
+ * failure rather than a silent fall-forward into the next blocked port.
+ */
+async function freePort(): Promise<number> {
+  const { createServer } = await import('node:net');
+  return new Promise<number>((res, rej) => {
+    const srv = createServer();
+    srv.on('error', rej);
+    srv.listen(0, '127.0.0.1', () => {
+      const addr = srv.address();
+      const port = typeof addr === 'object' && addr !== null ? addr.port : 0;
+      srv.close(() => {
+        if (port === 0) rej(new Error('could not find a free port'));
+        else res(port);
+      });
+    });
+  });
+}
+
 async function startServer(): Promise<Server> {
   // Never `~/.newsmonger` — this creates topics and runs checks, and that is
   // someone's real install.
   const dataDir = mkdtempSync(resolve(tmpdir(), 'newsmonger-stills-'));
+  const port = await freePort();
   const proc = spawn(
-    resolve(ROOT, 'node_modules/.bin/tsx'),
-    ['src/cli.ts', '--demo', '--no-open', '--data-dir', dataDir],
+    // `node --import tsx/esm`, not the `tsx` CLI (NEWS-285, following NEWS-299).
+    // Same loader, same source; the CLI additionally opens a unix socket to talk
+    // to its own child, which a command sandbox refuses. Demo capture cannot run
+    // sandboxed anyway (Chromium needs a Mach port, NEWS-311), but leaving the
+    // one remaining CLI spawn here is how the rule gets forgotten.
+    process.execPath,
+    ['--import', 'tsx/esm', 'src/cli.ts', '--demo', '--no-open', '--strict-port', '--port', String(port), '--data-dir', dataDir],
     { cwd: ROOT, stdio: ['ignore', 'pipe', 'pipe'] },
   );
 
-  const READY_RE = /running at (\S+)/;
+  // Accumulated, not matched per chunk (NEWS-285).
+  //
+  // `stdout` arrives in whatever pieces the pipe hands over, and a split inside
+  // the readiness URL matches a *truncated* one: a break after the colon yields
+  // `http://127.0.0.1:` and every later fetch dies with `bad port`. Intermittent
+  // by nature — it depends on where the kernel breaks the buffer — which is why
+  // it survived a working `--only feed` run and failed on the full set minutes
+  // later.
+  const READY_RE = /running at (\S+)\s/;
   let base = '';
+  let out = '';
   let exited = false;
   proc.on('exit', () => {
     exited = true;
   });
   proc.stdout.on('data', (d: Buffer) => {
-    const m = READY_RE.exec(d.toString());
+    out += d.toString();
+    const m = READY_RE.exec(out);
     if (m?.[1] !== undefined && base === '') base = m[1];
   });
   proc.stderr.on('data', (d: Buffer) => process.stderr.write(`[server] ${d.toString()}`));

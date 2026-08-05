@@ -40,6 +40,11 @@ const SPAWNERS = [
   'scripts/test-all.sh',
   'scripts/gate-quick.sh',
   'src-tauri/src/lib.rs',
+  // The demo captures spawn a server too. They cannot run sandboxed regardless
+  // (Chromium needs a Mach port, NEWS-311), but the one remaining `tsx` CLI
+  // spawn in the tree was here — which is how a rule stops being one.
+  'scripts/demo/capture-stills.ts',
+  'scripts/demo/capture-demo.ts',
 ];
 
 /**
