@@ -3,17 +3,7 @@ import { delegate, each, effect, mount } from 'kerfjs';
 
 import type { Effort,ProviderName  } from '../ai/types.js';
 import { PROVIDER_MODELS } from '../ai/types.js';
-import {
-  BUILTIN_CATEGORIES,
-  findCategory,
-  hasUncategorized,
-  NO_SUBCATEGORY_FILTER,
-  UNCATEGORIZED_FILTER,
-  UNCATEGORIZED_LABEL,
-  visibleCategories,
-  visibleSubcategories,
-} from '../categories.js';
-import type { NewsItem, Topic } from '../db/schemas.js';
+import type { NewsItem } from '../db/schemas.js';
 import {
   addSuggestedTopic,
   addTopic,
@@ -72,6 +62,7 @@ import { discoverDialogJsx } from './discover-view.js';
 import { correctedEffort } from './effort-options.js';
 import { currentFailure } from './failure.js';
 import { feedJsx, itemMenuJsx } from './feed.js';
+import { filterBarJsx } from './filter-bar.js';
 import { icon } from './icons.js';
 import { correctedModel } from './model-choice.js';
 import { ensureNotificationPermission, sendTestNotification } from './notifications.js';
@@ -159,100 +150,6 @@ function raiseToast(toast: ToastState, ms: number): void {
 
 
 
-/**
- * The section filter bar (NEWS-97) — a newspaper's section navigation.
- *
- * Two rows, and the second is deliberately styled unlike the first: the top row
- * is the masthead's sections, the sub-row is that section's subsections. Same
- * shape a newspaper uses, and it keeps "which level am I on" legible without a
- * label saying so.
- *
- * The sub-row only appears once a category is selected — 11 categories plus
- * their ~60 subcategories in one bar would be a wall rather than navigation.
- */
-function filterBarJsx(selected: AppState['categoryFilter'], topics: readonly Topic[]): SafeHtml {
-  // Only sections something is filed under (NEWS-114) — a pill for a section
-  // nobody watches can only ever produce an empty feed.
-  const table = visibleCategories(BUILTIN_CATEGORIES, topics, selected?.category ?? null);
-  const current = selected === null ? null : findCategory(table, selected.category);
-  const subs =
-    current === undefined || current === null
-      ? []
-      : visibleSubcategories(BUILTIN_CATEGORIES, current.slug, topics, selected?.subcategory ?? null);
-  return (
-    <nav class="filter-bar" aria-label="Filter by section">
-      <div class="filter-row filter-row-top">
-        <button
-          class={`filter-pill${selected === null ? ' active' : ''}`}
-          type="button"
-          data-filter-category=""
-          aria-pressed={selected === null ? 'true' : 'false'}
-        >
-          All
-        </button>
-        {table.map((category) => (
-          <button
-            class={`filter-pill${selected?.category === category.slug ? ' active' : ''}`}
-            type="button"
-            data-filter-category={category.slug}
-            aria-pressed={selected?.category === category.slug ? 'true' : 'false'}
-          >
-            {category.label}
-          </button>
-        ))}
-        {/* Selects the absence of a category, which no table row can express —
-            hence a sentinel slug rather than an entry in the taxonomy. Shown
-            only when something is actually unclassified (NEWS-114). */}
-        {hasUncategorized(topics, selected?.category ?? null) ? (
-          <button
-            class={`filter-pill${selected?.category === UNCATEGORIZED_FILTER ? ' active' : ''}`}
-            type="button"
-            data-filter-category={UNCATEGORIZED_FILTER}
-            aria-pressed={selected?.category === UNCATEGORIZED_FILTER ? 'true' : 'false'}
-          >
-            {UNCATEGORIZED_LABEL}
-          </button>
-        ) : (
-          ''
-        )}
-      </div>
-      {/* Always present, even when empty: this sits above the keyed topics list,
-          and a row that comes and going would be a conditional sibling
-          (docs/3-ui.md). It also keeps the bar's height from jumping. */}
-      <div class="filter-row filter-row-sub">
-        {subs.length === 0
-          ? ''
-          : [
-              <button
-                class={`filter-subpill${selected?.subcategory === null ? ' active' : ''}`}
-                type="button"
-                data-filter-subcategory=""
-                aria-pressed={selected?.subcategory === null ? 'true' : 'false'}
-              >
-                All {current?.label ?? ''}
-              </button>,
-              ...subs.map((sub) => {
-                // A null slug is the "Other" pill — topics in this section with
-                // no subcategory. The sentinel travels in the attribute because
-                // an absence has no slug of its own (FR-22.6).
-                const value = sub.slug ?? NO_SUBCATEGORY_FILTER;
-                const active = (selected?.subcategory ?? '') === value;
-                return (
-                  <button
-                    class={`filter-subpill${active ? ' active' : ''}`}
-                    type="button"
-                    data-filter-subcategory={value}
-                    aria-pressed={active ? 'true' : 'false'}
-                  >
-                    {sub.label}
-                  </button>
-                );
-              }),
-            ]}
-      </div>
-    </nav>
-  );
-}
 
 
 /**
