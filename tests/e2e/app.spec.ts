@@ -487,12 +487,13 @@ test('whatever model is selected is one the provider offers (NEWS-253)', async (
   // field could not: a model belonging to the provider you just left can no
   // longer sit in the control waiting to fail on the next check.
   //
-  // The *correction* — rewriting a stored model that belongs elsewhere — needs
-  // a live catalogue to judge against, and `--ai-test` forces the mock
+  // Most of the *correction* — rewriting a stored model that belongs elsewhere
+  // — needs a live catalogue to judge against, and `--ai-test` forces the mock
   // provider, so `/api/models` answers empty here and the picker falls back to
-  // the static list. That path is unit-tested in `model-choice.test.ts`, where
-  // the catalogue can be chosen. What is assertable here is the invariant that
-  // holds either way, on every provider.
+  // the static list. Those paths are unit-tested in `model-choice.test.ts`,
+  // where the catalogue can be chosen. What is assertable here is the invariant
+  // that holds either way, on every provider — and, since NEWS-278, the
+  // cross-vendor case, which needs no catalogue and has its own test below.
   await page.goto('/');
   await openSettingsTab(page, 'Source');
 
@@ -508,6 +509,46 @@ test('whatever model is selected is one the provider offers (NEWS-253)', async (
   }
 
   // Leave the shared server as later specs expect.
+  await page.selectOption('[data-action=provider]', 'auto');
+  await closeSettings(page);
+});
+
+test('switching vendor replaces the other vendor’s model (NEWS-278)', async ({ page }) => {
+  // The reported flow exactly: on the ChatGPT (Codex) provider with a GPT model
+  // chosen, switch to the Claude subscription. `gpt-5.4-mini` stayed selected
+  // and listed above `opus`/`sonnet`/`haiku`/`fable`, and every check after that
+  // would have failed.
+  //
+  // This one *is* assertable here, unlike the rest of the correction: Claude
+  // Code publishes no catalogue by design (NEWS-243), which is why the old rule
+  // had nothing to judge against — and why the new rule judges by vendor
+  // instead, which needs no catalogue and so works under `--ai-test` too.
+  await page.goto('/');
+  await openSettingsTab(page, 'Source');
+
+  await page.selectOption('[data-action=provider]', 'codex-cli');
+  await expect(page.locator('[data-action=provider]')).toHaveValue('codex-cli', { timeout: 15_000 });
+  await page.selectOption('[data-action=model]', 'gpt-5.4-mini');
+  await expect(page.locator('[data-action=model]')).toHaveValue('gpt-5.4-mini');
+
+  await page.selectOption('[data-action=provider]', 'claude-cli');
+  await expect(page.locator('[data-action=provider]')).toHaveValue('claude-cli', { timeout: 15_000 });
+
+  const model = page.locator('[data-action=model]');
+  await expect(model, 'the small model of the vendor now selected').toHaveValue('haiku', { timeout: 15_000 });
+  // And it is gone from the list, not merely deselected — `modelOptions` keeps
+  // an unlisted *stored* value visible on purpose (FR-6.14), so the leftover
+  // would still have been sitting at the top of the menu if only the selection
+  // had moved.
+  const options = await page.locator('[data-action=model] option').allTextContents();
+  expect(options, 'the other vendor’s model is no longer offered').not.toContain('gpt-5.4-mini');
+
+  // The correction settles: reopening the tab must not PATCH again, or every
+  // provider refresh writes settings and each write triggers another refresh.
+  await closeSettings(page);
+  await openSettingsTab(page, 'Source');
+  await expect(page.locator('[data-action=model]')).toHaveValue('haiku');
+
   await page.selectOption('[data-action=provider]', 'auto');
   await closeSettings(page);
 });

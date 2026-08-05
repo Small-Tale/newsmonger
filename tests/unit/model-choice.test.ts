@@ -149,3 +149,73 @@ describe('correctedModel and the static fallback (NEWS-253)', () => {
     expect(correctedModel('openai', 'claude-opus-4-8', OPENAI, FALLBACK)).toBe('gpt-5.4-mini');
   });
 });
+
+describe('correctedModel across vendors, with no catalogue to judge by (NEWS-278)', () => {
+  // The reported bug: switch ChatGPT (Codex) → Claude subscription and
+  // `gpt-5.4-mini` stayed selected, listed above `opus`/`sonnet`/`haiku`/`fable`.
+  //
+  // Not a gap in the NEWS-253 rules so much as a consequence of one. Claude Code
+  // publishes **no catalogue** — deliberately, since it takes aliases the vendor
+  // resolves (NEWS-243) — so "only overrule against a live catalogue" found
+  // nothing to overrule against and left the setting alone. Every check after
+  // that would have failed.
+  //
+  // The new rule needs no catalogue: another *vendor's* own list names the
+  // model, so it demonstrably cannot run here.
+  const CLAUDE_CLI = ['opus', 'sonnet', 'haiku', 'fable'];
+  const CODEX = ['gpt-5.6-sol', 'gpt-5.5', 'gpt-5.4', 'gpt-5.4-mini'];
+
+  it('replaces a Codex model when switching to the Claude subscription', () => {
+    expect(correctedModel('claude-cli', 'gpt-5.4-mini', [], CLAUDE_CLI)).toBe('haiku');
+  });
+
+  it('replaces a Claude model when switching to Codex', () => {
+    expect(correctedModel('codex-cli', 'opus', [], CODEX)).toBe('gpt-5.4-mini');
+  });
+
+  it('leaves a model alone when the two providers are the same vendor', () => {
+    // `claude --model` takes a full name as well as an alias, so an Anthropic
+    // API model is a valid choice on the subscription and vice versa. This is
+    // the assertion that stops the fix becoming rule 4's failure mode — helping
+    // by destroying a setting that works.
+    expect(correctedModel('claude-cli', 'claude-opus-4-8', [], CLAUDE_CLI)).toBeNull();
+    expect(correctedModel('anthropic', 'haiku', [], ANTHROPIC)).toBeNull();
+    expect(correctedModel('openai', 'gpt-5.4-mini', [], OPENAI)).toBeNull();
+  });
+
+  it('leaves a model no catalogue names alone', () => {
+    // The gateway escape hatch (FR-6.14), untouched: an id nobody lists is not
+    // evidence of anything, and this rule fires only on positive evidence.
+    expect(correctedModel('claude-cli', 'my-gateway/custom-7b', [], CLAUDE_CLI)).toBeNull();
+    expect(correctedModel('codex-cli', 'some-unknown-model', [], CODEX)).toBeNull();
+  });
+
+  it('never fires for an endpoint-configurable provider', () => {
+    // OpenAI is the one provider that can be pointed at another server, which is
+    // precisely the case the cautious rule exists for. A base URL can serve
+    // anything, including a model listed under another vendor here.
+    expect(correctedModel('openai', 'claude-opus-4-8', [], OPENAI)).toBeNull();
+  });
+
+  it('prefers the live catalogue when there is one', () => {
+    const live = ['sonnet-9', 'haiku-9'];
+    expect(correctedModel('claude-cli', 'gpt-5.4-mini', live, CLAUDE_CLI)).toBe('haiku-9');
+  });
+
+  it('settles rather than correcting on every refresh', () => {
+    // The corrected value must itself need no correcting, or `applyModelCorrection`
+    // PATCHes settings on every provider refresh and each PATCH triggers another.
+    const first = correctedModel('claude-cli', 'gpt-5.4-mini', [], CLAUDE_CLI);
+    expect(first).toBe('haiku');
+    expect(correctedModel('claude-cli', first ?? '', [], CLAUDE_CLI)).toBeNull();
+  });
+
+  it('survives the round trip the user actually made', () => {
+    // Codex → Claude → Codex. Each hop lands on that vendor's small model rather
+    // than accumulating the provider before last.
+    const toClaude = correctedModel('claude-cli', 'gpt-5.4-mini', [], CLAUDE_CLI);
+    expect(toClaude).toBe('haiku');
+    const back = correctedModel('codex-cli', toClaude ?? '', [], CODEX);
+    expect(back).toBe('gpt-5.4-mini');
+  });
+});

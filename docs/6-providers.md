@@ -73,8 +73,17 @@ The **Responses API** with the hosted `web_search` tool (`client.responses.creat
   `src/client/model-choice.ts` holds the rules, pure and unit-tested:
 
   - **Nothing chosen gets filled in**, from the live catalogue or the static fallback. `''` ("provider default") is storable but *not representable* in a dropdown — leaving it would make the control display its first option while the setting said something else, which is a control lying about what is stored and precisely what NEWS-238 turned out to be.
-  - **A real choice is only overruled against a *live* catalogue.** The fallback is four entries and could never contain a gateway's own model id, so correcting against it would clobber exactly the setting free text existed for. No live list means no opinion.
+  - **Another vendor's model is replaced, catalogue or no catalogue** *(NEWS-278)*. See below — this rule is the exception to the next one, and it exists because the next one had a hole.
+  - **Otherwise a real choice is only overruled against a *live* catalogue.** The fallback is four entries and could never contain a gateway's own model id, so correcting against it would clobber exactly the setting free text existed for. No live list means no opinion.
   - **A valid choice is never touched.** Switching provider is not consent to change a model that still works.
+
+  **The hole the live-catalogue rule left** *(NEWS-278)*. Switching *ChatGPT (Codex) → Claude subscription* left `gpt-5.4-mini` selected, and listed above `opus`/`sonnet`/`haiku`/`fable`. Not a bug in that rule so much as a consequence of it: **Claude Code publishes no catalogue at all**, deliberately, because it takes aliases the vendor resolves (FR-6.14, NEWS-243). So there was nothing live to judge against, the cautious branch fired, and the setting was left as it was. Every check afterwards would have failed.
+
+  No catalogue is needed to know a GPT model will not run on a Claude subscription. The new rule asks a different question — **which vendor is this?** — and `claude-cli`/`anthropic` are two routes to Anthropic just as `codex-cli`/`openai` are two routes to OpenAI. Three guards keep it from becoming the over-helpful correction the third rule forbids:
+
+  - It fires only when **another provider's own list names the model**, so an id nobody lists is still nobody's business. That is the gateway escape hatch, untouched.
+  - It never fires **within a vendor**. `claude --model` takes a full name as well as an alias, so an Anthropic API model is a valid choice on the subscription, and correcting it would destroy a setting that works.
+  - It never fires for an **endpoint-configurable** provider. A base URL can serve anything, including a model listed under another vendor here — which is the exact case the cautious rule exists for, so OpenAI keeps it.
   - Correction runs only where a person can see it — after a provider change, and when the Source tab opens. Applying it in the background would change which model someone's checks use without them touching anything.
 
   **The default is the small model**: the most recent Haiku on the Claude paths, the mini on the OpenAI ones. Matched on a *family* token rather than a version, so unlike the hardcoded `claude-opus-4-8` of NEWS-243 it cannot go stale — `haiku` follows whatever the newest Haiku is — and it falls back to the newest model when nothing matches, so an unfamiliar catalogue still yields a usable answer. This deliberately reintroduces name matching that NEWS-243/248 removed; the difference is that *"the Haiku one"* has no definition other than its name, where *"the newest model"* had one.
