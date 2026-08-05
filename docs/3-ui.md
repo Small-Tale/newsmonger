@@ -411,6 +411,22 @@ Both are measured in `tests/e2e/layout.spec.ts` rather than eyeballed, and both 
 
   Pinned per tab in `tests/e2e/app.spec.ts` — positionally, since the defect was that a heading existed but was not *first*. A count of headings would have passed on all four tabs while three of them opened anonymously.
 
+- **FR-3.69** *(Shipped, NEWS-306)* **A settings control gets one line of hint. The reasoning behind it lives in `docs/`.**
+
+  Settings → Data was four controls and twenty lines of prose, and the prose won: every control was followed by a 2–4 line paragraph, so the eye could not move control to control and nothing signalled which lines were actionable. Measured against Settings → Schedule — same number of controls, one short hint each — it was **3.73× the prose height**, so the review's "three times the density of its sibling tabs" was very nearly exact. It is 2.41× now.
+
+  Three registers, and the distinction is what the line is *for*:
+
+  - **`.field-hint`** — one line, hint scale, answering the single question its control raises. "Bookmarked and flagged stories are kept whatever you choose here."
+  - **`.note`** — kept for statements that are not explanations. *"**Your API keys are never included** — they stay in your keychain"* answers *what am I about to sync to someone else's computer*, and *"**Your topics, settings and API keys stay**"* answers *am I about to lose my topics too*. Both are the reason someone presses the button or doesn't; demoting them with the explanations would have been the wrong half of the fix.
+  - **`<details class="why">`** — progressive disclosure for a question most readers never ask. The sync-corruption explanation is four lines answering *why is the snapshot a JSON file rather than the database*, and answering it unprompted, at full width, between a control and the next section is what made the tab read as documentation.
+
+  **Nothing was deleted, only relocated.** Every removed sentence was already written down: retention's exemptions in [FR-4.11](4-cli-server-storage.md), the Markdown/JSON split in [FR-21.3/21.4](21-export-and-feed.md), the backup cadence in [FR-27.6](27-data-location.md), and what a clear resets in [FR-27.11](27-data-location.md). The settings dialog was the second copy, and the longer one.
+
+  `.why` is **its own block**, not a selector added to `.advanced`. That one is a section-foot disclosure with a rule and 20px of clearance, tuned for the Diagnostics block; splicing this into it is the shape NEWS-161's layout test exists to catch.
+
+  The E2E measures Data's prose against **Schedule's**, not against a constant — Schedule was the review's own proof that this is fixable without losing the explanations, and a ratio moves if the app's prose register ever does. The ceiling fails on the reported build.
+
 ## Section filter bar (NEWS-97)
 
 The bar under the masthead is documented in [docs/22-topic-categories.md](./22-topic-categories.md) (FR-22.9–22.12). Two structural points belong here with the other kerf conventions:

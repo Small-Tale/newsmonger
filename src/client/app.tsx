@@ -2463,10 +2463,14 @@ function settingsPanelJsx(s: AppState): SafeHtml {
             ))}
           </select>
         </label>
-        <p class="note">
-          Older stories are dropped so the data file doesn’t grow without bound. Bookmarked stories are always
-          kept, and so are ones you flagged off-topic — those still teach each topic what you meant.
-        </p>
+        {/* One line at hint scale, not a paragraph at note scale (NEWS-306).
+            The tab was four controls and twenty lines of prose, and the prose
+            won — the eye could not move control to control because an
+            explanation sat between every pair. Every hint here answers the one
+            question its control raises and stops; the reasoning behind them
+            lives in docs/4-cli-server-storage.md and docs/27-data-location.md,
+            which is where it was already written down. */}
+        <p class="field-hint">Bookmarked and flagged stories are kept whatever you choose here.</p>
         <h3 class="eyebrow">Export</h3>
         {/* One button, one dialog (NEWS-158). Three fixed buttons covered three
             of the four scope × format combinations — "Saved only (.json)" simply
@@ -2481,9 +2485,7 @@ function settingsPanelJsx(s: AppState): SafeHtml {
             {icon('download', 15)} Export stories…
           </button>
         </div>
-        <p class="note">
-          Nothing here is trapped in the app. Markdown is for pasting into notes; JSON is the escape hatch.
-        </p>
+        <p class="field-hint">Markdown to paste into notes, JSON as the escape hatch.</p>
         {/* Backups (NEWS-192, FR-27.6). The path is typed rather than picked:
             a browser cannot hand a Node server a real filesystem path, and the
             desktop shell has no dialog plugin yet — see docs/27-data-location.md. */}
@@ -2506,10 +2508,17 @@ function settingsPanelJsx(s: AppState): SafeHtml {
             {icon('database', 15)} Back up now
           </button>
         </div>
+        <p class="field-hint">
+          Point this at an iCloud Drive, OneDrive or Google Drive folder; empty turns backups off.
+        </p>
+        {/* The trust statement keeps note weight while the explanations around
+            it drop to hints (NEWS-306). It is not an explanation — it is the
+            answer to "what am I about to sync to someone else's computer", and
+            it was the one line on this tab doing real work. Demoting it with
+            everything else would have been the wrong half of the fix. */}
         <p class="note">
-          Point this at an iCloud Drive, OneDrive or Google Drive folder and Newsmonger writes a snapshot there —
-          your topics, settings and stories — after a check, at most once an hour. Leave it empty to turn backups
-          off. <strong>Your API keys are never included</strong>; they stay in your {s.keychainLabel}.
+          <strong>Your API keys are never included</strong> — they stay in your {s.keychainLabel}. A snapshot holds
+          your topics, settings and stories, written after a check at most once an hour.
         </p>
         {/* Restore (NEWS-252). Always-present container so the panel doesn't
             restructure when a backup is found (docs/3-ui.md). Offered only when
@@ -2536,11 +2545,33 @@ function settingsPanelJsx(s: AppState): SafeHtml {
             ''
           )}
         </div>
-        <p class="note">
-          The database itself stays on this machine on purpose: a live SQLite file inside a folder a sync client
-          rewrites is a known way to corrupt it. To restore, put <code>newsmonger-backup.json</code> in an empty
-          data folder as <code>data.json</code> and start the app.
-        </p>
+        {/* Progressive disclosure for the longest paragraph on the tab
+            (NEWS-306). It answers a question most readers never ask — why the
+            snapshot is a JSON file rather than the database — and answering it
+            unprompted, at full width, between a control and the next section is
+            what made this tab read as documentation.
+
+            Its own class rather than `.advanced`, whose rule and margins are
+            tuned for the Diagnostics block at the foot of a tab; sharing one is
+            the splice NEWS-161's test exists to catch.
+
+            The wording is unchanged on purpose. **NEWS-309 §3 is open against
+            it** — `data.json` is the legacy import path, so the instruction may
+            well be right, but it names two formats and three filenames in two
+            sentences and needs verifying against the current SQLite store.
+            Rewriting it here would have buried that question rather than
+            answering it. */}
+        <details class="why">
+          <summary>
+            {icon('chevron', 12)}
+            <span>Why isn’t the database itself backed up?</span>
+          </summary>
+          <p class="note">
+            A live SQLite file inside a folder a sync client rewrites is a known way to corrupt it, so the database
+            stays on this machine. To restore, put <code>newsmonger-backup.json</code> in an empty data folder as{' '}
+            <code>data.json</code> and start the app.
+          </p>
+        </details>
 
         <h3 class="eyebrow">Feed</h3>
         <p class="note">
@@ -2572,10 +2603,14 @@ function settingsPanelJsx(s: AppState): SafeHtml {
           <button class="btn danger" type="button" data-action="clear-stories" disabled={s.feedTotal === 0}>
             {icon('clear', 15)} Clear all stories
           </button>
+          {/* Note weight, not hint (NEWS-306): the bold clause answers "am I
+              about to lose my topics too", which is the fear this control
+              raises, and it is the same promise the confirm dialog makes. The
+              third sentence — each topic resuming from a sensible window — went
+              to FR-27.11, where it was already written. */}
           <p class="note">
-            Deletes every story from every topic. <strong>Your topics, settings and API keys stay.</strong> Each topic
-            starts covering news again from a sensible window on its next check, so this is a fresh start rather than a
-            hole in your history.
+            Deletes every story from every topic. <strong>Your topics, settings and API keys stay</strong>, and each
+            one starts covering news again on its next check.
           </p>
         </div>
 

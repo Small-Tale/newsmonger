@@ -1937,6 +1937,65 @@ test('a field hint sits below its field, not on top of it (NEWS-148)', async ({ 
  * — the server runs on this machine, so a temp path the test creates is one
  * both sides can see, and it needs no plumbing to share the pid-scoped dir.
  */
+test('the Data tab is scannable, not a document with widgets in it (NEWS-306)', async ({ page }) => {
+  // The tab was four controls and twenty lines of prose, at roughly three times
+  // the density of its sibling tabs. Every control was followed by a 2–4 line
+  // paragraph, so the eye could not move control to control.
+  //
+  // Measured against **Schedule**, not against a constant. Schedule has the same
+  // number of controls with one short hint each and was the review's own proof
+  // that this is fixable without deleting the explanations — so it is the right
+  // yardstick, and it moves if the app's whole prose register ever does.
+  await page.goto('/');
+
+  const prose = async (tab: 'Schedule' | 'Data'): Promise<number> => {
+    await openSettingsTab(page, tab);
+    const height = await page.evaluate(() =>
+      [...document.querySelectorAll('#settings-panel p.note, #settings-panel p.field-hint')]
+        // A closed `<details>` contributes nothing to read — that is the point
+        // of putting the longest paragraph behind one.
+        .filter((p) => p.closest('details')?.hasAttribute('open') !== false)
+        // The restore block appears only when a backup exists, and whether one
+        // does depends on where in the suite this runs. Measuring it would make
+        // the number depend on a neighbouring test rather than on this tab.
+        .filter((p) => p.closest('.restore-slot') === null)
+        .reduce((sum, p) => sum + p.getBoundingClientRect().height, 0),
+    );
+    await page.locator('.dialog [data-action=close-settings]').click();
+    return height;
+  };
+
+  const schedule = await prose('Schedule');
+  const data = await prose('Data');
+
+  expect(schedule, 'Schedule must have some prose, or this compares nothing').toBeGreaterThan(0);
+  // Measured: **3.73× before this change, 2.41× after** — so the review's "three
+  // times the density of its sibling tabs" was very nearly exact, and the
+  // ceiling below fails on the build that was reported.
+  //
+  // It is not lower because Data legitimately has five groups to Schedule's two,
+  // and the largest paragraph left is the Feed section's — which **NEWS-309 §2**
+  // is open against, to replace with a read-only field and a copy button.
+  // Tightening it here would have collided with that ticket for a number.
+  expect(data / schedule, 'Data vs Schedule prose height').toBeLessThan(2.8);
+
+  // The trust statement is not what got demoted. It answers "what am I about to
+  // sync to someone else's computer", and it keeps note weight while the
+  // explanations around it drop to hints.
+  await openSettingsTab(page, 'Data');
+  const trust = page.locator('#settings-panel p.note', { hasText: 'API keys are never included' });
+  await expect(trust).toBeVisible();
+  await expect(trust.locator('strong')).toHaveCount(1);
+
+  // The long explanation is still reachable — demoted, not deleted.
+  const why = page.locator('details.why');
+  await expect(why.locator('.note')).not.toBeVisible();
+  await why.locator('summary').click();
+  await expect(why.locator('.note')).toContainText('corrupt it');
+
+  await closeSettings(page);
+});
+
 test('backs up to a chosen folder, without the API keys (NEWS-192)', async ({ page }) => {
   const dest = fs.mkdtempSync(path.join(os.tmpdir(), 'newsmonger-backup-e2e-'));
   await page.goto('/');

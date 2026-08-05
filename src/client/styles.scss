@@ -1491,6 +1491,54 @@ h2.eyebrow {
   color: var(--ink-soft);
 }
 
+// An inline "why?" (NEWS-306) — a question most readers never ask, answered
+// where the one who does will look and nowhere else.
+//
+// Its own block, **not** a selector added to `.advanced` above. That one is a
+// section-foot disclosure with a rule and 20px of clearance, tuned for the
+// Diagnostics block; splicing this into it is the shape NEWS-161's layout test
+// exists to catch. The chevron and its rotation are shared behaviour, so they
+// are stated again here rather than reached for across the file.
+.why {
+  margin-top: 10px;
+
+  > summary {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    cursor: pointer;
+    list-style: none;
+    font-size: 12px;
+    color: var(--ink-soft);
+
+    &::-webkit-details-marker {
+      display: none;
+    }
+
+    &:hover {
+      color: var(--ink);
+    }
+
+    .icon {
+      transition: transform 140ms ease;
+    }
+  }
+
+  &[open] > summary .icon {
+    transform: rotate(180deg);
+  }
+
+  .note {
+    margin-top: 6px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .why > summary .icon {
+    transition: none;
+  }
+}
+
 // ------------------------------------------------------------- api keys ---
 
 .key-row {
