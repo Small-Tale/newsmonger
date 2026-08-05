@@ -414,7 +414,7 @@ Covered by `tests/unit/update.test.ts` (store transitions, walked as sequences) 
 
 ### Capabilities must name the origin the window navigates to
 
-**FR-5.21** *(NEWS-40)* `src-tauri/capabilities/default.json` carries a `remote` block listing `http://127.0.0.1:*` and `http://localhost:*`. Without it **none of its permissions apply at runtime**, and nothing says so.
+**FR-5.21** *(Shipped, NEWS-40)* `src-tauri/capabilities/default.json` carries a `remote` block listing `http://127.0.0.1:*` and `http://localhost:*`. Without it **none of its permissions apply at runtime**, and nothing says so.
 
 The shape of this app is what makes it a trap. `frontendDist` is a static loading page, so the window starts on a local `tauri://` origin where capabilities do apply. Then `lib.rs` navigates to the `http://127.0.0.1:PORT` the sidecar printed — and from that moment the page is a **remote origin**. A capability with no `remote` block grants its permissions to local origins only; the schema says as much, defaulting it to unset "as our default use case is that the content is served from our local application". Ours is not.
 

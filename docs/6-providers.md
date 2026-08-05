@@ -4,11 +4,11 @@ Newsmonger checks run through a pluggable provider abstraction so you can choose
 
 ## Scope: web-searching platforms only
 
-- **FR-6.0** Only AI platforms that perform **their own web search** are supported. Finding genuinely *new* news requires live browsing, and the app deliberately does not carry a search backend to compensate for models that can't browse. A local model would answer from its training cutoff — plausible-sounding but not actually news — so those providers are out of scope. (`mock` is a test-only provider for `--ai-test`.)
+- **FR-6.0** *(Shipped)* Only AI platforms that perform **their own web search** are supported. Finding genuinely *new* news requires live browsing, and the app deliberately does not carry a search backend to compensate for models that can't browse. A local model would answer from its training cutoff — plausible-sounding but not actually news — so those providers are out of scope. (`mock` is a test-only provider for `--ai-test`.)
 
 ## The abstraction
 
-- **FR-6.1** `NewsProvider` (`src/ai/types.ts`) extends `NewsService` with `name`, `model`, and `isAvailable()`. Providers are plain factory functions returning object literals (no base class), registered in `src/ai/providers/index.ts`.
+- **FR-6.1** *(Shipped)* `NewsProvider` (`src/ai/types.ts`) extends `NewsService` with `name`, `model`, and `isAvailable()`. Providers are plain factory functions returning object literals (no base class), registered in `src/ai/providers/index.ts`.
 
 - **FR-6.12** *(Shipped, NEWS-132)* **Discovery runs on a fast, cheap model** — `claude-haiku-4-5` on both Claude paths, `gpt-5-mini` on both OpenAI paths (`DISCOVERY_MODELS` in `src/ai/types.ts`). Discovery proposes topic *names* with a one-line reason; a check researches and cites stories. The lighter question gets the lighter model, at roughly a fifth the price and noticeably less latency.
 
@@ -26,9 +26,9 @@ Newsmonger checks run through a pluggable provider abstraction so you can choose
 
 ## Selection & config
 
-- **FR-6.2** Provider, model, and endpoint are **persisted settings** (`Settings.provider` / `.model` / `.endpoint`), changeable at runtime from the UI's Source block (`PATCH /api/settings`) or seeded at startup by `--provider auto|anthropic|openai|mock`, `--model <id>`, `--endpoint <url>` / `NEWSMONGER_PROVIDER`, `NEWSMONGER_MODEL`, `NEWSMONGER_ENDPOINT`. `--ai-test` forces the mock provider without touching settings.
-- **FR-6.3** `resolveProvider()` runs per check. For `auto` it returns the first available provider in `AUTO_ORDER` (`anthropic`, then `openai`); for an explicit choice it returns that provider if available, else throws an actionable message (e.g. "Anthropic has no API key — add one in Settings, or set ANTHROPIC_API_KEY"). If nothing is available, the check fails with a clear error rather than crashing the app. The provider that ran is recorded on the `CheckRun`.
-- **FR-6.4** A stored provider that no longer exists in the schema degrades to `auto` (`z.enum(...).catch('auto')`) rather than failing the whole data file — see [4 — CLI, Server, and Storage](4-cli-server-storage.md) FR-4.9.
+- **FR-6.2** *(Shipped)* Provider, model, and endpoint are **persisted settings** (`Settings.provider` / `.model` / `.endpoint`), changeable at runtime from the UI's Source block (`PATCH /api/settings`) or seeded at startup by `--provider auto|anthropic|openai|mock`, `--model <id>`, `--endpoint <url>` / `NEWSMONGER_PROVIDER`, `NEWSMONGER_MODEL`, `NEWSMONGER_ENDPOINT`. `--ai-test` forces the mock provider without touching settings.
+- **FR-6.3** *(Shipped)* `resolveProvider()` runs per check. For `auto` it returns the first available provider in `AUTO_ORDER` — **`claude-cli`, `codex-cli`, `anthropic`, `openai`**, subscriptions first, since someone holding a Claude subscription would expect it spent before an API key they also happen to have. (This read "`anthropic`, then `openai`", which predates the two CLI providers.) For an explicit choice it returns that provider if available, else throws an actionable message (e.g. "Anthropic has no API key — add one in Settings, or set ANTHROPIC_API_KEY"). If nothing is available, the check fails with a clear error rather than crashing the app. The provider that ran is recorded on the `CheckRun`.
+- **FR-6.4** *(Shipped)* A stored provider that no longer exists in the schema degrades to `auto` (`z.enum(...).catch('auto')`) rather than failing the whole data file — see [4 — CLI, Server, and Storage](4-cli-server-storage.md) FR-4.9.
 
 ## Providers
 

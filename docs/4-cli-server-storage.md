@@ -2,7 +2,7 @@
 
 ## CLI
 
-- **FR-4.1** `newsmonger` (dev: `npm run dev` → `tsx src/cli.ts`) starts the server and opens the browser. Flags:
+- **FR-4.1** *(Shipped)* `newsmonger` (dev: `npm run dev` → `node --import tsx/esm src/cli.ts`) starts the server and opens the browser. Flags:
   - `--port N` — requested port (default 4187)
   - `--data-dir PATH` — data directory (default `$NEWSMONGER_DATA_DIR` or `~/.newsmonger`)
   - `--provider auto|claude-cli|codex-cli|anthropic|openai|mock` — seed the provider setting (env `NEWSMONGER_PROVIDER`)
@@ -27,17 +27,17 @@
   The server finds its client assets **relative to its own module**, not the cwd (`clientDir()` in `src/server.ts`), which is what makes an install work from anywhere. Verified end to end for NEWS-216 by packing the tarball, installing it to a throwaway `--prefix`, and driving the result in a browser — see [manual-test-plan.md](manual-test-plan.md).
 
   The README is written for people **using** Newsmonger; everything about working *on* it moved to [CONTRIBUTING.md](../CONTRIBUTING.md). The quick start used to be `npm install && npm run dev`, which silently assumed a clone the reader had never been told to make.
-- **FR-4.2** Unknown flags or bad values print the usage line **to stderr** and exit non-zero.
-- **FR-4.3** The server prints `newsmonger running at http://127.0.0.1:<port>` on stdout when ready — the Tauri shell watches for this exact `running at ` marker (KEEP IN SYNC with `src-tauri/src/lib.rs`).
-- **FR-4.4** SIGINT/SIGTERM stop the scheduler and server cleanly.
+- **FR-4.2** *(Shipped)* Unknown flags or bad values print the usage line **to stderr** and exit non-zero.
+- **FR-4.3** *(Shipped)* The server prints `newsmonger running at http://127.0.0.1:<port>` on stdout when ready — the Tauri shell watches for this exact `running at ` marker (KEEP IN SYNC with `src-tauri/src/lib.rs`).
+- **FR-4.4** *(Shipped)* SIGINT/SIGTERM stop the scheduler and server cleanly.
 - **FR-4.4a** *(Shipped, NEWS-238)* **`NEWSMONGER_SCHEDULER_TICK_MS` sets how often the scheduler sweeps** (default 60 000; anything unparseable or non-positive falls back to it rather than throwing, since a bad value in the environment should not leave an app that starts and then never checks anything). It changes only *how often due-ness is reconsidered* — the check **interval** is a user setting ([9 — Scheduling](9-scheduling.md)), and a topic that is not due is not checked however often the sweep runs.
 
   It exists for the **E2E suite**, which sets it beyond the length of a run. Every spec shares one long-lived server, and a sweep there is an actor no test asked for: it checks any topic that has never been checked — most of what a spec creates — at a phase unrelated to the test in progress, writing stories, runs and failures into the state those tests assert on. Two failures have been traced to exactly that, one of them a test that says in its own comment that a new check is "the one thing that legitimately brings this banner back" and can only avoid *clicking* one. Nothing is given up by switching it off: no spec asserts on a scheduled check, so the sweeps were never coverage — `tests/unit/scheduler.test.ts` covers the scheduler with the clock in hand.
 
 ## Server
 
-- **FR-4.5** Hono + `@hono/node-server`, bound to 127.0.0.1 only. Default port 4187 with fallback across the next 20 ports unless `--strict-port`.
-- **FR-4.5a** Requests that a page on another origin could have made are rejected with 403 (`src/origin-guard.ts`, applied to *every* route — page, static assets and API alike, ahead of any handler that reads a body or touches state).
+- **FR-4.5** *(Shipped)* Hono + `@hono/node-server`, bound to 127.0.0.1 only. Default port 4187 with fallback across the next 20 ports unless `--strict-port`.
+- **FR-4.5a** *(Shipped)* Requests that a page on another origin could have made are rejected with 403 (`src/origin-guard.ts`, applied to *every* route — page, static assets and API alike, ahead of any handler that reads a body or touches state).
 
   Loopback binding keeps other machines out; it does nothing about the user's own browser. Any site they visit can issue requests to `http://127.0.0.1:4187`, and while it can't read the responses without CORS, `DELETE /api/topics/:id` and `POST /api/check` (which spends API credit) take effect regardless of whether anyone reads the reply. Two checks close that:
 
@@ -45,8 +45,8 @@
   - the **`Origin`**, when present, must be one of those same hosts or a `tauri:` webview origin. A literal `null` (sandboxed iframe, `data:` document) is rejected: it is never the app's own page.
 
   An **absent** `Origin` is allowed — no browser can omit it on a cross-origin request, so absence means a non-browser caller (curl, the test harness). This is deliberately **not authentication**: a local process can still call the API, but it could equally read `data.json` directly, so the guard's scope is the browser, not the machine.
-- **FR-4.6** API surface: `GET /api/state`, `GET /api/providers`, `POST /api/topics`, `PATCH|DELETE /api/topics/:id`, `PATCH /api/settings` (interval + provider/model/endpoint), `POST /api/check`, `POST /api/open-external`, `GET /healthz`. Request bodies are zod-validated; invalid input → 400, unknown ids → 404, duplicate topics → 409.
-- **FR-4.7** Static client assets are served from `/static/*` (flat directory; path traversal rejected). The page shell is server-rendered kerfjs JSX.
+- **FR-4.6** *(Shipped)* API surface: `GET /api/state`, `GET /api/providers`, `POST /api/topics`, `PATCH|DELETE /api/topics/:id`, `PATCH /api/settings` (interval + provider/model/endpoint), `POST /api/check`, `POST /api/open-external`, `GET /healthz`. Request bodies are zod-validated; invalid input → 400, unknown ids → 404, duplicate topics → 409.
+- **FR-4.7** *(Shipped)* Static client assets are served from `/static/*` (flat directory; path traversal rejected). The page shell is server-rendered kerfjs JSX.
 
 ## Storage
 
@@ -84,8 +84,8 @@
   The sweep ignores the `saved` / `offTopic` exemptions that `pruneOldItems` honours. Those mean "the user wants this kept", but there is no topic left to keep it under — and a flagged orphan would go on feeding the negative-example list for a topic that no longer exists.
 
 - **FR-4.8b** *(Shipped, NEWS-94)* **No foreign keys on `topic_id`.** `ON DELETE CASCADE` would make `deleteTopic` a single statement, but it would also reject a *write* for a topic deleted mid-check — a race the app has tolerated since `markTopicChecked` was written. A constraint would convert a harmless no-op into a thrown error mid-sweep. `deleteTopic` cascades explicitly, in a transaction.
-- **FR-4.9** A corrupt database is backed up (`newsmonger.db.corrupt-<ts>`, along with its `-wal`/`-shm` siblings, which would otherwise be replayed into the replacement) and the app starts fresh rather than crashing. Unreadable **settings** alone fall back to defaults *without* touching topics and stories — that separation is much of the point of leaving one file behind. Schema *evolution* must not trigger this: removed keys are stripped by zod, and a stored `provider` that no longer exists degrades to `auto` (`.catch('auto')`), so retiring a provider never wipes a user's topics.
-- **FR-4.10** Tests never touch `~/.newsmonger` — unit tests and E2E use temp dirs.
+- **FR-4.9** *(Shipped)* A corrupt database is backed up (`newsmonger.db.corrupt-<ts>`, along with its `-wal`/`-shm` siblings, which would otherwise be replayed into the replacement) and the app starts fresh rather than crashing. Unreadable **settings** alone fall back to defaults *without* touching topics and stories — that separation is much of the point of leaving one file behind. Schema *evolution* must not trigger this: removed keys are stripped by zod, and a stored `provider` that no longer exists degrades to `auto` (`.catch('auto')`), so retiring a provider never wipes a user's topics.
+- **FR-4.10** *(Shipped)* Tests never touch `~/.newsmonger` — unit tests and E2E use temp dirs.
 
 - **FR-4.12** *(Shipped, NEWS-164)* The product was renamed **News → Newsmonger**, and the rename went all the way through rather than stopping at the wordmark. A repo carrying two names for one product is a repo where every later reader has to work out which one is current.
 

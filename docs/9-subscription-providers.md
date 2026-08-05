@@ -8,7 +8,7 @@ See also: [6 — AI Providers](6-providers.md), [7 — API Keys](7-api-keys.md).
 
 ## Why a CLI and not the API
 
-- **FR-9.1** There is **no public OAuth flow** letting a third-party app spend someone's Pro/Max quota against `api.anthropic.com` — that endpoint wants an API key. But the Claude Code CLI already holds subscription credentials (`~/.claude/.credentials.json`, under `claudeAiOauth`), so invoking it inherits them. Verified working with no `ANTHROPIC_API_KEY` present at all.
+- **FR-9.1** *(Shipped)* There is **no public OAuth flow** letting a third-party app spend someone's Pro/Max quota against `api.anthropic.com` — that endpoint wants an API key. But the Claude Code CLI already holds subscription credentials (`~/.claude/.credentials.json`, under `claudeAiOauth`), so invoking it inherits them. Verified working with no `ANTHROPIC_API_KEY` present at all.
 
 - **FR-9.2** *(Rejected: the Agent SDK)* `@anthropic-ai/claude-agent-sdk` also works with subscription auth — confirmed, including with the global `claude` removed from `PATH`. It was rejected on size: it vendors **its own 243 MB copy of Claude Code** as a platform-specific optional dependency (298 MB of `node_modules`). `Newsmonger.app` is ~156 MB, so it would roughly triple the desktop bundle to avoid one `spawn`. If its typed streaming API is ever wanted, `query({ pathToClaudeCodeExecutable })` points it at the user's install and skips the vendored binary.
 

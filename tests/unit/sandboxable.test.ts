@@ -13,9 +13,12 @@ import { describe, expect, it } from 'vitest';
  * restricts the syscall rather than the path — so every such invocation dies
  * with `listen EPERM … /<tmp>/tsx-<uid>/<pid>.pipe`.
  *
- * `tsx/esm` is the same loader without the CLI wrapper: it registers the
- * resolve/load hooks and nothing else. Same source, same transform, same
- * coverage — and no socket.
+ * **It is the command, not the package.** `node --import tsx/esm` and
+ * `node --import tsx` both register the resolve/load hooks and open nothing —
+ * measured, both run `src/cli.ts` under the sandbox. Only `tsx <file>` and
+ * `npx tsx <file>` spawn the wrapper that needs the socket. So the rule this
+ * guards is narrow on purpose: the Tauri shell's `node --import tsx src/cli.ts`
+ * (`src-tauri/src/lib.rs`) is correct as written and must not be flagged.
  *
  * **This has now been fixed twice.** NEWS-295 moved the unit suite's CLI spawn
  * to `node dist/cli.js`, and `npm run test:all` still could not run in a sandbox
@@ -31,15 +34,25 @@ import { describe, expect, it } from 'vitest';
 const root = path.join(path.dirname(fileURLToPath(import.meta.url)), '../..');
 
 /** Files that spawn node on this project's source, and could reach for tsx. */
-const SPAWNERS = ['package.json', 'playwright.config.ts', 'scripts/test-all.sh', 'scripts/gate-quick.sh'];
+const SPAWNERS = [
+  'package.json',
+  'playwright.config.ts',
+  'scripts/test-all.sh',
+  'scripts/gate-quick.sh',
+  'src-tauri/src/lib.rs',
+];
 
 /**
- * `tsx` used as a command, rather than `tsx/esm` used as a loader.
+ * `tsx` used as a **command**, rather than as a loader argument.
  *
- * Matches `tsx <something>` and `npx tsx …` while allowing `tsx/esm`, the
- * package name in a dependency list, and prose that mentions the trap.
+ * Matches `tsx <file>.ts` and `npx tsx …`. The lookbehinds are what keep the
+ * legitimate forms out: `--import tsx src/cli.ts` is the Tauri shell's dev spawn
+ * and opens no socket, so a rule that flagged it would push someone toward
+ * "fixing" working code. `tsx/esm`, the dependency entry, and prose about the
+ * trap are all excluded by the `.ts` lookahead.
  */
-const TSX_CLI = /(?:^|[\s&|;"'`(])(?:npx\s+)?tsx(?=\s+[^\s]*\.[cm]?ts\b)/;
+const TSX_CLI =
+  /(?:^|[\s&|;"'`(])(?<!--import )(?<!--loader )(?<!--require )(?:npx\s+)?tsx(?=\s+[^\s]*\.[cm]?ts\b)/;
 
 describe('every spawned entry point stays sandbox-safe (NEWS-299)', () => {
   it.each(SPAWNERS)('%s does not invoke the tsx CLI', (file) => {

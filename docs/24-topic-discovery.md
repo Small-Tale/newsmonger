@@ -26,17 +26,17 @@ That last part is the decision worth stating plainly, because it is what the bra
                                                           └──▶ back to the list, enriched
 ```
 
-- **FR-24.1** Discovery is reachable from **two doors that produce the same result list**: a free-text box ("what are you into?") and a grid of the 11 taxonomy sections. Neither is primary. The box serves the user who sort of knows; the grid serves the user who wants to see what exists. Each covers the other's failure, which is why both ship together rather than one first.
+- **FR-24.1** *(Shipped)* Discovery is reachable from **two doors that produce the same result list**: a free-text box ("what are you into?") and a grid of the 11 taxonomy sections. Neither is primary. The box serves the user who sort of knows; the grid serves the user who wants to see what exists. Each covers the other's failure, which is why both ship together rather than one first.
 
-- **FR-24.2** The section grid drills **section → subcategory → suggestions**, reusing the NEWS-97 taxonomy rather than a discovery-specific list. A section offers an "Anything in *X*" escape for the user who doesn't recognise the subcategory names.
+- **FR-24.2** *(Shipped)* The section grid drills **section → subcategory → suggestions**, reusing the NEWS-97 taxonomy rather than a discovery-specific list. A section offers an "Anything in *X*" escape for the user who doesn't recognise the subcategory names.
 
-- **FR-24.3** The free-text box accepts anything, including nothing: an empty submission means "surprise me" and returns a broad spread across sections rather than an error. The blank-box wall is the one failure mode this door has, and the empty state is where it gets fixed.
+- **FR-24.3** *(Shipped)* The free-text box accepts anything, including nothing: an empty submission means "surprise me" and returns a broad spread across sections rather than an error. The blank-box wall is the one failure mode this door has, and the empty state is where it gets fixed.
 
-- **FR-24.4** Results are **cards, grouped by category**, each carrying: the topic name, a one-line reason, whether it is *ongoing* or *evergreen*, and an **Add** button. The grouping doubles as a preview of where the topic will file itself in the filter bar.
+- **FR-24.4** *(Shipped)* Results are **cards, grouped by category**, each carrying: the topic name, a one-line reason, whether it is *ongoing* or *evergreen*, and an **Add** button. The grouping doubles as a preview of where the topic will file itself in the filter bar.
 
 ### The tuner (depth)
 
-- **FR-24.5** Any result card offers **narrower** (more specific than this) and **similar** (adjacent to this). Either enters the tuner scoped to that card. The result *set* offers the same two actions scoped to the whole list, worded **narrow these** and **more like these** (*NEWS-265*).
+- **FR-24.5** *(Shipped)* Any result card offers **narrower** (more specific than this) and **similar** (adjacent to this). Either enters the tuner scoped to that card. The result *set* offers the same two actions scoped to the whole list, worded **narrow these** and **more like these** (*NEWS-265*).
 
   **The two scopes must be tellable apart without hovering.** They used to be byte-identical — same `link-btn` class, same Lucide icon, same word — sitting about 470px apart with a heading and a group label between them, so the only cue for which anchor a click committed to was position, and `margin-left: auto` had put the set-level pair as far from its heading as the row would allow. Both start a six-round tuner that spends a billable call per round (FR-24.6, FR-24.14), which makes a wrong guess expensive rather than merely annoying.
 
@@ -44,21 +44,21 @@ That last part is the decision worth stating plainly, because it is what the bra
 
   The icons in this doc were written as `⌄` and `≈`; they are Lucide `funnel` and `blend` from `icons.tsx`, per the NEWS-133/134/135 rule that icons never come from glyphs.
 
-- **FR-24.6** The tuner presents candidates one at a time with **keep / skip**, and each round re-prompts on the accumulated keeps *and* skips. Skips matter as much as keeps — "not that kind of cycling" is the signal that makes round three worth reaching.
+- **FR-24.6** *(Shipped)* The tuner presents candidates one at a time with **keep / skip**, and each round re-prompts on the accumulated keeps *and* skips. Skips matter as much as keeps — "not that kind of cycling" is the signal that makes round three worth reaching.
 
-- **FR-24.7** The tuner is **always entered deliberately and always exits back to the result list**, with everything kept added to the list rather than silently created. Nothing is created without an explicit Add, in the tuner or out of it.
+- **FR-24.7** *(Shipped)* The tuner is **always entered deliberately and always exits back to the result list**, with everything kept added to the list rather than silently created. Nothing is created without an explicit Add, in the tuner or out of it.
 
-- **FR-24.8** Each round shows **why** a candidate is being offered ("because you kept: AI policy, chip design"). Without it the loop is a slot machine; with it, it is legible, and a user who sees the model has misread them can skip out rather than abandon the feature.
+- **FR-24.8** *(Shipped)* Each round shows **why** a candidate is being offered ("because you kept: AI policy, chip design"). Without it the loop is a slot machine; with it, it is legible, and a user who sees the model has misread them can skip out rather than abandon the feature.
 
-- **FR-24.9** The tuner shows its round count and is **bounded** — it does not loop indefinitely, and every round is a billable call. It ends by itself and can be ended at any point.
+- **FR-24.9** *(Shipped)* The tuner shows its round count and is **bounded** — it does not loop indefinitely, and every round is a billable call. It ends by itself and can be ended at any point.
 
 ### Suggestion quality
 
-- **FR-24.10** Every request asks for a deliberate **mix of ongoing and evergreen** topics, and each suggestion is labelled with which it is. An ongoing story burns out and an evergreen topic does not; that is the honest answer to "why is this topic quiet now?" three months later, and it belongs on the card rather than in a support conversation.
+- **FR-24.10** *(Shipped)* Every request asks for a deliberate **mix of ongoing and evergreen** topics, and each suggestion is labelled with which it is. An ongoing story burns out and an evergreen topic does not; that is the honest answer to "why is this topic quiet now?" three months later, and it belongs on the card rather than in a support conversation.
 
-- **FR-24.11** **Nothing already followed is ever suggested.** Existing topic names go into the request as exclusions *and* results are matched against the current topics before rendering. Two layers, because the model will occasionally ignore the first and a duplicate suggestion is the most obviously-broken thing this feature could produce.
+- **FR-24.11** *(Shipped)* **Nothing already followed is ever suggested.** Existing topic names go into the request as exclusions *and* results are matched against the current topics before rendering. Two layers, because the model will occasionally ignore the first and a duplicate suggestion is the most obviously-broken thing this feature could produce.
 
-- **FR-24.12** A suggestion carries a **guidance steer** (FR-18), not just a name — "Formula 1: race results and team news, not driver gossip". Adding the topic stores it, so the *first* check is already narrowed. This costs nothing extra: the model is writing the justification prose anyway.
+- **FR-24.12** *(Shipped)* A suggestion carries a **guidance steer** (FR-18), not just a name — "Formula 1: race results and team news, not driver gossip". Adding the topic stores it, so the *first* check is already narrowed. This costs nothing extra: the model is writing the justification prose anyway.
 
 - **FR-24.12a** *(Shipped, NEWS-269)* **The heading and the group labels must not contradict each other.** A section drill-in whose results classify themselves elsewhere shows a **"closest matches"** note beside the heading.
 
@@ -68,7 +68,7 @@ That last part is the decision worth stating plainly, because it is what the bra
 
   Related: the tuner's own rationale line no longer says `narrower than “X”` when X **is** the candidate. A set-level tune anchors on the heading, and a heading can be the same string as a topic in the list, which shipped a card explaining itself as narrower than itself. Saying nothing beats saying something circular; the reason line above it still carries the substance.
 
-- **FR-24.13** Suggestions arrive **pre-classified** into the taxonomy, so a topic added from discovery lands in the right filter-bar section without a second classification call. The returned slug is untrusted and validated exactly as FR-22.8 requires — an unresolvable slug degrades to unclassified rather than being written.
+- **FR-24.13** *(Shipped)* Suggestions arrive **pre-classified** into the taxonomy, so a topic added from discovery lands in the right filter-bar section without a second classification call. The returned slug is untrusted and validated exactly as FR-22.8 requires — an unresolvable slug degrades to unclassified rather than being written.
 
 ### Cost, which is the sharpest constraint here
 
@@ -92,11 +92,11 @@ That last part is the decision worth stating plainly, because it is what the bra
 
   Cleared rather than relabelled, because a suggestion list is one cheap call to regenerate and there is no honest label for "these came from somewhere you are no longer asking". An `endpoint`-only change does **not** clear them: it moves which host answers, not which model does.
 
-- **FR-24.16** Every call is **user-initiated**. Nothing in discovery refreshes on a timer — that is the property that keeps this affordable, and it is the reason the newsstand variation was deferred rather than built.
+- **FR-24.16** *(Shipped)* Every call is **user-initiated**. Nothing in discovery refreshes on a timer — that is the property that keeps this affordable, and it is the reason the newsstand variation was deferred rather than built.
 
 ### Where it appears
 
-- **FR-24.17** A **Discover** entry point sits beside the add-topic field, for the ongoing case.
+- **FR-24.17** *(Shipped)* A **Discover** entry point sits beside the add-topic field, for the ongoing case.
 
 - **FR-24.18** *(Shipped, NEWS-128; reworked NEWS-146)* Onboarding's **Topics** step (FR-20.6) opens **this dialog** — the same one, not a version of it. Setup is where the need is sharpest, and a new user has no existing topics, which makes it the one place suggestions are guaranteed unfiltered.
 

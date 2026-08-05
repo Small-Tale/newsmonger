@@ -6,19 +6,19 @@ How a check turns a topic name into deduplicated, summarized news items.
 
 Checks run through a pluggable **provider** abstraction (`src/ai/providers/`, see [6 — AI Providers](6-providers.md)). The provider is a persisted setting; the default `auto` resolves to the best available web-searching provider.
 
-- **FR-2.1** The default provider is Anthropic — Claude (`claude-opus-4-8`) via the Anthropic API with adaptive thinking and the `web_search_20260209` server tool (max 8 searches per check), streamed to avoid HTTP timeouts. OpenAI plugs in behind the same interface. Only platforms that search the web themselves are supported.
-- **FR-2.2** The prompt includes: the topic name, the current date, the last-checked time (first checks focus on roughly the past week), and the titles of up to 60 previously reported stories with instructions not to re-report them.
-- **FR-2.3** The model returns a fenced JSON block `{"items": [{title, summary, sources: [{title, url}]}]}`; an empty list means "no new news" and is a successful check. Parsing accepts the last fenced block or a bare trailing JSON object; anything else fails the check.
-- **FR-2.4** Summaries are 2–4 sentences; each story carries at least one link to a news article.
-- **FR-2.5** The active provider must be available (e.g. `ANTHROPIC_API_KEY` set) for real checks; the CLI warns at startup when the Anthropic key is missing under an `auto`/`anthropic` provider. `--ai-test` (or `--provider mock`) substitutes a deterministic mock provider (used by E2E tests and offline development). Which provider ran a check is recorded on the `CheckRun`.
-- **FR-2.6** A refusal or unparseable response fails the check; the error is recorded on the run.
+- **FR-2.1** *(Shipped)* Claude (`claude-opus-4-8`) via the Anthropic API, with adaptive thinking and the `web_search_20260209` server tool (max 8 searches per check), streamed to avoid HTTP timeouts. OpenAI plugs in behind the same interface. Only platforms that search the web themselves are supported. **The default provider is `auto`, not `anthropic`** — this said Anthropic, which stopped being true when `SettingsSchema` moved to `.default('auto')` and `AUTO_ORDER` put the subscription CLIs first ([6 — AI Providers](6-providers.md)). Anthropic is the default *API* path, which is what the rest of this requirement describes.
+- **FR-2.2** *(Shipped)* The prompt includes: the topic name, the current date, the last-checked time (first checks focus on roughly the past week), and the titles of up to 60 previously reported stories with instructions not to re-report them.
+- **FR-2.3** *(Shipped)* The model returns a fenced JSON block `{"items": [{title, summary, sources: [{title, url}]}]}`; an empty list means "no new news" and is a successful check. Parsing accepts the last fenced block or a bare trailing JSON object; anything else fails the check.
+- **FR-2.4** *(Shipped)* Summaries are 2–4 sentences; each story carries at least one link to a news article.
+- **FR-2.5** *(Shipped)* The active provider must be available (e.g. `ANTHROPIC_API_KEY` set) for real checks; the CLI warns at startup when the Anthropic key is missing under an `auto`/`anthropic` provider. `--ai-test` (or `--provider mock`) substitutes a deterministic mock provider (used by E2E tests and offline development). Which provider ran a check is recorded on the `CheckRun`.
+- **FR-2.6** *(Shipped)* A refusal or unparseable response fails the check; the error is recorded on the run.
 
 ## Deduplication
 
-- **FR-2.7** Every stored item has a `dedupeKey`: the normalized URL of its first parseable source (`host+path`, lowercased, `www.` stripped, query/hash/trailing-slash dropped), falling back to the normalized title (lowercased, punctuation stripped, whitespace collapsed).
-- **FR-2.8** Found stories whose key matches an already-stored item for that topic are dropped (second line of defense after the prompt-level exclusion). Duplicates within a single batch are also collapsed.
-- **FR-2.9** Dedup scope is per-topic: the same story may legitimately appear under two different topics.
-- **FR-2.10** If the topic is deleted while its check is in flight, the results are discarded.
+- **FR-2.7** *(Shipped)* Every stored item has a `dedupeKey`: the normalized URL of its first parseable source (`host+path`, lowercased, `www.` stripped, query/hash/trailing-slash dropped), falling back to the normalized title (lowercased, punctuation stripped, whitespace collapsed).
+- **FR-2.8** *(Shipped)* Found stories whose key matches an already-stored item for that topic are dropped (second line of defense after the prompt-level exclusion). Duplicates within a single batch are also collapsed.
+- **FR-2.9** *(Shipped)* Dedup scope is per-topic: the same story may legitimately appear under two different topics.
+- **FR-2.10** *(Shipped)* If the topic is deleted while its check is in flight, the results are discarded.
 
 ### Deduplication is not threading
 

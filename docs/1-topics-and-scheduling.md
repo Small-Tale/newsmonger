@@ -6,19 +6,19 @@ The core of the app: a list of topics the user follows, checked for news on a sc
 
 ## Topics
 
-- **FR-1.1** The user can add a topic by name. Names are trimmed; empty names are rejected.
-- **FR-1.2** Topic names are unique, case-insensitively. Adding a duplicate is rejected with a clear error.
-- **FR-1.3** The user can delete a topic. Deleting a topic removes all of its news items and check-run records.
-- **FR-1.4** The user can pause and resume a topic. Paused topics are skipped by both scheduled and "check all" sweeps (an explicit per-topic "Check" still works via the API only when unpaused — the UI disables nothing, but scheduled/check-all never touch paused topics).
-- **FR-1.5** Each topic tracks when it was last checked (`lastCheckedAt`); this is shown in the UI as relative time, or as "not checked yet" when it is null — which includes a topic whose stories have just been cleared (FR-1.15).
-- **FR-1.13** A topic may carry optional free-text **guidance** describing what the user wants from it, which is fed to every check's prompt. Empty by default, so a plain topic behaves exactly as before. Full spec in [18 — Topic Guidance](18-topic-guidance.md).
+- **FR-1.1** *(Shipped)* The user can add a topic by name. Names are trimmed; empty names are rejected.
+- **FR-1.2** *(Shipped)* Topic names are unique, case-insensitively. Adding a duplicate is rejected with a clear error.
+- **FR-1.3** *(Shipped)* The user can delete a topic. Deleting a topic removes all of its news items and check-run records.
+- **FR-1.4** *(Shipped)* The user can pause and resume a topic. Paused topics are skipped by both scheduled and "check all" sweeps (an explicit per-topic "Check" still works via the API only when unpaused — the UI disables nothing, but scheduled/check-all never touch paused topics).
+- **FR-1.5** *(Shipped)* Each topic tracks when it was last checked (`lastCheckedAt`); this is shown in the UI as relative time, or as "not checked yet" when it is null — which includes a topic whose stories have just been cleared (FR-1.15).
+- **FR-1.13** *(Shipped)* A topic may carry optional free-text **guidance** describing what the user wants from it, which is fed to every check's prompt. Empty by default, so a plain topic behaves exactly as before. Full spec in [18 — Topic Guidance](18-topic-guidance.md).
 
 ## Scheduling
 
-- **FR-1.6** A single global check interval applies to all topics (default: 1 day). The user can change it; allowed range is 5 minutes and up (UI offers 1h–1 week presets).
-- **FR-1.7** A scheduler sweeps once per minute (plus once ~3 s after startup) and checks every unpaused topic whose last check is older than the interval, or that has never been checked.
-- **FR-1.8** Sweeps never overlap; topics are checked sequentially within a sweep; a topic is never checked concurrently with itself.
-- **FR-1.9** A failed check still advances `lastCheckedAt`, so a broken topic retries next interval instead of hammering the API every minute. The failure is recorded in the run history and surfaced in the UI.
+- **FR-1.6** *(Shipped)* A single global check interval applies to all topics (default: 1 day). The user can change it; allowed range is 5 minutes and up (UI offers 1h–1 week presets). **"Single" is no longer literal** — high-priority topics run on their own shorter interval ([12 — Topic Priority](12-topic-priority.md)), and a daily-times schedule replaces the interval entirely (FR-1.14). This remains the default and the fallback both are measured against.
+- **FR-1.7** *(Shipped)* A scheduler sweeps once per minute (plus once ~3 s after startup) and checks every unpaused topic whose last check is older than the interval, or that has never been checked.
+- **FR-1.8** *(Shipped)* Sweeps never overlap; a topic is never checked concurrently with itself. **"Sequentially within a sweep" was superseded** by [FR-13.4](13-scheduling-under-load.md) — sweeps run with bounded concurrency (`checkConcurrency`, default 3), and a cap of 1 is exactly the behaviour described here. The two invariants either side of that clause still hold and are the load-bearing half.
+- **FR-1.9** *(Shipped)* A failed check still advances `lastCheckedAt`, so a broken topic retries next interval instead of hammering the API every minute. The failure is recorded in the run history and surfaced in the UI.
 - **FR-1.10** *(Shipped)* A topic tracks **three** clocks, because they answer different questions:
 
   | Field | Advances on | Drives |
@@ -45,7 +45,7 @@ The core of the app: a list of topics the user follows, checked for news on a sc
 
   Times are evaluated in **local** time, so "8am" keeps meaning eight o'clock where the user is across a DST change. An empty list falls back to the interval — the mode can never leave a topic unscheduled forever. The store sorts and de-duplicates the list on save, so every reader sees the same canonical value; the UI refuses unparseable input and restores the saved value rather than clearing the schedule.
 
-- **FR-1.11** The user can trigger an immediate check for one topic or all unpaused topics ("Check all now").
+- **FR-1.11** *(Shipped)* The user can trigger an immediate check for one topic or all unpaused topics ("Check all now").
 - **FR-1.12** *(Shipped)* **Adding a topic checks it immediately** rather than leaving it for the next scheduler tick (up to a minute away) — the user just added it and is watching for the first results. The initial check is treated as **manual** (`checkTopic({ manual: true })`): it records attendance and so runs even for a subscription provider with no prior foreground signal, matching the Check-now buttons. It is fired in the background, so `POST /api/topics` returns immediately; the client's `/api/state` poll surfaces the in-flight state and then the items. The in-flight guard (FR-1.8) means a scheduler tick that also finds the new topic due won't double-run it.
 
 - **FR-1.15** *(Shipped)* **Clearing a topic's stories resets it to its initial state** (NEWS-291) — in the owner's words, "almost like removing and readding it". This applies to both clear paths: the per-topic clear offered with a rename ([25 — Topic Editing](25-topic-editing.md)) and the app-wide "clear all stories" ([27 — Data Location](27-data-location.md)).
