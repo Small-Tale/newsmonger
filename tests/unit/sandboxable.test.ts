@@ -45,6 +45,11 @@ const SPAWNERS = [
   // spawn in the tree was here — which is how a rule stops being one.
   'scripts/demo/capture-stills.ts',
   'scripts/demo/capture-demo.ts',
+  // Spawns Playwright, which spawns the server through the config above
+  // (NEWS-314). Listed for the same reason the demo captures are: it is a
+  // spawner, and the rule is on the pattern rather than on the files that
+  // happened to break it.
+  'scripts/e2e-scramble.mjs',
 ];
 
 /**

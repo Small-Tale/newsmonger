@@ -26,3 +26,7 @@ src-tauri/server
 .release-state.json
 scripts/demo/.debug/
 scripts/demo/.review/
+
+# Scratch from `npm run test:e2e:scramble` (NEWS-314); removed on a clean exit.
+tests/e2e-scramble/
+playwright.scramble.config.ts
