@@ -59,6 +59,7 @@ src/
     layout.tsx        HTML shell
   client/
     app.tsx           kerf UI: mount + **every `delegate()`**; header/banners/settings dialog/topics/onboarding + the top-level shell. Views are being split out by *view* (NEWS-297) — handlers stay here, because two delegates matching one gesture both run (NEWS-126)
+    filter-bar.tsx    the section filter bar under the masthead — filters the *feed* by taxonomy, despite rendering above the rail (NEWS-297)
     dialogs.tsx       the dialogs whose markup owns no state: export, privacy, guidance, rename, the backup offer (NEWS-297). `confirmDialogJsx` is **not** here — it reads with `confirm()`, whose promise is the mechanism
     key-row.tsx       `keyRowJsx` — one provider's API-key row, shared by Settings → Source *and* onboarding's Source step (NEWS-297)
     onboarding-view.tsx the first-run wizard's markup (NEWS-297); the step machine stays in `onboarding.ts` + the store
@@ -235,7 +236,7 @@ Data dir: `--data-dir` flag → `NEWSMONGER_DATA_DIR` → `~/.newsmonger`. Also 
 | Which filter pills are shown | `visibleCategories`/`visibleSubcategories`/`hasUncategorized` in `src/categories.ts` (pure, over the topic list). See `docs/22-topic-categories.md` FR-22.13–22.15 |
 | Renaming a topic / clearing its stories | `Store.renameTopic` / `clearItemsForTopic`; the story count comes from `GET /api/items?topics=<id>&limit=1` when the dialog opens (**not** `/api/state`, which is polled every 4 s); `PATCH /api/topics/:id { name, clearItems }`; `renameDialogJsx` in `client/dialogs.tsx` (NEWS-297), `saveRename` + the delegates in `client/app.tsx`. See `docs/25-topic-editing.md` |
 | Sidebar sort order / section headings | `src/client/topic-sort.ts` (`sortTopics`, `topicRows`); `TOPIC_SORTS`/`TOPIC_SORT_LABELS` in `client/stores.ts`; `.topic-section` in `styles.scss`. See `docs/3-ui.md` FR-3.2a |
-| Section filter bar / sidebar pills | `filterBarJsx` + `[data-filter-category]`/`[data-filter-subcategory]` delegates in `client/app.tsx`; `.filter-bar` in `styles.scss`; server filter in `Store.queryItems`. See `docs/22-topic-categories.md` FR-22.9–22.12 |
+| Section filter bar / sidebar pills | `filterBarJsx` in `client/filter-bar.tsx` (NEWS-297) + the `[data-filter-category]`/`[data-filter-subcategory]` delegates in `client/app.tsx`; `.filter-bar` in `styles.scss`; server filter in `Store.queryItems`. See `docs/22-topic-categories.md` FR-22.9–22.12 |
 | Automatic topic classification | `needsClassifying`/`classifierOptions`/`applyClassification` in `checks.ts`; prompt + parsing in `ai/prompt.ts`. See `docs/22-topic-categories.md` FR-22.8 |
 | Stale refresh overwriting newer state | sequence guards in `refreshState`/`refreshFeed` (`src/client/api.ts`). See `docs/17-server-pagination.md` FR-17.9 |
 | **When** the client asks for state (poll cadence, hidden pages, catch-up) | `src/client/poll.ts` — extracted from `app.tsx` so the policy is unit-testable at all (`tests/unit/poll.test.ts`). Deps are injected; `browserPollDeps` is the real wiring. Its sibling is the *ordering* question above: NEWS-104 pinned which answer wins, this pins when we ask. NEWS-238 |
