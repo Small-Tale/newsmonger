@@ -2197,15 +2197,22 @@ test('after a clear no topic says "checked N ago", and none starts checking itse
   }
   // Adding checks a topic immediately (NEWS-54), so wait until both rows really
   // do claim a check — otherwise the assertions below could pass on timing.
+  //
+  // **`just now` counts as claiming a check**, and leaving it out is how this
+  // test came to depend on a bug. It used to require `checked <N> ago`, which a
+  // topic checked seconds ago never says — `relativeTime` returns "just now"
+  // under a minute — so the precondition was unreachable inside its 15s window
+  // with a real clock. It passed anyway because `page.clock.install()` is
+  // *context*-scoped and two tests above fast-forward 10 hours between them,
+  // which leaked into every later test and aged these rows artificially. The
+  // fixture now restores the clock, so the assertion has to say what it means.
+  const CLAIMS_A_CHECK = /checked\s+(just now|.+\s+ago)/;
   const rows = page.locator('.topic');
-  await expect(page.locator('.topic', { hasText: 'Reset One' }).locator('.topic-meta')).toContainText(
-    /checked\s+\S+\s+ago/,
-    { timeout: 15_000 },
-  );
-  await expect(page.locator('.topic', { hasText: 'Reset Two' }).locator('.topic-meta')).toContainText(
-    /checked\s+\S+\s+ago/,
-    { timeout: 15_000 },
-  );
+  for (const name of ['Reset One', 'Reset Two']) {
+    await expect(page.locator('.topic', { hasText: name }).locator('.topic-meta')).toContainText(CLAIMS_A_CHECK, {
+      timeout: 15_000,
+    });
+  }
 
   await openSettingsTab(page, 'Data');
   await page.locator('[data-action=clear-stories]').click();
@@ -2215,10 +2222,15 @@ test('after a clear no topic says "checked N ago", and none starts checking itse
   await expect(page.locator('.dialog')).toHaveCount(0);
 
   // Not one row anywhere may still claim a check.
+  //
+  // The same pattern, which makes this *stricter* than it was: a row reading
+  // "checked just now" after a clear is as wrong as one reading "checked 1d
+  // ago", and the old pattern let the first through. "not checked yet" — what a
+  // reset row must say — matches neither.
   const count = await rows.count();
   expect(count).toBeGreaterThanOrEqual(2);
   for (let i = 0; i < count; i++) {
-    await expect(rows.nth(i).locator('.topic-meta')).not.toContainText(/checked\s+\S+\s+ago/);
+    await expect(rows.nth(i).locator('.topic-meta')).not.toContainText(CLAIMS_A_CHECK);
   }
 
   // The dial is the other surface that speaks about checking, and it must not

@@ -414,11 +414,34 @@ export const test = base.extend<TestFixtures, WorkerFixtures>({
       }
     }
 
-    // Put back the isolation a fresh context used to give (NEWS-246). Both are
-    // best-effort: a test that already failed must not be reported as failing
-    // here instead, and the next test's own `goto` re-seeds what it needs.
+    // Put back the isolation a fresh context used to give (NEWS-246). All three
+    // are best-effort: a test that already failed must not be reported as
+    // failing here instead, and the next test's own `goto` re-seeds what it
+    // needs.
     await page.evaluate(() => { localStorage.clear(); }).catch(() => undefined);
     await sharedContext.clearPermissions().catch(() => undefined);
+
+    // **The clock is context-scoped, so it leaks between tests** — the third
+    // thing NEWS-246's shared context gave away, found long after the other two.
+    //
+    // `app.spec.ts` installs a fake clock and fast-forwards 3h, then 7h, to test
+    // the poll's catch-up. Measured: a *later* test, on a fresh page, saw
+    // `16:30Z` while real time was `09:30Z`. Ten hours of drift, carried to the
+    // end of the run.
+    //
+    // Which made a **time-of-day-dependent** failure: `threads.spec.ts` asserts a
+    // story found now is dated "Today", and once local time plus the drift
+    // crossed midnight, the page believed it was tomorrow and rendered
+    // "Yesterday". Green every morning, red every afternoon, blamed on whatever
+    // change happened to be in the tree — which is exactly the class NEWS-298
+    // and NEWS-313 exist to stop.
+    //
+    // Restored here rather than in the tests that install it, for NEWS-313's
+    // reason: a cleanup inside a test is skipped by the failure that needs it
+    // most.
+    await page.clock.setSystemTime(Date.now()).catch(() => undefined);
+    await page.clock.resume().catch(() => undefined);
+
     await page.close().catch(() => undefined);
   },
 });
