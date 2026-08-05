@@ -126,6 +126,6 @@ The copy is **"keep a backup here"**, never "move your data here" — the second
 
 ## Note for anyone writing tests
 
-The offer fires on the third topic, and most E2E specs create three or more — so `resetTopics` in `tests/e2e/fixtures.ts` sets `backupPromptNever` for every spec except `backup-prompt.spec.ts`, which clears it and drives the real thing. That suppression lives in the **harness**; the app has no test-only branch for it.
+The offer fires on the third topic, and most E2E specs create three or more — so `resetSharedState` in `tests/e2e/fixtures.ts` sets `backupPromptNever` for every spec except `backup-prompt.spec.ts`, which clears it and drives the real thing. That suppression lives in the **harness**; the app has no test-only branch for it.
 
 See also: [4 — CLI, Server, and Storage](4-cli-server-storage.md) (FR-4.1 data-dir resolution, FR-4.9 corrupt-database recovery), [21 — Export and Feed](21-export-and-feed.md) (the JSON export a backup would reuse), [7 — API Keys](7-api-keys.md) (why keys are not affected).

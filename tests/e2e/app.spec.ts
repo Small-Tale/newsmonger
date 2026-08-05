@@ -5,7 +5,7 @@ import path from 'node:path';
 import AxeBuilder from '@axe-core/playwright';
 import type { Page } from '@playwright/test';
 
-import { expect, openSettingsTab, resetTopics, test, topicAction } from './fixtures.js';
+import { expect, openSettingsTab, resetSharedState, test, topicAction } from './fixtures.js';
 
 // Tests run serially against one shared server (see playwright.config.ts) and
 // build on each other's state where noted. The server runs with --ai-test, so
@@ -15,10 +15,10 @@ import { expect, openSettingsTab, resetTopics, test, topicAction } from './fixtu
 test.describe.configure({ mode: 'serial' });
 
 // Every attempt starts from an empty server, including a serial retry — see
-// `resetTopics` (NEWS-101). Without this a mid-test failure leaves topics
+// `resetSharedState` (NEWS-101). Without this a mid-test failure leaves topics
 // behind and the replay blames whichever early test trips over them.
 test.beforeAll(async () => {
-  await resetTopics(test.info().project.use.baseURL ?? '');
+  await resetSharedState(test.info().project.use.baseURL ?? '');
 });
 
 /** Settings (interval, provider, model/endpoint, API keys) live in a dialog. */
@@ -1634,7 +1634,7 @@ test('a single topic can be exported (NEWS-160)', async ({ page }) => {
 test('one-topic export is offered only when there are topics (NEWS-160)', async ({ page }) => {
   // With nothing to narrow to it could only ever produce an empty file, and an
   // enabled control that yields nothing is worse than a disabled one saying why.
-  await resetTopics(test.info().project.use.baseURL ?? '');
+  await resetSharedState(test.info().project.use.baseURL ?? '');
   await page.goto('/');
   await expect(page.locator('.topic')).toHaveCount(0);
 

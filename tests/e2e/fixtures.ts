@@ -10,25 +10,30 @@ import { serverAlive } from '../helpers/server-alive.js';
 export { expect } from '@playwright/test';
 
 /**
- * Delete every topic on the shared server (NEWS-101).
+ * Put the shared server back to the state a spec file expects to find it in
+ * (NEWS-101, widened in NEWS-313).
  *
- * The whole suite runs against **one** server and **one** data dir, and
- * `app.spec.ts` / `topics.spec.ts` are `mode: 'serial'` — so when a test fails,
- * Playwright replays the *entire group from the top* without resetting
- * anything. A test that failed before reaching its own cleanup leaves its
- * topics behind, and the replayed early tests then fail on state they never
- * created. The run blames an innocent test and hides the one that actually
- * broke, which is far more expensive than the flake itself.
+ * The whole suite runs against **one** server and **one** data dir, and every
+ * spec file is `mode: 'serial'` — so when a test fails, Playwright replays the
+ * *entire group from the top* without resetting anything. A test that failed
+ * before reaching its own cleanup leaves its state behind, and the replayed
+ * early tests then fail on state they never created. The run blames an innocent
+ * test and hides the one that actually broke, which is far more expensive than
+ * the flake itself.
  *
  * Calling this from `beforeAll` gives every attempt — first run or retry — the
- * same precondition the first attempt had: an empty server. Nothing else is
- * reset (settings, runs), because nothing else has caused this.
+ * same precondition the first attempt had.
+ *
+ * **Named for the state, not for topics** (NEWS-313). This was `resetTopics`,
+ * and that name was already a half-truth — it has silenced the backup offer
+ * since NEWS-230 — but the widening is what made it misleading. A helper called
+ * `resetTopics` that also deletes API keys is its own trap.
  *
  * Uses its own request context rather than the `request` fixture: `beforeAll`
  * only sees worker-scoped fixtures. No `Origin` header is sent, which the
  * cross-origin guard allows by design (FR-4.5a) — a non-browser caller.
  */
-export async function resetTopics(baseURL: string): Promise<void> {
+export async function resetSharedState(baseURL: string): Promise<void> {
   const ctx = await playwrightRequest.newContext({ baseURL });
   try {
     const state = (await (await ctx.get('/api/state')).json()) as { topics: { id: string }[] };
@@ -48,7 +53,36 @@ export async function resetTopics(baseURL: string): Promise<void> {
     // Suppressed in the *harness*, not in the product: the app has no test-only
     // branch for this. `backup-prompt.spec.ts` clears the flag and tests the
     // offer for real.
-    await ctx.patch('/api/settings', { data: { backupPromptNever: true } });
+    //
+    // The provider config goes back to its defaults in the same breath
+    // (NEWS-313). NEWS-101 said "nothing else is reset (settings, runs), because
+    // nothing else has caused this" — and then something else did. Fourteen
+    // places across six spec files end with a hand-written "leave the app as the
+    // rest of the suite expects it", and **every one of them is skipped when its
+    // test fails early**. `discover.spec.ts` removing a stored Anthropic key in
+    // its last four lines is what made `keys.spec.ts` — a different file,
+    // minutes later — fail on "lists both keyed providers as unconfigured".
+    // `mode: 'serial'` stops the rest of a *file*; it has no reach into the next
+    // one.
+    await ctx.patch('/api/settings', {
+      data: { backupPromptNever: true, provider: 'auto', model: '', endpoint: '', effort: '' },
+    });
+    for (const provider of ['anthropic', 'openai']) {
+      await ctx.delete(`/api/keys/${provider}`);
+    }
+
+    // Named here rather than left to whichever assertion trips on it later. A
+    // reset that silently failed would reproduce the exact bug this widening is
+    // for, and the point of NEWS-298's work is that a misattributed failure
+    // costs an investigation while a named one costs a sentence.
+    const keys = (await (await ctx.get('/api/keys')).json()) as {
+      keys: { provider: string; configured: boolean; source: string | null }[];
+    };
+    // `env` is not ours to clear — a developer with ANTHROPIC_API_KEY exported
+    // is a legitimate way to run this, and `keys.spec.ts` asserts that state
+    // reads as "from the environment" rather than as unconfigured.
+    const stored = keys.keys.filter((k) => k.configured && k.source !== 'env').map((k) => k.provider);
+    expect(stored, 'a stored API key survived the reset — a later spec will fail on it').toEqual([]);
   } finally {
     await ctx.dispose();
   }

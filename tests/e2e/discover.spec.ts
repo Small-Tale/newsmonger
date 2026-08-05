@@ -1,6 +1,6 @@
 import type { Page } from '@playwright/test';
 
-import { acceptConfirm, expect, openSettingsTab, resetTopics, test, topicAction } from './fixtures.js';
+import { acceptConfirm, expect, openSettingsTab, resetSharedState, test, topicAction } from './fixtures.js';
 
 // Topic discovery — both doors and the result list (NEWS-126, FR-24.1–24.4, 24.17).
 //
@@ -16,7 +16,7 @@ import { acceptConfirm, expect, openSettingsTab, resetTopics, test, topicAction 
 test.describe.configure({ mode: 'serial' });
 
 test.beforeAll(async () => {
-  await resetTopics(test.info().project.use.baseURL ?? '');
+  await resetSharedState(test.info().project.use.baseURL ?? '');
 });
 
 test('the discover dialog opens from beside the add-topic field', async ({ page }) => {

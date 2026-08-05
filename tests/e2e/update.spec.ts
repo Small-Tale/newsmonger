@@ -16,9 +16,16 @@
 
 import type { Page } from '@playwright/test';
 
-import { expect, openSettingsTab, test } from './fixtures.js';
+import { expect, openSettingsTab, resetSharedState, test } from './fixtures.js';
 
 test.describe.configure({ mode: 'serial' });
+
+// Every spec file establishes its own precondition (NEWS-313). This one used to
+// inherit whatever the previous file left behind — which is fine until that file
+// fails before its own cleanup, and then the failure lands here instead.
+test.beforeAll(async () => {
+  await resetSharedState(test.info().project.use.baseURL ?? '');
+});
 
 /** How the fake shell should answer each command. */
 interface ShellScript {

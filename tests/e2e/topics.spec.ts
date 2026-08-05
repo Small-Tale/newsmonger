@@ -1,4 +1,4 @@
-import { acceptConfirm, cancelConfirm, expect, openSettingsTab, resetTopics, test, topicAction } from './fixtures.js';
+import { acceptConfirm, cancelConfirm, expect, openSettingsTab, resetSharedState, test, topicAction } from './fixtures.js';
 
 // Selection, the right-click menu, and solo (NEWS-29). Serial and stateful
 // like the rest of the suite: this spec creates its own topics up front and
@@ -7,10 +7,10 @@ import { acceptConfirm, cancelConfirm, expect, openSettingsTab, resetTopics, tes
 test.describe.configure({ mode: 'serial' });
 
 // Every attempt starts from an empty server, including a serial retry — see
-// `resetTopics` (NEWS-101). Without this a mid-test failure leaves topics
+// `resetSharedState` (NEWS-101). Without this a mid-test failure leaves topics
 // behind and the replay blames whichever early test trips over them.
 test.beforeAll(async () => {
-  await resetTopics(test.info().project.use.baseURL ?? '');
+  await resetSharedState(test.info().project.use.baseURL ?? '');
 });
 
 const NAMES = ['Alpha Topic', 'Bravo Topic', 'Charlie Topic', 'Delta Topic'];

@@ -1,6 +1,6 @@
 import type { Page } from '@playwright/test';
 
-import { acceptConfirm, expect, openSettingsTab, test, topicAction } from './fixtures.js';
+import { acceptConfirm, expect, openSettingsTab, resetSharedState, test, topicAction } from './fixtures.js';
 
 // Runs against the shared server from playwright.config.ts, which sets
 // NEWSMONGER_FAKE_KEYCHAIN=1 — the save/remove flows below are real all the way to
@@ -10,6 +10,18 @@ import { acceptConfirm, expect, openSettingsTab, test, topicAction } from './fix
 // of the suite (and app.spec.ts) sees an unconfigured app.
 
 test.describe.configure({ mode: 'serial' });
+
+// This file had **no reset at all** until NEWS-313, and it is the one the gap
+// bit. Its first test asserts both providers read as *unconfigured*, which was
+// true only because `discover.spec.ts` removes a stored Anthropic key in its own
+// last four lines — so when that test failed early, this file failed too, in a
+// different file minutes later, for a reason with nothing to do with keys.
+//
+// A precondition a spec depends on should be one it establishes, not one it
+// inherits from whichever file happened to run before it.
+test.beforeAll(async () => {
+  await resetSharedState(test.info().project.use.baseURL ?? '');
+});
 
 const ANTHROPIC_ROW = '.key-row:has-text("Anthropic")';
 const OPENAI_ROW = '.key-row:has-text("OpenAI")';

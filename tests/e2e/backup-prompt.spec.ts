@@ -4,12 +4,12 @@ import path from 'node:path';
 
 import type { Page } from '@playwright/test';
 
-import { expect, resetTopics, test } from './fixtures.js';
+import { expect, resetSharedState, test } from './fixtures.js';
 
 /**
  * The backup offer, end to end (NEWS-230, FR-27.2–27.5).
  *
- * Every other spec suppresses this dialog in `resetTopics` — it fires on the
+ * Every other spec suppresses this dialog in `resetSharedState` — it fires on the
  * third topic and would swallow clicks in tests that have nothing to do with
  * backups. This one clears the flag and drives the real thing.
  *
@@ -38,13 +38,13 @@ async function addTopics(page: Page, names: string[]): Promise<void> {
 }
 
 test.beforeEach(async () => {
-  await resetTopics(baseURL());
+  await resetSharedState(baseURL());
   await armOffer();
 });
 
 test.afterAll(async () => {
   // Leave the shared server the way every other spec expects to find it.
-  await resetTopics(baseURL());
+  await resetSharedState(baseURL());
 });
 
 test('does not appear before the third topic, then does (FR-27.2)', async ({ page }) => {

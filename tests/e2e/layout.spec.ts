@@ -1,6 +1,6 @@
 import type { Page } from '@playwright/test';
 
-import { expect, openSettingsTab, resetTopics, test, topicAction } from './fixtures.js';
+import { expect, openSettingsTab, resetSharedState, test, topicAction } from './fixtures.js';
 
 // Wide-window layout (NEWS-96). The shell used to be capped at 1060px and
 // centred, which left the feed at a fixed ~650px no matter how much room the
@@ -15,7 +15,7 @@ import { expect, openSettingsTab, resetTopics, test, topicAction } from './fixtu
 test.describe.configure({ mode: 'serial' });
 
 test.beforeAll(async () => {
-  await resetTopics(test.info().project.use.baseURL ?? '');
+  await resetSharedState(test.info().project.use.baseURL ?? '');
 });
 
 const TOPICS = ['Layout One', 'Layout Two', 'Layout Three', 'Layout Four'];
@@ -94,7 +94,7 @@ test('extra window width becomes extra story columns (NEWS-96)', async ({ page }
 
 test('clean up the layout topics', async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 1000 });
-  await resetTopics(test.info().project.use.baseURL ?? '');
+  await resetSharedState(test.info().project.use.baseURL ?? '');
   await page.goto('/');
   for (const name of TOPICS) {
     await expect(page.locator('.topic', { hasText: name })).toHaveCount(0);
@@ -306,7 +306,7 @@ test('a source link’s arrow aligns with the first line, not the middle (NEWS-1
 
 test('clean up the card-layout topic', async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 1000 });
-  await resetTopics(test.info().project.use.baseURL ?? '');
+  await resetSharedState(test.info().project.use.baseURL ?? '');
   await page.goto('/');
   await expect(page.locator('.topic', { hasText: LONG_TOPIC })).toHaveCount(0);
 });
