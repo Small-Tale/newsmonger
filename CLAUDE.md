@@ -87,10 +87,8 @@ Keep human-readable requirements documents as the source of truth for what the p
 
 Maintain two synthesis docs an AI assistant reads at the start of a fresh session — keep them in sync with reality (source doc/code wins on conflict), and prefer small targeted edits over rewrites:
 
-- A **codebase map** — directory tree, entry points, data schema, build, tests, settings, and a "where do I look for X" index. **Hand-written, and staying that way**: it is a judgement about what matters, and generating it would flatten it into a directory listing worth nothing. Update it in the same change when you add a file or directory, add a route/endpoint, change the schema, add a client module, or add a setting key.
-- A **requirements summary** — two halves, and the distinction matters:
-  - Its **status block is generated** (NEWS-296) by `scripts/build-requirements-summary.mjs` from the `*(Shipped)*` / `*(Partial)*` / `*(Design only)*` / `*(Deferred)*` markers the FR docs already carry. **So record status in the FR doc and run `npm run docs:requirements`** — never edit the block by hand. `tests/unit/requirements-summary.test.ts` fails the gate when it is stale, and the script **refuses to guess**: a marker it cannot read is an error, not an "unknown". Status used to be maintained here *and* in the FR doc, and a forgotten second edit left this file lying to the next session that read it as context.
-  - Its **notes region is hand-written** and is the point of the file: what was decided and why, the traps, and the caveats no marker can carry. The generator copies it through byte for byte. Add to it freely; just don't restate status there.
+- A **codebase map** — directory tree, entry points, data schema, build, tests, settings, and a "where do I look for X" index. Update it in the same change when you add a file or directory, add a route/endpoint, change the schema, add a client module, or add a setting key.
+- A **requirements summary** — a synthesized view of every requirements doc with status markers (e.g. Shipped / Partial / Design only / Deferred). Update it in the same change when you add a requirements doc, ship a design-only feature, or defer/regress a shipped one.
 
 <!-- hotsheet:begin specifics=requirements-documentation v=1 -->
 ### This project's docs layout
