@@ -1,6 +1,6 @@
 import type { Page } from '@playwright/test';
 
-import { expect, resetTopics, test, topicAction } from './fixtures.js';
+import { expect, openSettingsTab, resetTopics, test, topicAction } from './fixtures.js';
 
 // Wide-window layout (NEWS-96). The shell used to be capped at 1060px and
 // centred, which left the feed at a fixed ~650px no matter how much room the
@@ -103,10 +103,11 @@ test('clean up the layout topics', async ({ page }) => {
 
 // Mode exits look pressable (NEWS-266).
 //
-// All four were `btn subtle`, which is `background: none; border-color:
+// All four were `btn subtle`, which was then `background: none; border-color:
 // transparent` — indistinguishable from the sentence beside it until you hover.
 // That put the weight backwards: the reversible in-mode actions read as buttons
-// while the **only way out** read as a caption.
+// while the **only way out** read as a caption. (NEWS-305 later gave the variant
+// its own resting edge; these four stay promoted on the weight argument.)
 //
 // Asserted by computed style rather than by class name: `class="btn"` passing is
 // not the point, a visible edge is, and a future change to `.btn` that removed
@@ -134,6 +135,38 @@ test('leaving the saved filter is a button, not a caption (NEWS-266)', async ({ 
   await expect(page.locator('.banner.saved')).toBeVisible();
   expect(await hasVisibleEdge(page, '[data-action=clear-saved-filter]')).toBe(true);
   await page.click('[data-action=clear-saved-filter]');
+});
+
+// The `subtle` variant itself, one level below NEWS-266 (NEWS-305).
+//
+// NEWS-266 moved four mode exits *out* of `btn subtle` because the variant had
+// no resting edge. The variant kept the bug for everyone still on it: Settings →
+// App's two actions were unbordered, unfilled `--ink-soft` text sitting among
+// unbordered, unfilled `--ink-soft` prose. Promoting call sites one at a time is
+// how a variant nobody can press survives, so the edge now lives on `.btn.subtle`
+// and this asserts it where the review found it missing.
+test('the quiet button variant has a resting edge (NEWS-305)', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 1000 });
+  await page.goto('/');
+  await openSettingsTab(page, 'App');
+
+  for (const action of ['test-notification', 'rerun-onboarding']) {
+    expect(await hasVisibleEdge(page, `[data-action=${action}]`), action).toBe(true);
+  }
+
+  // …and it is a *quiet* button, not a promoted one: no fill, so it still reads
+  // as secondary beside the primary actions elsewhere in the dialog. Without
+  // this the fix could drift into "make it a normal button", which loses the
+  // hierarchy the variant exists for.
+  const filled = await page.evaluate(() => {
+    const el = document.querySelector('[data-action=test-notification]');
+    if (el === null) throw new Error('test-notification not rendered');
+    const bg = getComputedStyle(el).backgroundColor;
+    return !(bg === 'transparent' || /rgba\(.*,\s*0\)$/.test(bg));
+  });
+  expect(filled, 'subtle stays unfilled').toBe(false);
+
+  await page.click('[data-action=close-settings]');
 });
 
 // The search field across the one-column collapse (NEWS-267).

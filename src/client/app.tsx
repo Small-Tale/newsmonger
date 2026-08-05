@@ -1410,10 +1410,12 @@ function tunerJsx(t: TunerState): SafeHtml {
         {/* Endable at any point (FR-24.9) — and the only way out, so it is
             never hidden behind a state the user has to reach first. `btn` rather
             than `btn subtle` for the same reason as the review banner's exit
-            (NEWS-266): subtle renders borderless and transparent, so the escape
-            from a six-round flow read as a caption while Skip and Keep below it
-            read as buttons. Equal weight to Skip is right — both are buttons,
-            and Keep stays the primary. */}
+            (NEWS-266): subtle then rendered borderless and transparent, so the
+            escape from a six-round flow read as a caption while Skip and Keep
+            below it read as buttons. Equal weight to Skip is right — both are
+            buttons, and Keep stays the primary. NEWS-305 gave `subtle` a resting
+            edge, so the two now differ only in weight; this stays `btn` because
+            the *only* way out of a flow should not be the quiet variant. */}
         <button class="btn" type="button" data-tuner="done">
           Done
         </button>
@@ -3030,13 +3032,14 @@ function appJsx(): SafeHtml {
                 ? ` for ${topicNames.get(s.reviewTopicIds[0] ?? '') ?? 'a topic'}`
                 : ''}
             </span>
-            {/* `btn`, not `btn subtle` (NEWS-266). `.btn.subtle` is
-                `background: none; border-color: transparent`, so at rest it is
-                indistinguishable from the sentence beside it and only grows a
+            {/* `btn`, not `btn subtle` (NEWS-266). `.btn.subtle` was then
+                `background: none; border-color: transparent`, so at rest it was
+                indistinguishable from the sentence beside it and only grew a
                 border on hover. That is the wrong weight for the **only way out
                 of a mode that filters the whole feed**: the reversible in-mode
                 actions looked pressable and the consequential exit looked like a
-                caption. */}
+                caption. NEWS-305 fixed the variant, but the weight argument is
+                unchanged — an exit outranks the quiet variant. */}
             <button class="btn" type="button" data-action="exit-review">
               Exit review
             </button>

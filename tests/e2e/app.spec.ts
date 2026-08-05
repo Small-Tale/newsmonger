@@ -1107,7 +1107,7 @@ test('flag a story off-topic: collapse, hide on reload, review, unflag (NEWS-61)
   await expect(cards).toHaveCount(1);
   await expect(page.locator('.item .off-topic-pill.label')).toHaveCount(1);
 
-  // The way out has to look pressable (NEWS-266). It was `btn subtle`, i.e.
+  // The way out has to look pressable (NEWS-266). It was `btn subtle`, then
   // `background: none; border-color: transparent`, so the only exit from a mode
   // that filters the whole feed was indistinguishable from the sentence beside it
   // until hovered. Checked by computed style rather than class name: a future

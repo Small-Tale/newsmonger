@@ -127,7 +127,7 @@ Called **before** the request, so there is no frame in which the refreshed empty
 
 ### A mode's exit must look pressable (NEWS-266)
 
-`.btn.subtle` is `background: none; border-color: transparent; color: var(--ink-soft)` — at rest it is indistinguishable from the prose beside it, and only grows a border on hover. That is a reasonable treatment for a tertiary action and the wrong one for **the only way out of a mode**, which is what it was being used for in all four places the app has one: the saved-filter banner, the solo banner, the review banner, and the tuner's *Done*.
+`.btn.subtle` was `background: none; border-color: transparent; color: var(--ink-soft)` — at rest it was indistinguishable from the prose beside it, and only grew a border on hover. That is a reasonable treatment for a tertiary action and the wrong one for **the only way out of a mode**, which is what it was being used for in all four places the app has one: the saved-filter banner, the solo banner, the review banner, and the tuner's *Done*. (The variant itself has since been fixed — next section — but the weight argument stands: an exit outranks the quiet variant either way.)
 
 The weight was backwards. Skip and Keep inside the tuner read as buttons while the escape from a six-round flow read as a caption; the review banner filtered the entire feed and offered a text-coloured exit. All four are now plain `.btn`, which has a border and a panel background — clearly pressable, still not `.btn.primary`, so *Keep* stays the loudest thing in the tuner.
 
@@ -137,6 +137,19 @@ Two decisions worth keeping:
 
 - **Placement did not change.** Every banner in the app is `icon · text (flex:1) · action`, so the action sits at the right edge. The distance from the sentence is real but it is the app's own convention, and one banner breaking rank is worse than a long gap. A bordered button at a banner's edge is not hard to find.
 - **The tests assert computed style, not the class.** `class="btn"` passing is not the point — a visible edge is. A future change to `.btn` that dropped its border would sail through a class assertion while reintroducing exactly this bug.
+
+### Quiet is a hairline, not nothing (NEWS-305)
+
+NEWS-266 promoted four call sites out of `.btn.subtle`. It did not touch the variant, so everything still on it kept the same defect — and the design review found it again on **Settings → App**, where `Send a test notification` and `Show the setup guide again` were unbordered, unfilled `--ink-soft` text sitting among unbordered, unfilled `--ink-soft` prose. Two features whose only entrance read as a caption.
+
+Promoting call sites one at a time is how a variant nobody can press survives, so the fix is the variant:
+
+- **A resting edge.** `border-color: var(--line)` at rest, `--pine` on hover. Still no fill, so the hierarchy the variant exists for is intact — it reads as secondary beside `.btn`, not as a demoted one.
+- **Disabled keeps the edge and only fades.** `.btn:disabled` is `opacity: 0.5`, which is right for a filled button and takes a hairline below legibility in dark mode, so `.btn.subtle:disabled` fades to `0.65` instead. "A control that is currently off" is information; "slightly greyer text" is not.
+
+`Send a test notification` is **not** disabled and should not be — it asks *will the OS take one*, which is a different question from *do I want one per story*, and it works with the toggle off (NEWS-260, pinned in `app.spec.ts`). The review read the two buttons' brightness difference as a disabled state; there was never a `disabled` on it.
+
+Tested in two places because the two halves live in different worlds: the resting edge by computed style in `layout.spec.ts` (a class assertion would pass while the border was gone), and the disabled rule in `tests/unit/subtle-button.test.ts` against the stylesheet — every subtle control that *can* be disabled is desktop-only, so the browser E2E build has none to point a camera at.
 
 ### New controls must reuse the established classes (NEWS-133/134/135)
 

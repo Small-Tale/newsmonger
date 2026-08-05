@@ -1270,15 +1270,32 @@ h2.eyebrow {
 
 // ------------------------------------------------------ settings dialog ---
 
+// The quiet button variant (NEWS-305). It used to be `border-color: transparent`
+// and grow an edge only on hover, which made it invisible as a control: "Send a
+// test notification" and "Show the setup guide again" sat inside Settings → App
+// as unbordered, unfilled, `--ink-soft` text among unbordered, unfilled,
+// `--ink-soft` prose. NEWS-266 had already had to promote four mode exits out of
+// this variant for the same reason; the variant itself was the bug.
+//
+// So: a hairline edge at rest — quiet is `--line` plus no fill, not *nothing* —
+// and `--pine` on hover, so hovering still says something.
 .btn.subtle {
   background: none;
-  border-color: transparent;
+  border-color: var(--line);
   color: var(--ink-soft);
   padding: 6px 10px;
 
   &:hover:not(:disabled) {
     color: var(--ink);
-    border-color: var(--line);
+    border-color: var(--pine);
+  }
+
+  // Disabled has to read as "a control that is off", not as greyer text, so the
+  // edge stays and only fades. The base `.btn:disabled` 0.5 is enough contrast
+  // loss for a filled button; against no fill it takes the hairline below where
+  // it is legible in dark mode, so this variant fades less far.
+  &:disabled {
+    opacity: 0.65;
   }
 }
 
