@@ -27,4 +27,4 @@ Scope for now is **filtering the collected feed** — not a live web search that
 ## Testing
 
 - **Unit** (`tests/unit/search.test.ts`): `itemMatchesQuery` (empty query matches all; title/summary/topic-name matches; non-match) and `filterItemsByQuery` (empty query passthrough, topic-name resolution, missing-topic-name fallback).
-- **E2E** (`tests/e2e/app.spec.ts`): typing filters the feed to matching stories and widens the box; a no-match query shows the empty state; clearing restores the full feed and collapses the box.
+- **E2E** (`tests/e2e/stories.spec.ts`): typing filters the feed to matching stories and widens the box; a no-match query shows the empty state; clearing restores the full feed and collapses the box.

@@ -31,4 +31,4 @@ Right-click is unchanged: the story context menu (bookmark / share / flag) still
 ## Testing
 
 - **Unit**: `Store.setItemSaved` and `PATCH /api/items/:id` (`tests/unit/saved-items.test.ts`); `shareText` formatting incl. the no-source case (`tests/unit/share.test.ts`).
-- **E2E** (`tests/e2e/app.spec.ts`): bookmark a story → filter to saved → unbookmark while filtered → reload clears the filter but not the flags (NEWS-42); share via a stubbed OS sheet (no toast) then via the clipboard fallback (toast + clipboard content), and the toast self-clears (NEWS-43). Both actions are also asserted **not** to expand the card (NEWS-281) — that they still fire is only half the property.
+- **E2E** (`tests/e2e/stories.spec.ts`): bookmark a story → filter to saved → unbookmark while filtered → reload clears the filter but not the flags (NEWS-42); share via a stubbed OS sheet (no toast) then via the clipboard fallback (toast + clipboard content), and the toast self-clears (NEWS-43). Both actions are also asserted **not** to expand the card (NEWS-281) — that they still fire is only half the property.

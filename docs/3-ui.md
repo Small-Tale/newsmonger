@@ -401,7 +401,7 @@ Both are measured in `tests/e2e/layout.spec.ts` rather than eyeballed, and both 
 
 - **FR-3.50** *(Shipped, NEWS-148)* A field hint sits **below** its field with a positive margin. Its top margin was `-4px`, deliberately pulling it up under the control, which read as a caption crushed against the thing it explains rather than a separate line of guidance.
 
-  Both are pinned in `tests/e2e/app.spec.ts` twice over: the computed **outcome** (label/control offset under 3px on every field of every tab; hint gap at least 4px, where the bug measured `-4`) and the **declaration** (`align-items: baseline`), because the point of FR-3.49 is that alignment no longer depends on a hand-tuned number — reintroducing one fails the test even on a machine where the pixels happen to land well. Verified non-vacuous by restoring each original value and watching the matching test fail.
+  Both are pinned in `tests/e2e/settings-layout.spec.ts` twice over: the computed **outcome** (label/control offset under 3px on every field of every tab; hint gap at least 4px, where the bug measured `-4`) and the **declaration** (`align-items: baseline`), because the point of FR-3.49 is that alignment no longer depends on a hand-tuned number — reintroducing one fails the test even on a machine where the pixels happen to land well. Verified non-vacuous by restoring each original value and watching the matching test fail.
 
 - **FR-3.48** *(Shipped, NEWS-117)* The high-priority interval is labelled just **"High-priority"**. It read "High-priority topics every", which restated the column it sits in — directly under "Check every" — and wrapped to a second line to do it.
 
@@ -421,7 +421,7 @@ Both are measured in `tests/e2e/layout.spec.ts` rather than eyeballed, and both 
 
   **Eyebrows take no icon** — the other half of the report. `DIAGNOSTICS` was the only heading-ranked thing in the dialog carrying one (a bug glyph), which read as arbitrary decoration on one of five headings. But it is not an eyebrow: it is a `<summary>`, and `list-style: none` had already removed its disclosure marker, so deleting the icon would have left a control with no affordance at all. It now carries a **chevron** that rotates on open, matching the story card's expander (FR-3.63) — so the one heading-shaped thing that is really a control says so, and the app has one disclosure gesture rather than two. The `bug` icon was the only user of that entry in `icons.tsx` and was removed with it.
 
-  Pinned per tab in `tests/e2e/app.spec.ts` — positionally, since the defect was that a heading existed but was not *first*. A count of headings would have passed on all four tabs while three of them opened anonymously.
+  Pinned per tab in `tests/e2e/settings-layout.spec.ts` — positionally, since the defect was that a heading existed but was not *first*. A count of headings would have passed on all four tabs while three of them opened anonymously.
 
 - **FR-3.69** *(Shipped, NEWS-306)* **A settings control gets one line of hint. The reasoning behind it lives in `docs/`.**
 

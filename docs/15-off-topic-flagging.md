@@ -27,4 +27,4 @@ Let the user mark specific stories as off-topic so the model can infer what a sh
 ## Testing
 
 - **Unit**: `Store.setItemOffTopic` + `offTopicTitlesForTopic` (order, cap, topic-scope, reload); `buildUserPrompt` includes/omits the section; `CheckRunner` forwards the titles to the provider; `PATCH /api/items/:id { offTopic }` route.
-- **E2E** (`tests/e2e/app.spec.ts`): flag via the item menu → collapse → pill-click confirm (cancel) → **review without reload** → reload hides it → review via the badge → unflag → exit → both stories back.
+- **E2E** (`tests/e2e/stories.spec.ts`): flag via the item menu → collapse → pill-click confirm (cancel) → **review without reload** → reload hides it → review via the badge → unflag → exit → both stories back.

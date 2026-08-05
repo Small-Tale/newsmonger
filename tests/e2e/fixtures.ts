@@ -89,6 +89,55 @@ export async function resetSharedState(baseURL: string): Promise<void> {
 }
 
 /**
+ * Give a file the precondition `app.spec.ts` used to inherit (NEWS-322).
+ *
+ * When every one of these tests lived in one 2,484-line serial file, "a topic
+ * that has been checked, with two stories" was established once near the top and
+ * silently relied on by the seventy tests below it. Splitting the file removes
+ * that, and the honest replacement is for each file to state what it needs.
+ *
+ * Adding a topic fires an immediate first check (FR-1.12), so the stories arrive
+ * without a manual check — but they arrive *asynchronously*, and a `beforeAll`
+ * that returned before they landed would hand the file a race rather than a
+ * precondition. So it waits, and **throws** rather than returning early on a
+ * timeout: a seeder that quietly gives up is NEWS-323's bug in a new place.
+ *
+ * Returns the topic id, since callers that clean up or check need it.
+ */
+export async function seedCheckedTopic(baseURL: string, name: string, timeoutMs = 30_000): Promise<string> {
+  const ctx = await playwrightRequest.newContext({ baseURL });
+  try {
+    const created = (await (await ctx.post('/api/topics', { data: { name } })).json()) as { id?: string };
+    const id = created.id;
+    if (id === undefined) throw new Error(`seedCheckedTopic: POST /api/topics did not return an id for "${name}"`);
+    const deadline = Date.now() + timeoutMs;
+    for (;;) {
+      const page = (await (await ctx.get(`/api/items?topics=${encodeURIComponent(id)}&limit=10`)).json()) as {
+        items: unknown[];
+      };
+      if (page.items.length > 0) return id;
+      if (Date.now() >= deadline) {
+        throw new Error(`seedCheckedTopic: "${name}" had no stories after ${String(timeoutMs)}ms`);
+      }
+      await new Promise((r) => setTimeout(r, 200));
+    }
+  } finally {
+    await ctx.dispose();
+  }
+}
+
+/** Settings (interval, provider, model/endpoint, API keys) live in a dialog. */
+export async function openSettings(page: Page): Promise<void> {
+  await page.click('[data-action=open-settings]');
+  await expect(page.locator('.dialog')).toBeVisible();
+}
+
+export async function closeSettings(page: Page): Promise<void> {
+  await page.locator('.dialog [data-action=close-settings]').click();
+  await expect(page.locator('.dialog')).toHaveCount(0);
+}
+
+/**
  * Accept the in-app confirmation dialog (NEWS-39).
  *
  * The app no longer uses `window.confirm`, which is a silent no-op in the Tauri

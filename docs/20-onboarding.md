@@ -49,5 +49,5 @@ See also [6 — AI Providers](6-providers.md), [7 — API Keys and Settings Dial
 ## Testing
 
 - **Unit** (`tests/unit/key-verify.test.ts`, 7 tests): a valid key saves and the vendor is asked exactly once with the **trimmed** value; an invalid key is rejected with the vendor's reason **and is not stored**; an `unknown` verdict saves anyway; a null verifier skips the check; an empty key never reaches the vendor.
-- **E2E** (`tests/e2e/app.spec.ts`): the guide **does not** auto-open once topics and a provider exist (the regression that would annoy every existing user), reopens from Settings, walks welcome → source → topics → schedule, toggles a starter chip with the count following, and closes on skip without creating anything.
+- **E2E** (`tests/e2e/settings-layout.spec.ts`): the guide **does not** auto-open once topics and a provider exist (the regression that would annoy every existing user), reopens from Settings, walks welcome → source → topics → schedule, toggles a starter chip with the count following, and closes on skip without creating anything.
 - The auto-open path on a genuinely fresh install is **manual** — the E2E suite shares one server whose state is built up by earlier specs, so it can never be in the no-topics/no-provider state. See `manual-test-plan.md`.
