@@ -3,7 +3,6 @@ import { delegate, each, effect, mount } from 'kerfjs';
 
 import type { Effort,ProviderName  } from '../ai/types.js';
 import { PROVIDER_MODELS } from '../ai/types.js';
-import type { BackupLocation } from '../backup-locations.js';
 import {
   BUILTIN_CATEGORIES,
   findCategory,
@@ -15,7 +14,6 @@ import {
   visibleSubcategories,
 } from '../categories.js';
 import type { NewsItem, Topic } from '../db/schemas.js';
-import { MAX_GUIDANCE_LENGTH } from '../db/schemas.js';
 import {
   addSuggestedTopic,
   addTopic,
@@ -59,7 +57,7 @@ import {
 import { shouldOfferBackup, snoozeUntil } from './backup-prompt.js';
 import { relativeTime } from './dates.js';
 import { buildDiagnostics } from './diagnostics.js';
-import { exportDialogJsx, privacyDialogJsx } from './dialogs.js';
+import { backupOfferJsx, exportDialogJsx, guidanceDialogJsx, privacyDialogJsx, renameDialogJsx } from './dialogs.js';
 import type { TunerState } from './discover.js';
 import {
   judgeCandidate,
@@ -309,187 +307,6 @@ function resolveConfirm(ok: boolean): void {
   resolve?.(ok);
 }
 
-/**
- * Editor for a topic's guidance (NEWS-80).
- *
- * The textarea is uncontrolled — its JSX children seed it from server state and
- * nothing re-renders it while the user types. Binding it to a signal would fight
- * the 4 s state poll for the cursor, and there is nothing to derive from the
- * draft until it's saved.
- */
-function guidanceDialogJsx(topic: Topic): SafeHtml {
-  return (
-    <div class="dialog-backdrop" data-action="guidance-backdrop">
-      <div class="dialog guidance" role="dialog" aria-modal="true" aria-label={`Guidance for ${topic.name}`}>
-        <form data-save-guidance={topic.id}>
-          <h2>Guidance for “{topic.name}”</h2>
-          <p class="dialog-hint">
-            Say what you want from this topic — and what you don’t. It’s sent with every check, so the
-            model narrows to your sense of the topic instead of guessing from the name alone.
-          </p>
-          <textarea
-            name="guidance"
-            rows={5}
-            maxLength={MAX_GUIDANCE_LENGTH}
-            placeholder="e.g. Regulatory and safety news only — not stock price moves or product rumours."
-          >
-            {topic.guidance}
-          </textarea>
-          <div class="confirm-actions">
-            <button class="btn" type="button" data-action="close-guidance">
-              Cancel
-            </button>
-            <button class="btn primary" type="submit">
-              Save
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
-  );
-}
-
-
-/**
- * Edit a topic's name (NEWS-139; relabelled NEWS-162).
- *
- * Still a rename in the API and in this code — `PATCH /api/topics/:id { name }`
- * is exactly what it does — but the *user-facing* verb is "edit", because
- * "rename" undersells it: the name is the question put to the model, which the
- * hint below has always said and the menu item used to contradict.
- *
- * The clear-results choice is offered **only when there are results to clear**,
- * and it is off by default: renaming is usually a correction — a typo, a better
- * wording — and discarding a topic's history should never be something that
- * happens because a checkbox was already ticked.
- */
-function renameDialogJsx(topic: Topic, itemCount: number | null): SafeHtml {
-  return (
-    <div class="dialog-backdrop" data-action="rename-backdrop">
-      <div class="dialog rename" role="dialog" aria-modal="true" aria-label={`Edit topic ${topic.name}`}>
-        <form data-save-rename={topic.id}>
-          <h2>Edit “{topic.name}”</h2>
-          <p class="dialog-hint">
-            The name is what the model is asked about, so changing it changes what gets found from the next
-            check onwards.
-          </p>
-          <input
-            type="text"
-            name="topic-name"
-            class="rename-input"
-            maxLength={200}
-            autocomplete="off"
-            value={topic.name}
-            data-morph-skip-children
-          />
-          {/* Always-present container so the checkbox appearing can't restructure
-              the form around it (docs/3-ui.md). */}
-          <div class="rename-clear">
-            {/* `null` means the count hasn't arrived yet — showing the option
-                before then would mean rendering "clear the 0 stories". */}
-            {itemCount !== null && itemCount > 0 ? (
-              <label class="checkbox">
-                <input type="checkbox" name="clear-items" />
-                <span>
-                  Also clear the {String(itemCount)} {itemCount === 1 ? 'story' : 'stories'} already found for
-                  this topic
-                </span>
-              </label>
-            ) : (
-              ''
-            )}
-          </div>
-          <div class="confirm-actions">
-            <button class="btn" type="button" data-action="close-rename">
-              Cancel
-            </button>
-            <button class="btn primary" type="submit">
-              Save
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
-  );
-}
-
-
-
-
-/**
- * The backup offer (NEWS-230, FR-27.2-27.5).
- *
- * **No backdrop `data-action`, deliberately** (FR-27.3). Every other dialog in
- * the app closes on an outside click, and this one must not: a stray click
- * outside would count as an answer to a question the user never read, and the
- * two real answers have different consequences -- one re-asks tomorrow, one
- * never does. A decision needs a decision, not a dismissal. There is no close
- * button for the same reason; the three buttons *are* the exits.
- *
- * The copy is **"keep a backup here"**, never "move your data here". The live
- * database stays local on purpose (`docs/27-data-location.md`), and promising
- * otherwise would be promising the one thing this design refuses to do.
- */
-function backupOfferJsx(locations: BackupLocation[]): SafeHtml {
-  return (
-    <div class="dialog-backdrop onboarding-backdrop">
-      <div class="dialog backup-offer" role="dialog" aria-modal="true" aria-labelledby="backup-offer-title">
-        <div class="dialog-head">
-          <h2 id="backup-offer-title">Keep a backup of your topics?</h2>
-        </div>
-        <p class="onboarding-lead">
-          You&rsquo;re watching a few topics now. Newsmonger can write a copy of them &mdash; your topics, your
-          settings and the stories it has found &mdash; into a folder your computer already syncs, so a lost laptop
-          doesn&rsquo;t mean starting over.
-        </p>
-        <div class="backup-suggestions">
-          {locations.length > 0 ? (
-            <div>
-              <p class="note">Found on this machine:</p>
-              {locations.map((l) => (
-                <button class="btn suggestion-btn" type="button" data-backup-suggestion={l.path}>
-                  <span class="backup-suggestion-label">{l.label}</span>
-                  <span class="backup-suggestion-path">{l.path}</span>
-                </button>
-              ))}
-            </div>
-          ) : (
-            <p class="note">
-              No iCloud Drive, OneDrive, Google Drive or Dropbox folder was found here &mdash; type any folder you
-              like below, including one on an external disk.
-            </p>
-          )}
-        </div>
-        <label class="field">
-          <span>Backup folder</span>
-          <input
-            type="text"
-            data-action="backup-offer-input"
-            placeholder="/path/to/a/folder"
-            spellCheck="false"
-            autocorrect="off"
-          />
-        </label>
-        <p class="note">
-          <strong>Your API keys are never included</strong> &mdash; they stay in your keychain. The database itself
-          stays on this machine on purpose: a live SQLite file inside a folder a sync client rewrites is a known way
-          to corrupt it. You can change this or turn it off later in Settings &rarr; Data.
-        </p>
-        <div class="dialog-actions">
-          <button class="btn subtle" type="button" data-action="backup-offer-never">
-            Don&rsquo;t ask again
-          </button>
-          <button class="btn subtle" type="button" data-action="backup-offer-later">
-            Not now
-          </button>
-          <button class="btn primary" type="button" data-action="backup-offer-save">
-            Keep backups here
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
 
 
 
