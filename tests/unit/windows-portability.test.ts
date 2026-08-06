@@ -75,7 +75,7 @@ describe('Windows portability conventions', () => {
     // `scripts/merge-coverage.mjs` and `scripts/e2e-scramble.mjs` still spawn a
     // bare tool; none of them runs in the Windows job (which runs `test:e2e`
     // only), so widening this today would assert something false about work
-    // nobody has done. They are NEWS-357 — this stays narrow and true rather
+    // nobody has done. They are NEWS-356 — this stays narrow and true rather
     // than broad and skipped.
     const pattern = /(?:spawn|spawnSync|exec|execSync|execFile|execFileSync)\(\s*['"]np[mx]['"]/;
     const onWindowsCI = (f: string): boolean =>
