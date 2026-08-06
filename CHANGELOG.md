@@ -14,6 +14,22 @@ fields reject semver prerelease suffixes.
 
 <!-- Nothing released yet. The first `npm run release` inserts its entry below. -->
 
+## [0.2.0-beta.18] - 2026-08-06
+
+## Reliability
+
+- Fixed the end-to-end test harness on Windows: the client build step now spawns npm the way current Node requires (`npm.cmd` through a shell), replacing a spawn that failed before any test could run.
+- Fixed test servers failing to launch on Windows with a misleading `node.exe ENOENT` — working directories are now resolved from `file:` URLs correctly instead of via a raw URL pathname.
+- The real-provider E2E suite now launches its server with `node --import tsx/esm` from an explicit repo root, so it runs under a command sandbox and on Windows.
+
+## CI
+
+- Added a Windows end-to-end CI job that runs on pushes touching the test harness, config, scripts, or the CLI entry point, so Windows-only breakage surfaces immediately instead of at the next release.
+
+## Documentation
+
+- macOS code signing and notarization (FR-5.5) is now documented as shipped and verified rather than partially complete, with the evidence from recent signed releases.
+
 ## [0.2.0-beta.17] - 2026-08-06
 
 ## Other Changes
