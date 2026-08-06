@@ -67,8 +67,10 @@ describe('pruneImageCache', () => {
     expect(removed).toBe(0);
     expect(exists(dir, hash(7))).toBe(true);
 
-    // Now no story references it — the last one went.
-    expect(pruneImageCache(dir, new Set())).toBe(1);
+    // Now no story references it — the last one went. Some *other* story still
+    // exists, which is what makes the mark set trustworthy enough to sweep on
+    // (NEWS-341); an empty set means something else entirely.
+    expect(pruneImageCache(dir, new Set([hash(8)]))).toBe(1);
     expect(exists(dir, hash(7))).toBe(false);
   });
 
@@ -98,12 +100,18 @@ describe('pruneImageCache', () => {
     expect(pruneImageCache(tmpDataDir(), new Set([hash(1)]))).toBe(0);
   });
 
-  it('removes everything when nothing is referenced', () => {
+  it('removes everything unreferenced once there is anything to compare against', () => {
+    // This used to pass an empty set and expect the cache emptied. That was the
+    // bug (NEWS-341): every caller derives the set from `store.listItems()`, so
+    // "nothing is referenced" is indistinguishable from "the database I read is
+    // not the one this cache belongs to" — and one of those costs the user every
+    // picture they have. The sweep needs a live story to be meaningful.
     const dir = tmpDataDir();
     seedImage(dir, hash(1));
     seedImage(dir, hash(2));
-    expect(pruneImageCache(dir, new Set())).toBe(2);
-    expect(fs.readdirSync(imagesDir(dir))).toEqual([]);
+    seedImage(dir, hash(3));
+    expect(pruneImageCache(dir, new Set([hash(3)]))).toBe(2);
+    expect(fs.readdirSync(imagesDir(dir))).toEqual([`${hash(3)}.bin`]);
   });
 });
 
@@ -132,5 +140,95 @@ describe('DELETE /api/topics prunes the cache', () => {
     // hash(2) was only drop's — gone. hash(1) still belongs to keep — stays.
     expect(exists(dir, hash(1))).toBe(true);
     expect(exists(dir, hash(2))).toBe(false);
+  });
+});
+
+describe('an empty mark set never sweeps a populated cache (NEWS-341)', () => {
+  // What actually happened, in order: a database was quarantined at startup
+  // (FR-4.9) and replaced with an empty one; the startup prune then ran against
+  // zero items and deleted **every** cached image in the install; the database
+  // was later restored from its backup, and 47 stories came back pointing at
+  // images that no longer existed. The mark set was wrong, and a mark-and-sweep
+  // with a wrong mark set is not a prune, it is a wipe.
+
+  it('keeps every cached image when no story references any of them', () => {
+    const dir = tmpDataDir();
+    seedImage(dir, hash(1));
+    seedImage(dir, hash(2));
+
+    const removed = pruneImageCache(dir, new Set());
+
+    expect(removed).toBe(0);
+    expect(exists(dir, hash(1))).toBe(true);
+    expect(exists(dir, hash(2))).toBe(true);
+  });
+
+  it('still sweeps .tmp files, which nothing can reference', () => {
+    // A half-written download is garbage whatever the mark set says, and it is
+    // the one thing that is never a live image.
+    const dir = tmpDataDir();
+    seedImage(dir, hash(1));
+    fs.mkdirSync(imagesDir(dir), { recursive: true });
+    fs.writeFileSync(path.join(imagesDir(dir), `${hash(9)}.bin.tmp`), 'half');
+
+    const removed = pruneImageCache(dir, new Set());
+
+    expect(removed).toBe(1);
+    expect(fs.existsSync(path.join(imagesDir(dir), `${hash(9)}.bin.tmp`))).toBe(false);
+    expect(exists(dir, hash(1))).toBe(true);
+  });
+
+  it('resumes sweeping as soon as one story exists again', () => {
+    // The guard must not become a leak. It suspends the sweep exactly while the
+    // set is untrustworthy; the moment there is anything to compare against,
+    // genuine orphans go.
+    const dir = tmpDataDir();
+    seedImage(dir, hash(1));
+    seedImage(dir, hash(2));
+
+    expect(pruneImageCache(dir, new Set())).toBe(0);
+    expect(pruneImageCache(dir, new Set([hash(1)]))).toBe(1);
+    expect(exists(dir, hash(1))).toBe(true);
+    expect(exists(dir, hash(2))).toBe(false);
+  });
+
+  it('is a no-op on an empty cache, not an error', () => {
+    // First run of a fresh install: no stories and no files. Nothing to guard
+    // against and nothing to do.
+    const dir = tmpDataDir();
+    expect(pruneImageCache(dir, new Set())).toBe(0);
+  });
+
+  it('survives the sequence that caused this: wipe the database, then prune', () => {
+    // The transition, not the states either side of it — a store with stories
+    // and images, replaced by an empty store pointed at the same data dir.
+    const dir = tmpDataDir();
+    const store = new Store(dir);
+    const topic = store.addTopic('Chips');
+    store.addItems([
+      {
+        topicId: topic.id,
+        title: 'Fab news',
+        summary: 'a',
+        sources: [],
+        dedupeKey: 'k1',
+        foundAt: '2026-08-01T00:00:00.000Z',
+        image: { hash: hash(7), sourceUrl: 'https://example.test/a.jpg' },
+      },
+    ]);
+    seedImage(dir, hash(7));
+    store.close();
+
+    // The database is replaced — quarantined and started fresh.
+    fs.rmSync(path.join(dir, 'newsmonger.db'), { force: true });
+    const fresh = new Store(dir);
+    expect(fresh.listItems()).toEqual([]);
+
+    pruneImageCache(dir, liveImageHashes(fresh.listItems()));
+    fresh.close();
+
+    // The image is still there, so restoring the database brings back a story
+    // whose picture still loads.
+    expect(exists(dir, hash(7))).toBe(true);
   });
 });

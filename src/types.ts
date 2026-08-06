@@ -28,5 +28,13 @@ export interface AppEnv {
     probe: ProviderProbe;
     /** Fixed API-key panel for `--demo`; null reads the real environment and keychain (NEWS-315). */
     demoKeys: KeysResp | null;
+    /**
+     * Refetches a cached image whose file has gone missing (NEWS-341).
+     *
+     * Injected so the repair path is testable without a network: the real one
+     * resolves DNS and downloads, which no unit test should do. Null disables
+     * repair entirely, leaving a missing image a plain 404.
+     */
+    refetchImage: ((imageUrl: string, dataDir: string) => Promise<unknown>) | null;
   };
 }

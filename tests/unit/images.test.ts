@@ -300,3 +300,145 @@ describe('CheckRunner image fetching', () => {
     expect(store.listItems().every((i) => i.image === null)).toBe(true);
   });
 });
+
+describe('repairing a cached image that has gone missing (NEWS-341)', () => {
+  // A mark-and-sweep prune ran against an empty database and deleted every
+  // cached image in the install; the database was later restored and its
+  // stories came back pointing at files that no longer existed. The prune
+  // itself is fixed (`image-prune.test.ts`), but the damage is already on disk
+  // in existing installs, and a file can go missing for duller reasons too.
+  //
+  // The refetcher is injected — the real one resolves DNS and downloads, which
+  // no unit test should do.
+  const IMAGE_URL = 'https://cdn.test/lead.jpg';
+  const PNG = Buffer.from('89504e470d0a1a0a', 'hex');
+
+  /** A store holding one story whose image is recorded but absent from disk. */
+  function storeWithMissingImage(dir: string): { store: Store; hash: string } {
+    const store = new Store(dir);
+    const topic = store.addTopic('Chips');
+    const hash = imageHash(IMAGE_URL);
+    store.addItems([
+      {
+        topicId: topic.id,
+        title: 'Fab news',
+        summary: 'a',
+        sources: [],
+        dedupeKey: 'k1',
+        foundAt: '2026-08-01T00:00:00.000Z',
+        image: { hash, sourceUrl: IMAGE_URL },
+      },
+    ]);
+    return { store, hash };
+  }
+
+  function appFor(dir: string, store: Store, refetch: Parameters<typeof createApp>[0]['refetchImage']) {
+    const runner = new CheckRunner(store, asResolver(createMockProvider()));
+    return createApp({ store, runner, dataDir: dir, refetchImage: refetch });
+  }
+
+  it('refetches from the URL the story recorded and serves the bytes', async () => {
+    const dir = tmpDataDir();
+    const { store, hash } = storeWithMissingImage(dir);
+    const asked: string[] = [];
+    const app = appFor(dir, store, (url, dataDir) => {
+      asked.push(url);
+      fs.mkdirSync(path.join(dataDir, 'images'), { recursive: true });
+      fs.writeFileSync(cachedImagePath(dataDir, hash), PNG);
+      return Promise.resolve({ hash, sourceUrl: url });
+    });
+
+    const res = await app.request(`/api/image/${hash}`);
+    expect(res.status).toBe(200);
+    expect(res.headers.get('content-type')).toBe('image/png');
+    // The URL the row carries, not one the caller supplied.
+    expect(asked).toEqual([IMAGE_URL]);
+  });
+
+  it('still refuses to fetch for a hash no story references', async () => {
+    // The property that makes this not an open proxy, and the reason the repair
+    // is keyed off the *stored* URL rather than off the request. Unchanged from
+    // when the route never fetched at all.
+    const dir = tmpDataDir();
+    const { store } = storeWithMissingImage(dir);
+    const asked: string[] = [];
+    const app = appFor(dir, store, (url) => {
+      asked.push(url);
+      return Promise.resolve(null);
+    });
+
+    const res = await app.request(`/api/image/${imageHash('https://cdn.test/not-ours.jpg')}`);
+    expect(res.status).toBe(404);
+    expect(asked).toEqual([]);
+  });
+
+  it('tries a given image once, however many times it is requested', async () => {
+    // A broken `<img>` is retried by the browser on every repaint, so an
+    // unreachable URL would otherwise become a fetch per frame.
+    const dir = tmpDataDir();
+    const { store, hash } = storeWithMissingImage(dir);
+    let calls = 0;
+    const app = appFor(dir, store, () => {
+      calls++;
+      return Promise.resolve(null); // unreachable, as it would be offline
+    });
+
+    for (let i = 0; i < 4; i++) {
+      expect((await app.request(`/api/image/${hash}`)).status).toBe(404);
+    }
+    expect(calls).toBe(1);
+  });
+
+  it('404s without attempting anything when repair is switched off', async () => {
+    const dir = tmpDataDir();
+    const { store, hash } = storeWithMissingImage(dir);
+    const res = await appFor(dir, store, null).request(`/api/image/${hash}`);
+    expect(res.status).toBe(404);
+  });
+});
+
+describe('Store.imageSourceUrl (NEWS-341)', () => {
+  it('finds the URL behind a story lead image', () => {
+    const store = new Store(tmpDataDir());
+    const topic = store.addTopic('Chips');
+    store.addItems([
+      {
+        topicId: topic.id,
+        title: 'Fab news',
+        summary: 'a',
+        sources: [],
+        dedupeKey: 'k1',
+        foundAt: '2026-08-01T00:00:00.000Z',
+        image: { hash: 'c'.repeat(32), sourceUrl: 'https://cdn.test/lead.jpg' },
+      },
+    ]);
+    expect(store.imageSourceUrl('c'.repeat(32))).toBe('https://cdn.test/lead.jpg');
+    expect(store.imageSourceUrl('d'.repeat(32))).toBeNull();
+  });
+
+  it('finds a source favicon too, which shares the same cache', () => {
+    // A repair that knew about only lead images would leave the icons broken
+    // with nothing to explain why.
+    const store = new Store(tmpDataDir());
+    const topic = store.addTopic('Chips');
+    store.addItems([
+      {
+        topicId: topic.id,
+        title: 'Fab news',
+        summary: 'a',
+        sources: [
+          {
+            title: 'Wire',
+            url: 'https://wire.test/a',
+            outlet: null,
+            publishedAt: null,
+            favicon: { hash: 'e'.repeat(32), sourceUrl: 'https://wire.test/favicon.ico' },
+          },
+        ],
+        dedupeKey: 'k1',
+        foundAt: '2026-08-01T00:00:00.000Z',
+      },
+    ]);
+    expect(store.imageSourceUrl('e'.repeat(32))).toBe('https://wire.test/favicon.ico');
+  });
+});

@@ -54,6 +54,8 @@ Downloads land via a temp file and an atomic rename, so a crash mid-download can
 
   The mark set *is* the reference count: an image shared by two stories (same URL → same hash) survives as long as either story does, so deleting one topic never orphans another's picture. The sweep is self-healing — it also reclaims orphans from a crash or an older version, not just the delete that triggered it — and best-effort: a cache it can't read simply isn't pruned that pass, and a failed prune never fails the delete.
 
+  **An empty mark set is not a licence to delete everything** — see FR-8.19, which is the failure this description hid.
+
   Not wired to the scheduler tick: the only way the item set shrinks is a topic delete (a re-check only adds), and startup covers everything else. A size/age cap (option 3 in the ticket) was considered unnecessary — images are ≤5 MB and the mark-and-sweep bounds the directory to what's actually referenced.
 
 ## Source favicons (FR-8.14–8.18, NEWS-169)
@@ -80,3 +82,22 @@ The feed's source links carried a pine arrow glyph — a bullet saying "this is 
 
   Verified against a real database, not only in a unit test: seed favicons, restart the server, and both files survive the startup prune.
 
+## Keeping pictures for as long as the stories (NEWS-341)
+
+- **FR-8.19** *(Shipped, NEWS-341)* **An empty mark set never sweeps a populated cache.** `pruneImageCache` skips the `.bin` sweep when `liveHashes` is empty and the cache is not, and says so on stderr. `.tmp` files still go: a half-written download is referenced by nothing whatever the mark set says.
+
+  Every caller builds the set from `store.listItems()`, so an empty set means one of two things — "this install has no stories" or "the database I read is not the one this cache belongs to" — and the second is not hypothetical. A database quarantined at startup ([FR-4.9](4-cli-server-storage.md)) is replaced by an empty one; the startup prune then ran against zero items and deleted **every cached image in the install**. When the database was restored from its backup, 47 stories came back pointing at pictures that no longer existed.
+
+  The asymmetry decides it. Refusing to sweep costs disk and nothing else, and corrects itself the moment any story exists again — the set is non-empty, and genuine orphans go. Sweeping on a set that is wrong is unrecoverable: the source URLs are the only way back, and only if the rows survived.
+
+- **FR-8.20** *(Shipped, NEWS-341)* **A missing cache file is refetched on demand from the URL the story recorded.** `GET /api/image/:hash` falls back to `Store.imageSourceUrl(hash)` → `cacheImageUrl(...)` → serve, rather than answering 404.
+
+  This works without a database write because the cache is **content-addressed by source URL**: `imageHash(sourceUrl)` is the hash the row already carries, so a repair cannot disagree with the row it repairs. Covers **source favicons** as well as lead images — they share the cache, and a repair that knew about half of it would leave the icons broken with nothing to explain why.
+
+  This does **not** reopen FR-8.9's open-proxy hole, and the distinction is the whole design: the URL comes from a story already stored, never from the request. A hash nothing references resolves to nothing and no request is made — exactly as when the route never fetched at all, which is still asserted. The refetch re-runs the SSRF checks, because a `sourceUrl` was checked when it was first seen and the name it resolves to today is not the name it resolved to then.
+
+  **One attempt per image per run**, keyed by data directory *and* hash. A broken `<img>` is retried by the browser on every repaint, so an unreachable URL would otherwise become a fetch per frame; keying by hash alone would let one `--data-dir` suppress a repair in another. Not persisted — a URL that fails today may work tomorrow, and a permanent "don't try" record would need something to invalidate it.
+
+  The downloader is **injected** (`refetchImage` on `createApp`), following the NEWS-315 precedent, so the repair path is testable without a network and `null` switches it off.
+
+  Verified against the real database from the incident: three stories whose images had been deleted all returned 200 with their bytes, cached back under their original hashes.

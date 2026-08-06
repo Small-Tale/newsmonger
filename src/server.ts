@@ -16,6 +16,7 @@ import type { Backups } from './backup.js';
 import type { CheckRunner } from './checks.js';
 import type { Store } from './db/store.js';
 import type { DiscoveryService } from './discovery.js';
+import { cacheImageUrl } from './images/index.js';
 import { originGuard } from './origin-guard.js';
 import { registerApi } from './routes/api.js';
 import { registerPages } from './routes/pages.js';
@@ -108,6 +109,11 @@ export function createApp(deps: {
    * credential store — all facts about the capturing machine.
    */
   demoKeys?: KeysResp;
+  /**
+   * Refetches an image whose cached file has gone missing (NEWS-341). Defaults
+   * to the real downloader; tests pass a fake, and `null` turns repair off.
+   */
+  refetchImage?: ((imageUrl: string, dataDir: string) => Promise<unknown>) | null;
 }): Hono<AppEnv> {
   const app = new Hono<AppEnv>();
   // Same instance the CheckRunner consults, when the caller passes one; tests
@@ -127,6 +133,7 @@ export function createApp(deps: {
     c.set('backups', deps.backups ?? null);
     c.set('probe', deps.probe ?? probeProviders);
     c.set('demoKeys', deps.demoKeys ?? null);
+    c.set('refetchImage', deps.refetchImage === undefined ? cacheImageUrl : deps.refetchImage);
     // Debug aid (e.g. verifying the Tauri webview actually hits the server).
     if (process.env['NEWSMONGER_LOG_REQUESTS'] === '1') {
       console.error(`[req] ${c.req.method} ${c.req.path}`);

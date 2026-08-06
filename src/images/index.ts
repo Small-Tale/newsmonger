@@ -16,5 +16,12 @@ export function createFaviconFetcher(dataDir: string): FaviconFetcher {
   return (origin) => cacheFavicon(origin, dataDir);
 }
 
-export { cachedImagePath, isValidHash, liveImageHashes, pruneImageCache, sniffImageType } from './cache.js';
+export {
+  cachedImagePath,
+  cacheImageUrl,
+  isValidHash,
+  liveImageHashes,
+  pruneImageCache,
+  sniffImageType,
+} from './cache.js';
 export { originOf } from './favicon.js';

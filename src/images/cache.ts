@@ -144,6 +144,26 @@ export async function cacheArticleImage(
 
   const imageUrl = extractImageUrl(page.body.toString('utf-8'), articleUrl);
   if (imageUrl === null) return null;
+  return cacheImageUrl(imageUrl, dataDir);
+}
+
+/**
+ * Download one image URL into the cache, returning its hash.
+ *
+ * The second half of `cacheArticleImage`, split out so a story whose cached file
+ * has gone missing can be refetched without re-scraping the article (NEWS-341).
+ * That works because the cache is **content-addressed by source URL** —
+ * `imageHash(sourceUrl)` is the same hash the item already stores, so a repair
+ * needs no database write and cannot disagree with the row it repairs.
+ *
+ * Re-checks the URL like every other hop: a stored `sourceUrl` came from a page
+ * we did not write, and time has passed since it was first checked — the name it
+ * resolves to today is not the name it resolved to then.
+ */
+export async function cacheImageUrl(
+  imageUrl: string,
+  dataDir: string,
+): Promise<{ hash: string; sourceUrl: string } | null> {
   if ((await rejectUnsafeUrl(imageUrl)) !== null) return null;
 
   const hash = imageHash(imageUrl);
@@ -210,6 +230,21 @@ export function liveImageHashes(
  * that triggered it. Stray `.tmp` files from an interrupted download are swept
  * too. Returns the number of files removed. Never throws — a cache that can't
  * be read just isn't pruned this pass.
+ *
+ * **An empty mark set never sweeps a populated cache** (NEWS-341). Every caller
+ * builds `liveHashes` from `store.listItems()`, so an empty set means either
+ * "the user has no stories" or "the database this was read from is not the one
+ * the cache belongs to" — and the second is not hypothetical. A database
+ * quarantined at startup (FR-4.9) is replaced by an empty one, the startup
+ * prune then runs against zero items, and every cached image in the install is
+ * deleted. That is what happened: a database was restored from its backup and
+ * the stories came back pointing at images that no longer existed.
+ *
+ * The cache is a *cache*, so refusing to sweep costs disk and nothing else, and
+ * it is self-healing in the direction that matters: the moment any story exists
+ * again the set is non-empty and the genuinely orphaned files go. Sweeping when
+ * the set is wrong is unrecoverable — the source URLs are the only way back, and
+ * only if the rows survived.
  */
 export function pruneImageCache(dataDir: string, liveHashes: ReadonlySet<string>): number {
   const dir = imagesDir(dataDir);
@@ -220,13 +255,22 @@ export function pruneImageCache(dataDir: string, liveHashes: ReadonlySet<string>
     return 0; // no cache directory yet — nothing to prune
   }
   let removed = 0;
+  // `.tmp` files are swept either way: a half-written download is referenced by
+  // nothing, whatever the mark set says.
+  const cached = entries.filter((name) => name.endsWith('.bin'));
+  const sweepCached = liveHashes.size > 0 || cached.length === 0;
+  if (!sweepCached && cached.length > 0) {
+    console.error(
+      `newsmonger: not pruning ${String(cached.length)} cached image(s) — no stories reference any of them, which is more likely a database that lost its contents than a cache to clear`,
+    );
+  }
   for (const name of entries) {
     if (name.endsWith('.tmp')) {
       fs.rmSync(path.join(dir, name), { force: true });
       removed++;
       continue;
     }
-    if (!name.endsWith('.bin')) continue;
+    if (!name.endsWith('.bin') || !sweepCached) continue;
     const hash = name.slice(0, -'.bin'.length);
     if (!liveHashes.has(hash)) {
       fs.rmSync(path.join(dir, name), { force: true });

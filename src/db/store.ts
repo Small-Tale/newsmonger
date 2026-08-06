@@ -1026,6 +1026,31 @@ export class Store {
 
   // --- Items ---------------------------------------------------------------
 
+  /**
+   * The URL a cached image was fetched from, by hash (NEWS-341).
+   *
+   * Lets the image route repair a cache file that has gone missing without
+   * touching the row that references it: the cache is content-addressed by
+   * source URL, so refetching this URL lands at the same hash.
+   *
+   * Covers **source favicons** as well as lead images — they share the cache,
+   * and a repair that knew about only half of it would leave the icons broken
+   * with no way to tell why.
+   *
+   * A scan rather than a query: `image` and `sources` are JSON columns
+   * ([FR-4.8](../../docs/4-cli-server-storage.md)), so indexing into them would
+   * mean teaching SQL their shape for a lookup that only runs on a cache miss.
+   */
+  imageSourceUrl(hash: string): string | null {
+    for (const item of this.listItems()) {
+      if (item.image !== null && item.image.hash === hash) return item.image.sourceUrl;
+      for (const source of item.sources) {
+        if (source.favicon != null && source.favicon.hash === hash) return source.favicon.sourceUrl;
+      }
+    }
+    return null;
+  }
+
   listItems(topicId?: string): NewsItem[] {
     const rows =
       topicId === undefined
