@@ -11,7 +11,12 @@
   --line: #dde3e0;
   --pine: #17604f;
   --pine-soft: #d8e7e2;
-  --marigold: #b97f24;
+  // Darkened from #b97f24 (NEWS-346). That value was 3.33:1 on the settings
+  // dialog and 2.91:1 on `--warn-bg`, against the 4.5:1 WCAG AA needs for text
+  // this size — and every place it is used is text. Same hue and saturation,
+  // lightness down from 0.43 to 0.32, which clears 4.5:1 on all three
+  // backgrounds it lands on with room to spare.
+  --marigold: #895e1b;
   --error-bg: #f7e5e1;
   --warn-bg: #f4ecd9;
   --shadow: 0 1px 2px rgba(26, 36, 32, 0.05), 0 4px 14px rgba(26, 36, 32, 0.05);

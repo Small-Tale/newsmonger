@@ -529,7 +529,7 @@ The UI grew mouse-first: right-click menus for every topic and story action, Cmd
 
 ### Regression net
 
-`tests/e2e/a11y.spec.ts` runs **axe-core** (`wcag2a/2aa/21a/21aa`, failing on serious/critical) against the main view in **both light and dark** — contrast is theme-specific, so a single-theme scan proves half the point — and, since NEWS-159, against the settings dialog on **all four tabs in both schemes**. It had been scanned once, in light, on whichever tab opens first; each tab is a different set of controls, and the dialog holds most of the app's. Currently **0 violations**, which also validates the listbox structure (`aria-required-parent` / `aria-required-children` are among the rules that pass).
+`tests/e2e/a11y.spec.ts` runs **axe-core** (`wcag2a/2aa/21a/21aa`, failing on serious/critical) against the main view in **both light and dark** — contrast is theme-specific, so a single-theme scan proves half the point — and, since NEWS-159, against the settings dialog on **all four tabs in both schemes**. It had been scanned once, in light, on whichever tab opens first; each tab is a different set of controls, and the dialog holds most of the app's. Kept at **0 violations** — though see FR-3.78 for what that number cannot tell you. It also validates the listbox structure (`aria-required-parent` / `aria-required-children` are among the rules that pass).
 
 **Two limits of the axe scan, both learned the hard way.**
 
@@ -537,6 +537,16 @@ The UI grew mouse-first: right-click menus for every topic and story action, Cmd
 - **NEWS-159 was filed off those invented numbers** and turned out to be no bug at all. "Check all now" measured **6.43:1**, not the 1.35:1 reported, and the settings tabs **5.65:1**, not 4.1:1 — both comfortably past AA. The lesson is not to distrust axe generally, but to distrust any reading taken while a second dialog is open, and to confirm against `getComputedStyle` before believing a contrast number.
 
 The same spec covers what axe cannot: focus + Enter + Shift+F10 on a topic row, Escape closing each dialog, and 40 consecutive Tab presses never escaping an open dialog.
+
+- **FR-3.78** *(Shipped, NEWS-346)* **The palette's contrast is also checked without rendering anything**, by `tests/unit/color-contrast.test.ts`: it reads the `:root` and `@mixin dark-tokens` blocks straight out of `styles.scss` and asserts 4.5:1 for every token pair the stylesheet puts text on, in **both** palettes.
+
+  It exists because the axe scan has a structural blind spot — **it can only see a violation on an element that happens to be rendering**. `--marigold` was `#b97f24`, which is 3.33:1 on the settings panel, 3.10:1 on the page and **2.91:1** on `--warn-bg`; every place it is used is text, so all three were real failures. What made it slip through is that its most visible use, `.state.warn` on the Source tab, renders once per *unavailable* provider: on a developer machine with a signed-in CLI the badge reads `.state.ok` and the failing element is never on screen. `npm run test:all` passed locally and CI went red on push — the worst shape of failure, since the gate meant to catch things before they land was the one that could not see it.
+
+  A token pair has a contrast ratio whether or not anything is on screen. Checking the arithmetic is deterministic, takes milliseconds, and is blind to which CLIs are signed in. It does not replace the axe scan — axe still owns what a reader actually meets, including composited and state-dependent colours — but the palette half is now caught before a push.
+
+  The fix was to darken the light token to `#895e1b`: same hue and saturation, lightness 0.43 → 0.32, clearing 4.5:1 on all three backgrounds. Dark mode's `#d8a44c` was already fine at 6.15–7.89 and is unchanged.
+
+  The test also asserts it parsed *something* — a regex that silently matched nothing would make every other assertion vacuous — that both palettes define the same tokens, and that the ratio function agrees with WCAG on known values.
 
 ## Diagnostics (NEWS-88)
 
