@@ -6,10 +6,12 @@ import { describe, expect, it } from 'vitest';
 
 import {
   CHECKOUT_ROOT,
+  E2E_MAX_WORKERS,
   E2E_REAL_SERVER,
   E2E_SERVER,
   e2ePort,
   e2ePortFor,
+  e2eWorkerRole,
   PORT_RANGE_START,
   PORT_SLOTS,
   PORTS_PER_CHECKOUT,
@@ -83,13 +85,18 @@ describe('the E2E port is derived from the checkout path (NEWS-287)', () => {
   });
 
   it('distributes across the window instead of clustering', () => {
-    // The honest version of "no collisions": 400 slots and a hash cannot be
-    // injective, so what matters is that it spreads. 1000 paths over 400 slots
-    // should fill ~367 of them (the birthday expectation); a derivation that
-    // clustered — a weak mix, or a length-sensitive one — would fill far fewer,
-    // which is what would make two sibling worktree paths collide in practice.
+    // The honest version of "no collisions": a hash over `PORT_SLOTS` cannot be
+    // injective, so what matters is that it spreads. 1000 paths over the slots
+    // should fill nearly all of them; a derivation that clustered — a weak mix,
+    // or a length-sensitive one — would fill far fewer, which is what would make
+    // two sibling worktree paths collide in practice.
+    //
+    // Stated as a fraction of `PORT_SLOTS` rather than as a number (NEWS-321):
+    // it was `> 340`, written when there were 400 slots, and sharding cut them
+    // to 160 to pay for a port per worker. A literal threshold turns a
+    // deliberate constant change into a puzzling test failure.
     const ports = new Set(Array.from({ length: 1000 }, (_, i) => e2ePortFor(`/Users/dev/checkout-${i}`)));
-    expect(ports.size).toBeGreaterThan(340);
+    expect(ports.size).toBeGreaterThan(PORT_SLOTS * 0.85);
   });
 
   it('keeps every port inside the documented window, clear of the app default', () => {
@@ -114,6 +121,48 @@ describe('the E2E port is derived from the checkout path (NEWS-287)', () => {
       expect(e2ePortFor(p, E2E_REAL_SERVER)).toBe(e2ePortFor(p, E2E_SERVER) + 1);
       expect((e2ePortFor(p, E2E_SERVER) - PORT_RANGE_START) % PORTS_PER_CHECKOUT).toBe(0);
     }
+  });
+
+  it('gives every worker its own port, and never the real-provider one (NEWS-321)', () => {
+    // The failure this prevents is the worst kind available here: two workers
+    // sharing a server would each reset and seed state the other was asserting
+    // on, and the result is not a clean error but *intermittently wrong tests* —
+    // sometimes green, sometimes a failure blamed on whichever spec noticed.
+    for (let i = 0; i < 200; i++) {
+      const checkout = `/Users/dev/checkout-${String(i)}`;
+      const roles = Array.from({ length: E2E_MAX_WORKERS }, (_, w) => e2eWorkerRole(w));
+      const ports = roles.map((r) => e2ePortFor(checkout, r));
+
+      expect(new Set(ports).size, 'two workers must never share a port').toBe(E2E_MAX_WORKERS);
+      expect(ports, 'no worker may take the real-provider server′s port').not.toContain(
+        e2ePortFor(checkout, E2E_REAL_SERVER),
+      );
+      // Still inside this checkout's own stride, so a worker cannot reach into
+      // the next checkout's window — the property the stride exists for.
+      for (const port of ports) {
+        const offset = (port - PORT_RANGE_START) % PORTS_PER_CHECKOUT;
+        expect(offset, 'a worker port must stay within its checkout stride').toBeLessThan(PORTS_PER_CHECKOUT);
+        expect(port).not.toBe(4187);
+      }
+      expect(ports[0], 'worker 0 keeps the port a serial run has always used').toBe(e2ePortFor(checkout, E2E_SERVER));
+    }
+  });
+
+  it('refuses a worker index outside the window rather than wrapping (NEWS-321)', () => {
+    // `workerIndex` grows without bound when Playwright replaces a crashed
+    // worker; only `parallelIndex` is the 0..workers-1 slot. Passing the wrong
+    // one must be an error here, not a port quietly borrowed from the next
+    // checkout — which is exactly the silent corruption above.
+    expect(() => e2eWorkerRole(E2E_MAX_WORKERS)).toThrow(/outside/);
+    expect(() => e2eWorkerRole(-1)).toThrow(/outside/);
+  });
+
+  it('the whole window still fits the documented range (NEWS-321)', () => {
+    // 4200–4999: near the app's own port so a stray listener is recognisably
+    // ours, below 5000 (macOS AirPlay Receiver) and clear of 5432/5900/6379.
+    // Widening the stride to one port per worker had to be paid for in slots,
+    // and this is the assertion that says the bill was paid.
+    expect(PORT_RANGE_START + PORT_SLOTS * PORTS_PER_CHECKOUT).toBeLessThanOrEqual(5000);
   });
 
   it('defaults to this checkout, resolved from the module and not from cwd', () => {

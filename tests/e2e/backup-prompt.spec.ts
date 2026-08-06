@@ -4,7 +4,7 @@ import path from 'node:path';
 
 import type { Page } from '@playwright/test';
 
-import { expect, resetSharedState, test } from './fixtures.js';
+import { expect, resetSharedState, test, workerBaseURL } from './fixtures.js';
 
 /**
  * The backup offer, end to end (NEWS-230, FR-27.2–27.5).
@@ -18,7 +18,7 @@ import { expect, resetSharedState, test } from './fixtures.js';
  */
 test.describe.configure({ mode: 'serial' });
 
-const baseURL = (): string => test.info().project.use.baseURL ?? '';
+const baseURL = (): string => workerBaseURL();
 
 /** Clear both dismissal flags, so the offer is armed again. */
 async function armOffer(): Promise<void> {

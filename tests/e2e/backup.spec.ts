@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
-import { expect, openSettingsTab, resetSharedState,seedCheckedTopic, test, topicAction } from './fixtures.js';
+import { expect, openSettingsTab, resetSharedState,seedCheckedTopic, test, topicAction, workerBaseURL } from './fixtures.js';
 
 // Backup, restore, and clearing stories — Settings → Data's destructive half
 // (NEWS-322 split this out of app.spec.ts).
@@ -16,7 +16,7 @@ test.describe.configure({ mode: 'serial' });
 // `resetSharedState` (NEWS-101) and `seedCheckedTopic` (NEWS-322). No file
 // inherits its precondition from another's leftovers (NEWS-313).
 test.beforeAll(async () => {
-  const baseURL = test.info().project.use.baseURL ?? '';
+  const baseURL = workerBaseURL();
   await resetSharedState(baseURL);
   await seedCheckedTopic(baseURL, 'Backup Topic');
 });

@@ -1,4 +1,4 @@
-import { closeSettings, expect, openSettingsTab, resetSharedState,seedCheckedTopic, test } from './fixtures.js';
+import { closeSettings, expect, openSettingsTab, resetSharedState,seedCheckedTopic, test, workerBaseURL } from './fixtures.js';
 
 // Settings → Source: which provider does the searching, on what model, at what
 // effort, and what it says about keys (NEWS-322 split this out of app.spec.ts).
@@ -12,7 +12,7 @@ test.describe.configure({ mode: 'serial' });
 // `resetSharedState` (NEWS-101) and `seedCheckedTopic` (NEWS-322). No file
 // inherits its precondition from another's leftovers (NEWS-313).
 test.beforeAll(async () => {
-  const baseURL = test.info().project.use.baseURL ?? '';
+  const baseURL = workerBaseURL();
   await resetSharedState(baseURL);
   await seedCheckedTopic(baseURL, 'Source Panel Topic');
 });

@@ -1,6 +1,6 @@
 import type { Page } from '@playwright/test';
 
-import { acceptConfirm, expect, openSettingsTab, resetSharedState, test, topicAction } from './fixtures.js';
+import { acceptConfirm, expect, openSettingsTab, resetSharedState, test, topicAction, workerBaseURL } from './fixtures.js';
 
 // Runs against the shared server from playwright.config.ts, which sets
 // NEWSMONGER_FAKE_KEYCHAIN=1 — the save/remove flows below are real all the way to
@@ -20,7 +20,7 @@ test.describe.configure({ mode: 'serial' });
 // A precondition a spec depends on should be one it establishes, not one it
 // inherits from whichever file happened to run before it.
 test.beforeAll(async () => {
-  await resetSharedState(test.info().project.use.baseURL ?? '');
+  await resetSharedState(workerBaseURL());
 });
 
 const ANTHROPIC_ROW = '.key-row:has-text("Anthropic")';

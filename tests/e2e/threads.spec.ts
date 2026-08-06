@@ -1,7 +1,7 @@
 import AxeBuilder from '@axe-core/playwright';
 import type { Page } from '@playwright/test';
 
-import { expect, resetSharedState, test, topicAction } from './fixtures.js';
+import { expect, resetSharedState, test, topicAction, workerBaseURL } from './fixtures.js';
 
 // Story threads (NEWS-280): two outlets' coverage of one subject lands in a
 // single thread, and unrelated stories in the same topic do not. Then the
@@ -19,7 +19,7 @@ import { expect, resetSharedState, test, topicAction } from './fixtures.js';
 test.describe.configure({ mode: 'serial' });
 
 test.beforeAll(async () => {
-  await resetSharedState(test.info().project.use.baseURL ?? '');
+  await resetSharedState(workerBaseURL());
 });
 
 interface Item {

@@ -1,6 +1,6 @@
 import type { Page } from '@playwright/test';
 
-import { acceptConfirm, expect, openSettingsTab, resetSharedState, test, topicAction } from './fixtures.js';
+import { acceptConfirm, expect, openSettingsTab, resetSharedState, test, topicAction, workerBaseURL } from './fixtures.js';
 
 // Topic discovery — both doors and the result list (NEWS-126, FR-24.1–24.4, 24.17).
 //
@@ -16,7 +16,7 @@ import { acceptConfirm, expect, openSettingsTab, resetSharedState, test, topicAc
 test.describe.configure({ mode: 'serial' });
 
 test.beforeAll(async () => {
-  await resetSharedState(test.info().project.use.baseURL ?? '');
+  await resetSharedState(workerBaseURL());
 });
 
 test('the discover dialog opens from beside the add-topic field', async ({ page }) => {
@@ -493,9 +493,26 @@ test('the Topics step opens the real discovery dialog (NEWS-146)', async ({ page
   await wizard.locator('[data-action=open-discover]').click();
   await dialog.locator('input[name=discover-query]').fill('cycling');
   await dialog.locator('[data-action=discover-search] button[type=submit]').click();
-  const card = dialog.locator('.suggestion').first();
-  await expect(card).toBeVisible();
-  const addedName = ((await card.locator('.suggestion-name').textContent()) ?? '').trim();
+  // The first suggestion that can actually be *added*, not simply the first
+  // (NEWS-321). The mock plants a topic you already follow at the **head** of
+  // every batch on purpose — "the planted duplicate goes first, where a filter
+  // that only checks the tail of the list would miss it" — and the UI renders an
+  // already-followed suggestion as "Added" with no button at all. So whenever a
+  // topic exists when this search runs, `.first()` is a card whose
+  // `[data-add-suggestion]` never appears, and the click waits out the whole
+  // timeout.
+  //
+  // Latent for as long as this test has existed, and intermittent because
+  // whether a topic exists here depends on what the tests above it left behind.
+  // It surfaced when sharding raised the load enough to change that timing.
+  //
+  // Resolved to a name-based locator before the click: filtering on the button
+  // would stop matching the moment the button is replaced by "Added".
+  const addable = dialog.locator('.suggestion', { has: page.locator('[data-add-suggestion]') }).first();
+  await expect(addable).toBeVisible();
+  const addedName = ((await addable.locator('.suggestion-name').textContent()) ?? '').trim();
+  expect(addedName).not.toBe('');
+  const card = dialog.locator('.suggestion', { hasText: addedName });
 
   // Adding creates the topic there and then (FR-24.26) — the wizard's
   // "nothing until Finish" rule covers the starter chips, not this.

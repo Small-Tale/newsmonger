@@ -1,4 +1,4 @@
-import { expect, resetSharedState, test, topicAction } from './fixtures.js';
+import { expect, resetSharedState, test, topicAction, workerBaseURL } from './fixtures.js';
 
 // The section filter bar and sidebar pills (NEWS-97, FR-22.9/22.10).
 //
@@ -10,7 +10,7 @@ import { expect, resetSharedState, test, topicAction } from './fixtures.js';
 test.describe.configure({ mode: 'serial' });
 
 test.beforeAll(async () => {
-  await resetSharedState(test.info().project.use.baseURL ?? '');
+  await resetSharedState(workerBaseURL());
 });
 
 const TOPICS = [
@@ -232,7 +232,7 @@ test('the active section stays visible after its last topic goes', async ({ page
 });
 
 test('clean up the category topics', async ({ page }) => {
-  await resetSharedState(test.info().project.use.baseURL ?? '');
+  await resetSharedState(workerBaseURL());
   await page.goto('/');
   for (const name of TOPICS) {
     await expect(page.locator('.topic', { hasText: name })).toHaveCount(0);

@@ -87,11 +87,31 @@ describe('every spawned entry point stays sandbox-safe (NEWS-299)', () => {
     // to the merged report, and coverage of `dist/cli.js` is coverage of a
     // bundle, not of `src/**`. Switching to the binary would have silently
     // dropped that leg or required sourcemap remapping in merge-coverage.mjs.
+    //
+    // Read from `tests/e2e/server.ts` since NEWS-321. It used to be the
+    // `webServer` command in `playwright.config.ts`; sharding needed a server
+    // *per worker* and Playwright's `webServer` is global, so the spawn moved to
+    // a worker-scoped fixture. The property is unchanged — only where it lives.
+    const spawner = fs.readFileSync(path.join(root, 'tests/e2e/server.ts'), 'utf8');
+    const args = /spawn\([\s\S]*?\[([\s\S]*?)\],/.exec(spawner)?.[1] ?? '';
+    expect(args, 'the E2E server spawn must still be found').not.toBe('');
+    expect(args).toContain("'src/cli.ts'");
+    expect(args).not.toContain('dist/cli.js');
+    expect(args, 'run through the loader, not the CLI').toContain("'tsx/esm'");
+    expect(args, 'the loader is registered with --import').toContain("'--import'");
+  });
+
+  it('builds the client once, before the workers exist (NEWS-321)', () => {
+    // The build used to be the first half of the `webServer` command, which is
+    // correct for one server and is N concurrent esbuild+sass runs writing the
+    // same files for N. The likely symptom is not a build error but a *torn*
+    // bundle served to whichever worker asked first — a failure that would look
+    // like anything but its cause.
     const config = fs.readFileSync(path.join(root, 'playwright.config.ts'), 'utf8');
-    const command = /command: `([^`]*)`/.exec(config)?.[1] ?? '';
-    expect(command, 'the webServer command must still be found').not.toBe('');
-    expect(command).toContain('src/cli.ts');
-    expect(command).not.toContain('dist/cli.js');
-    expect(command, 'run through the loader, not the CLI').toContain('--import tsx/esm');
+    expect(config, 'globalSetup is what runs before any worker starts').toContain('globalSetup');
+    expect(config, 'the server is no longer declared globally').not.toContain('webServer:');
+
+    const setup = fs.readFileSync(path.join(root, 'tests/e2e/global-setup.ts'), 'utf8');
+    expect(setup).toContain('build:client:dev');
   });
 });

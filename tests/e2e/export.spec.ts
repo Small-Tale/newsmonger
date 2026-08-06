@@ -1,6 +1,6 @@
 import type { Page } from '@playwright/test';
 
-import { closeSettings, expect, openSettingsTab, resetSharedState,seedCheckedTopic, test, topicAction } from './fixtures.js';
+import { closeSettings, expect, openSettingsTab, resetSharedState,seedCheckedTopic, test, topicAction, workerBaseURL } from './fixtures.js';
 
 // Getting stories out: the export dialog, every scope × format combination, the
 // single-topic export, and the HTTP surfaces the feed and exports are served on
@@ -12,7 +12,7 @@ test.describe.configure({ mode: 'serial' });
 // `resetSharedState` (NEWS-101) and `seedCheckedTopic` (NEWS-322). No file
 // inherits its precondition from another's leftovers (NEWS-313).
 test.beforeAll(async () => {
-  const baseURL = test.info().project.use.baseURL ?? '';
+  const baseURL = workerBaseURL();
   await resetSharedState(baseURL);
   await seedCheckedTopic(baseURL, 'Export Topic');
 });
@@ -180,7 +180,7 @@ test('a single topic can be exported (NEWS-160)', async ({ page }) => {
 test('one-topic export is offered only when there are topics (NEWS-160)', async ({ page }) => {
   // With nothing to narrow to it could only ever produce an empty file, and an
   // enabled control that yields nothing is worse than a disabled one saying why.
-  await resetSharedState(test.info().project.use.baseURL ?? '');
+  await resetSharedState(workerBaseURL());
   await page.goto('/');
   await expect(page.locator('.topic')).toHaveCount(0);
 

@@ -5,9 +5,36 @@ import { fileURLToPath } from 'node:url';
 import type { BrowserContext, Locator, Page } from '@playwright/test';
 import { expect, request as playwrightRequest, test as base } from '@playwright/test';
 
+import { DEFAULT_CHECK_INTERVAL_MS, DEFAULT_RETENTION_DAYS } from '../../src/db/schemas.js';
+import { e2ePort, e2eWorkerRole } from '../helpers/e2e-port.js';
 import { serverAlive } from '../helpers/server-alive.js';
+import type { E2EServer } from './server.js';
+import { startServer } from './server.js';
 
 export { expect } from '@playwright/test';
+
+/**
+ * The URL of *this worker's* server (NEWS-321).
+ *
+ * Replaces `test.info().project.use.baseURL`, which twenty call sites used and
+ * which is now wrong for every worker but the first: that reads the value
+ * declared in the config, and each worker is on its own port.
+ *
+ * Derived from `TEST_PARALLEL_INDEX` rather than taken from the `e2eServer`
+ * fixture because the callers are not all places a fixture can reach — module-level
+ * helpers in `backup-prompt.spec.ts`, and `beforeAll` hooks that would each need
+ * their signature changed. The env var is Playwright's own, set in the worker
+ * entry before any test code loads, and it is the **parallel** index (the
+ * `0..workers-1` slot) rather than the worker index, which increments on a
+ * worker restart.
+ *
+ * Falls back to slot 0, which is what a single-worker run uses.
+ */
+export function workerBaseURL(): string {
+  const raw = Number(process.env['TEST_PARALLEL_INDEX'] ?? '0');
+  const slot = Number.isInteger(raw) && raw >= 0 ? raw : 0;
+  return `http://127.0.0.1:${String(e2ePort(e2eWorkerRole(slot)))}`;
+}
 
 /**
  * Put the shared server back to the state a spec file expects to find it in
@@ -64,8 +91,39 @@ export async function resetSharedState(baseURL: string): Promise<void> {
     // minutes later — fail on "lists both keyed providers as unconfigured".
     // `mode: 'serial'` stops the rest of a *file*; it has no reach into the next
     // one.
+    //
+    // **Every setting, not the five that had bitten us** (NEWS-321). Sharding
+    // put four spec files on each worker's server, and *which* files share one —
+    // and in what order — varies from run to run. So a setting one file changes
+    // and never restores is no longer a stable, shaken-out coupling; it is a
+    // different coupling every run. `dailyTimes: ['07:15','18:30']`, a
+    // one-hour high-priority interval and a pinned model were all found sitting
+    // on a server whose spec had set none of them.
+    //
+    // The old list grew one entry at a time, each after a failure taught us it
+    // was needed (NEWS-101 → NEWS-313). That is the wrong shape for this: the
+    // honest default is "the server a file gets is the server a fresh install
+    // has", and anything deliberately *not* default says so here.
     await ctx.patch('/api/settings', {
-      data: { backupPromptNever: true, provider: 'auto', model: '', endpoint: '', effort: '' },
+      data: {
+        // Deliberately not the default: the backup offer fires on the third
+        // topic and most specs create three or more, so without this a modal
+        // appears partway through an unrelated test and swallows the next click.
+        backupPromptNever: true,
+        backupPromptSnoozedUntil: '',
+        provider: 'auto',
+        model: '',
+        endpoint: '',
+        effort: '',
+        checkIntervalMs: DEFAULT_CHECK_INTERVAL_MS,
+        highPriorityIntervalMs: DEFAULT_CHECK_INTERVAL_MS,
+        scheduleMode: 'interval',
+        dailyTimes: ['08:00'],
+        checkConcurrency: 3,
+        itemRetentionDays: DEFAULT_RETENTION_DAYS,
+        notifyOnNewItems: false,
+        backupDir: '',
+      },
     });
     for (const provider of ['anthropic', 'openai']) {
       await ctx.delete(`/api/keys/${provider}`);
@@ -204,9 +262,11 @@ function writeDiagnostic(name: string, body: string): void {
   }
 }
 
-/** This suite adds no test-scoped fixtures of its own — only the worker one. */
+/** This suite adds no test-scoped fixtures of its own — only the worker ones. */
 type TestFixtures = Record<never, never>;
 interface WorkerFixtures {
+  /** This worker's own `--ai-test` server (NEWS-321). */
+  e2eServer: E2EServer;
   sharedContext: BrowserContext;
 }
 
@@ -218,6 +278,50 @@ interface WorkerFixtures {
  * `src/client/*`. Chromium-only (the only browser we run).
  */
 export const test = base.extend<TestFixtures, WorkerFixtures>({
+  /**
+   * A server per worker (NEWS-321), which is what makes sharding possible.
+   *
+   * Playwright's `webServer` is global — one instance for the whole run, with no
+   * per-worker form — so the server had to come out of `playwright.config.ts`
+   * and be spawned here instead. Each worker gets its own port, data directory
+   * and process, so two workers share nothing and `resetSharedState` still means
+   * what it says.
+   */
+  e2eServer: [
+    // Playwright reads the first parameter's *destructuring pattern* to decide
+    // what to inject, and rejects a fixture whose first argument is not one —
+    // "First argument must use the object destructuring pattern". This fixture
+    // depends on no other, so the pattern is legitimately empty, and the lint
+    // rule that dislikes that has no way to know.
+    // eslint-disable-next-line no-empty-pattern
+    async ({}, use, workerInfo) => {
+      // `parallelIndex`, **not** `workerIndex`. `workerIndex` increments every
+      // time a worker is replaced (Playwright restarts one after a crash), so it
+      // is unbounded and would walk straight out of the port window this
+      // checkout reserved. `parallelIndex` is the slot — always `0..workers-1`,
+      // reused by the replacement.
+      const { server, stop } = await startServer(workerInfo.parallelIndex);
+      try {
+        await use(server);
+      } finally {
+        await stop();
+      }
+    },
+    { scope: 'worker' },
+  ],
+
+  /**
+   * Point every built-in that resolves a relative URL at *this worker's* server.
+   *
+   * Test-scoped rather than worker-scoped because `baseURL` is a test-scoped
+   * option and Playwright refuses to change a fixture's scope; depending on a
+   * worker-scoped fixture from a test-scoped one is fine, and the value is
+   * constant for the worker's lifetime anyway.
+   */
+  baseURL: async ({ e2eServer }, use) => {
+    await use(e2eServer.base);
+  },
+
   /**
    * **One browser context for the whole run** (NEWS-246).
    *
@@ -244,8 +348,12 @@ export const test = base.extend<TestFixtures, WorkerFixtures>({
    * dismissal survives a reload.
    */
   sharedContext: [
-    async ({ browser }, use) => {
-      const context = await browser.newContext();
+    async ({ browser, e2eServer }, use) => {
+      // `baseURL` explicitly: this context is built here rather than by
+      // Playwright's own `context` fixture, and it must resolve `page.goto('/')`
+      // against *this worker's* server rather than the config's single value
+      // (NEWS-321).
+      const context = await browser.newContext({ baseURL: e2eServer.base });
       // Suppress the first-run wizard's *auto*-open (NEWS-193).
       //
       // `maybeOpenOnboarding()` opens it when there are no topics AND no usable

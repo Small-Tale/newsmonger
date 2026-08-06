@@ -36,19 +36,36 @@ export const PORT_RANGE_START = 4200;
 /**
  * How many distinct windows the scheme can hand out.
  *
- * 400, which puts the whole range in 4200–4999 — near the app's own port, so a
- * stray listener is recognisably ours, and clear of 5000 (which macOS itself
- * takes for AirPlay Receiver) and of the 5432/5900/6379 neighbourhood.
+ * 160 × 5 ports, which still puts the whole range in **4200–4999** — near the
+ * app's own port, so a stray listener is recognisably ours, and clear of 5000
+ * (which macOS itself takes for AirPlay Receiver) and of the 5432/5900/6379
+ * neighbourhood. It was 400 × 2 until NEWS-321 widened the window to a server
+ * per worker; the range is the fixed quantity, so slots paid for ports.
  *
- * A hash over 400 slots is not injective, and pretending otherwise would be the
- * dishonest part. Two checkouts collide with probability ~1/400 per pair, so with
- * the two or three worktrees this repo actually runs it is well under a percent —
- * and when it happens `scripts/e2e-preflight.mjs` says so in a sentence instead of
- * leaving a raw `ECONNREFUSED` in an unrelated spec. That is the trade: a small
- * residual chance of a *diagnosed* collision, in place of a certain undiagnosable
- * one.
+ * A hash over 160 slots is not injective, and pretending otherwise would be the
+ * dishonest part. Two checkouts collide with probability ~1/160 per pair — up
+ * from ~1/400, so this trade is real: with the two or three worktrees this repo
+ * actually runs it is still under a percent, and when it happens
+ * `scripts/e2e-preflight.mjs` says so in a sentence instead of leaving a raw
+ * `ECONNREFUSED` in an unrelated spec. A small residual chance of a *diagnosed*
+ * collision, in place of a certain undiagnosable one.
+ *
+ * The alternative was keeping 400 slots and letting the range run to 6199, which
+ * would have walked into exactly the ports the paragraph above avoids.
  */
-export const PORT_SLOTS = 400;
+export const PORT_SLOTS = 160;
+
+/**
+ * The most Playwright workers this scheme can give a server to (NEWS-321).
+ *
+ * Each worker runs its own `--ai-test` server on its own port and data dir, so
+ * the window has to be wide enough for all of them at once. Four: the measured
+ * win flattens after that — E2E wall clock is bounded below by the longest
+ * single spec file (~26s of a ~160s serial suite), so a fifth worker divides
+ * time that is no longer the constraint, while every worker costs a real server
+ * process and 5 more ports of a finite range.
+ */
+export const E2E_MAX_WORKERS = 4;
 
 /**
  * Ports reserved per checkout.
@@ -58,14 +75,40 @@ export const PORT_SLOTS = 400;
  * port each and a `+1` for the second server, checkout A's real-provider port
  * would be checkout B's shared port whenever their slots were adjacent — a
  * collision introduced by the very scheme meant to prevent them.
+ *
+ * One per worker plus one for the real-subscription server (NEWS-321).
  */
-export const PORTS_PER_CHECKOUT = 2;
+export const PORTS_PER_CHECKOUT = E2E_MAX_WORKERS + 1;
 
-/** The shared `--ai-test` server every spec but one talks to. */
+/**
+ * Worker 0's `--ai-test` server — the one a single-worker run uses.
+ *
+ * Kept at role 0 so a serial run, `npm run dev`-adjacent tooling, and anything
+ * that has learned this checkout's port keep the number they had.
+ */
 export const E2E_SERVER = 0;
 
 /** The real-subscription spec's own server (NEWS-276) — `npm run test:e2e:real`. */
 export const E2E_REAL_SERVER = 1;
+
+/**
+ * The role a given Playwright worker's server occupies in the window.
+ *
+ * Worker 0 keeps role 0 (see `E2E_SERVER`); the rest sit above the real-provider
+ * server rather than displacing it, because `npm run test:e2e:real` and a
+ * sharded run can legitimately be in flight together.
+ */
+export function e2eWorkerRole(workerIndex: number): number {
+  if (workerIndex < 0 || workerIndex >= E2E_MAX_WORKERS) {
+    throw new Error(`worker ${String(workerIndex)} is outside the ${String(E2E_MAX_WORKERS)}-port window`);
+  }
+  return workerIndex === 0 ? E2E_SERVER : E2E_REAL_SERVER + workerIndex;
+}
+
+/** Every port this checkout may bind during a sharded run, worker 0 first. */
+export function e2eWorkerPorts(workers: number = E2E_MAX_WORKERS): number[] {
+  return Array.from({ length: Math.min(workers, E2E_MAX_WORKERS) }, (_, i) => e2ePort(e2eWorkerRole(i)));
+}
 
 /** This checkout's root, resolved from this module rather than from `cwd`. */
 export const CHECKOUT_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');

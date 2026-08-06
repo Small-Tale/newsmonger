@@ -1,7 +1,7 @@
 import AxeBuilder from '@axe-core/playwright';
 import type { Page } from '@playwright/test';
 
-import { expect, openSettingsTab, resetSharedState, test, topicAction } from './fixtures.js';
+import { expect, openSettingsTab, resetSharedState, test, topicAction, workerBaseURL } from './fixtures.js';
 
 // Accessibility regression net (NEWS-90). Runs axe against the real rendered
 // app in both colour schemes, then checks the keyboard paths axe cannot see —
@@ -14,7 +14,7 @@ test.describe.configure({ mode: 'serial' });
 // inherit whatever the previous file left behind — which is fine until that file
 // fails before its own cleanup, and then the failure lands here instead.
 test.beforeAll(async () => {
-  await resetSharedState(test.info().project.use.baseURL ?? '');
+  await resetSharedState(workerBaseURL());
 });
 
 /** Serious/critical only: axe's "minor" bucket is mostly advisory. */

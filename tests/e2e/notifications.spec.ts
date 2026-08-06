@@ -1,4 +1,4 @@
-import { expect, openSettingsTab, resetSharedState,seedCheckedTopic, test, topicAction } from './fixtures.js';
+import { expect, openSettingsTab, resetSharedState,seedCheckedTopic, test, topicAction, workerBaseURL } from './fixtures.js';
 
 // Notifications and the banners beside them: the permission flow, the on-demand
 // test notification, and dismissing an error or a repeated-failure warning
@@ -13,7 +13,7 @@ test.describe.configure({ mode: 'serial' });
 // `resetSharedState` (NEWS-101) and `seedCheckedTopic` (NEWS-322). No file
 // inherits its precondition from another's leftovers (NEWS-313).
 test.beforeAll(async () => {
-  const baseURL = test.info().project.use.baseURL ?? '';
+  const baseURL = workerBaseURL();
   await resetSharedState(baseURL);
   await seedCheckedTopic(baseURL, 'Notification Topic');
 });

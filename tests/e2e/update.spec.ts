@@ -16,7 +16,7 @@
 
 import type { Page } from '@playwright/test';
 
-import { expect, openSettingsTab, resetSharedState, test } from './fixtures.js';
+import { expect, openSettingsTab, resetSharedState, test, workerBaseURL } from './fixtures.js';
 
 test.describe.configure({ mode: 'serial' });
 
@@ -24,7 +24,7 @@ test.describe.configure({ mode: 'serial' });
 // inherit whatever the previous file left behind — which is fine until that file
 // fails before its own cleanup, and then the failure lands here instead.
 test.beforeAll(async () => {
-  await resetSharedState(test.info().project.use.baseURL ?? '');
+  await resetSharedState(workerBaseURL());
 });
 
 /** How the fake shell should answer each command. */

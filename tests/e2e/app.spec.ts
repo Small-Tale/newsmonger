@@ -1,4 +1,4 @@
-import { closeSettings, expect, openSettings, resetSharedState,test, topicAction } from './fixtures.js';
+import { closeSettings, expect, openSettings, resetSharedState,test, topicAction, workerBaseURL } from './fixtures.js';
 
 // The application shell, topics, and the check loop (NEWS-322 split this out of
 // the original 2,484-line app.spec.ts).
@@ -15,7 +15,7 @@ test.describe.configure({ mode: 'serial' });
 // `resetSharedState` (NEWS-101) and `seedCheckedTopic` (NEWS-322). No file
 // inherits its precondition from another's leftovers (NEWS-313).
 test.beforeAll(async () => {
-  const baseURL = test.info().project.use.baseURL ?? '';
+  const baseURL = workerBaseURL();
   await resetSharedState(baseURL);
 });
 

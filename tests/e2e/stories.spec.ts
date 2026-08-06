@@ -1,6 +1,6 @@
 import AxeBuilder from '@axe-core/playwright';
 
-import { expect, resetSharedState,seedCheckedTopic, test, topicAction } from './fixtures.js';
+import { expect, resetSharedState,seedCheckedTopic, test, topicAction, workerBaseURL } from './fixtures.js';
 
 // The story card and the feed around it: bookmarking, sharing, expanding,
 // flagging off-topic, search, the multi-column layout, and outlets (NEWS-322
@@ -12,7 +12,7 @@ test.describe.configure({ mode: 'serial' });
 // `resetSharedState` (NEWS-101) and `seedCheckedTopic` (NEWS-322). No file
 // inherits its precondition from another's leftovers (NEWS-313).
 test.beforeAll(async () => {
-  const baseURL = test.info().project.use.baseURL ?? '';
+  const baseURL = workerBaseURL();
   await resetSharedState(baseURL);
   await seedCheckedTopic(baseURL, 'Story Card Topic');
 });
