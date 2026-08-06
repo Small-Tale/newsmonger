@@ -3,8 +3,12 @@ import { spawn } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 import { e2ePort, e2eWorkerRole } from '../helpers/e2e-port.js';
+
+/** The checkout root, resolved the one way that is correct on Windows too. */
+const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 
 /**
  * One `--ai-test` server per Playwright worker (NEWS-321).
@@ -81,7 +85,13 @@ export async function startServer(parallelIndex: number): Promise<{ server: E2ES
       dataDir,
     ],
     {
-      cwd: path.resolve(path.dirname(new URL(import.meta.url).pathname), '../..'),
+      // `fileURLToPath`, never `new URL(...).pathname` (NEWS-355). On Windows the
+      // pathname of a `file:` URL is `/D:/a/repo/tests/e2e/server.ts` — leading
+      // slash, forward slashes — and resolving that yields a directory which does
+      // not exist. Windows then reports the missing **cwd** as `ENOENT` on the
+      // *executable*, so this surfaced as `spawn …\node.exe ENOENT` for a
+      // `process.execPath` that was plainly right there.
+      cwd: repoRoot,
       stdio: ['ignore', 'pipe', 'pipe'],
       env: {
         ...process.env,

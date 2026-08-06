@@ -2,13 +2,17 @@ import type { ChildProcess } from 'node:child_process';
 import { spawn } from 'node:child_process';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { resolve } from 'node:path';
+import { dirname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 import { expect, test } from '@playwright/test';
 
 import { CHECK_TIMEOUT_MS as CLAUDE_CEILING, hasSubscriptionCredentials } from '../../src/ai/providers/claude-cli.js';
 import { CHECK_TIMEOUT_MS as CODEX_CEILING, hasChatGptCredentials } from '../../src/ai/providers/codex-cli.js';
 import { E2E_REAL_SERVER, e2ePort } from '../helpers/e2e-port.js';
+
+/** The checkout root — `fileURLToPath`, never `URL.pathname` (NEWS-355). */
+const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 
 /**
  * The real subscriptions, not the mock (NEWS-276).
@@ -73,10 +77,27 @@ let base = '';
 /** Boot a server with the real providers available, and return its URL. */
 async function startRealServer(): Promise<string> {
   dataDir = mkdtempSync(resolve(tmpdir(), 'newsmonger-e2e-real-'));
+  // `process.execPath --import tsx/esm`, matching `server.ts` (NEWS-299,
+  // NEWS-355). This was `npx tsx`, which breaks two rules at once: the `tsx`
+  // CLI opens a unix socket a command sandbox denies, and a bare `npx` cannot
+  // be spawned on Windows at all. `sandboxable.test.ts` pins the first, but
+  // against a hand-maintained file list this spec was not on — which is exactly
+  // what that file's own comment warns turns a rule into a suggestion.
   const proc = spawn(
-    'npx',
-    ['tsx', 'src/cli.ts', '--no-open', '--strict-port', '--port', String(PORT), '--data-dir', dataDir],
+    process.execPath,
+    [
+      '--import',
+      'tsx/esm',
+      'src/cli.ts',
+      '--no-open',
+      '--strict-port',
+      '--port',
+      String(PORT),
+      '--data-dir',
+      dataDir,
+    ],
     {
+      cwd: repoRoot,
       stdio: ['ignore', 'pipe', 'pipe'],
       // A fake keychain even here: these tests use subscription CLIs, which need
       // no key, and must never touch the developer's own keychain.
