@@ -19,7 +19,7 @@ import {
 } from '../api/schemas.js';
 import { readBackup, restoreBackup } from '../backup.js';
 import { normalizeBackupDir, suggestedBackupLocations } from '../backup-locations.js';
-import { toAtom, toJson, toMarkdown } from '../export.js';
+import { toAtom, toJson, toMarkdown, topicsToJson } from '../export.js';
 import { cachedImagePath, isValidHash, liveImageHashes, pruneImageCache, sniffImageType } from '../images/index.js';
 import { isKeychainAvailable, keychainLabel } from '../keychain.js';
 import type { AppEnv } from '../types.js';
@@ -658,6 +658,22 @@ export function registerApi(app: Hono<AppEnv>): void {
   app.get('/api/export.md', exportHandler('md'));
   app.get('/api/export.json', exportHandler('json'));
   app.get('/feed.xml', exportHandler('atom'));
+
+  /**
+   * The topic list as a shareable file (FR-30.2, NEWS-317).
+   *
+   * Its own route rather than a `scope` on `/api/export.*`: that endpoint's
+   * three formats and three scopes are all ways of selecting *stories*, and a
+   * topic list is neither a selection of them nor renderable as Markdown or
+   * Atom. What it shares with them is the download disposition, so it arrives as
+   * a file rather than as a page of JSON.
+   */
+  app.get('/api/export-topics.json', (c) =>
+    c.body(topicsToJson(c.get('store').listTopics(), new Date()), 200, {
+      'Content-Type': 'application/json; charset=utf-8',
+      'Content-Disposition': 'attachment; filename="newsmonger-topics.json"',
+    }),
+  );
 
   app.get('/healthz', (c) => c.json({ ok: true }));
 }

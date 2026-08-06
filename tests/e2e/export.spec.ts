@@ -249,3 +249,63 @@ test('an export goes to the system browser inside Tauri (NEWS-157)', async ({ pa
 
   await closeSettings(page);
 });
+
+test('the topic list downloads, carrying guidance but not check state (FR-30.2, NEWS-317)', async ({ page }) => {
+  // The whole feature end to end: a real click, a real download, and the file's
+  // *contents* checked — not just that something arrived. The exclusions are the
+  // requirement (FR-30.3/30.4), and a test that only asserted the name was
+  // present would pass on a file that also shipped `paused` and every timestamp.
+  await page.goto('/');
+
+  // Creates its own topic rather than taking whatever is there: the test above
+  // deletes every topic to reach the "no topics" empty state, so `.topic.first()`
+  // is nothing by the time this runs. Inheriting a precondition from the test
+  // before it is the trap NEWS-313 and NEWS-322 exist to close.
+  const topicName = 'Shareable Subject';
+  await page.fill('.add-topic input', topicName);
+  await page.press('.add-topic input', 'Enter');
+  const row = page.locator('.topic', { hasText: topicName });
+  await expect(row).toBeVisible();
+
+  // Guidance is what makes a shared list worth more than a list of words, so
+  // the topic under test has some. Set through the real UI, per FR-28.5's spirit.
+  await topicAction(page, row, 'guidance');
+  const guidance = page.locator('.dialog.guidance');
+  await expect(guidance).toBeVisible();
+  await guidance.locator('textarea').fill('Safety and regulation only, not share prices.');
+  await guidance.locator('button[type=submit]').click();
+  await expect(guidance).toHaveCount(0);
+
+  // Pausing it is the state that must *not* travel: a shared list arriving
+  // paused would look broken to whoever imported it.
+  await topicAction(page, row, 'pause');
+  await expect(row).toHaveClass(/paused/);
+
+  await openSettingsTab(page, 'Data');
+  const download = page.waitForEvent('download');
+  await page.locator('[data-external]:has-text("Export topics")').click();
+  const file = await download;
+  expect(file.suggestedFilename()).toBe('newsmonger-topics.json');
+
+  const stream = await file.createReadStream();
+  const raw = await new Promise<string>((resolve, reject) => {
+    let text = '';
+    stream.on('data', (chunk: Buffer) => (text += chunk.toString()));
+    stream.on('end', () => { resolve(text); });
+    stream.on('error', reject);
+  });
+  const parsed = JSON.parse(raw) as { topics: { name: string; guidance: string }[] };
+
+  const exported = parsed.topics.find((t) => t.name === topicName);
+  expect(exported, 'the topic must be in its own export').toBeDefined();
+  expect(exported?.guidance).toBe('Safety and regulation only, not share prices.');
+  expect(raw, 'a shared list must not carry how this install runs a topic').not.toContain('"paused"');
+  expect(raw).not.toContain('"lastCheckedAt"');
+  expect(raw).not.toContain('"id"');
+
+  // Settings first: its backdrop intercepts pointer events, so un-pausing the
+  // row underneath it silently retries until the test times out.
+  await closeSettings(page);
+  await topicAction(page, row, 'pause');
+  await expect(row).not.toHaveClass(/paused/);
+});

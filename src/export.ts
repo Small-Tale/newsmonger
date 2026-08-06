@@ -67,6 +67,46 @@ export function toJson(input: ExportInput): string {
   );
 }
 
+/**
+ * A topic list, as a file to **share** (FR-30.2, NEWS-317).
+ *
+ * Not a backup of your topics — that is what `newsmonger-backup.json` already
+ * is (FR-27.7), and building a second, worse one here would leave two formats to
+ * drift apart. What this offers that a backup does not is that a human can read
+ * it, hand-edit it, and post it in a gist.
+ *
+ * So it carries what a topic *is* — its name, the guidance that says what you
+ * meant by it, and where it files itself — and nothing about how *this install*
+ * is running it. **The exclusions are the requirement**, not an oversight:
+ *
+ * - **No ids or timestamps.** `createdAt`, `lastCheckedAt` and `coveredThroughAt`
+ *   describe one machine's history with a topic and mean nothing on another.
+ * - **No `paused` or `highPriority`** (FR-30.3). Both say how you are running a
+ *   topic today. A shared list that silently arrived paused would look broken.
+ * - **No settings, keys or stories** (FR-30.4). Stated because the file looks
+ *   like a config file and someone will assume otherwise.
+ *
+ * `categorySource` is dropped for a subtler reason: it is a promise about who
+ * chose the category *here* ("manual is a promise: automatic classification
+ * never overwrites it"), and importing someone else's manual choice as your own
+ * manual choice would make that promise on your behalf.
+ */
+export function topicsToJson(topics: Topic[], now: Date): string {
+  return JSON.stringify(
+    {
+      exportedAt: now.toISOString(),
+      topics: topics.map((topic) => ({
+        name: topic.name,
+        guidance: topic.guidance,
+        category: topic.category,
+        subcategory: topic.subcategory,
+      })),
+    },
+    null,
+    2,
+  );
+}
+
 /** Escape the five XML metacharacters. Applied to every interpolated value. */
 export function escapeXml(value: string): string {
   return value

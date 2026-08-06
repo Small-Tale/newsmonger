@@ -1,6 +1,6 @@
 # 30 — Import (and topic export)
 
-**Status: design only.** Nothing here is built. Written for NEWS-290 (export/import topic lists) and NEWS-289 (import exported stories), which share enough machinery that answering them separately would have produced two incompatible formats.
+**Status: partial.** The topic *export* is shipped (FR-30.2–30.4, NEWS-317); both imports are still design. Written for NEWS-290 (export/import topic lists) and NEWS-289 (import exported stories), which share enough machinery that answering them separately would have produced two incompatible formats.
 
 The owner was asked four questions on NEWS-290 and three on NEWS-289 and had not answered when this was written, so **every decision below is taken under a stated assumption**, flagged as such. A doc is the right artifact for that: the assumptions are legible and correctable in one place, which they would not be spread through an implementation.
 
@@ -26,11 +26,11 @@ So the gap is real and specific: **there is no additive way in.** Restore replac
 
 ## Topic export
 
-- **FR-30.2** *(Design only)* `GET /api/export-topics.json` returns `{exportedAt, topics: [{name, guidance, category, subcategory}]}`. Names are trimmed as stored; `guidance` is included because it is the difference between "Formula 1" and a topic that already knows what you meant by it ([FR-24.12](24-topic-discovery.md)), and it is the single thing that makes a shared list worth more than a list of words.
+- **FR-30.2** *(Shipped, NEWS-317)* `GET /api/export-topics.json` returns `{exportedAt, topics: [{name, guidance, category, subcategory}]}`. Names are trimmed as stored; `guidance` is included because it is the difference between "Formula 1" and a topic that already knows what you meant by it ([FR-24.12](24-topic-discovery.md)), and it is the single thing that makes a shared list worth more than a list of words.
 
-- **FR-30.3** *(Design only)* **`paused` and `highPriority` are not exported.** Both are statements about how *you* are running a topic today, not about the topic. A shared list that silently arrives paused would look broken.
+- **FR-30.3** *(Shipped, NEWS-317)* **`paused` and `highPriority` are not exported.** Both are statements about how *you* are running a topic today, not about the topic. A shared list that silently arrives paused would look broken.
 
-- **FR-30.4** *(Design only)* **No API keys, no settings, no stories.** Stated because the file looks like a config file and someone will assume otherwise. `newsmonger-backup.json` has the same property for the same reason (FR-27.7).
+- **FR-30.4** *(Shipped, NEWS-317)* **No API keys, no settings, no stories.** Stated because the file looks like a config file and someone will assume otherwise. `newsmonger-backup.json` has the same property for the same reason (FR-27.7).
 
 ## Importing topics
 
@@ -66,9 +66,13 @@ So the gap is real and specific: **there is no additive way in.** Restore replac
 
 ## Where it lives
 
-- **FR-30.15** *(Design only)* Settings → Data gains a **Topics** group, after `Stories` and before `Export`: an *Export topics* button and an *Import…* file input. Story import joins the existing `Export` group beside the button whose output it reads.
+- **FR-30.15** *(Partial, NEWS-317)* Settings → Data has a **Topics** group holding an *Export topics* link; the *Import…* file input joins it when import ships. Story import joins the existing `Export` group beside the button whose output it reads.
 
   **Assumed.** Folding topics into the export dialog was the alternative; that dialog asks two questions (scope × format) and a topic list answers neither. The tab's groups are already named and ordered ([FR-3.68](3-ui.md)), so a new pair of controls belongs in a group of its own rather than wedged into one whose heading would stop being true.
+
+  Placed **after** `Export` rather than before it, which is where this doc first put it: "Export stories…" and "Export topics…" are the same verb on two different nouns, and a reader looking for one will look at the other. `Stories` (retention) is a different question and does not want to sit between them.
+
+  A plain `<a download>`, not a button — the route is a `GET` returning a file, so the browser's own download is the whole mechanism and an anchor gets right-click → Save As for free. `data-external="1"` so the desktop shell hands it to the system browser like every other outbound link (FR-3.8). Its own `.topics-row` class rather than a second `.export-row`: reusing that one made every `.export-row` locator in the E2E suite ambiguous, so "add a button" broke an assertion about a different feature.
 
 - **FR-30.16** *(Design only)* Import is **not** in the danger zone and takes no confirm dialog. It cannot destroy anything: it adds, skips and reports. The `Reset` group ([FR-27.11](27-data-location.md)) is for actions with no way back, and putting a safe action there would dilute it.
 

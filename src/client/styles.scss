@@ -2252,6 +2252,11 @@ h2.eyebrow {
 // Same layout, two rows: the export button and the backup button (NEWS-192).
 // Separate classes because a selector naming one must not also match the other.
 .export-row,
+// The shareable topic list (NEWS-317). Its own class rather than a second
+// `.export-row`: the two rows look identical and sit two groups apart, and
+// reusing the class made every `.export-row` locator in the suite ambiguous —
+// which is how "add a button" broke an assertion about a different feature.
+.topics-row,
 // Clear all stories (NEWS-255). Plain, not boxed like `.restore-row`: it is
 // destructive but far less so — topics, settings and keys all survive — and
 // making every dangerous-ish control shout the same way teaches people to stop

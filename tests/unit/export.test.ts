@@ -5,7 +5,7 @@ import { CheckRunner } from '../../src/checks.js';
 import type { NewsItem, Topic } from '../../src/db/schemas.js';
 import { Store } from '../../src/db/store.js';
 import type { ExportInput } from '../../src/export.js';
-import { escapeXml, toAtom, toJson, toMarkdown } from '../../src/export.js';
+import { escapeXml, toAtom, toJson, toMarkdown, topicsToJson } from '../../src/export.js';
 import { createApp } from '../../src/server.js';
 import { asResolver } from '../helpers/provider.js';
 import { tmpDataDir } from '../helpers/tmp.js';
@@ -216,5 +216,109 @@ describe('the export routes (NEWS-85)', () => {
       headers: { origin: 'https://evil.com' },
     });
     expect(res.status).toBe(403);
+  });
+});
+
+describe('topicsToJson — the shareable topic list (FR-30.2, NEWS-317)', () => {
+  const shared = [
+    topic({
+      id: 't1',
+      name: 'Fusion Energy',
+      guidance: 'Regulatory and safety news only, not stock moves.',
+      category: 'science',
+      subcategory: 'energy',
+      // Everything below describes *this install*, and none of it may travel.
+      paused: true,
+      highPriority: true,
+      categorySource: 'manual',
+      createdAt: '2026-07-01T00:00:00Z',
+      lastCheckedAt: '2026-07-26T09:00:00Z',
+      coveredThroughAt: '2026-07-26T09:00:00Z',
+      consecutiveFailures: 3,
+      retryAfter: '2026-07-27T09:00:00Z',
+      clearedAt: '2026-07-20T00:00:00Z',
+    }),
+    topic({ id: 't2', name: 'Antarctic ice', guidance: '', category: null, subcategory: null }),
+  ];
+
+  it('carries what a topic is', () => {
+    const parsed = JSON.parse(topicsToJson(shared, NOW)) as {
+      exportedAt: string;
+      topics: { name: string; guidance: string; category: string | null; subcategory: string | null }[];
+    };
+    expect(parsed.exportedAt).toBe(NOW.toISOString());
+    expect(parsed.topics).toEqual([
+      {
+        name: 'Fusion Energy',
+        guidance: 'Regulatory and safety news only, not stock moves.',
+        category: 'science',
+        subcategory: 'energy',
+      },
+      { name: 'Antarctic ice', guidance: '', category: null, subcategory: null },
+    ]);
+  });
+
+  it('carries nothing about how this install runs it', () => {
+    // **The exclusions are the requirement** (FR-30.1/30.3/30.4), so they are
+    // asserted directly rather than inferred from the happy path above. A
+    // `toEqual` alone would catch a *changed* field; this catches a field that
+    // starts riding along, which is how a "list to share" quietly becomes a
+    // snapshot of one machine — and how `paused: true` above would arrive at
+    // someone else's install looking like a broken import.
+    //
+    // Asserted on the serialized text, not the parsed object: a key nested
+    // somewhere unexpected would still be a leak.
+    const json = topicsToJson(shared, NOW);
+    for (const forbidden of [
+      'id',
+      'paused',
+      'highPriority',
+      'categorySource',
+      'createdAt',
+      'lastCheckedAt',
+      'coveredThroughAt',
+      'consecutiveFailures',
+      'retryAfter',
+      'clearedAt',
+    ]) {
+      expect(json, `"${forbidden}" must not travel in a shared topic list`).not.toContain(`"${forbidden}"`);
+    }
+    // And no story or credential ever reaches this file.
+    expect(json).not.toContain('sk-');
+    expect(json).not.toContain('stories');
+  });
+
+  /** A store with one real topic in it, and the app in front of it. */
+  function served() {
+    const store = new Store(tmpDataDir());
+    const app = createApp({ store, runner: new CheckRunner(store, asResolver(createMockProvider())) });
+    return { app, store };
+  }
+
+  it('is served as a download, from the topics the store actually holds', async () => {
+    const { app, store } = served();
+    store.addTopic('Semiconductor supply chain', { guidance: 'Packaging and export controls.' });
+
+    const res = await app.request('/api/export-topics.json');
+    expect(res.status).toBe(200);
+    expect(res.headers.get('content-type')).toContain('application/json');
+    // A file, not a page of JSON — the point of the control is to hand you
+    // something you can send to someone.
+    expect(res.headers.get('content-disposition')).toContain('attachment');
+    expect(res.headers.get('content-disposition')).toContain('newsmonger-topics.json');
+
+    const parsed = JSON.parse(await res.text()) as { topics: { name: string; guidance: string }[] };
+    expect(parsed.topics.map((t) => t.name)).toContain('Semiconductor supply chain');
+    expect(parsed.topics.find((t) => t.name === 'Semiconductor supply chain')?.guidance).toBe(
+      'Packaging and export controls.',
+    );
+  });
+
+  it('answers an install with no topics with an empty list, not an error', async () => {
+    // The state a first-run user is in, and the one a "share your topics"
+    // control is most likely to be poked at from.
+    const { app } = served();
+    const parsed = JSON.parse(await (await app.request('/api/export-topics.json')).text()) as { topics: unknown[] };
+    expect(parsed.topics).toEqual([]);
   });
 });

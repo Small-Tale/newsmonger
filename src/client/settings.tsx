@@ -666,6 +666,30 @@ function settingsPanelJsx(s: AppState): SafeHtml {
           </button>
         </div>
         <p class="field-hint">Markdown to paste into notes, JSON as the escape hatch.</p>
+        {/* Its own group, not a scope inside the export dialog (FR-30.15,
+            NEWS-317). That dialog asks two questions — which stories, in what
+            format — and a topic list answers neither: it is not a selection of
+            stories, and it renders as neither Markdown nor Atom. Folding it in
+            would have meant a third axis on a control that already has two.
+
+            A plain link rather than a button: this is a `GET` that returns a
+            file, so the browser's own download is the whole mechanism, and an
+            anchor gets right-click → Save As for free. `data-external` so the
+            desktop shell hands it to the system browser like every other
+            outbound link (FR-3.8). */}
+        <h3 class="eyebrow">Topics</h3>
+        <div class="topics-row">
+          <a class="btn" href="/api/export-topics.json" download data-external="1">
+            {icon('download', 15)} Export topics…
+          </a>
+        </div>
+        {/* One line, and it earns its place by answering the question the file
+            raises rather than by describing the button (FR-3.69). "No stories,
+            no keys" is FR-30.4: the file looks like a config file and someone
+            will assume otherwise. Two sentences here pushed the Data tab past
+            NEWS-306's prose-density ceiling — the tab has five groups to
+            Schedule's two, so each one's hint has to be genuinely one line. */}
+        <p class="field-hint">Names, guidance and categories — no stories, no keys.</p>
         {/* Backups (NEWS-192, FR-27.6). The path is typed rather than picked:
             a browser cannot hand a Node server a real filesystem path, and the
             desktop shell has no dialog plugin yet — see docs/27-data-location.md. */}
