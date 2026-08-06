@@ -88,17 +88,11 @@ describe('the effort a run used is recorded (NEWS-226)', () => {
   });
 });
 
+// `effortLabel`, which rendered these in the diagnostics run list, went with
+// that section in NEWS-333. The *storage* distinction below is unaffected and
+// still matters: it is what keeps runs recorded before the column existed out
+// of any later comparison.
 describe('null and empty effort mean different things (NEWS-226)', () => {
-  it('renders a level, and stays silent for both unknown and default', async () => {
-    const { effortLabel } = await import('../../src/client/diagnostics.js');
-    expect(effortLabel('max')).toBe(' · effort max');
-    // Not recorded (a run from before the column existed) and "ran at the
-    // model's default" both read as nothing — a line saying "effort default" on
-    // every run from a provider without the parameter would be noise.
-    expect(effortLabel(null)).toBe('');
-    expect(effortLabel('')).toBe('');
-  });
-
   it('keeps a historical run distinguishable from a default-effort one', async () => {
     // Collapsing null into '' would make every run recorded before this shipped
     // look like a default-effort data point — poisoning the comparison the

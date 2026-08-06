@@ -15,7 +15,6 @@ import {
   discoverTopics,
   dismissBackupPrompt,
   fetchBackupLocations,
-  fetchDiscoveryUsage,
   importStories,
   importTopics,
   loadThread,
@@ -48,7 +47,6 @@ import {
 } from './api.js';
 import { shouldOfferBackup, snoozeUntil } from './backup-prompt.js';
 import { relativeTime } from './dates.js';
-import { buildDiagnostics } from './diagnostics.js';
 import { backupOfferJsx, exportDialogJsx, guidanceDialogJsx, privacyDialogJsx, renameDialogJsx } from './dialogs.js';
 import type { TunerState } from './discover.js';
 import {
@@ -1707,35 +1705,6 @@ function wireEvents(root: HTMLElement): void {
 
   void delegate(root, 'change', '[data-action=retention]', (_e, el) => {
     if (el instanceof HTMLSelectElement) void updateRetention(Number(el.value));
-  });
-
-  void delegate(root, 'change', '[data-action=diag-topics]', (_e, el) => {
-    if (el instanceof HTMLInputElement) appStore.actions.setDiagIncludeTopics(el.checked);
-  });
-
-  void delegate(root, 'click', '[data-action=copy-diagnostics]', () => {
-    void (async () => {
-      const s = appStore.state.value;
-      // Fetched rather than read from state: the log grows with use and has no
-      // business on the 4-second poll (NEWS-130). A bundle without it is still
-      // worth having, so a failure here degrades to "(unavailable)".
-      const discovery = await fetchDiscoveryUsage().catch(() => null);
-      const text = buildDiagnostics(
-        { ...s, latestItemIds: [] },
-        {
-          includeTopicNames: s.diagIncludeTopics,
-          userAgent: navigator.userAgent,
-          appVersion: s.appVersion === '' ? 'unknown' : s.appVersion,
-          discovery,
-        },
-      );
-      try {
-        await navigator.clipboard.writeText(text);
-        showToast('Diagnostics copied');
-      } catch {
-        showToast('Could not copy — clipboard unavailable');
-      }
-    })();
   });
 
   // The feed URL, copied rather than drag-selected out of a sentence

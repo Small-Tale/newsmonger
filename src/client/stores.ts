@@ -237,7 +237,6 @@ export interface AppState {
    */
   checksPossibleSince: string;
   /** Whether a copied diagnostics bundle includes topic names (NEWS-88). */
-  diagIncludeTopics: boolean;
   /** Provider list + availability (fetched on demand, not every poll). */
   providers: ProviderInfo[];
   /**
@@ -607,7 +606,6 @@ export const appStore = defineStore({
     // which is the pre-NEWS-247 behaviour and the right thing to assume before
     // the server has said otherwise.
     checksPossibleSince: '1970-01-01T00:00:00.000Z',
-    diagIncludeTopics: false,
     providers: [],
     liveModels: [],
     liveEffortLevels: null,
@@ -656,9 +654,6 @@ export const appStore = defineStore({
     toast: null,
   }),
   actions: (set, get) => ({
-    setDiagIncludeTopics: (diagIncludeTopics: boolean) => {
-      set({ ...get(), diagIncludeTopics });
-    },
     setBackupOffer: (backupOffer: BackupLocation[] | null) => {
       set({ ...get(), backupOffer });
     },

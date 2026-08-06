@@ -74,6 +74,8 @@ That last part is the decision worth stating plainly, because it is what the bra
 
 - **FR-24.14** *(Shipped, NEWS-125)* Discovery is the only surface in the app that can issue **unbounded** AI calls, so every call is **recorded** — entry path, provider, model, outcome, and whether it was served free from the cache. `GET /api/discover/usage`.
 
+  **The recording is the requirement; a reader for it is not.** NEWS-130 folded this into the diagnostics bundle, and NEWS-333 removed that section — so the route now has no in-app consumer and is reached by hand. Kept deliberately: an accountability record for the one unbounded-spend surface should not disappear because the screen that happened to display it did.
+
   **This was originally written as "counted against the spend cap", which is not possible: [NEWS-119](ai/requirements-summary.md) removed spend estimation, the monthly budget and the price table outright.** There is no cap to count against, so the recording is for *visibility* and the actual protection against runaway cost is structural — the round ceiling (FR-24.9), the cache (FR-24.15), and user-initiated-only (FR-24.16). Those three are load-bearing precisely because no budget backstops them.
 
   It is surfaced in the redacted diagnostics bundle (NEWS-130, [7 — API Keys](7-api-keys.md) FR-7.13): a bug report about unexpected cost needs exactly "how many calls, and how many were free". The log holds the scope **kind** only, never the free-text query — that query is what a user said about their own interests, and a bundle is usually pasted somewhere public. Safe by construction rather than by filtering, and a test pins it that way.

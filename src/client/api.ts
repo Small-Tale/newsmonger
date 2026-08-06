@@ -1,12 +1,11 @@
 import type { Effort,ProviderName} from '../ai/types.js';
-import type { BackupPreview, DiscoverReq, DiscoverResp, DiscoverUsageResp, ImportStoriesResp, ImportTopicsResp, TopicSuggestion } from '../api/schemas.js';
+import type { BackupPreview, DiscoverReq, DiscoverResp, ImportStoriesResp, ImportTopicsResp, TopicSuggestion } from '../api/schemas.js';
 import {
   BackupLocationsRespSchema,
   BackupPreviewRespSchema,
   BackupRespSchema,
   ClearItemsRespSchema,
   DiscoverRespSchema,
-  DiscoverUsageRespSchema,
   ImportStoriesRespSchema,
   ImportTopicsRespSchema,
   ItemsRespSchema,
@@ -261,15 +260,6 @@ export async function addSuggestedTopic(suggestion: TopicSuggestion): Promise<vo
   await refreshState();
 }
 
-/**
- * What discovery has spent this process lifetime (FR-24.14).
- *
- * Its own endpoint rather than a field on `/api/state`: the log grows with use,
- * and `/api/state` is polled every 4 seconds.
- */
-export async function fetchDiscoveryUsage(): Promise<DiscoverUsageResp> {
-  return DiscoverUsageRespSchema.parse(await request('/api/discover/usage'));
-}
 
 /** Ask for topic suggestions (FR-24.1). */
 export async function discoverTopics(

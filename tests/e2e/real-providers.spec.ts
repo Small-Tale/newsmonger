@@ -4,7 +4,6 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { resolve } from 'node:path';
 
-import type { Page } from '@playwright/test';
 import { expect, test } from '@playwright/test';
 
 import { CHECK_TIMEOUT_MS as CLAUDE_CEILING, hasSubscriptionCredentials } from '../../src/ai/providers/claude-cli.js';
@@ -202,12 +201,18 @@ for (const [provider, label, credentials] of [
   });
 }
 
-test('the effort comparison fills in from real runs at two levels (NEWS-227, NEWS-276)', async ({ page }: { page: Page }) => {
+test('a real run records the effort level it ran at (NEWS-226, NEWS-276)', async () => {
   test.skip(!(await hasSubscriptionCredentials()), 'claude-cli is not signed in on this machine');
   test.setTimeout(CHECK_TIMEOUT * 2 + 60_000);
 
-  // Two levels, which is the whole point: the mock records one, so this view's
-  // populated state was unreachable until a real provider ran it.
+  // Two levels, which is the point: the mock records one, so "the level is
+  // stored, and stored *per run*" was only ever observable against a real
+  // provider.
+  //
+  // This used to walk Settings → App → Diagnostics and read the effort
+  // comparison table. That view was removed in NEWS-333; the **recording** it
+  // read is FR-6.15 and unaffected, so the assertions moved down to the run
+  // rows, which is where the property actually lives.
   await patchSettings({ provider: 'claude-cli', effort: 'low' });
   const low = await checkNewTopic('Effort probe low');
   expect(low.status, `low-effort check failed: ${low.error ?? ''}`).toBe('succeeded');
@@ -218,29 +223,14 @@ test('the effort comparison fills in from real runs at two levels (NEWS-227, NEW
   expect(high.status, `high-effort check failed: ${high.error ?? ''}`).toBe('succeeded');
   expect(high.effort).toBe('high');
 
-  // Onboarding is the other modal that covers the app on a fresh data dir.
-  await page.addInitScript(() => {
-    localStorage.setItem('news:onboarding-seen', '1');
-  });
-  await page.goto(base);
-  await page.locator('[data-action=open-settings]').click();
-  await page.locator('.settings-tab').filter({ hasText: 'App' }).click();
-  await page.locator('summary').filter({ hasText: 'Diagnostics' }).click();
+  // Two runs of the same provider at different levels are distinguishable, which
+  // is the whole reason the column exists — and neither collapses to `null` (a
+  // run from before the column) or `''` (ran at the model's default).
+  expect(new Set([low.effort, high.effort]).size).toBe(2);
 
-  // **Contains**, not equals. The smoke tests above run against the same server and
-  // leave runs at the model default, so the table legitimately holds three levels
-  // by now — asserting `toHaveCount(2)` passed only when this test ran alone and
-  // failed the moment the file ran in full. This test's business is that *its* two
-  // levels appear, not how many other levels exist.
-  const levels = (await page.locator('.effort-level').allInnerTexts()).map((l) => l.trim());
-  expect(levels).toContain('low');
-  expect(levels).toContain('high');
-  // Which level is *faster* is deliberately not asserted: that is the question the
-  // view exists to answer, and pinning an answer would make this a test of the
-  // provider's mood.
-
-  // Every row here is a subscription run, so none can report tokens — the
-  // null-is-not-zero rule, observed against a real provider rather than a fixture.
-  const tokens = await page.locator('.effort-tokens').allInnerTexts();
-  expect(tokens.every((t) => t.includes('not reported'))).toBe(true);
+  // The old version also checked that a subscription run reports no token count,
+  // by reading "tokens not reported" out of the comparison table. That is a
+  // property of `usage`, not of the run row this helper returns, and is already
+  // covered by the provider unit tests — not re-asserted here through a shape
+  // this file does not fetch.
 });

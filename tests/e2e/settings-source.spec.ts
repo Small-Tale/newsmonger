@@ -389,32 +389,3 @@ test('a subscription provider never asks for an API key it does not use (NEWS-24
   await expect(page.locator('[data-action=provider]')).toHaveValue('mock', { timeout: 15_000 });
 });
 
-test('the effort comparison explains itself before it has data (NEWS-227)', async ({ page }) => {
-  // Only the empty state is reachable from here, and that is a fact about the
-  // fixture rather than a gap in the feature: the mock provider hardcodes
-  // `effort: ''` (it genuinely takes no level), so every run under `--ai-test`
-  // lands on one level and two are needed for a comparison. The populated table
-  // is covered by twelve unit tests on `effortComparison`, and was checked against
-  // a real database — 24 runs at the model default (median 61.5s) against 23 at
-  // `low` (76.5s). Seeding demo runs at two levels so this path gets an automated
-  // guard is filed separately.
-  //
-  // What this does assert is the half that a fresh install actually sees, and the
-  // half NEWS-227 was held back over: that an empty comparison says what to do
-  // instead of rendering a box with one bar in it.
-  await page.goto('/');
-  await openSettingsTab(page, 'App');
-  await page.locator('.advanced summary', { hasText: 'Diagnostics' }).click();
-
-  const section = page.locator('.effort-compare');
-  await expect(section).toBeVisible();
-
-  // No table, and a note that names the control to change and where it lives.
-  await expect(section.locator('.effort-row')).toHaveCount(0);
-  const note = section.locator('.note');
-  await expect(note).toContainText('two or more effort levels');
-  await expect(note).toContainText('Effort');
-  await expect(note, 'must point at where the setting is').toContainText('Source');
-
-  await page.locator('.dialog [data-action=close-settings]').click();
-});

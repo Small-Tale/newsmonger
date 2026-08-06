@@ -386,59 +386,6 @@ body {
   max-width: 520px;
 }
 
-// Diagnostics, collapsed (NEWS-120).
-.advanced {
-  margin-top: 20px;
-  border-top: 1px solid var(--line);
-  padding-top: 12px;
-
-  > summary {
-    display: flex;
-    align-items: center;
-    gap: 7px;
-    cursor: pointer;
-    list-style: none;
-    font-family: var(--mono);
-    font-size: 11px;
-    font-weight: 500;
-    text-transform: uppercase;
-    letter-spacing: 0.14em;
-    color: var(--ink-soft);
-
-    &::-webkit-details-marker {
-      display: none;
-    }
-
-    &:hover {
-      color: var(--ink);
-    }
-
-    // The disclosure marker (NEWS-307). `list-style: none` above removes the
-    // browser's own triangle, so without this the summary has no affordance at
-    // all — which is how it ended up wearing a bug glyph that read as a heading
-    // icon. Rotation matches the story card's expander so the app has one
-    // disclosure gesture, not two.
-    .icon {
-      transition: transform 140ms ease;
-    }
-  }
-
-  &[open] > summary {
-    margin-bottom: 12px;
-    color: var(--ink);
-
-    .icon {
-      transform: rotate(180deg);
-    }
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .advanced > summary .icon {
-    transition: none;
-  }
-}
-
 // ---------------------------------------------------------------- header ---
 
 .header-left {
@@ -1587,11 +1534,13 @@ h2.eyebrow {
 // An inline "why?" (NEWS-306) — a question most readers never ask, answered
 // where the one who does will look and nowhere else.
 //
-// Its own block, **not** a selector added to `.advanced` above. That one is a
-// section-foot disclosure with a rule and 20px of clearance, tuned for the
-// Diagnostics block; splicing this into it is the shape NEWS-161's layout test
-// exists to catch. The chevron and its rotation are shared behaviour, so they
-// are stated again here rather than reached for across the file.
+// It used to share the file with `.advanced`, the Diagnostics disclosure — a
+// section-foot control with a rule and 20px of clearance — and was deliberately
+// *not* folded into it, because splicing a mid-section question into a
+// section-foot block is the shape NEWS-161's layout test exists to catch.
+// `.advanced` went with Diagnostics in NEWS-333; this is now the app's only
+// disclosure outside the story card, and self-contained, which is why the
+// chevron and its rotation are stated here rather than shared.
 .why {
   margin-top: 10px;
 
@@ -2570,57 +2519,6 @@ a.btn {
   }
 }
 
-// ----------------------------------------------------------- diagnostics ---
-
-.diagnostics .runs {
-  list-style: none;
-  margin: 0 0 12px;
-  padding: 0;
-  font-size: 12.5px;
-}
-
-.run {
-  display: grid;
-  // Fixed first two columns so the times and topics line up into scannable
-  // rulers; the message takes whatever is left and truncates.
-  grid-template-columns: 74px 1fr 1.4fr;
-  gap: 10px;
-  align-items: baseline;
-  padding: 4px 0;
-  border-bottom: 1px solid var(--line);
-
-  &:last-child {
-    border-bottom: 0;
-  }
-}
-
-.run-when {
-  color: var(--ink-soft);
-  font-family: var(--mono);
-  font-size: 11px;
-}
-
-.run-topic,
-.run-meta {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.run-meta {
-  color: var(--ink-soft);
-}
-
-.run.failed .run-meta {
-  color: #b3423a;
-}
-
-@media (prefers-color-scheme: dark) {
-  .run.failed .run-meta {
-    color: #e08a7e;
-  }
-}
-
 // ------------------------------------------------------ guidance dialog ---
 
 .dialog.guidance {
@@ -2933,60 +2831,6 @@ button.off-topic-pill {
 
   .update-check-note p {
     margin: 6px 0 0;
-  }
-}
-
-// The effort comparison inside Diagnostics (NEWS-227). Its own block rather than
-// a selector added to `.runs` — NEWS-161.
-.effort-compare {
-  margin-top: 16px;
-  padding-top: 12px;
-  border-top: 1px solid var(--line);
-
-  > .eyebrow {
-    margin: 0 0 6px;
-  }
-
-  .effort-rows {
-    list-style: none;
-    margin: 8px 0 0;
-    padding: 0;
-  }
-
-  .effort-row {
-    display: flex;
-    align-items: baseline;
-    gap: 10px;
-    padding: 5px 0;
-    font-size: 12.5px;
-
-    + .effort-row {
-      border-top: 1px solid var(--line);
-    }
-  }
-
-  // The level is the thing being compared, so it is the one that reads first.
-  .effort-level {
-    flex: 0 0 108px;
-    font-weight: 500;
-  }
-
-  // Mono for the measurement, matching the timestamps and counts elsewhere —
-  // this is clockwork, not prose.
-  .effort-median {
-    font-family: var(--mono);
-    flex: 0 0 auto;
-  }
-
-  .effort-runs,
-  .effort-tokens {
-    color: var(--ink-soft);
-  }
-
-  .effort-tokens {
-    margin-left: auto;
-    font-family: var(--mono);
-    font-size: 11px;
   }
 }
 

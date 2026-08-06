@@ -1,6 +1,5 @@
 /**
- * The settings dialog: its tabs, all four panels, and the diagnostics block
- * (NEWS-297).
+ * The settings dialog: its tabs and all four panels (NEWS-297).
  *
  * The largest seam out of `app.tsx`, and the cleanest despite its size — every
  * symbol in here had exactly **one** caller, and every one of those callers was
@@ -8,8 +7,7 @@
  * for. That is what made a 900-line move safe: it is a subsystem, not a slice.
  *
  * Includes the pieces only Settings renders — `sourceStatusJsx`,
- * `providerIsAttended`, `notifyBlockedNoteJsx`, `diagnosticsJsx`,
- * `effortComparisonJsx`, `RETENTION_OPTIONS`. `INTERVAL_OPTIONS` is *not* here:
+ * `providerIsAttended`, `notifyBlockedNoteJsx`, `RETENTION_OPTIONS`. `INTERVAL_OPTIONS` is *not* here:
  * onboarding renders it too, so it lives in `stores.ts` with the other shared
  * client constants (NEWS-297). A thing moves to the view that owns it, or to a
  * shared home if two views own it — never to whichever view moved first.
@@ -31,9 +29,7 @@ import {
   providerTakesEffort,
 } from '../ai/types.js';
 import { relativeTime } from './dates.js';
-import { formatDuration,runRows } from './diagnostics.js';
 import { effortAvailable, effortOptions } from './effort-options.js';
-import { effortComparison, hasEffortComparison } from './effort-stats.js';
 import { icon } from './icons.js';
 import { keyRowJsx } from './key-row.js';
 import { modelOptions } from './model-choice.js';
@@ -176,121 +172,6 @@ function notifyBlockedNoteJsx(): SafeHtml {
  * it names the *unobvious* parts: the flagged titles and the already-reported
  * titles both go too, because that is how dedup and steering work.
  */
-/**
- * Recent check history (NEWS-88).
- *
- * The store has kept the last 200 runs all along — status, timing, provider,
- * error text — and the UI showed a spinner and one dismissable banner. When
- * something breaks for someone who isn't the author, this is the difference
- * between "it stopped working" and a report anyone can act on.
- */
-/**
- * What each effort level costs, measured (NEWS-227).
- *
- * The question NEWS-19 parked: is a higher level buying anything? Beside the run
- * list because that is where the evidence lives, and inside the collapsed
- * Diagnostics section for the same reason the run list is — a thing you go
- * looking for, not something a settings screen should lead with.
- *
- * **Not a nested `<details>`.** The first version was, which put the table behind
- * two disclosures and made `details.advanced summary` ambiguous for a test that
- * had reasonably assumed one match. One click to reach Diagnostics is enough.
- *
- * **Silent below two levels.** One level is a number with no second number to be
- * read against, and NEWS-227 was held back for months precisely to avoid
- * shipping a view that renders one bar and looks broken. The note says what to do
- * about it rather than leaving an empty box.
- */
-function effortComparisonJsx(s: AppState): SafeHtml {
-  const stats = effortComparison(s.runs);
-  if (!hasEffortComparison(stats)) {
-    return (
-      <div class="effort-compare">
-        <h4 class="eyebrow">Effort comparison</h4>
-        <p class="note">
-          Nothing to compare yet — this needs completed checks at two or more effort levels. Change{' '}
-          <strong>Effort</strong> in Settings → Source, let some checks run, and come back.
-        </p>
-      </div>
-    );
-  }
-  // Fastest first, so the comparison reads as a ranking rather than as a list in
-  // whatever order the levels happened to be used.
-  const fastest = stats[0];
-  return (
-    <div class="effort-compare">
-      <h4 class="eyebrow">Effort comparison</h4>
-      <ul class="effort-rows">
-        {stats.map((stat) => (
-          <li class="effort-row" data-key={stat.effort}>
-            <span class="effort-level">{stat.label}</span>
-            <span class="effort-median">{formatDuration(stat.medianMs)}</span>
-            {/* Just the count: the note below already says these are medians, and
-                "median of 3 checks" wrapped to two lines in a 460px dialog. */}
-            <span class="effort-runs">
-              {String(stat.runs)} check{stat.runs === 1 ? '' : 's'}
-            </span>
-            <span class="effort-tokens">
-              {stat.medianInputTokens === null
-                ? // Never "0 tokens" (NEWS-227). Both subscription CLIs report no
-                  // counts at all, so on those installs every run lands here — and a
-                  // zero would be a measurement the app never made, sitting beside a
-                  // duration it did.
-                  'tokens not reported'
-                : `${String(stat.medianInputTokens)} in / ${String(stat.medianOutputTokens)} out`}
-            </span>
-          </li>
-        ))}
-      </ul>
-      <p class="note">
-        Median rather than mean, because one stalled check would otherwise move the figure far enough to invert the
-        comparison. Fastest here is {fastest.label}. Runs recorded before effort was tracked are left out — they are
-        not a level.
-      </p>
-    </div>
-  );
-}
-
-function diagnosticsJsx(s: AppState): SafeHtml {
-  const rows = runRows(s);
-  return (
-    <div class="diagnostics">
-      {rows.length === 0 ? (
-        <p class="note">No checks have run yet.</p>
-      ) : (
-        <ul class="runs">
-          {rows.slice(0, 10).map((row) => (
-            <li class={`run ${row.status}`}>
-              <span class="run-when" title={row.startedAt}>
-                {relativeTime(row.startedAt)}
-              </span>
-              <span class="run-topic">{row.topicName}</span>
-              <span class="run-meta">
-                {row.status === 'running'
-                  ? 'running…'
-                  : row.status === 'failed'
-                    ? (row.error ?? 'failed')
-                    : `${String(row.newItems)} new · ${formatDuration(row.durationMs)}`}
-              </span>
-            </li>
-          ))}
-        </ul>
-      )}
-      {effortComparisonJsx(s)}
-      <label class="field checkbox-field">
-        <input type="checkbox" data-action="diag-topics" checked={s.diagIncludeTopics ? true : undefined} />
-        <span>Include topic names when copying</span>
-      </label>
-      <p class="note">
-        <button class="btn subtle" type="button" data-action="copy-diagnostics">
-          Copy diagnostics
-        </button>{' '}
-        Puts versions, settings and the recent check outcomes on the clipboard for a bug report. Topic names are
-        left out unless you tick the box; error text is copied verbatim and may still mention one.
-      </p>
-    </div>
-  );
-}
 
 /**
  * Privacy, as its own dialog reached from the footer (NEWS-121).
@@ -938,23 +819,6 @@ function settingsPanelJsx(s: AppState): SafeHtml {
             tab *and* collapsed, so it takes two deliberate steps — but it stays
             nameable in support ("open Settings → App and expand Diagnostics")
             rather than hidden behind a gesture nobody can be talked through. */}
-        {/* A chevron, not the bug glyph it used to carry (NEWS-307).
-            DIAGNOSTICS was the only heading-ranked thing in the dialog with an
-            icon, which read as an arbitrary decoration on one of five section
-            headings. The rule settled here is **eyebrows take no icon** — but
-            this one is not an eyebrow, it is a `<summary>` styled like one, and
-            `list-style: none` had already taken its disclosure marker away. So
-            the mark stays and starts meaning something: a chevron says "this
-            opens", which is the one thing that actually distinguishes it from
-            the headings beside it. It rotates on open, matching the story
-            card's expander. */}
-        <details class="advanced">
-          <summary>
-            {icon('chevron', 13)}
-            <span>Diagnostics</span>
-          </summary>
-          {diagnosticsJsx(s)}
-        </details>
         </div>
       );
   }

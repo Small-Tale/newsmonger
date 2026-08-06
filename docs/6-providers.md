@@ -164,7 +164,9 @@ The Settings model field is a **combobox** (NEWS-37): an editable text input bac
 
   This is what dissolves NEWS-19's blocker: that ticket is parked waiting on budget for a formal multi-sample effort comparison, and with the level recorded per run, every ordinary check becomes a data point instead.
 
-- **FR-6.16** *(Shipped, NEWS-227)* **An effort comparison** in Settings → App → Diagnostics: median duration and median tokens per level, fastest first. `effortComparison` in `src/client/effort-stats.ts`.
+- **FR-6.16** *(Removed, NEWS-333)* An **effort comparison** in Settings → App → Diagnostics showed median duration and median tokens per level, fastest first (NEWS-227).
+
+  Removed with the Diagnostics section that contained it. **FR-6.15 is unaffected** — every run still records the level it ran at — so the data the comparison was computed from is intact and the view could be rebuilt from `runs` alone. That recording was the part NEWS-19 was blocked on, and it survives.
 
   Held back twice on purpose — a comparison over a handful of runs is noise presented as evidence — and built once the data arrived: a live database showed **24 succeeded runs at the model default (median 61.5s) against 23 at `low` (76.5s)**, which is a comparison worth reading. It is the answer NEWS-19 was parked waiting for.
 

@@ -401,7 +401,7 @@ Both are measured in `tests/e2e/layout.spec.ts` rather than eyeballed, and both 
 
   Reopening always starts on the first tab. A dialog that remembers where you left off is a dialog that opens somewhere surprising.
 
-- **FR-3.46** *(Shipped, NEWS-120)* **Diagnostics is collapsed and on the App tab** — two deliberate steps to reach. A bug-report bundle is an advanced, rarely-used tool, and an always-open run log was the loudest thing on the screen while being the least often wanted. It stays a `<details>` rather than a hidden gesture so support can talk someone into it: "open Settings → App and expand Diagnostics".
+- **FR-3.46** *(Removed, NEWS-333)* Diagnostics was collapsed on the App tab (NEWS-120), two deliberate steps to reach. Removed with the section itself — see FR-3.25.
 
 - **FR-3.47** *(Shipped, NEWS-121)* **Privacy is its own dialog**, reached from a footer link under the main content rather than from Settings. It was the wrong place twice over: nothing on it can be changed, so it isn't a setting, and burying "what leaves this machine" under two screens of configuration is the opposite of how a privacy note earns trust. Escape and a backdrop click close it, like every other dialog.
 
@@ -542,9 +542,13 @@ The same spec covers what axe cannot: focus + Enter + Shift+F10 on a topic row, 
 
 The store has kept the last 200 `CheckRun` records all along — status, timing, provider, error text — and the UI showed a spinner and one dismissable failure banner. For anyone who isn't the author, "it stopped working" had nowhere to go.
 
-- **FR-3.25** *(Shipped)* A **Diagnostics** section in Settings lists the ten most recent checks: when, topic, and either the outcome (new items, duration, estimated cost) or the error text. Failures are coloured, and a deleted topic reads as "deleted topic" rather than a bare id.
+- **FR-3.25** *(Removed, NEWS-333)* A **Diagnostics** section in Settings listed the ten most recent checks — when, topic, and either the outcome or the error text.
 
-- **FR-3.26** *(Shipped)* **Copy diagnostics** puts a Markdown bundle on the clipboard: app version, user agent, provider/model/interval settings, topic and spend counts, and the recent run outcomes with **verbatim error text** — the error is the whole point, so it is never truncated.
+  Removed on request, and worth recording what went with it: the run *history* is still stored (FR-25.7) and still drives the failure banner and the "checked N ago" line; what is gone is the only place a user could read it directly. A failed check now surfaces through the banner alone, and its verbatim error text is no longer reachable from the UI.
+
+- **FR-3.26** *(Removed, NEWS-333)* **Copy diagnostics** put a Markdown bundle on the clipboard — app version, user agent, settings, topic and spend counts, and the recent run outcomes with verbatim error text.
+
+  **This was the app's bug-report path**, so its removal has a cost: someone reporting a problem now has nothing to paste. `src/client/diagnostics.ts` is deleted rather than orphaned; the data it assembled all still exists behind `/api/state`, so rebuilding it is a rendering job, not a plumbing one.
 
 - **FR-3.27** *(Shipped)* **Topic names are redacted by default**, behind an explicit opt-in checkbox: a topic name is user content (see [7 — API Keys](7-api-keys.md) FR-7.13) and a bug report usually gets pasted somewhere public. The bundle says which mode produced it, and — when redacted — warns that **error text is verbatim and may still mention a topic**. Honest beats reassuring.
 

@@ -1,11 +1,11 @@
-import { closeSettings, expect, openSettings, openSettingsTab, resetSharedState,seedCheckedTopic, test, topicAction, workerBaseURL } from './fixtures.js';
+import { closeSettings, expect, openSettings, openSettingsTab, resetSharedState,seedCheckedTopic, test, workerBaseURL } from './fixtures.js';
 
 // Settings as a *document*: tabs, group headings, field alignment, hints, the
 // dialogs it opens, and what it does not talk about (NEWS-322 split this out of
 // app.spec.ts).
 //
-// Almost all geometry. Seeds a checked topic because the diagnostics bundle and
-// the Data tab both describe a server that has actually run a check.
+// Almost all geometry. Seeds a checked topic because the Data tab describes a
+// server that has actually run a check.
 
 test.describe.configure({ mode: 'serial' });
 
@@ -88,39 +88,6 @@ test('the privacy note discloses what leaves the machine (NEWS-91)', async ({ pa
   await page.keyboard.press('Escape');
 });
 
-test('Settings shows recent checks and copies a diagnostics bundle (NEWS-88)', async ({ page, context }) => {
-  await context.grantPermissions(['clipboard-read', 'clipboard-write']);
-  await page.goto('/');
-
-  // Self-sufficient rather than relying on earlier specs: adding a topic fires
-  // its own first check (FR-1.12), which is the run this asserts on.
-  await page.fill('.add-topic input', 'Diagnostics Probe');
-  await page.press('.add-topic input', 'Enter');
-  const row = page.locator('.topic', { hasText: 'Diagnostics Probe' });
-  await expect(row).toBeVisible();
-
-  await openSettingsTab(page, 'App');
-  // Collapsed since NEWS-120 — expand it before asserting on its contents.
-  await page.locator('details.advanced summary').click();
-  await expect(page.locator('.diagnostics .run').first()).toBeVisible({ timeout: 15_000 });
-
-  await page.locator('[data-action=copy-diagnostics]').click();
-  await expect(page.locator('.toast')).toContainText('Diagnostics copied');
-
-  const copied = await page.evaluate(() => navigator.clipboard.readText());
-  expect(copied).toContain('# Newsmonger diagnostics');
-  expect(copied).toContain('provider setting:');
-  expect(copied).toContain('## Recent checks');
-  // Redacted by default: the run lines refer to "topic N", never a real name.
-  expect(copied).toContain('Topic names redacted');
-  expect(copied).toMatch(/- .* (succeeded|failed|running) topic \d+/);
-  expect(copied).not.toContain('Diagnostics Probe');
-
-  await closeSettings(page);
-  await topicAction(page, row, 'delete');
-  await expect(row).toHaveCount(0);
-});
-
 test('settings is organised into tabs (NEWS-118)', async ({ page }) => {
   await page.goto('/');
   // Plain open, not `openSettingsTab`: this test is about the default tab.
@@ -200,27 +167,6 @@ test('no settings tab opens with an unnamed group (NEWS-307)', async ({ page }) 
     // dialog already open that press waits on a backdrop that never clears.
     await page.locator('.dialog [data-action=close-settings]').click();
   }
-});
-
-test('diagnostics is collapsed and out of the way (NEWS-120)', async ({ page }) => {
-  await page.goto('/');
-  // Plain open: the first assertion is that it is *not* on the default tab.
-  await openSettings(page);
-
-  // Not on the tab that opens by default, and closed even once you reach it.
-  await expect(page.locator('.advanced')).toHaveCount(0);
-  await page.locator('.settings-tab').filter({ hasText: 'App' }).click();
-
-  const details = page.locator('details.advanced');
-  await expect(details).toBeVisible();
-  expect(await details.evaluate((el: HTMLDetailsElement) => el.open)).toBe(false);
-  await expect(page.locator('.diagnostics')).not.toBeVisible();
-
-  // Still one click away — support has to be able to talk someone into it.
-  await details.locator('summary').click();
-  await expect(page.locator('[data-action=copy-diagnostics]')).toBeVisible();
-
-  await closeSettings(page);
 });
 
 test('privacy is its own dialog, opened from the footer (NEWS-121)', async ({ page }) => {
