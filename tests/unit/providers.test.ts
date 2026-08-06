@@ -44,6 +44,65 @@ describe('resolveProvider', () => {
     expect(p.name).toBe('openai');
   });
 
+  /**
+   * Availability changes while the app runs, and `auto` is resolved **per
+   * check** (FR-6.8) — so "the primary came back" is an ordinary path, not a
+   * hypothesis: someone signs into the Claude CLI, or pastes a key into
+   * Settings, between one sweep and the next.
+   *
+   * Every fallback test above fixes availability for the whole test and
+   * resolves once. These drive the transition (NEWS-361). The factories read
+   * `available` at call time, so mutating it between resolutions is the whole
+   * mechanism — no sequenced stub needed.
+   */
+  it('goes back to the primary once it becomes available again', async () => {
+    const available: Record<string, boolean> = { anthropic: false, openai: true };
+    const factories = factoriesWith(available);
+    const cfg = { provider: 'auto', model: '', endpoint: '' } as const;
+
+    expect((await resolveProvider(cfg, factories)).name).toBe('openai');
+
+    available['anthropic'] = true;
+    expect((await resolveProvider(cfg, factories)).name).toBe('anthropic');
+  });
+
+  it('prefers the subscription again once it is signed back in', async () => {
+    // The commonest real sequence: checks fall back to an API key while the CLI
+    // is logged out, and must stop spending that key the moment it is not needed.
+    const available: Record<string, boolean> = { 'claude-cli': false, anthropic: true };
+    const factories = factoriesWith(available);
+    const cfg = { provider: 'auto', model: '', endpoint: '' } as const;
+
+    expect((await resolveProvider(cfg, factories)).name).toBe('anthropic');
+
+    available['claude-cli'] = true;
+    expect((await resolveProvider(cfg, factories)).name).toBe('claude-cli');
+  });
+
+  it('recovers from having nothing available at all', async () => {
+    // The throw is not a latched state — a resolver that cached its own failure
+    // would leave the app permanently broken after one bad moment.
+    const available: Record<string, boolean> = {};
+    const factories = factoriesWith(available);
+    const cfg = { provider: 'auto', model: '', endpoint: '' } as const;
+
+    await expect(resolveProvider(cfg, factories)).rejects.toThrow(/No AI provider is usable/);
+
+    available['openai'] = true;
+    expect((await resolveProvider(cfg, factories)).name).toBe('openai');
+  });
+
+  it('a named provider recovers too, not just auto', async () => {
+    const available: Record<string, boolean> = { openai: false };
+    const factories = factoriesWith(available);
+    const cfg = { provider: 'openai', model: '', endpoint: '' } as const;
+
+    await expect(resolveProvider(cfg, factories)).rejects.toThrow(/OpenAI has no API key/);
+
+    available['openai'] = true;
+    expect((await resolveProvider(cfg, factories)).name).toBe('openai');
+  });
+
   it('auto throws an actionable error when nothing is available', async () => {
     await expect(
       resolveProvider({ provider: 'auto', model: '', endpoint: '' }, factoriesWith({})),

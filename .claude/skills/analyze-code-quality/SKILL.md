@@ -66,13 +66,13 @@ Line coverage is structurally blind to a whole class of bugs: a missing behavior
 
 Read `CLAUDE.md` and the requirements docs (`docs/*.md`) for documented conventions and anti-patterns. Then scan the codebase for violations:
 
-- **`document.createElement()` usage** — Should use `toElement()` with JSX instead (per CLAUDE.md)
+- **`document.createElement()` usage** — the client is kerfjs JSX rendered through `mount`/`morph`; hand-built DOM nodes bypass it (per CLAUDE.md and `docs/3-ui.md`)
 - **Manual HTML string concatenation** — Should use JSX/SafeHtml runtime (per CLAUDE.md)
 - **Inlined CSS/JS in layout** — Client CSS and JS should be built separately and served as static files
-- **Missing `.js` extension in imports** — ESM requires `.js` extensions
-- **ORM or query builder usage** — Should use raw SQL via PGLite
-- **`body: JSON.stringify(...)` in api() calls** — The `api()` helper auto-serializes; passing pre-stringified body causes double-encoding
-- **React/ReactDOM imports** — The project uses a custom JSX runtime, not React
+- **Missing `.js` extension in relative imports** — the project is ESM and TypeScript does not rewrite specifiers
+- **ORM or query builder usage** — storage is raw SQL through the built-in `node:sqlite` (`src/db/sqlite.ts`); there is no ORM and adding one would be a decision, not a refactor
+- **Client fetches bypassing `request()`** in `src/client/api.ts` — it sets the JSON content type and unwraps `{error}` bodies. Note it does **not** auto-serialize: callers pass `body: JSON.stringify(...)` themselves, so that is correct here, not a double-encoding bug
+- **React/ReactDOM imports** — the JSX runtime is kerfjs (`jsxImportSource: kerfjs`), not React
 - **Excessive file length** — Files over 300 lines with multiple exports should be split (per code organization conventions)
 
 ### 5. Generate the report
