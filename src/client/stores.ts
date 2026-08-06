@@ -596,6 +596,7 @@ export const appStore = defineStore({
       notifyOnNewItems: false,
       itemRetentionDays: 365,
       scheduleMode: 'interval',
+      theme: 'auto',
       dailyTimes: ['08:00'],
       checkConcurrency: 3,
     },

@@ -21,8 +21,18 @@
   --mono: ui-monospace, 'SF Mono', 'Menlo', 'Cascadia Code', monospace;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
+// The dark palette (NEWS-334).
+//
+// A mixin rather than a bare `@media` block, because dark has **two** triggers
+// now: the system preference, and an explicit choice in Settings → App that must
+// win over it in either direction. Writing the rules once and applying them to
+// both selectors is what stops the two drifting — a value fixed in one and
+// forgotten in the other is a theme that is subtly wrong only when pinned.
+//
+// `:root:not([data-theme='light'])` on the media query is what lets a light pin
+// beat a dark system. `auto` writes no attribute at all, so the query alone
+// decides — see `Layout`.
+@mixin dark-tokens {
     --paper: #0f1513;
     --panel: #161d1a;
     --ink: #e4e8e6;
@@ -35,6 +45,15 @@
     --warn-bg: #332c1c;
     --shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 4px 14px rgba(0, 0, 0, 0.25);
   }
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    @include dark-tokens;
+  }
+}
+
+:root[data-theme='dark'] {
+  @include dark-tokens;
 }
 
 // The topic name's line-height. Named because the sidebar's left gutter is
@@ -1817,7 +1836,7 @@ h2.eyebrow {
 
 // The danger ink is a light-mode red; on the dark page it drops below a legible
 // contrast, so both controls that carry it lift to the same lighter tint.
-@media (prefers-color-scheme: dark) {
+@mixin dark-danger-ink {
   .menu-item.danger {
     color: #e08a72;
   }
@@ -1830,6 +1849,18 @@ h2.eyebrow {
       border-color: #e08a72;
     }
   }
+}
+
+// Applied by the system preference *unless* the user has pinned light,
+// and by an explicit dark pin whatever the system says (FR-3.75, NEWS-334).
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    @include dark-danger-ink;
+  }
+}
+
+:root[data-theme='dark'] {
+  @include dark-danger-ink;
 }
 
 // ---------------------------------------------------------- item media ---
@@ -2617,10 +2648,22 @@ a.btn {
   }
 }
 
-@media (prefers-color-scheme: dark) {
+@mixin dark-banner-dismiss {
   .banner-dismiss:hover {
     background: rgba(255, 255, 255, 0.1);
   }
+}
+
+// Applied by the system preference *unless* the user has pinned light,
+// and by an explicit dark pin whatever the system says (FR-3.75, NEWS-334).
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    @include dark-banner-dismiss;
+  }
+}
+
+:root[data-theme='dark'] {
+  @include dark-banner-dismiss;
 }
 
 // -------------------------------------------------------- item actions ---
@@ -2926,10 +2969,22 @@ button.off-topic-pill {
   }
 }
 
-@media (prefers-color-scheme: dark) {
+@mixin dark-item-action {
   .item-action:hover {
     background: rgba(255, 255, 255, 0.08);
   }
+}
+
+// Applied by the system preference *unless* the user has pinned light,
+// and by an explicit dark pin whatever the system says (FR-3.75, NEWS-334).
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    @include dark-item-action;
+  }
+}
+
+:root[data-theme='dark'] {
+  @include dark-item-action;
 }
 
 /* --- Topic discovery (NEWS-126) -------------------------------------------
@@ -3162,10 +3217,22 @@ button.off-topic-pill {
   flex: 0 0 auto;
 }
 
-@media (prefers-color-scheme: dark) {
+@mixin dark-section-tile {
   .section-tile {
     background: var(--paper);
   }
+}
+
+// Applied by the system preference *unless* the user has pinned light,
+// and by an explicit dark pin whatever the system says (FR-3.75, NEWS-334).
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    @include dark-section-tile;
+  }
+}
+
+:root[data-theme='dark'] {
+  @include dark-section-tile;
 }
 
 /* --- The keep/skip tuner (NEWS-127) ---------------------------------------

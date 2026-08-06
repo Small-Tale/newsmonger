@@ -16,6 +16,7 @@ const SETTINGS: Settings = {
   checkIntervalMs: 24 * 60 * 60 * 1000,
   highPriorityIntervalMs: 60 * 60 * 1000,
   scheduleMode: 'daily',
+  theme: 'auto',
   dailyTimes: ['08:00', '18:00'],
   checkConcurrency: 3,
   provider: 'auto',

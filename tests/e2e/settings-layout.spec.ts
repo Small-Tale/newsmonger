@@ -602,3 +602,56 @@ test('the backup folder gets its own line, and Back up now the one below (NEWS-3
 
   await closeSettings(page);
 });
+
+test('the theme can be pinned, and beats the system preference (FR-3.74–3.76, NEWS-334)', async ({ page }) => {
+  // The half that takes work is not "a dark palette exists" — it is that an
+  // explicit choice wins over `prefers-color-scheme` **in both directions**, and
+  // that going back to `auto` really does hand control back to the system.
+  //
+  // Read as the computed `--paper` rather than as a class: the whole feature is
+  // which palette is in effect, and a `data-theme` attribute proves only that
+  // something was written.
+  const paperNow = () =>
+    page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue('--paper').trim());
+  // Waited for, not read: the theme follows the *setting*, so it lands after the
+  // PATCH returns rather than on the change event (see the handler's note).
+  const settle = async (value: 'auto' | 'light' | 'dark') => {
+    const html = page.locator('html');
+    if (value === 'auto') await expect(html).not.toHaveAttribute('data-theme', /.*/);
+    else await expect(html).toHaveAttribute('data-theme', value);
+    return paperNow();
+  };
+
+  await page.emulateMedia({ colorScheme: 'dark' });
+  await page.goto('/');
+  const systemDark = await settle('auto');
+
+  // Pin light while the system says dark.
+  await openSettingsTab(page, 'App');
+  await expect(page.locator('[data-action=theme]')).toHaveValue('auto');
+  await page.selectOption('[data-action=theme]', 'light');
+  const pinnedLight = await settle('light');
+  expect(pinnedLight, 'a light pin must beat a dark system').not.toBe(systemDark);
+
+  // It survives a reload, and the *server* is what carries it — the page is
+  // client-rendered, so a theme applied after boot would flash the other palette.
+  await closeSettings(page);
+  const served = await (await page.request.get('/')).text();
+  expect(served, 'the shell must arrive already themed').toContain('data-theme="light"');
+  await page.reload();
+  expect(await settle('light')).toBe(pinnedLight);
+
+  // And the other direction: pin dark while the system says light.
+  await page.emulateMedia({ colorScheme: 'light' });
+  await page.reload();
+  await openSettingsTab(page, 'App');
+  await page.selectOption('[data-action=theme]', 'dark');
+  expect(await settle('dark'), 'a dark pin must beat a light system').toBe(systemDark);
+
+  // Back to auto hands control to the system, which is now light.
+  await page.selectOption('[data-action=theme]', 'auto');
+  expect(await settle('auto')).toBe(pinnedLight);
+
+  await closeSettings(page);
+  await page.emulateMedia({ colorScheme: 'light' });
+});

@@ -47,14 +47,15 @@ function contrast(a: string, b: string): number {
 /**
  * The token values for one theme.
  *
- * Light lives in the first `:root`; dark lives in the `:root` nested inside the
- * `prefers-color-scheme: dark` block, which is the *second* `:root {` in the
- * file. Slicing from that offset is what makes the dark lookup find the
- * override rather than the base value.
+ * Light lives in the first `:root`. Dark lives in the **`dark-tokens` mixin**
+ * (NEWS-334) — it used to be a bare `prefers-color-scheme` block, and moved when
+ * dark gained a second trigger (an explicit choice in Settings, which has to beat
+ * the system preference in either direction). Slicing from that offset is what
+ * makes the dark lookup find the override rather than the base value.
  */
 function tokens(theme: 'light' | 'dark'): (name: string) => string {
-  const darkAt = scss.indexOf('@media (prefers-color-scheme: dark)');
-  expect(darkAt).toBeGreaterThan(-1);
+  const darkAt = scss.indexOf('@mixin dark-tokens');
+  expect(darkAt, 'the dark palette must still be one findable block').toBeGreaterThan(-1);
   const scope = theme === 'light' ? scss.slice(0, darkAt) : scss.slice(darkAt);
   return (name) => {
     const found = new RegExp(`--${name}:\\s*(#[0-9a-fA-F]{6})\\s*;`).exec(scope);

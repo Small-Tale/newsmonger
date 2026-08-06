@@ -38,6 +38,19 @@ import type { AppState } from './stores.js';
 import { appStore, INTERVAL_OPTIONS } from './stores.js';
 import { isTauri } from './tauri.js';
 
+/**
+ * Theme choices (FR-3.74, NEWS-334).
+ *
+ * `auto` is first and is the default — it is a real choice rather than the
+ * absence of one, and naming what it does ("Match system") is the difference
+ * between a reader trusting it and pinning a mode to be sure.
+ */
+const THEME_OPTIONS: { label: string; value: 'auto' | 'light' | 'dark' }[] = [
+  { label: 'Match system', value: 'auto' },
+  { label: 'Light', value: 'light' },
+  { label: 'Dark', value: 'dark' },
+];
+
 /** Story-retention choices (NEWS-87). 0 = keep everything. */
 const RETENTION_OPTIONS: { label: string; days: number }[] = [
   { label: '3 months', days: 90 },
@@ -788,6 +801,22 @@ function settingsPanelJsx(s: AppState): SafeHtml {
         <div class="notify-note">
           {s.notifyPermissionDenied ? notifyBlockedNoteJsx() : ''}
         </div>
+        {/* Appearance (FR-3.74, NEWS-334). Its own group rather than a line in
+            Notifications: it is the only thing on this tab about how the app
+            *looks*, and folding it under a heading about alerts is how the
+            anonymous clusters NEWS-307 unpicked came about in the first place. */}
+        <h3 class="eyebrow">Appearance</h3>
+        <label class="field">
+          <span>Theme</span>
+          <select data-action="theme">
+            {THEME_OPTIONS.map((o) => (
+              <option value={o.value} selected={o.value === s.settings.theme ? true : undefined}>
+                {o.label}
+              </option>
+            ))}
+          </select>
+        </label>
+        <p class="field-hint">Auto follows your system, and keeps following it as it changes.</p>
         {/* "Show the setup guide again" was inside the notifications cluster
             with nothing to do with it (NEWS-307). Its own group, because the
             alternative — folding it under Notifications — is what made the

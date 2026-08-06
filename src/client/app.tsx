@@ -45,6 +45,7 @@ import {
   updateProviderSettings,
   updateRetention,
   updateScheduleMode,
+  updateTheme,
 } from './api.js';
 import { shouldOfferBackup, snoozeUntil } from './backup-prompt.js';
 import { relativeTime } from './dates.js';
@@ -1748,6 +1749,27 @@ function wireEvents(root: HTMLElement): void {
     answerBackupOffer('never');
   });
 
+  /**
+   * Theme (FR-3.75, NEWS-334).
+   *
+   * **The store is the only writer**, and the handler deliberately does not
+   * apply the theme itself. Writing it here optimistically *and* from the
+   * `settings.theme` effect below means two writers disagreeing for as long as
+   * the PATCH is in flight: any unrelated store change in that window — a poll,
+   * a check starting — re-runs the effect with the old value and puts the
+   * previous palette back. Measured: pinning dark reverted to light before the
+   * request landed.
+   *
+   * `updateTheme` refreshes state as soon as the PATCH returns, and this server
+   * is on loopback, so the round trip costs a few milliseconds rather than a
+   * visible beat.
+   */
+  void delegate(root, 'change', '[data-action=theme]', (_e, el) => {
+    const value = (el as HTMLSelectElement).value;
+    if (value !== 'auto' && value !== 'light' && value !== 'dark') return;
+    void updateTheme(value);
+  });
+
   void delegate(root, 'change', '[data-action=retention]', (_e, el) => {
     if (el instanceof HTMLSelectElement) void updateRetention(Number(el.value));
   });
@@ -2553,6 +2575,22 @@ function trackRailTop(root: HTMLElement): void {
   }
 }
 
+/**
+ * Put the chosen theme on `<html>`, where the stylesheet reads it (FR-3.75).
+ *
+ * `auto` **removes** the attribute: following the system is the
+ * `prefers-color-scheme` query doing its job, and `data-theme="auto"` would be a
+ * third state every rule had to exclude.
+ *
+ * Exported-shaped rather than inlined so the settings handler and the poll can
+ * both use it — a restore, or a second window changing the setting, arrives
+ * through `/api/state` rather than through the control.
+ */
+function applyTheme(theme: 'auto' | 'light' | 'dark'): void {
+  if (theme === 'auto') document.documentElement.removeAttribute('data-theme');
+  else document.documentElement.setAttribute('data-theme', theme);
+}
+
 const root = document.getElementById('app');
 if (root) {
   mount(root, () => appJsx());
@@ -2565,6 +2603,14 @@ if (root) {
   effect(() => {
     void appStore.state.value;
     queueMicrotask(() => syncSelects(root));
+  });
+  // The theme follows the *setting*, not only the control (FR-3.75, NEWS-334).
+  // A restore from backup brings someone else's choice, and a second window can
+  // change it — both arrive through `/api/state`, never through the `<select>`
+  // on this page. The server stamps the attribute on first paint; this keeps it
+  // true afterwards.
+  effect(() => {
+    applyTheme(appStore.state.value.settings.theme);
   });
   wireEvents(root);
   wireGlobalKeysAndDismiss();

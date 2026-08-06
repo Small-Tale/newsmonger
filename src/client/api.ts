@@ -352,6 +352,11 @@ export function setNotifyOnNewItems(notifyOnNewItems: boolean): Promise<void> {
   );
 }
 
+/** Light, dark, or follow the system (FR-3.74, NEWS-334). */
+export function updateTheme(theme: 'auto' | 'light' | 'dark'): Promise<void> {
+  return withRefresh(() => request('/api/settings', { method: 'PATCH', body: JSON.stringify({ theme }) }));
+}
+
 /** Set the story-retention window in days; 0 keeps everything (NEWS-87). */
 export function updateRetention(itemRetentionDays: number): Promise<void> {
   return withRefresh(() =>

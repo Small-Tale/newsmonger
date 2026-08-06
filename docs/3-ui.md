@@ -34,7 +34,7 @@ Two deliberate choices in the wording. Durations **round down** (`23h59m` → "i
 
   Observed as: shorten the default check interval below the high-priority one and the high-priority dropdown keeps showing the old value although the server has clamped it — the stored setting correct, the control lying about it. `src/client/select-sync.ts` closes it by making the rendered attribute authoritative after every render: no per-control wiring, inert whenever the two agree, and it cannot disagree with what was just rendered. Guarded by a unit test on the rule and an E2E that dirties a control deliberately, since the interleaving that produces it in the wild cannot be scheduled.
 - **FR-3.6** *(Shipped)* Empty states: an invitational hint when there are no topics, and a "no stories yet" hint when topics exist but no items do. Both render inside a stable `.empty-slot` wrapper so their appearance/disappearance can't disturb the keyed lists (kerf KF-377).
-- **FR-3.7** *(Shipped)* The UI supports light and dark color schemes (`prefers-color-scheme`), plus visible keyboard focus and `prefers-reduced-motion`.
+- **FR-3.7** *(Shipped; chooseable since NEWS-334)* The UI supports light and dark colour schemes, plus visible keyboard focus and `prefers-reduced-motion`. Which scheme is shown follows the system by default and can be pinned — see FR-3.74.
 - **FR-3.8** *(Shipped)* In the Tauri webview, source links route through `POST /api/open-external` to open in the system browser (http/https only).
 
 ### kerf structural conventions (learned the hard way)
@@ -419,7 +419,7 @@ Both are measured in `tests/e2e/layout.spec.ts` rather than eyeballed, and both 
 
   Three tabs used to open with an anonymous cluster of controls and only *start* labelling at the second group — Data went unnamed → `BACKUP` → `FEED`, Source unnamed → `API KEYS`, App unnamed → the Diagnostics disclosure. That says "the first group is not a group" about a group, and it costs the reader the one landmark they most need: the controls at the top of a tab are the ones most people came for, and they were the only region with no name to scan back to. Schedule had no eyebrows at all, which made it internally consistent and externally the odd one out.
 
-  The groups are now: Schedule → **Cadence** / **Concurrency**; Source → **Provider** / **API keys**; Data → **Retention** / **Topics** / **Stories** / **Backup** / **Feed** / **Reset** (FR-27.11); App → **Notifications** / **Setup** / **Updates** (desktop only) / Diagnostics. (Data's first three were renamed and reordered in NEWS-327 — see FR-3.72.)
+  The groups are now: Schedule → **Cadence** / **Concurrency**; Source → **Provider** / **API keys**; Data → **Retention** / **Topics** / **Stories** / **Backup** / **Feed** / **Reset** (FR-27.11); App → **Notifications** / **Appearance** (NEWS-334) / **Setup** / **Updates** (desktop only). (Diagnostics was removed in NEWS-333.) (Data's first three were renamed and reordered in NEWS-327 — see FR-3.72.)
 
   Naming them settled two things that had been hiding inside the anonymous clusters. Data's opening group was **two** groups — how long stories are kept and how to take a copy out are unrelated questions. So was Schedule's *Check at once*: how often to check and how many to run at a time are different decisions, and only one of them is a cadence.
 
@@ -619,3 +619,21 @@ kerf 3.x no longer infers dev mode — installing diagnostics is the app's decis
   Sized for the **unstuck** position, which is the binding one. Once stuck the rail ends a little above the fold rather than flush to it; the rail has no background of its own, so that slack is invisible. Preferring the flush look would mean re-measuring on every scroll frame to buy nothing a reader can see.
 
   Tested at the top of the page *and* scrolled: only the first was ever broken, and only the second was ever covered.
+
+### Light, dark, or follow the system (NEWS-334)
+
+- **FR-3.74** *(Shipped, NEWS-334)* **Settings → App → Appearance offers `Match system` / `Light` / `Dark`, defaulting to `Match system`.** Stored as `theme` in settings, so it survives a restart and travels in a backup.
+
+  `auto` is a real third choice rather than the absence of one: it keeps tracking the OS as it changes through the day, which is what someone who never opens this control is relying on. Naming it "Match system" is the difference between trusting it and pinning a mode to be sure.
+
+  Its own group rather than a line under Notifications — it is the only thing on the tab about how the app *looks*, and folding it under a heading about alerts is how the anonymous clusters NEWS-307 unpicked came about.
+
+- **FR-3.75** *(Shipped, NEWS-334)* **An explicit choice beats the system preference in both directions**, which is the part that takes work. The dark palette lives in a `dark-tokens` mixin applied twice: under `@media (prefers-color-scheme: dark)` scoped to `:root:not([data-theme='light'])`, and under `:root[data-theme='dark']` unconditionally.
+
+  Written once and applied twice on purpose. Two copies of a palette drift, and the drift shows up only when a theme is *pinned* — the configuration nobody looks at while changing a colour.
+
+  **`auto` writes no attribute at all.** Following the system *is* the media query doing its job, and a `data-theme="auto"` would be a third state every rule had to exclude for nothing.
+
+  **The store is the only writer.** The client applies the theme from `settings.theme`, never from the control — a restore brings someone else's choice and a second window can change it, and both arrive through `/api/state`. Applying it optimistically in the change handler *as well* was tried and reverted: two writers disagree for as long as the PATCH is in flight, so any unrelated store change in that window — a poll, a check starting — re-runs the effect with the old value and puts the previous palette back. Measured, pinning dark flipped back to light before the request landed. The round trip is on loopback, so waiting for it costs milliseconds rather than a visible beat.
+
+- **FR-3.76** *(Shipped, NEWS-334)* **The attribute is stamped on `<html>` server-side.** The page is otherwise entirely client-rendered, so a theme applied after boot would paint the wrong palette and correct it — a flash of the opposite scheme on every load, which is precisely what someone who pinned dark asked not to see. `Layout` takes the stored value and writes it before the client runs.

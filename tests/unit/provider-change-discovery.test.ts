@@ -32,6 +32,7 @@ const BASE_SETTINGS: StateResp['settings'] = {
   notifyOnNewItems: false,
   itemRetentionDays: 365,
   scheduleMode: 'interval',
+  theme: 'auto',
   dailyTimes: ['08:00'],
   checkConcurrency: 3,
 };

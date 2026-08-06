@@ -65,7 +65,7 @@ src/
     onboarding-view.tsx the first-run wizard's markup (NEWS-297); the step machine stays in `onboarding.ts` + the store
     discover-view.tsx the topic-discovery dialog + tuner markup (NEWS-297); the state machine is `discover.ts`, the handlers stay in `app.tsx`
     topics-view.tsx   the Watching rail: `dialJsx`, `topicRowJsx`, and the topic context menu (NEWS-297). **Not** `filterBarJsx` (that filters the feed) nor `itemMenuJsx` (a story's menu — in `feed.tsx`)
-    settings.tsx      the whole settings dialog — tabs, all four panels, the source status line (NEWS-297). One export, `settingsDialogJsx`. **No diagnostics or effort comparison since NEWS-333** — both sections removed on request, along with `diagnostics.ts` and `effort-stats.ts`
+    settings.tsx      the whole settings dialog — tabs, all four panels, the source status line (NEWS-297). Theme picker in App → Appearance (NEWS-334). One export, `settingsDialogJsx`. **No diagnostics or effort comparison since NEWS-333** — both sections removed on request, along with `diagnostics.ts` and `effort-stats.ts`
     feed.tsx          the feed: `itemJsx`/`flaggedRowJsx`/`feedJsx`, the day grouping, the thread pane and badge, and the story context menu (`itemMenuJsx`). Rendering only — first seam out of `app.tsx` (NEWS-297)
     stores.ts         appStore (defineStore)
     api.ts            fetch wrappers, refreshState (zod-validated), withRefresh

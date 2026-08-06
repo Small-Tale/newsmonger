@@ -233,6 +233,15 @@ export const SettingsSchema = z.object({
    */
   dailyTimes: z.array(z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/)).default(['08:00']),
   /**
+   * Light, dark, or follow the system (FR-3.74, NEWS-334).
+   *
+   * **`auto` is the default**, and it is not merely "no preference expressed" —
+   * it is a real third choice that keeps tracking the OS as it changes through
+   * the day. Storing it explicitly is what lets someone go back to it after
+   * pinning one.
+   */
+  theme: z.enum(['auto', 'light', 'dark']).default('auto').catch('auto'),
+  /**
    * How many topics a sweep checks at once (NEWS-81). Default 3.
    *
    * A real check takes minutes, so a strictly sequential sweep over 20 topics
@@ -383,6 +392,7 @@ export function emptyDataFile(): DataFile {
       notifyOnNewItems: false,
       scheduleMode: 'interval',
       dailyTimes: ['08:00'],
+      theme: 'auto',
       checkConcurrency: 3,
       itemRetentionDays: DEFAULT_RETENTION_DAYS,
     },

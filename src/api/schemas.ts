@@ -173,6 +173,7 @@ export const UpdateSettingsReqSchema = z
     backupPromptSnoozedUntil: z.string().max(64),
     notifyOnNewItems: z.boolean(),
     scheduleMode: z.enum(['interval', 'daily']),
+    theme: z.enum(['auto', 'light', 'dark']),
     checkConcurrency: z.number().int().min(1).max(8),
     // '' clears it. Non-empty must be https — a plaintext manifest could be
     // swapped in transit, and it decides what the budget cap acts on.

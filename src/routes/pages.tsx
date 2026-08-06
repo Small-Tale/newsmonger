@@ -52,7 +52,7 @@ export function registerPages(app: Hono<AppEnv>): void {
 
   app.get('/', (c) => {
     const html = (
-      <Layout title="Newsmonger">
+      <Layout title="Newsmonger" theme={c.get('store').getSettings().theme}>
         <div id="app"></div>
       </Layout>
     );

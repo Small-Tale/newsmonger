@@ -118,6 +118,7 @@ export async function resetSharedState(baseURL: string): Promise<void> {
         checkIntervalMs: DEFAULT_CHECK_INTERVAL_MS,
         highPriorityIntervalMs: DEFAULT_CHECK_INTERVAL_MS,
         scheduleMode: 'interval',
+        theme: 'auto',
         dailyTimes: ['08:00'],
         checkConcurrency: 3,
         itemRetentionDays: DEFAULT_RETENTION_DAYS,

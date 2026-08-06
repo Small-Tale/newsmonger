@@ -26,6 +26,7 @@ describe('Store', () => {
       itemRetentionDays: 365,
       scheduleMode: 'interval',
       dailyTimes: ['08:00'],
+      theme: 'auto',
       checkConcurrency: 3,
     });
   });
@@ -247,6 +248,7 @@ describe('Store', () => {
       itemRetentionDays: 365,
       scheduleMode: 'interval',
       dailyTimes: ['08:00'],
+      theme: 'auto',
       checkConcurrency: 3,
     });
   });
