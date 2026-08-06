@@ -68,6 +68,68 @@ jobs:
           path: coverage/
           retention-days: 7
 
+  # Windows E2E, when the harness changes (NEWS-350).
+  #
+  # The full Windows E2E job lives in `release-candidate.yml` and runs once per
+  # beta tag. That is too rare for the thing it catches: the harness spawns
+  # processes, joins paths and writes temp directories, and none of that is
+  # exercised on Windows by a local run or by the Ubuntu gate above. NEWS-348
+  # landed a broken `globalSetup` on Aug 3 and it was not seen until a release
+  # was cut on Aug 6 — then the fix for it was *also* wrong, and cost a second
+  # failed release, because nothing between pushes could tell us.
+  #
+  # Path-filtered rather than always-on: the breakages are concentrated in the
+  # harness, those are exactly the files a filter can name, and a Windows runner
+  # bills at 2x Linux. Both failures so far would have been caught by this list —
+  # `tests/e2e/global-setup.ts` is in it.
+  #
+  # `paths` on a job is not a thing, so the filter is a step-level condition on a
+  # `dorny/paths-filter`-free basis: the job always starts, and skips its work
+  # when nothing relevant changed. That keeps it out of required-check plumbing
+  # while costing seconds when it does not apply.
+  test-e2e-windows:
+    name: E2E Tests (Windows, harness changes only)
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - name: Did anything the Windows run cares about change?
+        id: changed
+        shell: bash
+        run: |
+          # First push of a branch has no usable "before"; run it then.
+          BASE="${{ github.event.before }}"
+          if [ -z "$BASE" ] || [ "$BASE" = "0000000000000000000000000000000000000000" ] || ! git cat-file -e "$BASE^{commit}" 2>/dev/null; then
+            echo "run=true" >> "$GITHUB_OUTPUT"; exit 0
+          fi
+          if git diff --name-only "$BASE" "${{ github.sha }}" \
+               | grep -qE '^(tests/(e2e|helpers)/|playwright\.config\.ts|scripts/|package\.json|src/cli\.ts)'; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "run=false" >> "$GITHUB_OUTPUT"
+          fi
+      - uses: actions/setup-node@v7
+        if: steps.changed.outputs.run == 'true'
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+      - run: npm ci
+        if: steps.changed.outputs.run == 'true'
+      - run: npx playwright install chromium
+        if: steps.changed.outputs.run == 'true'
+      - run: npm run test:e2e
+        if: steps.changed.outputs.run == 'true'
+      - uses: actions/upload-artifact@v7
+        if: failure()
+        with:
+          name: playwright-report-windows-ci
+          path: |
+            playwright-report/
+            test-results/
+          retention-days: 7
+
   # The demo capture is manual and run rarely, which is how it sat broken for
   # weeks: the backup offer (FR-27.4) started firing at the third topic and its
   # modal backdrop swallowed the hero's discover click, so the script timed out
