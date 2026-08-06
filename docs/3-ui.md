@@ -560,11 +560,13 @@ The store has kept the last 200 `CheckRun` records all along — status, timing,
 
   **This was the app's bug-report path**, so its removal has a cost: someone reporting a problem now has nothing to paste. `src/client/diagnostics.ts` is deleted rather than orphaned; the data it assembled all still exists behind `/api/state`, so rebuilding it is a rendering job, not a plumbing one.
 
-- **FR-3.27** *(Shipped)* **Topic names are redacted by default**, behind an explicit opt-in checkbox: a topic name is user content (see [7 — API Keys](7-api-keys.md) FR-7.13) and a bug report usually gets pasted somewhere public. The bundle says which mode produced it, and — when redacted — warns that **error text is verbatim and may still mention a topic**. Honest beats reassuring.
+- **FR-3.27** *(Removed, NEWS-333)* **Topic names were redacted by default**, behind an explicit opt-in checkbox: a topic name is user content (see [7 — API Keys](7-api-keys.md) FR-7.13) and a bug report usually gets pasted somewhere public. The bundle says which mode produced it, and — when redacted — warns that **error text is verbatim and may still mention a topic**. Honest beats reassuring.
 
-- **FR-3.28** *(Shipped)* The endpoint setting is reported as `set: yes/no`, never as its URL (it may be an internal gateway). **API keys cannot leak here by construction**: no key value exists in client state at all (`KeyStatusSchema`), so there is nothing to filter.
+- **FR-3.28** *(Removed, NEWS-333)* The endpoint setting was reported as `set: yes/no`, never as its URL (it may be an internal gateway). **API keys cannot leak here by construction**: no key value exists in client state at all (`KeyStatusSchema`), so there is nothing to filter.
 
-The bundle is built by a pure function (`src/client/diagnostics.ts`) so it is unit-testable without a browser.
+The bundle was built by a pure function (`src/client/diagnostics.ts`) so it was unit-testable without a browser. That file is deleted.
+
+  **These two were left marked *Shipped* when NEWS-333 removed the feature they describe** — found by NEWS-344's requirements audit. Both are properties *of the diagnostics bundle*: with no bundle there is nothing to redact and nothing to report an endpoint in, and nothing in `src/` implements either. They are recorded here rather than deleted because they are the privacy reasoning a rebuilt bug-report path must satisfy again — see FR-3.25's note on what its removal cost.
 
 ## Source attribution (NEWS-82)
 
