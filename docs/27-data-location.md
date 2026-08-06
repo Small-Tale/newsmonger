@@ -136,3 +136,7 @@ See also: [4 — CLI, Server, and Storage](4-cli-server-storage.md) (FR-4.1 data
 
   A `.field.stacked` modifier rather than a change to every field — most hold a short value and read better on one line. The button below it is full width with `14px` above, which is `.field`'s own top margin: the same gap every other control on the tab gets from the one above it. It had none, so it sat tight under the field with less air than anything else there.
 
+- **FR-27.14** *(Shipped, NEWS-332)* **`Restore from backup` fills its box.** It is the only control on its line inside a bordered panel, and sized to its own label it read as unfinished rather than as restrained — the same complaint FR-27.13 answers for `Back up now` and FR-3.72 for the import/export pairs, so all three now behave the same way.
+
+  `display: flex` with `width: 100%` rather than `width` alone: the button is `inline-flex` so its icon sits on the label's centre line (NEWS-161), and this keeps that while letting it fill the row. Measured against the row's *content* box — `clientWidth` minus its padding — so the assertion does not quietly depend on the panel's border.
+

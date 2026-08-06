@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
-import { expect, openSettingsTab, resetSharedState,seedCheckedTopic, test, topicAction, workerBaseURL } from './fixtures.js';
+import { closeSettings, expect, openSettingsTab, resetSharedState, seedCheckedTopic, test, topicAction, workerBaseURL } from './fixtures.js';
 
 // Backup, restore, and clearing stories — Settings → Data's destructive half
 // (NEWS-322 split this out of app.spec.ts).
@@ -259,4 +259,42 @@ test('back up, then restore from that folder without moving files (NEWS-252)', a
   await expect(page.locator('.dialog')).toHaveCount(0);
   await topicAction(page, page.locator('.topic', { hasText: 'Restore Probe' }), 'delete');
   fs.rmSync(dest, { recursive: true, force: true });
+});
+
+test('the restore button fills the box it sits in (NEWS-332)', async ({ page }) => {
+  // The only control on its line, and it was sized to its label — a short button
+  // floating at the left of a bordered panel, which reads as unfinished rather
+  // than as restrained. `Back up now` above it (FR-27.13) and the import/export
+  // pairs (FR-3.72) both fill their rows; this now matches them.
+  await page.goto('/');
+
+  // The restore block only exists once a backup does, so make one.
+  const dir = test.info().outputPath('restore-width-backup');
+  fs.mkdirSync(dir, { recursive: true });
+  await page.request.patch('/api/settings', { data: { backupDir: dir } });
+  await page.request.post('/api/backup');
+
+  await openSettingsTab(page, 'Data');
+  const button = page.locator('[data-action=restore-backup]');
+  await expect(button).toBeVisible({ timeout: 15_000 });
+
+  const m = await page.evaluate(() => {
+    const btn = document.querySelector('[data-action=restore-backup]');
+    const row = btn?.closest('.restore-row');
+    if (!(btn instanceof HTMLElement) || !(row instanceof HTMLElement)) return null;
+    const cs = getComputedStyle(row);
+    // `clientWidth` excludes the border and includes the padding, so taking the
+    // padding off it is the row's content width — what a 100%-wide child fills.
+    const content = row.clientWidth - Number.parseFloat(cs.paddingLeft) - Number.parseFloat(cs.paddingRight);
+    return { buttonWidth: btn.getBoundingClientRect().width, content };
+  });
+  expect(m, 'the restore row must be present').not.toBeNull();
+  if (m === null) return;
+
+  expect(m.content, 'the row must have a width to fill').toBeGreaterThan(100);
+  expect(m.buttonWidth).toBeCloseTo(m.content, 0);
+
+  // Put the setting back so the next spec on this worker starts clean.
+  await page.request.patch('/api/settings', { data: { backupDir: '' } });
+  await closeSettings(page);
 });

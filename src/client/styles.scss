@@ -2418,10 +2418,20 @@ h2.eyebrow {
     font-size: 13px;
   }
 
+  // Full width of the box it sits in (NEWS-332), like `Back up now` above it
+  // (FR-27.13) and the import/export pairs (FR-3.72). It is the only control on
+  // its line, and a short button floating at the left of a bordered panel reads
+  // as unfinished rather than as restrained.
+  //
+  // `flex`, not `width: 100%`: the button is already `inline-flex` so its icon
+  // sits on the label's centre line (NEWS-161), and `display: flex` keeps that
+  // while letting it fill the row.
   .btn {
-    display: inline-flex;
+    display: flex;
     align-items: center;
+    justify-content: center;
     gap: 7px;
+    width: 100%;
   }
 
   .note {
