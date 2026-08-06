@@ -1031,8 +1031,14 @@ h2.eyebrow {
   // Guidance is a quieter signal than priority — it says "this topic is
   // narrowed", not "this topic is urgent", so it stays unfilled and muted.
   // The high-priority star is filled to read as a "starred" state at a glance.
+  //
+  // `--marigold` since NEWS-363, and it used to be `var(--amber, #c8891b)` —
+  // a token declared in neither palette, so the literal always rendered, in
+  // both themes, at 2.90:1 on `--panel`. Marigold is the same signal (this
+  // wants attention) and is the one amber the palette actually defines, so it
+  // themes correctly and is contrast-checked in both directions.
   .flag.high-priority {
-    color: var(--amber, #c8891b);
+    color: var(--marigold);
 
     .icon {
       fill: currentColor;
@@ -1584,7 +1590,7 @@ h2.eyebrow {
   .icon {
     vertical-align: -2px;
     margin-right: 3px;
-    color: var(--amber, #c8891b);
+    color: var(--marigold);
     fill: currentColor;
   }
 }
@@ -2248,7 +2254,7 @@ h2.eyebrow {
 .backup-suggestion-path {
   font-family: var(--mono);
   font-size: 11px;
-  color: var(--muted);
+  color: var(--ink-soft);
   // A long CloudStorage path must not widen the dialog.
   overflow-wrap: anywhere;
 }
@@ -2440,7 +2446,10 @@ h2.eyebrow {
 .restore-row {
   margin: 14px 0 0;
   padding: 12px;
-  border: 1px solid var(--rule);
+  // `--line`, not the undeclared `--rule` it said until NEWS-363. With no
+  // fallback, the whole shorthand was invalid at computed-value time, so
+  // `border` fell back to its initial `none` — this box had no border at all.
+  border: 1px solid var(--line);
   border-radius: 8px;
   background: var(--paper);
 
@@ -2496,8 +2505,14 @@ h2.eyebrow {
 
   // The focus ring belongs on the label, since that is what the eye sees — the
   // input it wraps is a pixel wide.
+  //
+  // `--pine`, not the undeclared `--accent` (NEWS-363). This is the worst of
+  // the five: an invalid `outline` shorthand computes to its initial value and
+  // an author rule still beats the UA default, so this control had **no focus
+  // ring at all** — a keyboard user could not see where they were. axe does
+  // not test focus visibility, which is why nothing caught it.
   &:focus-within {
-    outline: 2px solid var(--accent);
+    outline: 2px solid var(--pine);
     outline-offset: 2px;
   }
 }
@@ -2618,7 +2633,7 @@ a.btn {
     font-size: 13px;
     line-height: 1.5;
     color: var(--ink);
-    background: var(--field, var(--panel));
+    background: var(--panel);
     border: 1px solid var(--line);
     border-radius: 8px;
     // Free text, not code — and a fixed height keeps the dialog from jumping
@@ -2631,7 +2646,7 @@ a.btn {
   margin: 0 0 14px;
   font-size: 12.5px;
   line-height: 1.5;
-  color: var(--muted);
+  color: var(--ink-soft);
 }
 
 // ------------------------------------------------------- notifications ---
@@ -2871,7 +2886,7 @@ button.off-topic-pill {
   color: var(--ink);
 
   .icon {
-    color: var(--amber, #c8891b);
+    color: var(--marigold);
     fill: currentColor;
   }
 

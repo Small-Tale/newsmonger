@@ -546,6 +546,21 @@ The same spec covers what axe cannot: focus + Enter + Shift+F10 on a topic row, 
 
   The fix was to darken the light token to `#895e1b`: same hue and saturation, lightness 0.43 → 0.32, clearing 4.5:1 on all three backgrounds. Dark mode's `#d8a44c` was already fine at 6.15–7.89 and is unchanged.
 
+- **FR-3.79** *(Shipped, NEWS-363)* **Every `var(--x)` in the stylesheet names a token something actually defines**, asserted by the same unit test. Five did not, and the way they failed is why this needs its own guard rather than a wider contrast table.
+
+  A `var()` naming an undeclared token does not error. It fails in one of two quiet ways, and the codebase had both:
+
+  - **With a literal fallback, the literal silently becomes the real value** — in *both* themes, since a fallback cannot be theme-aware. `var(--amber, #c8891b)` styled the high-priority star, the settings field-label star and the review banner's flag: three rules rendering a colour that was in no palette, at **2.90:1** on `--panel`, and untouched by NEWS-346's darkening because the token it darkened was a different one.
+  - **With no fallback the whole declaration is invalid at computed-value time**, so the property takes its initial value. `border: 1px solid var(--rule)` on `.restore-row` drew **no border**; `color: var(--muted)` merely inherited; and worst, `outline: 2px solid var(--accent)` in `.btn.file-btn:focus-within` drew **no focus ring at all**. An author declaration still beats the UA stylesheet even when it computes to `none`, so the browser's own ring did not come back — a keyboard user had nothing to see.
+
+  All five now use declared tokens: `--marigold` for the three attention glyphs, `--line`, `--ink-soft` and `--pine`.
+
+  **Two custom properties are deliberately undeclared** — `--rail-top` (set on `documentElement` by `src/client/rail.ts`, FR-3.74) and `--discover-duration` (set inline per element by `discover-view.tsx`). They are listed by name with a reason, and a companion test asserts each named setter still exists, so an exemption cannot outlive the code that earned it.
+
+  Two details make the scan honest rather than decorative. It **strips comments first** — this doc's own prose and the stylesheet's `NEWS-363` note both name `--amber`, so a raw scan would rediscover the fixed bug inside the sentence explaining the fix. And it asserts it **matched something at all** before asserting the orphan list is empty, since a regex that quietly matches nothing passes every downstream check.
+
+  The star is also contrast-checked now, at WCAG 1.4.11's **3:1** rather than 4.5:1 — it is an icon, and the threshold is a fact about what the thing is. `--marigold` on `--pine-soft` (the hover and selected fill under it) is the tighter of its two backgrounds at 4.47:1 light, 5.99:1 dark.
+
   The test also asserts it parsed *something* — a regex that silently matched nothing would make every other assertion vacuous — that both palettes define the same tokens, and that the ratio function agrees with WCAG on known values.
 
 ## Diagnostics (NEWS-88)

@@ -93,6 +93,45 @@ const TEXT_PAIRS: { fg: string; bg: string; where: string }[] = [
 /** WCAG AA for normal-size text. The app's smallest text is ~10.5px. */
 const AA_TEXT = 4.5;
 
+/**
+ * Icons and borders, which WCAG 1.4.11 holds to 3:1 rather than 4.5:1.
+ *
+ * Kept separate rather than folded into `TEXT_PAIRS` at a lower bar, because
+ * the threshold is a fact about *what the thing is*, and a reader of this file
+ * should be able to see which rule each pair is being judged by.
+ */
+const GRAPHIC_PAIRS: { fg: string; bg: string; where: string }[] = [
+  // The high-priority star (NEWS-363). It sits in the sidebar rail, and the row
+  // under it turns `--pine-soft` on hover and when selected — so it must clear
+  // the bar on both, and `--pine-soft` is the tighter of the two.
+  { fg: 'marigold', bg: 'paper', where: 'the high-priority star in the rail' },
+  { fg: 'marigold', bg: 'pine-soft', where: 'the star on a hovered or selected row' },
+];
+
+/** WCAG AA for icons, borders and other non-text (1.4.11). */
+const AA_GRAPHIC = 3;
+
+/**
+ * Custom properties that are deliberately never declared in a palette, because
+ * something sets them at runtime. Each needs a reason, and the reason is the
+ * point: `--amber` looked exactly like these until NEWS-363, and was not.
+ */
+const RUNTIME_TOKENS: Record<string, string> = {
+  'rail-top': 'set on documentElement by src/client/rail.ts (NEWS-325)',
+  'discover-duration': 'set inline per element by src/client/discover-view.tsx',
+};
+
+/**
+ * The stylesheet with comments removed.
+ *
+ * Required, not tidiness: this file's own prose names the tokens it is about,
+ * so a scan over the raw source finds `var(--amber, …)` inside the comment that
+ * explains why `--amber` is gone, and reports the bug it just fixed.
+ */
+function withoutComments(src: string): string {
+  return src.replaceAll(/\/\*[\s\S]*?\*\//g, '').replaceAll(/\/\/[^\n]*/g, '');
+}
+
 describe('palette contrast (NEWS-346)', () => {
   it('reads both palettes out of the stylesheet', () => {
     // A parse that silently found nothing would make every assertion below
@@ -125,6 +164,16 @@ describe('palette contrast (NEWS-346)', () => {
     });
   }
 
+  for (const { fg, bg, where } of GRAPHIC_PAIRS) {
+    it(`light: --${fg} on --${bg} clears the graphic bar (${where})`, () => {
+      expect(contrast(LIGHT[fg], LIGHT[bg])).toBeGreaterThanOrEqual(AA_GRAPHIC);
+    });
+
+    it(`dark: --${fg} on --${bg} clears the graphic bar (${where})`, () => {
+      expect(contrast(DARK[fg], DARK[bg])).toBeGreaterThanOrEqual(AA_GRAPHIC);
+    });
+  }
+
   it('computes a ratio the way WCAG does', () => {
     // Pinned against known values, so a broken formula cannot quietly pass
     // everything above.
@@ -132,5 +181,65 @@ describe('palette contrast (NEWS-346)', () => {
     expect(contrast('#ffffff', '#ffffff')).toBeCloseTo(1, 5);
     // Order must not matter.
     expect(contrast('#895e1b', '#fbfcfb')).toBeCloseTo(contrast('#fbfcfb', '#895e1b'), 10);
+  });
+});
+
+/**
+ * Every `var(--x)` resolves to something (NEWS-363).
+ *
+ * The bug this catches is quiet in a way the contrast checks above are not. A
+ * `var()` naming a token no palette declares does **not** fail loudly:
+ *
+ * - with a literal fallback it silently renders that literal, in both themes,
+ *   so a value nobody chose survives a palette change that was supposed to
+ *   cover it — `var(--amber, #c8891b)` in three rules, at 2.90:1;
+ * - with **no** fallback the declaration is invalid at computed-value time, so
+ *   the property takes its initial value. `border: 1px solid var(--rule)` drew
+ *   no border, and `outline: 2px solid var(--accent)` in a `:focus-within`
+ *   rule drew **no focus ring** — an author rule still beats the UA default,
+ *   so the browser's own ring did not come back.
+ *
+ * Neither shows up in a contrast table, because there is no pair to check, and
+ * neither shows up in axe: the first renders a colour that is merely wrong, and
+ * axe has no focus-visibility rule for the second. The declaration is the thing
+ * to assert on.
+ */
+describe('custom properties resolve (NEWS-363)', () => {
+  const code = withoutComments(scss);
+  const declared = new Set([...code.matchAll(/--([\w-]+)\s*:/g)].map((m) => m[1]));
+  const used = [...new Set([...code.matchAll(/var\(\s*--([\w-]+)/g)].map((m) => m[1]))].sort();
+
+  it('found the declarations and the uses', () => {
+    // A regex that quietly matched nothing would make the assertion below pass
+    // for the wrong reason — the failure mode every scan test has.
+    expect(declared.size).toBeGreaterThanOrEqual(10);
+    expect(used.length).toBeGreaterThanOrEqual(10);
+    expect(used).toContain('marigold');
+  });
+
+  it('strips comments before scanning', () => {
+    // This file's own prose names `--amber`, and so does the stylesheet comment
+    // recording why it went away. Scanning raw source would rediscover the
+    // fixed bug in the sentence explaining the fix.
+    expect(withoutComments('a { /* var(--gone) */ color: red; }')).not.toContain('--gone');
+    expect(withoutComments('a { // var(--gone)\n  color: red; }')).not.toContain('--gone');
+    expect(withoutComments('a { color: var(--kept); }')).toContain('--kept');
+  });
+
+  it('leaves no var() naming a token nothing defines', () => {
+    const orphans = used.filter((name) => !declared.has(name) && !(name in RUNTIME_TOKENS));
+    expect(orphans, `undeclared custom properties: ${orphans.join(', ')}`).toEqual([]);
+  });
+
+  it('still sets every token claimed to be set at runtime', () => {
+    // The escape hatch above is only honest while the runtime setter is real.
+    // Delete `rail.ts`'s setProperty and `--rail-top` becomes an orphan wearing
+    // an exemption.
+    const sources = ['src/client/rail.ts', 'src/client/discover-view.tsx']
+      .map((f) => fs.readFileSync(path.join(root, f), 'utf8'))
+      .join('\n');
+    for (const name of Object.keys(RUNTIME_TOKENS)) {
+      expect(sources, `--${name} is set somewhere`).toContain(`--${name}`);
+    }
   });
 });
