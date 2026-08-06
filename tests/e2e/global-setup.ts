@@ -21,5 +21,29 @@ import { fileURLToPath } from 'node:url';
  */
 export default function globalSetup(): void {
   const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
-  execFileSync('npm', ['run', 'build:client:dev'], { cwd: root, stdio: 'inherit' });
+  execFileSync(npmCommand(), ['run', 'build:client:dev'], { cwd: root, stdio: 'inherit' });
+}
+
+/**
+ * What npm is actually called on this platform (NEWS-348).
+ *
+ * On Windows npm is **`npm.cmd`**, a shell shim rather than an executable, and
+ * `execFile`/`spawn` without `shell: true` resolve only real executables. A bare
+ * `'npm'` therefore throws `spawnSync npm ENOENT` — which, from `globalSetup`,
+ * happens before the workers exist and takes the whole suite with it.
+ *
+ * `shell: true` would also work and is worse: it hands the arguments to cmd.exe
+ * and brings its quoting rules into a path that has no need of them.
+ *
+ * Nothing else in the harness needs this — `server.ts` spawns `process.execPath`,
+ * which is a real binary everywhere. This is the one place a *tool* is spawned by
+ * name.
+ *
+ * The parameter exists so a test can ask about a platform it isn't running on.
+ * That is the whole difficulty: on macOS and Linux the bare name works, so this
+ * bug is invisible on every machine anyone develops on and only appears in the
+ * Windows E2E job, which runs once per release.
+ */
+export function npmCommand(platform: NodeJS.Platform = process.platform): string {
+  return platform === 'win32' ? 'npm.cmd' : 'npm';
 }
