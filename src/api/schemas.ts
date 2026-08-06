@@ -11,6 +11,24 @@ import {
 } from '../db/schemas.js';
 
 // Request schemas (validated server-side).
+//
+// **A `z.infer` alias is exported when a caller names the type, and not
+// otherwise** (NEWS-352). Thirteen aliases were exported that nothing imported;
+// the argument for keeping them was that every schema should have a
+// symmetrical public type — but the convention was never actually applied, so
+// it could not be the reason. Eight schemas had no alias at the time, including
+// five `Resp` schemas and one `Req` added the day before beside a sibling that
+// did get one. They were incidental, not designed, and a reader could not tell
+// which of the two exports beside a schema was load-bearing.
+//
+// Routes call `parseBody(c, XReqSchema)` and let the type infer at the call
+// site, which is why request aliases in particular go unused. Adding one back
+// the moment something names it is a one-line change.
+//
+// `ErrorRespSchema` went with them: removing its alias left it referenced by
+// nothing, which is what it had always been — routes answer with an inline
+// `c.json({ error: '…' }, 4xx)` and never validate their own error bodies. It
+// was a shape nobody was held to.
 
 /**
  * Body of a topic creation.
@@ -28,7 +46,6 @@ export const CreateTopicReqSchema = z.object({
   category: z.string().min(1).optional(),
   subcategory: z.string().min(1).optional(),
 });
-export type CreateTopicReq = z.infer<typeof CreateTopicReqSchema>;
 
 /**
  * A shared topic list, on its way back in (FR-30.5–30.9, NEWS-318).
@@ -57,7 +74,6 @@ export const ImportTopicsReqSchema = z.object({
     }),
   ),
 });
-export type ImportTopicsReq = z.infer<typeof ImportTopicsReqSchema>;
 
 /**
  * An exported story archive, on its way back in (FR-30.10–30.14, NEWS-319).
@@ -95,7 +111,6 @@ export const ImportStoriesReqSchema = z.object({
     }),
   ),
 });
-export type ImportStoriesReq = z.infer<typeof ImportStoriesReqSchema>;
 
 /** What a story import did (FR-30.7, FR-30.12). */
 export const ImportStoriesRespSchema = z.object({
@@ -151,7 +166,6 @@ export const UpdateTopicReqSchema = z
   .refine((v) => !(v.clearItems === true && v.name === undefined), {
     message: 'clearItems requires name',
   });
-export type UpdateTopicReq = z.infer<typeof UpdateTopicReqSchema>;
 
 const MIN_CHECK_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
 export const UpdateSettingsReqSchema = z
@@ -187,13 +201,10 @@ export const UpdateSettingsReqSchema = z
   })
   .partial()
   .refine((v) => Object.keys(v).length > 0, { message: 'at least one setting is required' });
-export type UpdateSettingsReq = z.infer<typeof UpdateSettingsReqSchema>;
 
 export const CheckReqSchema = z.object({ topicId: z.string().optional() });
-export type CheckReq = z.infer<typeof CheckReqSchema>;
 
 export const OpenExternalReqSchema = z.object({ url: z.url() });
-export type OpenExternalReq = z.infer<typeof OpenExternalReqSchema>;
 
 /**
  * Hard ceiling on tuner rounds (FR-24.9), enforced at the trust boundary.
@@ -286,18 +297,15 @@ export const DiscoverUsageRespSchema = z.object({
     }),
   ),
 });
-export type DiscoverUsageResp = z.infer<typeof DiscoverUsageRespSchema>;
 
 /** Body of an item update: bookmark and/or off-topic flag; at least one. */
 export const SaveItemReqSchema = z
   .object({ saved: z.boolean(), offTopic: z.boolean() })
   .partial()
   .refine((v) => Object.keys(v).length > 0, { message: 'at least one field is required' });
-export type SaveItemReq = z.infer<typeof SaveItemReqSchema>;
 
 /** Body of a key save. The value is write-only — no endpoint ever returns it. */
 export const SaveKeyReqSchema = z.object({ key: z.string().min(1).max(500) });
-export type SaveKeyReq = z.infer<typeof SaveKeyReqSchema>;
 
 // Response schemas (shared with the client, which validates on receipt).
 
@@ -495,7 +503,6 @@ export const ModelsRespSchema = z.object({
    */
   effortLevels: z.array(z.enum(EFFORT_LEVELS)).nullable().default(null),
 });
-export type ModelsResp = z.infer<typeof ModelsRespSchema>;
 export type ProvidersResp = z.infer<typeof ProvidersRespSchema>;
 
 /**
@@ -515,7 +522,6 @@ export const KeyStatusSchema = z.object({
   source: z.enum(['env', 'keychain']).nullable(),
   envVar: z.string(),
 });
-export type KeyStatus = z.infer<typeof KeyStatusSchema>;
 
 export const KeysRespSchema = z.object({
   keys: z.array(KeyStatusSchema),
@@ -526,5 +532,3 @@ export const KeysRespSchema = z.object({
 });
 export type KeysResp = z.infer<typeof KeysRespSchema>;
 
-export const ErrorRespSchema = z.object({ error: z.string() });
-export type ErrorResp = z.infer<typeof ErrorRespSchema>;

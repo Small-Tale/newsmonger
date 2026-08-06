@@ -198,9 +198,6 @@ export const DEMO_TOPICS: DemoTopic[] = [
   },
 ];
 
-/** Topic names in the order the demo adds them. */
-export const DEMO_TOPIC_NAMES = DEMO_TOPICS.map((t) => t.name);
-
 /**
  * How many stories exist after every topic's **first** check.
  *
