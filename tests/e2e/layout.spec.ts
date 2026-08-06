@@ -150,7 +150,12 @@ test('the quiet button variant has a resting edge (NEWS-305)', async ({ page }) 
   await page.goto('/');
   await openSettingsTab(page, 'App');
 
-  for (const action of ['test-notification', 'rerun-onboarding']) {
+  // One subject since NEWS-329 removed `test-notification`, which was the other.
+  // The property is per *variant*, not per button, so one call site still proves
+  // it — and `.btn.subtle` is worn widely enough elsewhere (discovery's Back,
+  // the backup offer's two exits, onboarding's Skip, the key rows' Remove) that
+  // a regression here would be a regression everywhere.
+  for (const action of ['rerun-onboarding']) {
     expect(await hasVisibleEdge(page, `[data-action=${action}]`), action).toBe(true);
   }
 
@@ -159,8 +164,8 @@ test('the quiet button variant has a resting edge (NEWS-305)', async ({ page }) 
   // this the fix could drift into "make it a normal button", which loses the
   // hierarchy the variant exists for.
   const filled = await page.evaluate(() => {
-    const el = document.querySelector('[data-action=test-notification]');
-    if (el === null) throw new Error('test-notification not rendered');
+    const el = document.querySelector('[data-action=rerun-onboarding]');
+    if (el === null) throw new Error('rerun-onboarding not rendered');
     const bg = getComputedStyle(el).backgroundColor;
     return !(bg === 'transparent' || /rgba\(.*,\s*0\)$/.test(bg));
   });

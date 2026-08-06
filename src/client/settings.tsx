@@ -150,9 +150,9 @@ function notifyBlockedNoteJsx(): SafeHtml {
     // so the old copy pointed at a blank space and looked like a fault.
     return (
       <p class="note warn">
-        Newsmonger couldn’t hand a notification to your system. Try <strong>Send a test notification</strong> below —
-        the app only appears in <strong>System Settings → Notifications</strong> once it has delivered one, so there
-        may be nothing to allow there yet.
+        Newsmonger couldn’t hand a notification to your system. The app only appears in{' '}
+        <strong>System Settings → Notifications</strong> once it has delivered one, so there may be nothing to allow
+        there yet — it should show up after the first new story arrives while this window is in the background.
       </p>
     );
   }
@@ -895,20 +895,6 @@ function settingsPanelJsx(s: AppState): SafeHtml {
         {/* Always-present slot for the permission note (KF-377). */}
         <div class="notify-note">
           {s.notifyPermissionDenied ? notifyBlockedNoteJsx() : ''}
-        </div>
-        {/* A test notification (NEWS-260). The feature is otherwise
-            unobservable — a real one needs a check to find new stories while
-            the window is unfocused — and on macOS this is also what puts the
-            app into System Settings → Notifications, which happens only once it
-            has actually delivered one. Always-present result slot so the answer
-            is announced (see #banners, NEWS-99). */}
-        <div class="test-notify">
-          <button class="btn subtle" type="button" data-action="test-notification">
-            Send a test notification
-          </button>
-          <div class="test-notify-note" role="status" aria-live="polite">
-            {s.testNotifyMessage !== null ? <p class="note">{s.testNotifyMessage}</p> : ''}
-          </div>
         </div>
         {/* "Show the setup guide again" was inside the notifications cluster
             with nothing to do with it (NEWS-307). Its own group, because the

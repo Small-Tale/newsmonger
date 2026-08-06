@@ -1381,8 +1381,9 @@ h2.eyebrow {
 
 // The quiet button variant (NEWS-305). It used to be `border-color: transparent`
 // and grow an edge only on hover, which made it invisible as a control: "Send a
-// test notification" and "Show the setup guide again" sat inside Settings → App
-// as unbordered, unfilled, `--ink-soft` text among unbordered, unfilled,
+// test notification" (since removed, NEWS-329) and "Show the setup guide again"
+// sat inside Settings → App as unbordered, unfilled `--ink-soft` text among
+// unbordered, unfilled,
 // `--ink-soft` prose. NEWS-266 had already had to promote four mode exits out of
 // this variant for the same reason; the variant itself was the bug.
 //
@@ -2931,18 +2932,6 @@ button.off-topic-pill {
   margin-top: 10px;
 
   .update-check-note p {
-    margin: 6px 0 0;
-  }
-}
-
-// Its own block rather than an extra selector on `.update-check` above: sharing
-// one would tie a notification control's spacing to the updater's, and NEWS-161
-// caught that exact splice once already when a shared rule gave the export
-// button a box's padding.
-.test-notify {
-  margin-top: 10px;
-
-  .test-notify-note p {
     margin: 6px 0 0;
   }
 }

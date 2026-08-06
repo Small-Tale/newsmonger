@@ -126,26 +126,6 @@ function fire(count: number): void {
   bounceDockIcon();
 }
 
-/**
- * Deliver one right now, on demand from Settings (NEWS-260).
- *
- * The feature is otherwise unobservable: a real notification needs a check to
- * find new stories *while the window is unfocused*, so there is no way to answer
- * "is this working" except to wait and hope. Worse on macOS, where an app is
- * listed in System Settings → Notifications only once it has **delivered** one —
- * so before this button there was nothing a user could do to make the app appear
- * there, and its absence looked like a permissions fault rather than a feature
- * that had never run.
- *
- * Deliberately ignores focus and the throttle: the point is to fire *now*, while
- * the user is watching Settings. It does not consume the throttle window either,
- * so testing cannot suppress a real notification minutes later.
- */
-export async function sendTestNotification(): Promise<boolean> {
-  if (!(await ensureNotificationPermission())) return false;
-  deliver('Newsmonger test', 'If you can see this, notifications are working.');
-  return true;
-}
 
 /**
  * Fold a fresh state snapshot into the notifier. Call after every state update.

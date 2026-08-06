@@ -7,7 +7,6 @@ import {
   ensureNotificationPermission,
   focusProbe,
   noteState,
-  sendTestNotification,
 } from '../../src/client/notifications.js';
 import { appStore } from '../../src/client/stores.js';
 
@@ -269,32 +268,3 @@ describe('the desktop path delivers through the replaced window.Notification', (
   });
 });
 
-describe('the test notification (NEWS-260)', () => {
-  it('delivers immediately, ignoring focus and the throttle', async () => {
-    // Both suppressions are deliberate: the user is watching Settings, and a
-    // real notification minutes earlier must not make the button appear broken.
-    focusProbe.isFocused = (): boolean => true;
-    noteState(state(['a']));
-    noteState(state(['a', 'b'])); // focused, so nothing fires
-    expect(FakeNotification.instances).toHaveLength(0);
-
-    expect(await sendTestNotification()).toBe(true);
-    expect(FakeNotification.instances).toHaveLength(1);
-    expect(FakeNotification.instances[0]?.title).toBe('Newsmonger test');
-  });
-
-  it('does not consume the throttle window a real notification uses', async () => {
-    // Sending a test must not suppress the next genuine one.
-    focusProbe.isFocused = (): boolean => false;
-    expect(await sendTestNotification()).toBe(true);
-    noteState(state(['a']));
-    noteState(state(['a', 'b']));
-    expect(FakeNotification.instances.map((n) => n.title)).toEqual(['Newsmonger test', 'New story']);
-  });
-
-  it('reports failure rather than throwing when permission is refused', async () => {
-    FakeNotification.permission = 'denied';
-    expect(await sendTestNotification()).toBe(false);
-    expect(FakeNotification.instances).toHaveLength(0);
-  });
-});

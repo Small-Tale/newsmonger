@@ -67,7 +67,7 @@ import { feedJsx, itemMenuJsx } from './feed.js';
 import { filterBarJsx } from './filter-bar.js';
 import { icon } from './icons.js';
 import { correctedModel } from './model-choice.js';
-import { ensureNotificationPermission, sendTestNotification } from './notifications.js';
+import { ensureNotificationPermission } from './notifications.js';
 import { onboardingJsx } from './onboarding-view.js';
 import { browserPollDeps, startPolling as startStatePolling } from './poll.js';
 import { activeBehindWarnings } from './schedule.js';
@@ -2110,22 +2110,6 @@ function wireEvents(root: HTMLElement): void {
     appStore.actions.setUpdateChecking(true);
     void requestUpdateCheck().then((message) => {
       appStore.actions.setUpdateCheckMessage(message);
-    });
-  });
-
-  // Send one now (NEWS-260). Rides the click for the same reason the toggle
-  // does: if permission has not been asked for yet, the request must come from a
-  // user gesture. Says which surface it went to, because "sent" is the wrong
-  // word if the OS then suppresses it for Do Not Disturb or a per-app setting —
-  // this can only honestly report that it handed one over.
-  void delegate(root, 'click', '[data-action=test-notification]', () => {
-    appStore.actions.setTestNotifyMessage(null);
-    void sendTestNotification().then((sent) => {
-      appStore.actions.setTestNotifyMessage(
-        sent
-          ? 'Sent. If nothing appeared, check Do Not Disturb and this app’s entry in your notification settings.'
-          : 'Could not send — notifications are blocked for this app. See the note above.',
-      );
     });
   });
 

@@ -426,14 +426,6 @@ export interface AppState {
   /** True when the user tried to enable notifications but permission was refused. */
   notifyPermissionDenied: boolean;
   /**
-   * Result line for the test notification (NEWS-260), or null before one is sent.
-   *
-   * Beside `notifyPermissionDenied` rather than replacing it: that flag is about
-   * whether the toggle could be honoured, this is about whether a delivery the
-   * user asked for reached the OS.
-   */
-  testNotifyMessage: string | null;
-  /**
    * Whether the "checks are falling behind" banner has been dismissed this
    * session (NEWS-59). Informational, so a plain session-level dismiss — it
    * reappears on reload if the condition persists.
@@ -653,7 +645,6 @@ export const appStore = defineStore({
     renameTopicId: null,
     renameItemCount: null,
     notifyPermissionDenied: false,
-    testNotifyMessage: null,
     dismissedRunId: readDismissedRunId(),
     updateVersion: null,
     updateDismissed: false,
@@ -944,9 +935,6 @@ export const appStore = defineStore({
     },
     closeGuidance: () => {
       set({ ...get(), guidanceTopicId: null });
-    },
-    setTestNotifyMessage: (testNotifyMessage: string | null) => {
-      set({ ...get(), testNotifyMessage });
     },
     setNotifyPermissionDenied: (notifyPermissionDenied: boolean) => {
       set({ ...get(), notifyPermissionDenied });

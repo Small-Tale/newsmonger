@@ -259,7 +259,7 @@ Browser-verified (toggle, permission, firing, throttle, and since NEWS-260 the t
 - **The app is listed in System Settings → Notifications only after it has successfully delivered one.** So its absence there before the first notification is expected, not a permissions fault.
 - **`tauri:dev` cannot register this app.** In dev the plugin sets the application to `com.apple.Terminal` (`tauri::is_dev()`), so a dev notification registers *Terminal*. Anything about System Settings must be checked on a **built** app.
 
-1. `npm run tauri:build` (or install a released bundle), open Settings → App, and press **Send a test notification**. Confirm a notification appears and the result line says it was sent.
+1. `npm run tauri:build` (or install a released bundle), turn notifications on in Settings → App, then let a check find a new story while the window is in the background. Confirm a notification appears. (The **Send a test notification** button that made this a one-click check was removed in NEWS-329 — there is no longer a way to trigger one on demand.)
 2. Confirm the app now appears in **System Settings → Notifications** as Newsmonger. This is the check that was impossible before NEWS-260 — nothing else in the app delivers on demand.
 3. Toggle notifications on. Confirm no permission dialog appears and the toggle simply sticks (see above — there is nothing to grant).
 4. Add a topic with active coverage on an API-key provider, background the app, and let a scheduled check run — confirm an OS notification appears **and** the dock icon bounces (macOS) / taskbar flashes.
