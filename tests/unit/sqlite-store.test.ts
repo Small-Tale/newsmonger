@@ -6,7 +6,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { scheduleBaseline } from '../../src/checks.js';
 import { DEFAULT_RETENTION_DAYS } from '../../src/db/schemas.js';
-import { dbPath, SCHEMA_VERSION } from '../../src/db/sqlite.js';
+import { backupUnreadableDb, dbPath, SCHEMA_VERSION } from '../../src/db/sqlite.js';
 import { Store } from '../../src/db/store.js';
 import { tmpDataDir } from '../helpers/tmp.js';
 
@@ -814,6 +814,163 @@ describe('schema migration v2 → v3 (NEWS-110)', () => {
 
     const check = new DatabaseSync(dbPath(dir));
     expect((check.prepare('PRAGMA user_version').get() as { user_version: number }).user_version).toBe(SCHEMA_VERSION);
+    check.close();
+  });
+});
+
+describe('a schema ahead of its own user_version (NEWS-335)', () => {
+  // The state that cost a real install its topics. Every migration had been
+  // applied but the version stamp still read v4, so the next open re-ran
+  // `MIGRATIONS[4]` and died on `duplicate column name: thread_id` — which the
+  // store read as corruption and answered by starting fresh. Nothing here is
+  // reachable from a clean database, which is why no existing test saw it.
+
+  /** A current-schema database whose `user_version` lies about how far it got. */
+  function strandedAt(dir: string, version: number): void {
+    const db = new DatabaseSync(dbPath(dir));
+    db.exec(`PRAGMA user_version = ${String(version)}`);
+    db.close();
+  }
+
+  it('opens a database whose columns are current but whose stamp says v4', () => {
+    const dir = tmpDataDir();
+    const store = new Store(dir);
+    store.addTopic('Stranded');
+    store.close();
+    strandedAt(dir, 4);
+
+    const reopened = new Store(dir);
+    expect(reopened.listTopics().map((t) => t.name)).toEqual(['Stranded']);
+    reopened.close();
+  });
+
+  it('re-stamps the healed database so the repair happens once', () => {
+    const dir = tmpDataDir();
+    new Store(dir).close();
+    strandedAt(dir, 4);
+
+    new Store(dir).close();
+    const check = new DatabaseSync(dbPath(dir));
+    expect((check.prepare('PRAGMA user_version').get() as { user_version: number }).user_version).toBe(SCHEMA_VERSION);
+    check.close();
+  });
+
+  it('does not flatten existing threads while healing', () => {
+    // The trap in making a migration idempotent. `MIGRATIONS[4]` backfills
+    // `thread_id = id`, and a database stranded at v4 has *real* groupings in
+    // that column — re-running the backfill would turn every thread into a
+    // thread of one. Healing must not cost data to do it.
+    const dir = tmpDataDir();
+    const store = new Store(dir);
+    const topic = store.addTopic('Threaded');
+    store.addItems([
+      { topicId: topic.id, title: 'First report', summary: 'a', sources: [], dedupeKey: 'k1', foundAt: '2026-07-02T00:00:00.000Z' },
+      { topicId: topic.id, title: 'Second outlet', summary: 'b', sources: [], dedupeKey: 'k2', foundAt: '2026-07-02T00:00:00.000Z' },
+    ]);
+    store.close();
+
+    // Group them by hand: two stories, one thread, as threading would leave them.
+    const grouped = new DatabaseSync(dbPath(dir));
+    const first = grouped.prepare(`SELECT id FROM items ORDER BY rowid LIMIT 1`).get() as { id: string };
+    grouped.prepare(`UPDATE items SET thread_id = ?`).run(first.id);
+    grouped.exec('PRAGMA user_version = 4');
+    grouped.close();
+
+    new Store(dir).close();
+    const check = new DatabaseSync(dbPath(dir));
+    const threads = (check.prepare(`SELECT DISTINCT thread_id FROM items`).all() as { thread_id: string }[]).map(
+      (r) => r.thread_id,
+    );
+    expect(threads).toEqual([first.id]);
+    check.close();
+  });
+});
+
+describe('a failed schema step is all-or-nothing (NEWS-335, NEWS-336)', () => {
+  /**
+   * A v5 database that cannot be migrated: two topics whose names collide under
+   * `NOCASE`, so creating `topics_name_nocase` throws *after* migration 5 has
+   * added its column. Realistic — the unique index is a backstop precisely
+   * because older data might violate it — and it puts a failure in the one
+   * place that used to strand the file.
+   */
+  function unmigratable(dir: string): void {
+    const db = new DatabaseSync(dbPath(dir));
+    db.exec('DROP INDEX IF EXISTS topics_name_nocase');
+    db.exec('ALTER TABLE topics DROP COLUMN cleared_at');
+    db.prepare(`INSERT INTO topics (id, name, created_at) VALUES ('a', 'Apple', '2026-07-01T00:00:00.000Z')`).run();
+    db.prepare(`INSERT INTO topics (id, name, created_at) VALUES ('b', 'apple', '2026-07-01T00:00:00.000Z')`).run();
+    db.exec('PRAGMA user_version = 5');
+    db.close();
+  }
+
+  it('rolls the half-applied migration back rather than stranding the version', () => {
+    const dir = tmpDataDir();
+    new Store(dir).close();
+    unmigratable(dir);
+
+    expect(() => new Store(dir)).toThrow();
+
+    const check = new DatabaseSync(dbPath(dir));
+    // Still v5, and migration 5's column is gone with the rolled-back transaction.
+    expect((check.prepare('PRAGMA user_version').get() as { user_version: number }).user_version).toBe(5);
+    const columns = (check.prepare('PRAGMA table_info(topics)').all() as { name: string }[]).map((c) => c.name);
+    expect(columns).not.toContain('cleared_at');
+    check.close();
+  });
+
+  it('refuses to start instead of setting the database aside', () => {
+    // NEWS-336. The file is readable and every row is intact; this is our own
+    // schema code failing. Quarantining it here is what made a fixable bug
+    // present as total data loss.
+    const dir = tmpDataDir();
+    new Store(dir).close();
+    unmigratable(dir);
+
+    expect(() => new Store(dir)).toThrow(/cannot open the database/i);
+    expect(fs.readdirSync(dir).filter((f) => f.includes('.corrupt-'))).toHaveLength(0);
+
+    const check = new DatabaseSync(dbPath(dir));
+    expect((check.prepare('SELECT count(*) AS c FROM topics').get() as { c: number }).c).toBe(2);
+    check.close();
+  });
+});
+
+describe('rescuing a database keeps its write-ahead log (NEWS-337)', () => {
+  // Driven through `backupUnreadableDb` directly rather than through `Store`,
+  // because `openDb`'s own failure path closes its handle first and SQLite
+  // removes the `-wal` on close — so a full-stack test cannot get a log to this
+  // function to begin with. What is pinned here is this function's contract for
+  // the case where one *does* survive: a `-wal` in front of it is preserved,
+  // never unlinked unread.
+  it('carries a surviving -wal into the backup set instead of deleting it', () => {
+    const dir = tmpDataDir();
+    const store = new Store(dir);
+    store.addTopic('Doomed');
+    store.close();
+
+    const file = dbPath(dir);
+    fs.writeFileSync(`${file}-wal`, Buffer.alloc(4096, 0x42));
+
+    const backup = backupUnreadableDb(file);
+    expect(fs.existsSync(`${backup}-wal`)).toBe(true);
+    expect(fs.readFileSync(`${backup}-wal`)).toEqual(Buffer.alloc(4096, 0x42));
+    // And nothing left beside the replacement to be replayed into it.
+    expect(fs.existsSync(`${file}-wal`)).toBe(false);
+    expect(fs.existsSync(file)).toBe(false);
+  });
+
+  it('checkpoints a readable database so the copy is complete', () => {
+    // The main file lags the log until a checkpoint folds it in; copying it
+    // alone is how a rescue copy ends up older than the thing it rescued.
+    const dir = tmpDataDir();
+    const store = new Store(dir);
+    store.addTopic('Kept');
+    store.close();
+
+    const backup = backupUnreadableDb(dbPath(dir));
+    const check = new DatabaseSync(backup);
+    expect((check.prepare(`SELECT name FROM topics`).get() as { name: string }).name).toBe('Kept');
     check.close();
   });
 });

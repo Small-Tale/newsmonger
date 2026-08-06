@@ -84,8 +84,26 @@
   The sweep ignores the `saved` / `offTopic` exemptions that `pruneOldItems` honours. Those mean "the user wants this kept", but there is no topic left to keep it under — and a flagged orphan would go on feeding the negative-example list for a topic that no longer exists.
 
 - **FR-4.8b** *(Shipped, NEWS-94)* **No foreign keys on `topic_id`.** `ON DELETE CASCADE` would make `deleteTopic` a single statement, but it would also reject a *write* for a topic deleted mid-check — a race the app has tolerated since `markTopicChecked` was written. A constraint would convert a harmless no-op into a thrown error mid-sweep. `deleteTopic` cascades explicitly, in a transaction.
-- **FR-4.9** *(Shipped)* A corrupt database is backed up (`newsmonger.db.corrupt-<ts>`, along with its `-wal`/`-shm` siblings, which would otherwise be replayed into the replacement) and the app starts fresh rather than crashing. Unreadable **settings** alone fall back to defaults *without* touching topics and stories — that separation is much of the point of leaving one file behind. Schema *evolution* must not trigger this: removed keys are stripped by zod, and a stored `provider` that no longer exists degrades to `auto` (`.catch('auto')`), so retiring a provider never wipes a user's topics.
+- **FR-4.9** *(Shipped)* A database that is **genuinely unreadable as a file** is backed up (`newsmonger.db.corrupt-<ts>`, along with its `-wal`/`-shm` siblings, which would otherwise be replayed into the replacement) and the app starts fresh rather than crashing. "Unreadable" is a narrow, explicit list — `file is not a database`, `database disk image is malformed`, `file is encrypted` — and everything else is FR-4.13's hard stop, because the direction that keeps data is the one to fail towards. Unreadable **settings** alone fall back to defaults *without* touching topics and stories — that separation is much of the point of leaving one file behind. Schema *evolution* must not trigger this: removed keys are stripped by zod, and a stored `provider` that no longer exists degrades to `auto` (`.catch('auto')`), so retiring a provider never wipes a user's topics.
 - **FR-4.10** *(Shipped)* Tests never touch `~/.newsmonger` — unit tests and E2E use temp dirs.
+
+- **FR-4.13** *(Shipped, NEWS-336)* **A schema error is not corruption, and is answered by refusing to start.** If `openDb` fails for any reason outside FR-4.9's list, the app stops with a message naming the file and the error, and **leaves the database exactly where it is**.
+
+  This is the lesson of a real incident. A migration bug (FR-4.14) made a healthy database throw `duplicate column name: thread_id`; the store read any throw as corruption, renamed 20 topics and 51 stories aside, and opened an empty app. `PRAGMA integrity_check` on that file returned `ok` — nothing was ever wrong with it. The response threw away a working install to recover from a bug in our own code, and the only notice was a `console.error` the desktop shell never surfaces.
+
+  A stopped app is recoverable: the data is still there, and someone can ask for help or wait for a fix. An empty app is the one outcome that both looks like total loss and invites the user to start typing new data over the top of the old.
+
+- **FR-4.14** *(Shipped, NEWS-335)* **Migrations and the version stamp are one transaction.** The whole schema step — `TABLES`, every migration, the indexes, and the `PRAGMA user_version` bump — runs inside a single transaction, so a database is either fully migrated *and* stamped, or untouched.
+
+  Each statement used to autocommit separately, with the stamp last. Any failure after the final `ALTER` left a fully-migrated database claiming an old version, and that state is not transient: **every** subsequent open re-applied an already-applied migration and threw. One bad start made a file permanently unopenable.
+
+- **FR-4.15** *(Shipped, NEWS-335)* **Every migration is safe to run twice.** Column additions go through a helper that checks `PRAGMA table_info` first, so a database whose schema is ahead of its own `user_version` heals on the next open instead of needing hand repair with the sqlite CLI.
+
+  A migration that *backfills* the column it adds runs that backfill **only when it did the adding**. Re-running NEWS-280's `UPDATE items SET thread_id = id` on a database that has already grouped its stories would flatten every thread to a thread of one — healing must not cost data to do it.
+
+- **FR-4.16** *(Shipped, NEWS-337)* **A rescue copy never unlinks a write-ahead log unread.** `backupUnreadableDb` copies any `-wal`/`-shm` beside the database *before* it tries anything else, then checkpoints the database if it can open it, then copies the main file.
+
+  The order is the substance. In WAL mode a committed transaction lives in `-wal` until a checkpoint folds it in, so copying the main file alone leaves the rescue copy older than what was actually committed — and closing a SQLite handle removes the log, including on a failed open. Copying first is what keeps the set restorable. This is best-effort by nature: `openDb`'s own failure path closes its handle before the backup runs, so a log often will not survive to reach this function. What it guarantees is that this function never destroys one.
 
 - **FR-4.12** *(Shipped, NEWS-164)* The product was renamed **News → Newsmonger**, and the rename went all the way through rather than stopping at the wordmark. A repo carrying two names for one product is a repo where every later reader has to work out which one is current.
 

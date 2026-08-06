@@ -18,7 +18,7 @@ import {
   SettingsSchema,
   TopicSchema,
 } from './schemas.js';
-import { backupUnreadableDb, dbPath, openDb } from './sqlite.js';
+import { backupUnreadableDb, dbPath, isUnreadableDbError, openDb } from './sqlite.js';
 
 /**
  * Run-history retention (NEWS-103, revised NEWS-119). Two limits, whichever
@@ -214,6 +214,21 @@ export class Store {
     try {
       db = openDb(this.file);
     } catch (err) {
+      // Only a genuinely unreadable *file* gets the start-fresh treatment
+      // (NEWS-336). A schema error means the database is fine and our own
+      // migration code failed on it — answering that by renaming someone's
+      // topics aside and opening an empty app is the one outcome that both
+      // looks like total loss and invites them to type new data over the top.
+      // Refusing to start keeps every row exactly where it is, and a stopped
+      // app is a situation someone can recover from.
+      if (!isUnreadableDbError(err)) {
+        throw new Error(
+          `newsmonger: cannot open the database at ${this.file} — ${String(err)}\n` +
+            `Your data has NOT been touched. This is a schema problem in newsmonger itself, not a damaged file; ` +
+            `please report it rather than deleting anything.`,
+          { cause: err },
+        );
+      }
       // Corrupt or unreadable database: back it up and start fresh rather than
       // crash — the same contract the JSON store had for a bad `data.json`.
       // A database that cannot be opened cannot be repaired from in here, and
