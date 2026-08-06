@@ -6,11 +6,12 @@ import type { z } from 'zod';
 
 import { deleteApiKey, resolveApiKey, saveApiKey } from '../ai/api-keys.js';
 import { isKeyedProvider, KEY_ENV_VARS, KEYED_PROVIDERS, PROVIDER_INFO } from '../ai/types.js';
-import type { ItemsResp, KeysResp, ProvidersResp, StateResp, ThreadResp } from '../api/schemas.js';
+import type { ImportTopicsResp, ItemsResp, KeysResp, ProvidersResp, StateResp, ThreadResp } from '../api/schemas.js';
 import {
   CheckReqSchema,
   CreateTopicReqSchema,
   DiscoverReqSchema,
+  ImportTopicsReqSchema,
   OpenExternalReqSchema,
   SaveItemReqSchema,
   SaveKeyReqSchema,
@@ -674,6 +675,45 @@ export function registerApi(app: Hono<AppEnv>): void {
       'Content-Disposition': 'attachment; filename="newsmonger-topics.json"',
     }),
   );
+
+  /**
+   * Read a shared topic list back in (FR-30.5–30.9, NEWS-318).
+   *
+   * **Refused whole or accepted whole.** A file the schema cannot read is a 400
+   * with the reason and nothing written; a file it can read is applied in one
+   * transaction. Half an import is worse than none, because you cannot tell
+   * which half.
+   *
+   * The 400 carries zod's own message rather than a generic "invalid request".
+   * This is a *file the user chose*, quite possibly hand-edited, and "topics.0.name:
+   * expected string, received number" is the difference between fixing it and
+   * guessing. Everywhere else in this file a bad body is a programming error; here
+   * it is an ordinary thing a person does.
+   *
+   * No check is fired — see `Store.importTopics`. And no confirm dialog anywhere
+   * near it (FR-30.16): this adds, skips and reports, and cannot destroy
+   * anything, so putting it behind the ceremony the danger zone uses would
+   * dilute the ceremony.
+   */
+  app.post('/api/import-topics', async (c) => {
+    let body: unknown;
+    try {
+      body = await c.req.json();
+    } catch {
+      return c.json({ error: "that file isn't JSON" }, 400);
+    }
+    const parsed = ImportTopicsReqSchema.safeParse(body);
+    if (!parsed.success) {
+      // `.at(0)` rather than `[0]`: without `noUncheckedIndexedAccess` the index
+      // is typed as definitely present, so the guard below would read as dead
+      // code and the linter would agree.
+      const first = parsed.error.issues.at(0);
+      const where = first === undefined ? '' : `${first.path.join('.')}: `;
+      return c.json({ error: `that file isn't a topic list — ${where}${first?.message ?? 'unreadable'}` }, 400);
+    }
+    const resp: ImportTopicsResp = c.get('store').importTopics(parsed.data.topics);
+    return c.json(resp);
+  });
 
   app.get('/healthz', (c) => c.json({ ok: true }));
 }

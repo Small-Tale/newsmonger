@@ -1,6 +1,6 @@
 # 30 — Import (and topic export)
 
-**Status: partial.** The topic *export* is shipped (FR-30.2–30.4, NEWS-317); both imports are still design. Written for NEWS-290 (export/import topic lists) and NEWS-289 (import exported stories), which share enough machinery that answering them separately would have produced two incompatible formats.
+**Status: partial.** Topic export (FR-30.2–30.4, NEWS-317) and topic import (FR-30.5–30.9, NEWS-318) are shipped; **story import is still design** (FR-30.10–30.14). Written for NEWS-290 (export/import topic lists) and NEWS-289 (import exported stories), which share enough machinery that answering them separately would have produced two incompatible formats.
 
 The owner was asked four questions on NEWS-290 and three on NEWS-289 and had not answered when this was written, so **every decision below is taken under a stated assumption**, flagged as such. A doc is the right artifact for that: the assumptions are legible and correctable in one place, which they would not be spread through an implementation.
 
@@ -34,19 +34,27 @@ So the gap is real and specific: **there is no additive way in.** Restore replac
 
 ## Importing topics
 
-- **FR-30.5** *(Design only)* Import is **additive and idempotent**: importing the same file twice leaves the same topics as importing it once.
+- **FR-30.5** *(Shipped, NEWS-318)* Import is **additive and idempotent**: importing the same file twice leaves the same topics as importing it once.
 
-- **FR-30.6** *(Design only)* **A topic already present is skipped, never merged.** Match on the rule the add-topic form already uses — `name = ? COLLATE NOCASE` against the trimmed name (`Store.addTopic`) — so import and typing agree on what a duplicate is. Reusing that query rather than restating it is the point; two definitions of "same topic" would drift.
+- **FR-30.6** *(Shipped, NEWS-318)* **A topic already present is skipped, never merged.** Match on the rule the add-topic form already uses — `name = ? COLLATE NOCASE` against the trimmed name — so import and typing agree on what a duplicate is. Reusing that query rather than restating it is the point; two definitions of "same topic" would drift.
+
+  Implemented as `Store.topicExists`, called by **both** `addTopic` and `importTopics`, so there is one query rather than two that started identical. The drift this prevents would show up as an import creating a second "Fusion Energy" beside the "fusion energy" you already follow — a bug nobody would think to look for in a SQL string, which is why the test asserts it through both doors rather than restating the rule.
 
   **Skipped rather than merged**, and this is the one place the design refuses a plausible alternative outright: adopting an incoming `guidance` for a topic you already have would silently overwrite something you wrote, in a bulk action, with no diff. An import that can destroy work is not an import.
 
-- **FR-30.7** *(Design only)* The result is **reported, not silent**: *"Added 7 topics · skipped 3 you already follow."* A bulk action whose outcome you cannot see invites running it twice.
+- **FR-30.7** *(Shipped, NEWS-318)* The result is **reported, not silent**: *"Added 7 topics · skipped 3 you already follow."* A bulk action whose outcome you cannot see invites running it twice.
 
-- **FR-30.8** *(Design only)* **An imported topic is due, not checked immediately.** Adding a topic by hand fires a check at once ([FR-1.12](1-topics-and-scheduling.md)), which is right for one topic and wrong for twenty: it would spend an hour of provider quota in a burst nobody asked for. Imported topics get `clearedAt`-style baseline treatment — the scheduler picks them up on its own cadence, and "Check all now" is there for anyone impatient.
+- **FR-30.8** *(Shipped, NEWS-318)* **An imported topic is due, not checked immediately.** Adding a topic by hand fires a check at once ([FR-1.12](1-topics-and-scheduling.md)), which is right for one topic and wrong for twenty: it would spend an hour of provider quota in a burst nobody asked for. Imported topics get `clearedAt`-style baseline treatment — the scheduler picks them up on its own cadence, and "Check all now" is there for anyone impatient.
 
   **Assumed.** The alternative — ask at import time — adds a decision to a flow whose whole point is bulk.
 
-- **FR-30.9** *(Design only)* A file the schema cannot read is **refused whole**, with the reason. Half an import is worse than none, and the transaction discipline is the same as `Store.replaceAll`'s (FR-27.10).
+- **FR-30.9** *(Shipped, NEWS-318)* A file the schema cannot read is **refused whole**, with the reason. Half an import is worse than none, and the transaction discipline is the same as `Store.replaceAll`'s (FR-27.10).
+
+  The 400 carries **zod's own message**, not a generic "invalid request": `topics.0.name: expected string, received number` is the difference between fixing the file and guessing at it. Everywhere else in the API a bad body is a programming error; here it is a file a person chose, quite possibly hand-edited, so it is an ordinary thing to get wrong.
+
+  The schema is correspondingly **lenient about what it ignores and strict about what it accepts**. An `exportedAt` it does not need, or a field from a future version, must not make a usable list unreadable — but a name that is not a string is a file this cannot honestly import. `guidance`, `category` and `subcategory` are optional, so the smallest file a person could type is valid: `{"topics":[{"name":"Fusion energy"}]}`. Bounds match `CreateTopicReqSchema`, since these are the same fields arriving by a different door and a list that could carry a 10,000-character name past the form's limit would be a way around it.
+
+  Duplicates **within one file** collapse by the same rule, because each insert happens before the next entry is examined — a hand-editable file is one someone will paste into twice.
 
 ## Importing stories
 
@@ -66,7 +74,7 @@ So the gap is real and specific: **there is no additive way in.** Restore replac
 
 ## Where it lives
 
-- **FR-30.15** *(Partial, NEWS-317)* Settings → Data has a **Topics** group holding an *Export topics* link; the *Import…* file input joins it when import ships. Story import joins the existing `Export` group beside the button whose output it reads.
+- **FR-30.15** *(Partial, NEWS-317/318)* Settings → Data has a **Topics** group holding *Export topics…* and *Import topics…* side by side. Story import joins the existing `Export` group beside the button whose output it reads.
 
   **Assumed.** Folding topics into the export dialog was the alternative; that dialog asks two questions (scope × format) and a topic list answers neither. The tab's groups are already named and ordered ([FR-3.68](3-ui.md)), so a new pair of controls belongs in a group of its own rather than wedged into one whose heading would stop being true.
 
@@ -74,7 +82,7 @@ So the gap is real and specific: **there is no additive way in.** Restore replac
 
   A plain `<a download>`, not a button — the route is a `GET` returning a file, so the browser's own download is the whole mechanism and an anchor gets right-click → Save As for free. `data-external="1"` so the desktop shell hands it to the system browser like every other outbound link (FR-3.8). Its own `.topics-row` class rather than a second `.export-row`: reusing that one made every `.export-row` locator in the E2E suite ambiguous, so "add a button" broke an assertion about a different feature.
 
-- **FR-30.16** *(Design only)* Import is **not** in the danger zone and takes no confirm dialog. It cannot destroy anything: it adds, skips and reports. The `Reset` group ([FR-27.11](27-data-location.md)) is for actions with no way back, and putting a safe action there would dilute it.
+- **FR-30.16** *(Shipped, NEWS-318)* Import is **not** in the danger zone and takes no confirm dialog. It cannot destroy anything: it adds, skips and reports. The `Reset` group ([FR-27.11](27-data-location.md)) is for actions with no way back, and putting a safe action there would dilute it.
 
 ## Deliberately not in scope
 

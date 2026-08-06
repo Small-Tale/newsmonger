@@ -16,6 +16,7 @@ import {
   dismissBackupPrompt,
   fetchBackupLocations,
   fetchDiscoveryUsage,
+  importTopics,
   loadThread,
   refreshBackupPreview,
   refreshFeed,
@@ -1495,6 +1496,37 @@ function wireEvents(root: HTMLElement): void {
         );
       } catch (err) {
         showToast(`Clear failed: ${err instanceof Error ? err.message : String(err)}`);
+      }
+    })();
+  });
+
+  /**
+   * Read a shared topic list back in (FR-30.5–30.9, NEWS-318).
+   *
+   * `change`, not `click`: the interesting moment is a file being *chosen*, and
+   * the same file chosen twice must work — so the input is cleared afterwards,
+   * or the second pick fires no event at all and the control looks broken.
+   *
+   * The outcome is a toast, never silence (FR-30.7). A bulk action whose result
+   * you cannot see invites running it twice, and "skipped 3 you already follow"
+   * is the difference between "it did nothing" and "it did exactly what it
+   * should have".
+   */
+  void delegate(root, 'change', '[data-action=import-topics]', (_e, el) => {
+    const input = el as HTMLInputElement;
+    const file = input.files?.[0];
+    if (file === undefined) return;
+    void (async () => {
+      try {
+        const { added, skipped } = await importTopics(await file.text());
+        const parts = [`Added ${String(added.length)} topic${added.length === 1 ? '' : 's'}`];
+        if (skipped.length > 0) parts.push(`skipped ${String(skipped.length)} you already follow`);
+        showToast(parts.join(' · '));
+      } catch (err) {
+        showToast(`Import failed: ${err instanceof Error ? err.message : String(err)}`);
+      } finally {
+        // So picking the same file again is still a `change`.
+        input.value = '';
       }
     })();
   });

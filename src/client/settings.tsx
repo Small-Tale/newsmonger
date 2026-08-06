@@ -682,6 +682,18 @@ function settingsPanelJsx(s: AppState): SafeHtml {
           <a class="btn" href="/api/export-topics.json" download data-external="1">
             {icon('download', 15)} Export topics…
           </a>
+          {/* A `<label>` wrapping a hidden input, not a button that opens one:
+              the file picker can only be opened by a real user gesture on a real
+              file input, and a label *is* that gesture. It also gets keyboard
+              focus and the accessible name for free.
+
+              No confirmation anywhere near it (FR-30.16). This adds, skips and
+              reports — it cannot destroy anything — and putting a safe action
+              behind the ceremony the Reset group uses would dilute the ceremony. */}
+          <label class="btn import-topics">
+            {icon('upload', 15)} Import topics…
+            <input type="file" accept="application/json,.json" data-action="import-topics" />
+          </label>
         </div>
         {/* One line, and it earns its place by answering the question the file
             raises rather than by describing the button (FR-3.69). "No stories,

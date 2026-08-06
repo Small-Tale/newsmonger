@@ -29,6 +29,42 @@ export const CreateTopicReqSchema = z.object({
 });
 export type CreateTopicReq = z.infer<typeof CreateTopicReqSchema>;
 
+/**
+ * A shared topic list, on its way back in (FR-30.5–30.9, NEWS-318).
+ *
+ * The file `GET /api/export-topics.json` writes (FR-30.2) — and, deliberately, a
+ * file a person may have edited by hand, since being hand-editable is the point
+ * of that format. So this is **lenient about what it ignores and strict about
+ * what it accepts**: an `exportedAt` it does not need, or a future field it does
+ * not know, must not make a usable list unreadable, but a name that is not a
+ * string is a file this cannot honestly import.
+ *
+ * `guidance`, `category` and `subcategory` are optional so the smallest useful
+ * file someone could type — `{"topics":[{"name":"Fusion energy"}]}` — is valid.
+ *
+ * Bounds match `CreateTopicReqSchema`, because these are the same fields
+ * arriving by a different door; a list that could carry a 10,000-character name
+ * past the limit the form enforces would be a way around it.
+ */
+export const ImportTopicsReqSchema = z.object({
+  topics: z.array(
+    z.object({
+      name: z.string().min(1).max(200),
+      guidance: z.string().max(MAX_GUIDANCE_LENGTH).optional(),
+      category: z.string().min(1).nullish(),
+      subcategory: z.string().min(1).nullish(),
+    }),
+  ),
+});
+export type ImportTopicsReq = z.infer<typeof ImportTopicsReqSchema>;
+
+/** What an import did, so the UI can say it (FR-30.7). */
+export const ImportTopicsRespSchema = z.object({
+  added: z.array(z.string()),
+  skipped: z.array(z.string()),
+});
+export type ImportTopicsResp = z.infer<typeof ImportTopicsRespSchema>;
+
 // A topic PATCH may toggle pause / high-priority, set guidance, and/or set the
 // category; at least one is required. Guidance accepts '' — that is how the user
 // clears it, and `category: null` is how they clear that.

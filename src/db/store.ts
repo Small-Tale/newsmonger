@@ -471,6 +471,82 @@ export class Store {
    * (FR-22.7). A topic that arrives already classified is not re-classified on
    * its first check, which is what saves the extra call (FR-24.13).
    */
+  /**
+   * Whether a topic by this name is already followed — **the** rule, singular.
+   *
+   * Extracted so `addTopic` and `importTopics` cannot disagree about what a
+   * duplicate is (FR-30.6, NEWS-318). Two copies of `name = ? COLLATE NOCASE`
+   * would start identical and drift, and the drift would show up as an import
+   * creating a second "Fusion Energy" beside the "fusion energy" you already
+   * follow — a bug nobody would look for in a query.
+   *
+   * Case-insensitive on the trimmed name, which is what the add-topic form has
+   * always meant by "already exists".
+   */
+  topicExists(name: string): boolean {
+    const row = this.db.prepare('SELECT id FROM topics WHERE name = ? COLLATE NOCASE').get(name.trim()) as
+      | { id: string }
+      | undefined;
+    return row !== undefined;
+  }
+
+  /**
+   * Add a shared topic list, additively (FR-30.5–30.9, NEWS-318).
+   *
+   * **Skips what you already follow; never merges.** Adopting an incoming
+   * `guidance` for a topic you already have would overwrite something you wrote,
+   * in a bulk action, with no diff and no undo — so the one thing this refuses
+   * outright is the one that could destroy work. Skipping is also what makes it
+   * **idempotent**: importing the same file twice leaves what importing it once
+   * left.
+   *
+   * **In a transaction**, so a file that fails partway leaves nothing behind
+   * (FR-30.9). Half an import is worse than none: you cannot tell which half.
+   *
+   * **Does not check anything.** Adding a topic through `POST /api/topics` fires
+   * an immediate check (FR-1.12), which is right for the one topic someone is
+   * watching for and wrong for twenty arriving at once — that is an hour of
+   * provider quota in a burst nobody asked for. An imported topic has
+   * `lastCheckedAt: null`, which already makes it *due*, so the scheduler picks
+   * it up on its own cadence and "Check all now" is there for the impatient.
+   *
+   * Returns the names it added and the names it skipped, in file order, because
+   * a bulk action whose outcome you cannot see invites running it twice
+   * (FR-30.7).
+   */
+  importTopics(
+    entries: readonly { name: string; guidance?: string; category?: string | null; subcategory?: string | null }[],
+  ): { added: string[]; skipped: string[] } {
+    const added: string[] = [];
+    const skipped: string[] = [];
+    this.db.exec('BEGIN');
+    try {
+      for (const entry of entries) {
+        const trimmed = entry.name.trim();
+        // An entry whose name is only whitespace is not a topic. Skipped rather
+        // than thrown: it is a hand-editable file, and one stray blank line
+        // should not cost the reader the other forty topics.
+        if (trimmed === '' || this.topicExists(trimmed)) {
+          skipped.push(trimmed === '' ? entry.name : trimmed);
+          continue;
+        }
+        // Duplicates *within one file* are caught by the same check, because the
+        // insert happens before the next entry is examined.
+        this.addTopic(trimmed, {
+          guidance: entry.guidance,
+          category: entry.category ?? null,
+          subcategory: entry.subcategory ?? null,
+        });
+        added.push(trimmed);
+      }
+      this.db.exec('COMMIT');
+    } catch (err) {
+      this.db.exec('ROLLBACK');
+      throw err;
+    }
+    return { added, skipped };
+  }
+
   addTopic(
     name: string,
     init: { guidance?: string; category?: string | null; subcategory?: string | null } = {},
@@ -479,10 +555,7 @@ export class Store {
     if (trimmed === '') throw new Error('topic name must not be empty');
     // Checked here rather than left to the unique index, so the message the API
     // surfaces names the topic instead of quoting a constraint.
-    const existing = this.db
-      .prepare('SELECT id FROM topics WHERE name = ? COLLATE NOCASE')
-      .get(trimmed) as { id: string } | undefined;
-    if (existing !== undefined) throw new Error(`topic "${trimmed}" already exists`);
+    if (this.topicExists(trimmed)) throw new Error(`topic "${trimmed}" already exists`);
     const topic: Topic = {
       id: randomUUID(),
       name: trimmed,

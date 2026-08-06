@@ -322,3 +322,168 @@ describe('topicsToJson — the shareable topic list (FR-30.2, NEWS-317)', () => 
     expect(parsed.topics).toEqual([]);
   });
 });
+
+describe('importing a topic list (FR-30.5–30.9, NEWS-318)', () => {
+  function served() {
+    const store = new Store(tmpDataDir());
+    const app = createApp({ store, runner: new CheckRunner(store, asResolver(createMockProvider())) });
+    return { app, store };
+  }
+
+  const post = (app: ReturnType<typeof served>['app'], body: unknown) =>
+    app.request('/api/import-topics', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: typeof body === 'string' ? body : JSON.stringify(body),
+    });
+
+  const LIST = {
+    topics: [
+      { name: 'Fusion energy', guidance: 'Safety and regulation only.', category: 'science', subcategory: 'energy' },
+      { name: 'Antarctic ice' },
+    ],
+  };
+
+  it('adds the list, carrying guidance and classification', async () => {
+    const { app, store } = served();
+    const resp = (await (await post(app, LIST)).json()) as { added: string[]; skipped: string[] };
+    expect(resp).toEqual({ added: ['Fusion energy', 'Antarctic ice'], skipped: [] });
+
+    const fusion = store.listTopics().find((t) => t.name === 'Fusion energy');
+    expect(fusion?.guidance).toBe('Safety and regulation only.');
+    expect(fusion?.category).toBe('science');
+    expect(fusion?.subcategory).toBe('energy');
+  });
+
+  it('is idempotent — the second import changes nothing', async () => {
+    // FR-30.5, and the requirement most easily broken by a later change: a
+    // "merge the guidance" or "update the category" refinement would pass every
+    // other test here and fail this one.
+    const { app, store } = served();
+    await post(app, LIST);
+    const before = store.listTopics().map((t) => ({ name: t.name, guidance: t.guidance, id: t.id }));
+
+    const second = (await (await post(app, LIST)).json()) as { added: string[]; skipped: string[] };
+    expect(second.added).toEqual([]);
+    expect(second.skipped).toEqual(['Fusion energy', 'Antarctic ice']);
+    // Same topics, same ids — not deleted and recreated, and not rewritten.
+    expect(store.listTopics().map((t) => ({ name: t.name, guidance: t.guidance, id: t.id }))).toEqual(before);
+  });
+
+  it('skips a duplicate by the *same* rule the add-topic form uses', async () => {
+    // Asserted through **both doors** rather than by restating the query
+    // (FR-30.6). If the two ever disagreed, an import would create a second
+    // "Fusion Energy" beside the "fusion energy" you already follow — a bug
+    // nobody would think to look for in a SQL string.
+    const { app, store } = served();
+    store.addTopic('  fusion ENERGY  ');
+
+    // The form's own verdict on this name.
+    expect(() => store.addTopic('Fusion energy')).toThrow(/already exists/);
+
+    // …and the import's, which must match it.
+    const resp = (await (await post(app, { topics: [{ name: 'Fusion energy' }] })).json()) as {
+      added: string[];
+      skipped: string[];
+    };
+    expect(resp.skipped).toEqual(['Fusion energy']);
+    expect(store.listTopics()).toHaveLength(1);
+  });
+
+  it('never merges into a topic you already have', async () => {
+    // The one alternative the design refuses outright: adopting an incoming
+    // `guidance` would overwrite something the user wrote, in bulk, with no diff
+    // and no undo.
+    const { app, store } = served();
+    store.addTopic('Fusion energy', { guidance: 'My own words, which I spent time on.' });
+    await post(app, LIST);
+    expect(store.listTopics().find((t) => t.name === 'Fusion energy')?.guidance).toBe(
+      'My own words, which I spent time on.',
+    );
+  });
+
+  it('collapses duplicates inside one file', async () => {
+    // A hand-editable file is a file someone will paste into twice.
+    const { app, store } = served();
+    const resp = (await (
+      await post(app, { topics: [{ name: 'Fusion energy' }, { name: 'FUSION ENERGY' }] })
+    ).json()) as { added: string[]; skipped: string[] };
+    expect(resp.added).toEqual(['Fusion energy']);
+    expect(resp.skipped).toEqual(['FUSION ENERGY']);
+    expect(store.listTopics()).toHaveLength(1);
+  });
+
+  it('imports topics due, without checking them', async () => {
+    // FR-30.8. Adding one topic by hand fires a check (FR-1.12); doing that for
+    // twenty at once spends an hour of provider quota in a burst nobody asked
+    // for. `lastCheckedAt: null` is what makes a topic due, so the scheduler
+    // picks these up on its own cadence.
+    const { app, store } = served();
+    await post(app, LIST);
+    for (const topic of store.listTopics()) {
+      expect(topic.lastCheckedAt, `${topic.name} must not have been checked on import`).toBeNull();
+    }
+    // And no stories arrived, which is the observable form of the same claim.
+    expect(store.listItems()).toHaveLength(0);
+  });
+
+  it('refuses an unreadable file whole, changing nothing', async () => {
+    // FR-30.9, asserted **against the store afterwards** rather than against the
+    // error message: what matters is that a rejected file leaves no trace, not
+    // how the rejection was worded.
+    const { app, store } = served();
+    store.addTopic('Existing topic');
+
+    for (const bad of ['not json at all', JSON.stringify({ nope: [] }), JSON.stringify({ topics: [{ name: 7 }] })]) {
+      const res = await post(app, bad);
+      expect(res.status, `"${bad.slice(0, 24)}" should be refused`).toBe(400);
+      expect(store.listTopics().map((t) => t.name)).toEqual(['Existing topic']);
+    }
+  });
+
+  it('says where an unreadable file went wrong', async () => {
+    // This is a file the user chose, quite possibly hand-edited — so unlike
+    // every other bad body in the API, it is an ordinary thing a person does and
+    // the message has to be usable.
+    const res = await post(served().app, { topics: [{ name: 7 }] });
+    const body = (await res.json()) as { error: string };
+    expect(body.error).toContain('topics.0.name');
+  });
+
+  it('reads its own export, round trip', async () => {
+    // The two halves are one format or they are nothing (FR-30.10's argument,
+    // applied here): this asserts the file NEWS-317 writes is the file NEWS-318
+    // accepts, rather than two schemas that happen to look alike.
+    const source = served();
+    source.store.addTopic('Fusion energy', { guidance: 'Safety only.', category: 'science' });
+    source.store.addTopic('Antarctic ice');
+    const file = await (await source.app.request('/api/export-topics.json')).text();
+
+    const target = served();
+    const resp = (await (await post(target.app, file)).json()) as { added: string[] };
+    expect(resp.added).toEqual(['Fusion energy', 'Antarctic ice']);
+    expect(target.store.listTopics().find((t) => t.name === 'Fusion energy')?.guidance).toBe('Safety only.');
+  });
+
+  it('accepts the smallest file a person could type', async () => {
+    // Being hand-editable is the point of the format, so the minimum has to work.
+    const { app, store } = served();
+    const res = await post(app, '{"topics":[{"name":"Fusion energy"}]}');
+    expect(res.status).toBe(200);
+    expect(store.listTopics()).toHaveLength(1);
+  });
+
+  it('ignores fields it does not know rather than refusing the file', async () => {
+    // Lenient about what it ignores, strict about what it accepts: a future
+    // field, or the `exportedAt` it does not need, must not make a usable list
+    // unreadable.
+    const { app, store } = served();
+    const res = await post(app, {
+      exportedAt: '2026-07-27T12:00:00.000Z',
+      somethingFromNextYear: true,
+      topics: [{ name: 'Fusion energy', unknownField: 'ignored' }],
+    });
+    expect(res.status).toBe(200);
+    expect(store.listTopics().map((t) => t.name)).toEqual(['Fusion energy']);
+  });
+});

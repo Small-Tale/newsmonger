@@ -1,5 +1,5 @@
 import type { Effort,ProviderName} from '../ai/types.js';
-import type { BackupPreview, DiscoverReq, DiscoverResp, DiscoverUsageResp, TopicSuggestion } from '../api/schemas.js';
+import type { BackupPreview, DiscoverReq, DiscoverResp, DiscoverUsageResp, ImportTopicsResp,TopicSuggestion  } from '../api/schemas.js';
 import {
   BackupLocationsRespSchema,
   BackupPreviewRespSchema,
@@ -7,6 +7,7 @@ import {
   ClearItemsRespSchema,
   DiscoverRespSchema,
   DiscoverUsageRespSchema,
+  ImportTopicsRespSchema,
   ItemsRespSchema,
   KeysRespSchema,
   ModelsRespSchema,
@@ -492,6 +493,28 @@ export async function restoreBackup(): Promise<{ preview: BackupPreview; safetyC
   // Everything on screen is now the *old* data — topics, stories, settings.
   await refreshState();
   return { preview: parsed.preview, safetyCopy: parsed.safetyCopy };
+}
+
+/**
+ * Read a shared topic list back in (FR-30.5–30.9, NEWS-318).
+ *
+ * The file's text is posted as-is rather than parsed here: the server validates
+ * it against the same schema either way, and doing it in one place means the
+ * client cannot accept something the server would refuse. A parse error and a
+ * schema error then arrive by the same road, with the server's wording.
+ *
+ * `refreshState()` afterwards because the topics rail is now wrong — nothing
+ * else fires, since an import runs no check (FR-30.8).
+ */
+export async function importTopics(fileText: string): Promise<ImportTopicsResp> {
+  const body = await request('/api/import-topics', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: fileText,
+  });
+  const parsed = ImportTopicsRespSchema.parse(body);
+  await refreshState();
+  return parsed;
 }
 
 /** Fetch the provider list + availability (probes providers; call on demand). */

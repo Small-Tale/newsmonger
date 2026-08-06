@@ -309,3 +309,89 @@ test('the topic list downloads, carrying guidance but not check state (FR-30.2, 
   await topicAction(page, row, 'pause');
   await expect(row).not.toHaveClass(/paused/);
 });
+
+test('a topic list can be imported, and importing it twice adds nothing (FR-30.5–30.7, NEWS-318)', async ({
+  page,
+}) => {
+  // The round trip through the real UI: export what is here, delete it, put it
+  // back from the file, then do it again and watch the app say it did nothing.
+  // Idempotence is the requirement most easily broken by a later change and the
+  // one a unit test alone cannot show reaching the user — the second import's
+  // *toast* is what tells them it was a no-op rather than a failure.
+  await page.goto('/');
+
+  const names = ['Imported Alpha', 'Imported Beta'];
+  for (const name of names) {
+    await page.fill('.add-topic input', name);
+    await page.press('.add-topic input', 'Enter');
+    await expect(page.locator('.topic', { hasText: name })).toBeVisible();
+  }
+
+  // Take the file the app itself writes, so this exercises one format rather
+  // than a fixture that happens to look like it. It holds **every** topic on the
+  // server, not only the two just added, so the counts below are derived from it
+  // rather than assumed — earlier tests in this file leave topics behind, and a
+  // hardcoded "skipped 1" would be a promise about them.
+  const exported = await (await page.request.get('/api/export-topics.json')).text();
+  const inFile = (JSON.parse(exported) as { topics: unknown[] }).topics.length;
+  expect(inFile).toBeGreaterThanOrEqual(names.length);
+
+  for (const name of names) {
+    const row = page.locator('.topic', { hasText: name });
+    await topicAction(page, row, 'delete');
+    await expect(row).toHaveCount(0);
+  }
+
+  await openSettingsTab(page, 'Data');
+  const chooser = page.locator('[data-action=import-topics]');
+  await chooser.setInputFiles({ name: 'topics.json', mimeType: 'application/json', buffer: Buffer.from(exported) });
+
+  // Reported, never silent (FR-30.7) — a bulk action whose outcome you cannot
+  // see invites running it twice.
+  const toast = page.locator('.toast');
+  await expect(toast).toHaveText(
+    new RegExp(`Added ${String(names.length)} topics · skipped ${String(inFile - names.length)} you already follow`),
+  );
+  await closeSettings(page);
+  for (const name of names) await expect(page.locator('.topic', { hasText: name })).toBeVisible();
+
+  // Again. Nothing is added, and the app says which half happened.
+  await openSettingsTab(page, 'Data');
+  await chooser.setInputFiles({ name: 'topics.json', mimeType: 'application/json', buffer: Buffer.from(exported) });
+  // One assertion, not two: a toast fades on its own, and a second `toContainText`
+  // against the same element races that timer — the first wait can consume most
+  // of the toast's life and the second then finds nothing.
+  await expect(toast).toHaveText(new RegExp(`Added 0 topics · skipped ${String(inFile)} you already follow`));
+  await closeSettings(page);
+
+  for (const name of names) {
+    await expect(page.locator('.topic', { hasText: name })).toHaveCount(1);
+    await topicAction(page, page.locator('.topic', { hasText: name }), 'delete');
+  }
+});
+
+test('a file that is not a topic list is refused, and says why (FR-30.9, NEWS-318)', async ({ page }) => {
+  // The user chose this file, quite possibly hand-edited it, so the refusal has
+  // to be usable rather than a generic "invalid request" — and it must leave the
+  // topics alone.
+  await page.goto('/');
+  await page.fill('.add-topic input', 'Survivor Topic');
+  await page.press('.add-topic input', 'Enter');
+  await expect(page.locator('.topic', { hasText: 'Survivor Topic' })).toBeVisible();
+
+  await openSettingsTab(page, 'Data');
+  await page.locator('[data-action=import-topics]').setInputFiles({
+    name: 'not-a-list.json',
+    mimeType: 'application/json',
+    buffer: Buffer.from('{"topics":[{"name":7}]}'),
+  });
+  const toast = page.locator('.toast');
+  // One assertion for the same reason as above: the toast fades.
+  await expect(toast, 'the message must name the field, not just refuse').toHaveText(
+    /Import failed.*topics\.0\.name/,
+  );
+
+  await closeSettings(page);
+  await expect(page.locator('.topic', { hasText: 'Survivor Topic' })).toHaveCount(1);
+  await topicAction(page, page.locator('.topic', { hasText: 'Survivor Topic' }), 'delete');
+});

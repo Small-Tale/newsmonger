@@ -31,6 +31,7 @@ export type IconName =
   | 'warn'
   | 'arrow'
   | 'download'
+  | 'upload'
   | 'bookmark'
   | 'share'
   | 'star'
@@ -216,6 +217,15 @@ function paths(name: IconName): SafeHtml {
           <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
           <polyline points="7 10 12 15 17 10" />
           <line x1="12" x2="12" y1="15" y2="3" />
+        </g>
+      );
+    case 'upload': // lucide `upload` — the same tray, arrow reversed, so import
+      // and export read as one pair rather than as two unrelated controls.
+      return (
+        <g>
+          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+          <polyline points="17 8 12 3 7 8" />
+          <line x1="12" x2="12" y1="3" y2="15" />
         </g>
       );
     case 'share': // share-2

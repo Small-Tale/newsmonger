@@ -2359,6 +2359,35 @@ h2.eyebrow {
   }
 }
 
+// A `<label>` styled as a button, wrapping the file input it opens (NEWS-318).
+//
+// The input is hidden rather than absent: a file picker can only be opened by a
+// real user gesture on a real `<input type=file>`, and a label *is* that gesture.
+// `display: none` would take it out of the accessibility tree along with the
+// keyboard path to it, so it is clipped instead — present, focusable, invisible.
+.btn.import-topics {
+  position: relative;
+  cursor: pointer;
+
+  input[type='file'] {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+
+  // The focus ring belongs on the label, since that is what the eye sees — the
+  // input it wraps is a pixel wide.
+  &:focus-within {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+}
+
 // An <a> styled as a button, wherever it appears. Scoped to `.export-row` until
 // NEWS-158 moved the export link into a dialog, where it promptly turned up
 // underlined — the rule was never about that row, it was about anchors.
