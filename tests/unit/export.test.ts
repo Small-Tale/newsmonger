@@ -487,3 +487,181 @@ describe('importing a topic list (FR-30.5–30.9, NEWS-318)', () => {
     expect(store.listTopics().map((t) => t.name)).toEqual(['Fusion energy']);
   });
 });
+
+describe('importing exported stories (FR-30.10–30.14, NEWS-319)', () => {
+  async function checked() {
+    const store = new Store(tmpDataDir());
+    const runner = new CheckRunner(store, asResolver(createMockProvider()));
+    const t = store.addTopic('Fusion');
+    await runner.checkTopic(t.id);
+    return { store, runner, app: createApp({ store, runner }), topicId: t.id };
+  }
+
+  const post = (app: ReturnType<typeof createApp>, body: string) =>
+    app.request('/api/import-stories', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body,
+    });
+
+  it('reads the file the export writes, into a fresh install', async () => {
+    // FR-30.10 — one format, not two. The archive comes from the app itself
+    // rather than from a fixture that resembles it.
+    const source = await checked();
+    source.store.setItemSaved(source.store.listItems()[0].id, true);
+    const archive = await (await source.app.request('/api/export.json?scope=all')).text();
+
+    const target = new Store(tmpDataDir());
+    const app = createApp({ store: target, runner: new CheckRunner(target, asResolver(createMockProvider())) });
+    const resp = (await (await post(app, archive)).json()) as {
+      added: number;
+      skipped: number;
+      topicsCreated: string[];
+    };
+
+    expect(resp.added).toBe(2);
+    expect(resp.skipped).toBe(0);
+    // FR-30.12: the topic did not exist here, so importing made it — and said so.
+    expect(resp.topicsCreated).toEqual(['Fusion']);
+    expect(target.listTopics().map((t) => t.name)).toEqual(['Fusion']);
+    expect(target.listItems()).toHaveLength(2);
+  });
+
+  it('preserves foundAt and bookmarks, and cannot carry a flag', async () => {
+    // FR-30.13/30.14. An imported story is not new — dating it "now" would put a
+    // year-old article at the top of today's feed.
+    const source = await checked();
+    const [first] = source.store.listItems();
+    source.store.setItemSaved(first.id, true);
+    const archive = await (await source.app.request('/api/export.json?scope=all')).text();
+
+    const target = new Store(tmpDataDir());
+    const app = createApp({ store: target, runner: new CheckRunner(target, asResolver(createMockProvider())) });
+    await post(app, archive);
+
+    const landed = target.listItems().find((i) => i.title === first.title);
+    expect(landed?.foundAt).toBe(first.foundAt);
+    expect(landed?.saved).toBe(true);
+    // Nothing arrives flagged, because nothing flagged can be in the file.
+    expect(target.listItems().every((i) => !i.offTopic)).toBe(true);
+  });
+
+  it('never exports a flagged story, so an import cannot carry someone else’s flags', async () => {
+    // Pinning FR-30.13's *premise* rather than its consequence (the doc asks for
+    // this by name). If a future change to FR-21.2 started including flagged
+    // stories, importing would quietly start teaching your topics what someone
+    // else meant — the prompt's negative examples are built from these titles.
+    const source = await checked();
+    const [first] = source.store.listItems();
+    source.store.setItemOffTopic(first.id, true);
+    const archive = await (await source.app.request('/api/export.json?scope=all')).text();
+
+    expect(archive).not.toContain('offTopic');
+    const parsed = JSON.parse(archive) as { stories: { title: string }[] };
+    expect(parsed.stories.map((s) => s.title)).not.toContain(first.title);
+  });
+
+  it('is idempotent, deduping on the recomputed key', async () => {
+    // FR-30.11. The export carries no ids and no keys, so this is `dedupeKeyFor`
+    // deriving one from the URL — the same rule a check uses.
+    const source = await checked();
+    const archive = await (await source.app.request('/api/export.json?scope=all')).text();
+    const target = new Store(tmpDataDir());
+    const app = createApp({ store: target, runner: new CheckRunner(target, asResolver(createMockProvider())) });
+
+    await post(app, archive);
+    const again = (await (await post(app, archive)).json()) as { added: number; skipped: number };
+    expect(again).toMatchObject({ added: 0, skipped: 2 });
+    expect(target.listItems()).toHaveLength(2);
+  });
+
+  it('an imported story is not re-reported by the next check', async () => {
+    // **A sequence test, not an operation test** — the one the doc asks for.
+    // `items` *is* the dedup ledger (FR-2.13), so importing writes into the
+    // ledger a check reads. That is correct — it is the same story — but it is
+    // the kind of consequence that should be pinned rather than rediscovered.
+    const source = await checked();
+    const archive = await (await source.app.request('/api/export.json?scope=all')).text();
+
+    const target = new Store(tmpDataDir());
+    const runner = new CheckRunner(target, asResolver(createMockProvider()));
+    const app = createApp({ store: target, runner });
+    await post(app, archive);
+    expect(target.listItems()).toHaveLength(2);
+
+    // The mock returns the same two stories every call, so a check here *would*
+    // have found exactly what the import just added.
+    const topic = target.listTopics().find((t) => t.name === 'Fusion');
+    expect(topic).toBeDefined();
+    if (topic === undefined) return;
+    await runner.checkTopic(topic.id);
+    expect(target.listItems(), 'the check must not re-report what the import filed').toHaveLength(2);
+  });
+
+  it('files stories into a topic that already exists rather than making a second one', async () => {
+    const source = await checked();
+    const archive = await (await source.app.request('/api/export.json?scope=all')).text();
+
+    // Same name, different case — the topic rule is case-insensitive.
+    const target = new Store(tmpDataDir());
+    target.addTopic('fusion');
+    const app = createApp({ store: target, runner: new CheckRunner(target, asResolver(createMockProvider())) });
+    const resp = (await (await post(app, archive)).json()) as { added: number; topicsCreated: string[] };
+
+    expect(resp.topicsCreated).toEqual([]);
+    expect(target.listTopics()).toHaveLength(1);
+    expect(resp.added).toBe(2);
+  });
+
+  it('threads imported stories in, rather than leaving each one alone', async () => {
+    // An import that produced two-dozen threads of one would look like the
+    // threading feature being broken. `backfillThreads` is deterministic and
+    // idempotent, so reusing it gives an import the threading a check would
+    // have produced.
+    const store = new Store(tmpDataDir());
+    const app = createApp({ store, runner: new CheckRunner(store, asResolver(createMockProvider())) });
+    const source = new Store(tmpDataDir());
+    const t = source.addTopic('Dam Thread Probe');
+    await new CheckRunner(source, asResolver(createMockProvider())).checkTopic(t.id);
+    const archive = await (
+      await createApp({ store: source, runner: new CheckRunner(source, asResolver(createMockProvider())) }).request(
+        '/api/export.json?scope=all',
+      )
+    ).text();
+
+    await post(app, archive);
+    const threads = new Set(store.listItems().map((i) => i.threadId));
+    expect(store.listItems().length).toBeGreaterThan(1);
+    expect(threads.size, 'two outlets on one subject are one thread').toBe(1);
+  });
+
+  it('refuses an unreadable file whole, naming the field', async () => {
+    const store = new Store(tmpDataDir());
+    const app = createApp({ store, runner: new CheckRunner(store, asResolver(createMockProvider())) });
+    store.addTopic('Existing');
+
+    const res = await post(app, JSON.stringify({ stories: [{ topic: 'X', title: 'ok' }] }));
+    expect(res.status).toBe(400);
+    expect(((await res.json()) as { error: string }).error).toContain('stories.0.foundAt');
+    expect(store.listItems()).toHaveLength(0);
+    expect(store.listTopics().map((t) => t.name)).toEqual(['Existing']);
+  });
+
+  it('declines a story the export could not name a topic for', async () => {
+    // The export writes `topic: null` when the story's topic was deleted before
+    // the file was made. There is nowhere to put it, and inventing a topic would
+    // be worse than declining it.
+    const store = new Store(tmpDataDir());
+    const app = createApp({ store, runner: new CheckRunner(store, asResolver(createMockProvider())) });
+    const resp = (await (
+      await post(
+        app,
+        JSON.stringify({
+          stories: [{ topic: null, title: 'Orphan', summary: '', sources: [], foundAt: '2026-07-01T00:00:00.000Z' }],
+        }),
+      )
+    ).json()) as { added: number; skipped: number };
+    expect(resp).toMatchObject({ added: 0, skipped: 1 });
+    expect(store.listTopics()).toHaveLength(0);
+  });
+});

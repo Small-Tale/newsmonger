@@ -1,6 +1,6 @@
 # 30 — Import (and topic export)
 
-**Status: partial.** Topic export (FR-30.2–30.4, NEWS-317) and topic import (FR-30.5–30.9, NEWS-318) are shipped; **story import is still design** (FR-30.10–30.14). Written for NEWS-290 (export/import topic lists) and NEWS-289 (import exported stories), which share enough machinery that answering them separately would have produced two incompatible formats.
+**Status: shipped**, apart from FR-30.1's premise, which is a decision rather than code. Topic export (NEWS-317), topic import (NEWS-318) and story import (NEWS-319) are all built. Written for NEWS-290 (export/import topic lists) and NEWS-289 (import exported stories), which share enough machinery that answering them separately would have produced two incompatible formats.
 
 The owner was asked four questions on NEWS-290 and three on NEWS-289 and had not answered when this was written, so **every decision below is taken under a stated assumption**, flagged as such. A doc is the right artifact for that: the assumptions are legible and correctable in one place, which they would not be spread through an implementation.
 
@@ -18,7 +18,7 @@ So the gap is real and specific: **there is no additive way in.** Restore replac
 
 ## The fork this hangs on
 
-- **FR-30.1** *(Design only)* **These are shareable lists, not personal transfers.** A topic export is a small, human-readable, hand-editable file naming topics, their guidance and their classification — something to post in a gist or send to a friend. It carries no ids, no timestamps and no check state, because those describe *this* install and mean nothing on another.
+- **FR-30.1** *(Shipped, NEWS-317)* **These are shareable lists, not personal transfers.** A topic export is a small, human-readable, hand-editable file naming topics, their guidance and their classification — something to post in a gist or send to a friend. It carries no ids, no timestamps and no check state, because those describe *this* install and mean nothing on another.
 
   **Assumed, not confirmed.** The alternative — round-tripping your own topics between your own machines with everything intact — is already served by backup and restore (FR-27.10), so building it again here would be a second, worse copy of a shipped feature. What a *topic* export offers that a backup does not is that a human can read it.
 
@@ -58,23 +58,27 @@ So the gap is real and specific: **there is no additive way in.** Restore replac
 
 ## Importing stories
 
-- **FR-30.10** *(Design only)* Import accepts the file `GET /api/export.json` already produces (FR-21.4). Not a new format: an export nothing can read is the actual complaint behind NEWS-289, and inventing a second shape would leave the first still unreadable.
+- **FR-30.10** *(Shipped, NEWS-319)* Import accepts the file `GET /api/export.json` already produces (FR-21.4). Not a new format: an export nothing can read is the actual complaint behind NEWS-289, and inventing a second shape would leave the first still unreadable.
 
-- **FR-30.11** *(Design only)* **Dedup is on the dedupe key, and there is no other option.** The export carries no ids and no keys, so `dedupeKeyFor` has to recompute one per story — normalized URL, falling back to normalized title ([FR-2.7](2-news-checks-and-dedup.md)). Reuse `filterNewItems` so import and checking agree on what "the same story" means.
+- **FR-30.11** *(Shipped, NEWS-319)* **Dedup is on the dedupe key, and there is no other option.** The export carries no ids and no keys, so `dedupeKeyFor` has to recompute one per story — normalized URL, falling back to normalized title ([FR-2.7](2-news-checks-and-dedup.md)). Reuse `filterNewItems` so import and checking agree on what "the same story" means.
 
-  Worth knowing, because it is a real consequence rather than a detail: **an import writes into the same ledger a check reads.** `items` *is* the dedup ledger ([FR-2.13](2-news-checks-and-dedup.md)), so a future check will not re-report an imported story. That is correct — it is the same story — but it means importing quietly narrows what checks will surface.
+  Worth knowing, because it is a real consequence rather than a detail: **an import writes into the same ledger a check reads.** `items` *is* the dedup ledger ([FR-2.13](2-news-checks-and-dedup.md)), so a future check will not re-report an imported story. That is correct — it is the same story — but it means importing quietly narrows what checks will surface. Pinned as a *sequence* test: import, then run a check that would have found exactly those stories, and assert nothing new arrives.
 
-- **FR-30.12** *(Design only)* **A story whose topic does not exist here creates it.** The export carries the topic *name* precisely so it means something elsewhere. The alternative is dropping those stories, and a story filed under nothing is invisible everywhere in this app — `pruneOrphans` would delete it ([FR-4.8c](4-cli-server-storage.md)).
+  Imported stories are **threaded in** rather than left as threads of one, by calling `Store.backfillThreads` — deterministic and idempotent, so an import gets the threading a check would have produced (NEWS-280). Without it a restored archive would look like the threading feature was broken.
+
+  A story the file gives **no topic name** for is declined and counted as skipped. The export writes `topic: null` when the story's topic was deleted before the file was made; there is nowhere to put it, and inventing a topic would be worse than saying so.
+
+- **FR-30.12** *(Shipped, NEWS-319)* **A story whose topic does not exist here creates it.** The export carries the topic *name* precisely so it means something elsewhere. The alternative is dropping those stories, and a story filed under nothing is invisible everywhere in this app — `pruneOrphans` would delete it ([FR-4.8c](4-cli-server-storage.md)).
 
   So story import is also a topic-creating action. Said plainly here because it is the kind of thing that should not be a surprise, and the report (FR-30.7) names it.
 
-- **FR-30.13** *(Design only)* **Bookmarks come across; off-topic flags cannot.** `saved` is in the export and carries a judgement worth keeping. `offTopic` is not in the export *at all* — [FR-21.2](21-export-and-feed.md) excludes flagged stories from every selection — so the question of whether to import someone else's flags does not arise. That is the right outcome for an independent reason: flagged titles feed the prompt's negative examples ([15 — Off-Topic Flagging](15-off-topic-flagging.md)), so importing them would teach your topics what *someone else* meant.
+- **FR-30.13** *(Shipped, NEWS-319)* **Bookmarks come across; off-topic flags cannot.** `saved` is in the export and carries a judgement worth keeping. `offTopic` is not in the export *at all* — [FR-21.2](21-export-and-feed.md) excludes flagged stories from every selection — so the question of whether to import someone else's flags does not arise. That is the right outcome for an independent reason: flagged titles feed the prompt's negative examples ([15 — Off-Topic Flagging](15-off-topic-flagging.md)), so importing them would teach your topics what *someone else* meant.
 
-- **FR-30.14** *(Design only)* `foundAt` is preserved from the file. An imported story is not new; dating it "now" would put a year-old article at the top of today's feed.
+- **FR-30.14** *(Shipped, NEWS-319)* `foundAt` is preserved from the file. An imported story is not new; dating it "now" would put a year-old article at the top of today's feed.
 
 ## Where it lives
 
-- **FR-30.15** *(Partial, NEWS-317/318)* Settings → Data has a **Topics** group holding *Export topics…* and *Import topics…* side by side. Story import joins the existing `Export` group beside the button whose output it reads.
+- **FR-30.15** *(Shipped, NEWS-317/318/319)* Settings → Data has a **Topics** group holding *Export topics…* and *Import topics…* side by side, and story import sits in the `Export` group beside the button whose output it reads. Story import joins the existing `Export` group beside the button whose output it reads.
 
   **Assumed.** Folding topics into the export dialog was the alternative; that dialog asks two questions (scope × format) and a topic list answers neither. The tab's groups are already named and ordered ([FR-3.68](3-ui.md)), so a new pair of controls belongs in a group of its own rather than wedged into one whose heading would stop being true.
 

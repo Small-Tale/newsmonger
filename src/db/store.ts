@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import type { DatabaseSync } from 'node:sqlite';
 
+import { filterNewItems } from '../ai/dedupe.js';
 import type { TokenUsage } from '../ai/types.js';
 import { NO_SUBCATEGORY_FILTER, UNCATEGORIZED_FILTER } from '../categories.js';
 import { planThreadIds } from '../threads.js';
@@ -545,6 +546,117 @@ export class Store {
       throw err;
     }
     return { added, skipped };
+  }
+
+  /**
+   * Add exported stories back, additively (FR-30.10–30.14, NEWS-319).
+   *
+   * **Dedup is on the recomputed dedupe key, and there was never a choice.** The
+   * export carries no ids and no keys, so `dedupeKeyFor` has to derive one from
+   * the URL (falling back to the title) either way — and using `filterNewItems`,
+   * the function a check uses, is what makes import and checking agree on what
+   * "the same story" means. Per topic, because that is the scope the ledger has.
+   *
+   * **A story whose topic is missing creates it** (FR-30.12). The export carries
+   * the topic's *name* precisely so it means something on another install, and
+   * the alternative — dropping those stories — puts them nowhere: a story with
+   * no topic is invisible on every surface and `pruneOrphans` deletes it. So
+   * this is also a topic-creating action, and the names it created come back so
+   * the report can say so rather than leaving it as a surprise.
+   *
+   * **`foundAt` is preserved** (FR-30.14). An imported story is not new; dating
+   * it "now" would put a year-old article at the top of today's feed.
+   *
+   * Worth knowing rather than discovering: `items` **is** the dedup ledger
+   * (FR-2.13), so importing a story means a future check will not report it.
+   * That is correct — it is the same story — but it means an import quietly
+   * narrows what checks surface.
+   *
+   * In one transaction, for FR-30.9's reason: half an import is worse than none.
+   */
+  importStories(
+    stories: readonly {
+      topic: string | null;
+      title: string;
+      summary: string;
+      sources: { title: string; url: string; outlet?: string | null; publishedAt?: string | null }[];
+      foundAt: string;
+      saved: boolean;
+    }[],
+  ): { added: number; skipped: number; topicsCreated: string[] } {
+    // Grouped by topic name first: dedup is per topic, so a story can only be
+    // compared against the ledger it would join.
+    const byTopic = new Map<string, typeof stories[number][]>();
+    let skipped = 0;
+    for (const story of stories) {
+      const name = (story.topic ?? '').trim();
+      // A story the export could not name a topic for has nowhere to go, and
+      // inventing one would be worse than declining it.
+      if (name === '') {
+        skipped++;
+        continue;
+      }
+      const group = byTopic.get(name);
+      if (group === undefined) byTopic.set(name, [story]);
+      else group.push(story);
+    }
+
+    const topicsCreated: string[] = [];
+    // Planned in full, then written in **one** `addItems` call, which owns its
+    // own transaction — so every story of every topic lands together or not at
+    // all. An outer `BEGIN` here would be a transaction inside a transaction,
+    // which `node:sqlite` refuses outright.
+    //
+    // Topic creation sits outside that transaction, and deliberately: a topic
+    // created for stories that then failed to insert is the topic the user asked
+    // to import into, empty and visible, not silent corruption. The malformed-file
+    // case — the one that actually happens — writes nothing at all, because the
+    // schema rejects it at the route before any of this runs.
+    const planned: Parameters<Store['addItems']>[0] = [];
+    for (const [name, group] of byTopic) {
+      let topic = this.listTopics().find((t) => t.name.toLowerCase() === name.toLowerCase());
+      if (topic === undefined) {
+        topic = this.addTopic(name);
+        topicsCreated.push(topic.name);
+      }
+      const known = this.dedupeKeysForTopic(topic.id);
+      const fresh = filterNewItems(
+        group.map((s) => ({ title: s.title, summary: s.summary, sources: s.sources })),
+        known,
+      );
+      skipped += group.length - fresh.length;
+      // Keyed by title so each surviving story keeps *its own* `foundAt` and
+      // `saved`; `filterNewItems` returns a subset, so positions do not line up.
+      const originals = new Map(group.map((s) => [s.title, s]));
+      for (const { item, dedupeKey } of fresh) {
+        const original = originals.get(item.title);
+        planned.push({
+          topicId: topic.id,
+          title: item.title,
+          summary: item.summary,
+          sources: item.sources.map((s) => ({
+            title: s.title,
+            url: s.url,
+            outlet: s.outlet ?? null,
+            publishedAt: s.publishedAt ?? null,
+            favicon: null,
+          })),
+          dedupeKey,
+          foundAt: original?.foundAt ?? new Date().toISOString(),
+          saved: original?.saved ?? false,
+        });
+      }
+    }
+    if (planned.length > 0) this.addItems(planned);
+    const added = planned.length;
+
+    // Thread the imported stories in with whatever was already there
+    // (NEWS-280). `backfillThreads` is deterministic and idempotent — a
+    // chronological replay per topic — so calling it here gives an import the
+    // same threading a check would have produced, rather than leaving every
+    // imported story a thread of one until the next restart.
+    if (added > 0) this.backfillThreads();
+    return { added, skipped, topicsCreated };
   }
 
   addTopic(

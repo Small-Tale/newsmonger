@@ -58,6 +58,53 @@ export const ImportTopicsReqSchema = z.object({
 });
 export type ImportTopicsReq = z.infer<typeof ImportTopicsReqSchema>;
 
+/**
+ * An exported story archive, on its way back in (FR-30.10–30.14, NEWS-319).
+ *
+ * **The file `GET /api/export.json` already writes** (FR-21.4), not a new one.
+ * "An export nothing can read" is the whole complaint behind this, and inventing
+ * a second shape would leave the first still unreadable.
+ *
+ * `topic` is the topic's **name**, which is why the export carries a name rather
+ * than an id — an id means nothing on another install. `null` is what the export
+ * writes for a story whose topic was deleted before the file was made.
+ *
+ * `saved` is optional and defaults false; `offTopic` is absent by construction,
+ * because FR-21.2 keeps flagged stories out of every export. Nothing here can
+ * carry one, which is the point (FR-30.13).
+ */
+export const ImportStoriesReqSchema = z.object({
+  stories: z.array(
+    z.object({
+      topic: z.string().min(1).nullable(),
+      title: z.string().min(1),
+      summary: z.string().default(''),
+      sources: z
+        .array(
+          z.object({
+            title: z.string().default(''),
+            url: z.string(),
+            outlet: z.string().nullish(),
+            publishedAt: z.string().nullish(),
+          }),
+        )
+        .default([]),
+      foundAt: z.string(),
+      saved: z.boolean().default(false),
+    }),
+  ),
+});
+export type ImportStoriesReq = z.infer<typeof ImportStoriesReqSchema>;
+
+/** What a story import did (FR-30.7, FR-30.12). */
+export const ImportStoriesRespSchema = z.object({
+  added: z.number().int(),
+  skipped: z.number().int(),
+  /** Topics the import had to create, named so the report can say so. */
+  topicsCreated: z.array(z.string()),
+});
+export type ImportStoriesResp = z.infer<typeof ImportStoriesRespSchema>;
+
 /** What an import did, so the UI can say it (FR-30.7). */
 export const ImportTopicsRespSchema = z.object({
   added: z.array(z.string()),

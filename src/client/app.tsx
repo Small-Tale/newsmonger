@@ -16,6 +16,7 @@ import {
   dismissBackupPrompt,
   fetchBackupLocations,
   fetchDiscoveryUsage,
+  importStories,
   importTopics,
   loadThread,
   refreshBackupPreview,
@@ -1526,6 +1527,34 @@ function wireEvents(root: HTMLElement): void {
         showToast(`Import failed: ${err instanceof Error ? err.message : String(err)}`);
       } finally {
         // So picking the same file again is still a `change`.
+        input.value = '';
+      }
+    })();
+  });
+
+  /**
+   * Read an exported story archive back in (FR-30.10–30.14, NEWS-319).
+   *
+   * The report names the topics it had to create, because story import is also
+   * a **topic**-creating action (FR-30.12) and that should not be a surprise
+   * discovered later in the sidebar.
+   */
+  void delegate(root, 'change', '[data-action=import-stories]', (_e, el) => {
+    const input = el as HTMLInputElement;
+    const file = input.files?.[0];
+    if (file === undefined) return;
+    void (async () => {
+      try {
+        const { added, skipped, topicsCreated } = await importStories(await file.text());
+        const parts = [`Added ${String(added)} stor${added === 1 ? 'y' : 'ies'}`];
+        if (skipped > 0) parts.push(`skipped ${String(skipped)} already here`);
+        if (topicsCreated.length > 0) {
+          parts.push(`created ${String(topicsCreated.length)} topic${topicsCreated.length === 1 ? '' : 's'}`);
+        }
+        showToast(parts.join(' · '));
+      } catch (err) {
+        showToast(`Import failed: ${err instanceof Error ? err.message : String(err)}`);
+      } finally {
         input.value = '';
       }
     })();

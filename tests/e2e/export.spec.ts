@@ -56,7 +56,10 @@ async function openExportDialog(page: Page): Promise<void> {
 test('the export button is filled, and its icon says download (NEWS-161)', async ({ page }) => {
   await page.goto('/');
   await openSettingsTab(page, 'Data');
-  const button = page.locator('.export-row .btn');
+  // `.btn.primary`, not `.btn`: the row gained an *Import stories…* control
+  // beside it (NEWS-319), and this test is about the export button specifically
+  // — its fill and its glyph. Naming the variant says which one it means.
+  const button = page.locator('.export-row .btn.primary');
   await expect(button).toBeVisible();
 
   const m = await button.evaluate((el) => {
@@ -394,4 +397,51 @@ test('a file that is not a topic list is refused, and says why (FR-30.9, NEWS-31
   await closeSettings(page);
   await expect(page.locator('.topic', { hasText: 'Survivor Topic' })).toHaveCount(1);
   await topicAction(page, page.locator('.topic', { hasText: 'Survivor Topic' }), 'delete');
+});
+
+test('exported stories can be imported back, creating the topic they need (FR-30.10–30.14, NEWS-319)', async ({
+  page,
+}) => {
+  // The complaint this whole doc answers: the app could write an archive nothing
+  // could read. So this exports through the dialog a user would use, deletes the
+  // topic *and* its stories, and puts them back from the file.
+  await page.goto('/');
+  const name = 'Reimportable Subject';
+  await page.fill('.add-topic input', name);
+  await page.press('.add-topic input', 'Enter');
+  const cards = page.locator('.item:not(.flagged-row)', { has: page.locator('.item-topic', { hasText: name }) });
+  await expect(cards).toHaveCount(2, { timeout: 20_000 });
+
+  // Bookmark one, so the round trip can be shown to carry a judgement and not
+  // just text (FR-30.13).
+  await cards.first().locator('[data-save-item]').click();
+  await expect(cards.first()).toHaveClass(/saved/);
+  const titles = await cards.allInnerTexts();
+
+  const archive = await (await page.request.get('/api/export.json?scope=all')).text();
+
+  // Deleting the topic takes its stories with it, so this is a genuine "nothing
+  // here" starting point rather than a partial one.
+  await topicAction(page, page.locator('.topic', { hasText: name }), 'delete');
+  await expect(page.locator('.topic', { hasText: name })).toHaveCount(0);
+  await expect(cards).toHaveCount(0);
+
+  await openSettingsTab(page, 'Data');
+  await page
+    .locator('[data-action=import-stories]')
+    .setInputFiles({ name: 'stories.json', mimeType: 'application/json', buffer: Buffer.from(archive) });
+
+  // The report names the topics it had to create, because story import is also
+  // a topic-creating action and that should not be a surprise found later in the
+  // sidebar (FR-30.12).
+  await expect(page.locator('.toast')).toHaveText(/Added \d+ stories.*created \d+ topics?/);
+  await closeSettings(page);
+
+  // The topic is back, with its stories and the bookmark.
+  await expect(page.locator('.topic', { hasText: name })).toHaveCount(1);
+  await expect(cards).toHaveCount(2);
+  expect(titles.length).toBe(2);
+  await expect(page.locator('.item.saved')).toHaveCount(1);
+
+  await topicAction(page, page.locator('.topic', { hasText: name }), 'delete');
 });

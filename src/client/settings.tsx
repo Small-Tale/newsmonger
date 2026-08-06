@@ -664,6 +664,13 @@ function settingsPanelJsx(s: AppState): SafeHtml {
           <button class="btn primary" type="button" data-action="open-export">
             {icon('download', 15)} Export stories…
           </button>
+          {/* Beside the button whose output it reads (FR-30.15, NEWS-319) — an
+              export nothing could read was the whole complaint, and putting the
+              two anywhere but together would leave that half-answered. */}
+          <label class="btn import-topics">
+            {icon('upload', 15)} Import stories…
+            <input type="file" accept="application/json,.json" data-action="import-stories" />
+          </label>
         </div>
         <p class="field-hint">Markdown to paste into notes, JSON as the escape hatch.</p>
         {/* Its own group, not a scope inside the export dialog (FR-30.15,

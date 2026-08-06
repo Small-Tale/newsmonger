@@ -6,11 +6,12 @@ import type { z } from 'zod';
 
 import { deleteApiKey, resolveApiKey, saveApiKey } from '../ai/api-keys.js';
 import { isKeyedProvider, KEY_ENV_VARS, KEYED_PROVIDERS, PROVIDER_INFO } from '../ai/types.js';
-import type { ImportTopicsResp, ItemsResp, KeysResp, ProvidersResp, StateResp, ThreadResp } from '../api/schemas.js';
+import type { ImportStoriesResp, ImportTopicsResp, ItemsResp, KeysResp, ProvidersResp, StateResp, ThreadResp } from '../api/schemas.js';
 import {
   CheckReqSchema,
   CreateTopicReqSchema,
   DiscoverReqSchema,
+  ImportStoriesReqSchema,
   ImportTopicsReqSchema,
   OpenExternalReqSchema,
   SaveItemReqSchema,
@@ -712,6 +713,30 @@ export function registerApi(app: Hono<AppEnv>): void {
       return c.json({ error: `that file isn't a topic list — ${where}${first?.message ?? 'unreadable'}` }, 400);
     }
     const resp: ImportTopicsResp = c.get('store').importTopics(parsed.data.topics);
+    return c.json(resp);
+  });
+
+  /**
+   * Read an exported story archive back in (FR-30.10–30.14, NEWS-319).
+   *
+   * Same refusal discipline as `/api/import-topics` above, and for the same
+   * reason: this is a file a person chose, so the 400 says which field was
+   * wrong rather than "invalid request".
+   */
+  app.post('/api/import-stories', async (c) => {
+    let body: unknown;
+    try {
+      body = await c.req.json();
+    } catch {
+      return c.json({ error: "that file isn't JSON" }, 400);
+    }
+    const parsed = ImportStoriesReqSchema.safeParse(body);
+    if (!parsed.success) {
+      const first = parsed.error.issues.at(0);
+      const where = first === undefined ? '' : `${first.path.join('.')}: `;
+      return c.json({ error: `that file isn't a story export — ${where}${first?.message ?? 'unreadable'}` }, 400);
+    }
+    const resp: ImportStoriesResp = c.get('store').importStories(parsed.data.stories);
     return c.json(resp);
   });
 

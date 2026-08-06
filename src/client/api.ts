@@ -1,5 +1,5 @@
 import type { Effort,ProviderName} from '../ai/types.js';
-import type { BackupPreview, DiscoverReq, DiscoverResp, DiscoverUsageResp, ImportTopicsResp,TopicSuggestion  } from '../api/schemas.js';
+import type { BackupPreview, DiscoverReq, DiscoverResp, DiscoverUsageResp, ImportStoriesResp, ImportTopicsResp, TopicSuggestion } from '../api/schemas.js';
 import {
   BackupLocationsRespSchema,
   BackupPreviewRespSchema,
@@ -7,6 +7,7 @@ import {
   ClearItemsRespSchema,
   DiscoverRespSchema,
   DiscoverUsageRespSchema,
+  ImportStoriesRespSchema,
   ImportTopicsRespSchema,
   ItemsRespSchema,
   KeysRespSchema,
@@ -513,6 +514,25 @@ export async function importTopics(fileText: string): Promise<ImportTopicsResp> 
     body: fileText,
   });
   const parsed = ImportTopicsRespSchema.parse(body);
+  await refreshState();
+  return parsed;
+}
+
+/**
+ * Read an exported story archive back in (FR-30.10–30.14, NEWS-319).
+ *
+ * Same shape as `importTopics`: the file's text goes up as-is so one schema on
+ * the server decides what is acceptable, and the client cannot accept something
+ * the server would refuse.
+ */
+export async function importStories(fileText: string): Promise<ImportStoriesResp> {
+  const body = await request('/api/import-stories', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: fileText,
+  });
+  const parsed = ImportStoriesRespSchema.parse(body);
+  // Topics *and* the feed may both have changed — an import can create topics.
   await refreshState();
   return parsed;
 }
