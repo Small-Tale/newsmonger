@@ -109,12 +109,37 @@ export function topicsToJson(topics: Topic[], now: Date): string {
 
 /** Escape the five XML metacharacters. Applied to every interpolated value. */
 export function escapeXml(value: string): string {
-  return value
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&apos;');
+  return (
+    value
+      // **Characters XML 1.0 has no way to represent, removed first** (NEWS-330).
+      //
+      // Escaping the five metacharacters is not enough to make a string safe to
+      // put in a document. XML 1.0 §2.2 permits only tab, LF, CR and `#x20`
+      // upward — every other C0 control is forbidden *outright*, and there is no
+      // character reference for one either, so `&#x1;` would be just as invalid.
+      // One in a title makes the whole feed unparseable, and a reader's only
+      // report is that the feed is broken.
+      //
+      // This matters because the strings are not ours: titles and summaries come
+      // from a model, and outlet names come from web pages. Nothing upstream
+      // strips them — `stripMarkup` on a source title is about tags, not control
+      // codes — so this is the one place that can.
+      //
+      // Also drops the surrogate range's unpaired halves and the two permanently
+      // unassigned noncharacters, which are equally illegal and arrive the same
+      // way: through a truncated or mis-decoded string.
+      //
+      // `no-control-regex` exists to catch one pasted in by accident; here they
+      // are the subject.
+      // eslint-disable-next-line no-control-regex
+      .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\uFFFE\uFFFF]/g, '')
+      .replace(/[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/g, '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&apos;')
+  );
 }
 
 /**
@@ -139,6 +164,19 @@ export function toAtom(input: ExportInput): string {
     `  <updated>${escapeXml(updated)}</updated>`,
     `  <link rel="self" href="${escapeXml(`${input.baseUrl}/feed.xml`)}"/>`,
     `  <link rel="alternate" href="${escapeXml(input.baseUrl)}"/>`,
+    // **Required, and its absence is why readers rejected this feed** (NEWS-330).
+    //
+    // RFC 4287 §4.1.1: a feed MUST carry one or more `atom:author` *unless every
+    // entry carries one*. This had none anywhere, which is the only rule the
+    // output broke — and a strict reader's report for that is "the feed doesn't
+    // work", with nothing to say which rule.
+    //
+    // At feed level, and naming the **app** rather than the outlet. The outlet
+    // wrote the article; the summary in every `<content>` here was written by
+    // this app's model, and attributing that to Reuters would put words in a
+    // publication's mouth. The outlet is already on each entry's `alternate`
+    // link, which is where a reader looks for it.
+    '  <author><name>Newsmonger</name></author>',
   ];
   for (const item of input.items) {
     // A story is required to cite at least one source, but the schema doesn't

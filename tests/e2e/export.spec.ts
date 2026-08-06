@@ -445,3 +445,57 @@ test('exported stories can be imported back, creating the topic they need (FR-30
 
   await topicAction(page, page.locator('.topic', { hasText: name }), 'delete');
 });
+
+test('the served feed parses as Atom and names an author (NEWS-330)', async ({ page }) => {
+  // A feed reader refused `/feed.xml` and could only say "it seems to not work".
+  // The bytes were fine — well-formed XML, correct Content-Length, no trailing
+  // characters — so the fault was semantic: RFC 4287 4.1.1 requires an
+  // `atom:author` on the feed unless every entry has one, and there were none.
+  //
+  // Parsed with the **browser's own XML parser** rather than with a regex, which
+  // is the point: a regex would have been just as happy with the broken feed. No
+  // new dependency either — Chromium is already here.
+  await page.goto('/');
+
+  const parsed = await page.evaluate(async () => {
+    const res = await fetch('/feed.xml');
+    const text = await res.text();
+    const doc = new DOMParser().parseFromString(text, 'application/xml');
+    const NS = 'http://www.w3.org/2005/Atom';
+    const kids = (parent: Element | Document, name: string): Element[] =>
+      [...parent.children].filter((el) => el.namespaceURI === NS && el.localName === name);
+    const feed = doc.documentElement;
+    return {
+      contentType: res.headers.get('content-type'),
+      // A parse failure shows up as a `<parsererror>` element rather than a throw.
+      parseError: doc.querySelector('parsererror')?.textContent.slice(0, 200) ?? null,
+      root: `${String(feed.namespaceURI)}|${feed.localName}`,
+      feedChildren: {
+        id: kids(feed, 'id').length,
+        title: kids(feed, 'title').length,
+        updated: kids(feed, 'updated').length,
+        author: kids(feed, 'author').length,
+      },
+      authorName: kids(kids(feed, 'author')[0] ?? feed, 'name')[0]?.textContent ?? null,
+      entries: kids(feed, 'entry').map((entry) => ({
+        id: kids(entry, 'id').length,
+        title: kids(entry, 'title').length,
+        updated: kids(entry, 'updated').length,
+      })),
+    };
+  });
+
+  expect(parsed.parseError, 'the feed must parse as XML').toBeNull();
+  expect(parsed.contentType).toContain('application/atom+xml');
+  expect(parsed.root, 'the root must be an Atom <feed>').toBe('http://www.w3.org/2005/Atom|feed');
+
+  // RFC 4287 4.1.1 — exactly one of each, and the author that was missing.
+  expect(parsed.feedChildren).toEqual({ id: 1, title: 1, updated: 1, author: 1 });
+  expect(parsed.authorName, 'an author element with no name is not a Person construct').toBeTruthy();
+
+  // RFC 4287 4.1.2 — every entry, not just the first.
+  expect(parsed.entries.length).toBeGreaterThan(0);
+  for (const entry of parsed.entries) {
+    expect(entry).toEqual({ id: 1, title: 1, updated: 1 });
+  }
+});

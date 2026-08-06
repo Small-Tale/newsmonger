@@ -92,6 +92,31 @@ describe('escapeXml', () => {
   it('escapes all five metacharacters', () => {
     expect(escapeXml(`<a href="x">&'`)).toBe('&lt;a href=&quot;x&quot;&gt;&amp;&apos;');
   });
+
+  it('drops characters XML has no way to represent (NEWS-330)', () => {
+    // Escaping is not enough to make a string safe to put in a document. XML 1.0
+    // §2.2 forbids the C0 controls outright — there is no character reference
+    // for one either — so a single `\x01` in a title makes the *whole feed*
+    // unparseable, and the reader's only report is that the feed is broken.
+    //
+    // These strings are not ours: titles and summaries come from a model, outlet
+    // names come from web pages, and nothing upstream strips control codes.
+    expect(escapeXml('before\u0001after')).toBe('beforeafter');
+    expect(escapeXml('a\u000Bb\u000Cc\u001Fd')).toBe('abcd');
+    expect(escapeXml('x\uFFFEy\uFFFFz')).toBe('xyz');
+    // A lone surrogate is half a character and equally illegal — it arrives the
+    // same way, through a truncated or mis-decoded string.
+    expect(escapeXml('a\uD800b')).toBe('ab');
+    expect(escapeXml('a\uDC00b')).toBe('ab');
+  });
+
+  it('keeps the whitespace XML does allow, and real astral characters', () => {
+    // Tab, LF and CR are legal and meaningful; stripping them would quietly
+    // reflow every summary.
+    expect(escapeXml('a\tb\nc\rd')).toBe('a\tb\nc\rd');
+    // A *paired* surrogate is one real character (an emoji) and must survive.
+    expect(escapeXml('rocket \u{1F680}')).toBe('rocket \u{1F680}');
+  });
 });
 
 describe('toAtom (NEWS-85)', () => {
@@ -663,5 +688,94 @@ describe('importing exported stories (FR-30.10–30.14, NEWS-319)', () => {
     ).json()) as { added: number; skipped: number };
     expect(resp).toMatchObject({ added: 0, skipped: 1 });
     expect(store.listTopics()).toHaveLength(0);
+  });
+});
+
+describe('the Atom feed is valid enough for a reader to accept (NEWS-330)', () => {
+  // A feed reader refused `/feed.xml`, and "it seems to not work" is all a
+  // reader can tell you - they do not report *which* rule. The output was
+  // well-formed XML with a correct Content-Length and no trailing bytes, so the
+  // fault was semantic: RFC 4287 4.1.1 says a feed MUST carry one or more
+  // `atom:author` unless every entry carries one, and this had none anywhere.
+  //
+  // These assert the RFC's **required elements** rather than "the string
+  // contains <author>", so the next omission fails here instead of being found
+  // by someone's reader weeks later.
+
+  function feed(over: Partial<ExportInput> = {}): string {
+    return toAtom(input(over));
+  }
+
+  /** Elements at one nesting level, so `<entry><title>` cannot satisfy a feed-level check. */
+  function childrenOf(xml: string, indent: string): string[] {
+    return [...xml.matchAll(new RegExp(`^${indent}<([a-z:]+)`, 'gm'))].map((m) => m[1]);
+  }
+
+  it('carries every element a feed is required to have', () => {
+    const top = childrenOf(feed(), '  ');
+    for (const required of ['id', 'title', 'updated', 'author']) {
+      expect(top, `RFC 4287 4.1.1 requires a feed-level <${required}>`).toContain(required);
+    }
+    // Exactly one of each singular element - two `<id>`s is as invalid as none.
+    for (const once of ['id', 'title', 'updated']) {
+      expect(top.filter((t) => t === once), `<${once}> must appear exactly once`).toHaveLength(1);
+    }
+  });
+
+  it('carries every element an entry is required to have', () => {
+    const entries = [...feed().matchAll(/ {2}<entry>([\s\S]*?) {2}<\/entry>/g)].map((m) => m[1]);
+    expect(entries.length).toBeGreaterThan(0);
+    for (const entry of entries) {
+      const children = childrenOf(entry, '    ');
+      for (const required of ['id', 'title', 'updated']) {
+        expect(children, `RFC 4287 4.1.2 requires an entry-level <${required}>`).toContain(required);
+      }
+    }
+  });
+
+  it('names an author even with no stories at all', () => {
+    // The empty feed is what a fresh install serves, and so the one most likely
+    // to be pointed at a reader first.
+    const top = childrenOf(feed({ items: [] }), '  ');
+    expect(top).toContain('author');
+    expect(top).toContain('updated');
+  });
+
+  it('attributes the summaries to the app, not to the outlet', () => {
+    // The outlet wrote the article; the summary in every <content> was written
+    // by this app's model. Attributing that to a real masthead would put words
+    // in a publication's mouth - the same care the demo fixtures take.
+    expect(feed()).toContain('<author><name>Newsmonger</name></author>');
+    expect(feed()).not.toContain('<author><name>Example News</name>');
+  });
+
+  it('survives a control character in a title without becoming unparseable', () => {
+    // The end-to-end form of `escapeXml`'s unit test, and the reason it matters
+    // here: one C0 control anywhere in the document makes the *whole feed*
+    // unparseable, so a single bad title costs every story in the file. These
+    // strings come from a model and from web pages, so this is not hypothetical.
+    //
+    // Written as escapes rather than as pasted bytes: a test whose input is
+    // invisible in its own source cannot be reviewed.
+    const NUL = '\u0000';
+    const SOH = '\u0001';
+    const VT = '\u000B';
+    const US = '\u001F';
+    const xml = toAtom(
+      input({
+        items: [item({ title: `Reactor${SOH} hits${VT} milestone`, summary: `Plasma${US} held.` })],
+        topics: [topic({ name: `Fusion${NUL} Energy` })],
+      }),
+    );
+    expect(xml, 'no C0 control may reach the document').not.toMatch(
+      // Deliberate: this asserts that none of them survived into the document.
+      // eslint-disable-next-line no-control-regex
+      /[\u0000-\u0008\u000B\u000C\u000E-\u001F]/,
+    );
+    // …and the text survives minus the illegal characters, rather than the
+    // whole field being dropped.
+    expect(xml).toContain('Reactor hits milestone');
+    expect(xml).toContain('Plasma held.');
+    expect(xml).toContain('Fusion Energy');
   });
 });

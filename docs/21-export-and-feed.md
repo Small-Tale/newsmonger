@@ -24,6 +24,16 @@ See also [11 — Story Actions](11-story-actions.md) (bookmarking) and [4 — CL
 
   Every interpolated value is XML-escaped. An unescaped `&` in a source URL is the classic way to ship a feed no reader will parse, and a headline is model output — tests cover both.
 
+- **FR-21.13** *(Shipped, NEWS-330)* **The feed carries an `atom:author`, because RFC 4287 requires one.** §4.1.1: a feed MUST have one or more unless *every* entry has one. This had none anywhere, and a reader's report for that is "it doesn't work" — no rule named, nothing to grep for. The bytes were never the problem: well-formed XML, correct `Content-Length`, no trailing characters.
+
+  At **feed** level, and naming the **app**. The outlet wrote the article, but the summary in every `<content>` was written by this app's model; attributing that to a real masthead would put words in a publication's mouth — the same care the demo fixtures take with "Illustrative" source names. The outlet is already on each entry's `alternate` link, which is where a reader looks for it.
+
+- **FR-21.14** *(Shipped, NEWS-330)* **Escaping the five metacharacters is not enough — characters XML cannot represent are removed.** XML 1.0 §2.2 permits tab, LF, CR and `#x20` upward; every other C0 control is forbidden outright, and there is no character reference for one either, so `&#x1;` is equally invalid. One of them anywhere makes the *whole document* unparseable, so a single bad title costs every story in the file.
+
+  Not hypothetical: titles and summaries are model output and outlet names come from web pages, and nothing upstream strips control codes (`stripMarkup` is about tags). Unpaired surrogates and the two permanent noncharacters go the same way — they arrive the same way, through a truncated or mis-decoded string.
+
+  Tested at both levels, and the guards assert the RFC's **required elements** rather than "the output contains `<author>`": the unit tests check each mandatory child of `feed` and `entry`, and an E2E parses the *served* feed with the browser's own `DOMParser`. A regex would have been just as happy with the broken feed.
+
 ### Reach
 
 - **FR-21.6** *(Shipped)* All three are same-origin-guarded like every other route (FR-4.5a), and the guard's "**absent `Origin` is allowed**" rule is exactly what makes the feed usable: a desktop RSS reader is not a browser page and sends no `Origin`, while a web page on another origin still gets a 403 and cannot read the archive.
