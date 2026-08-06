@@ -8,6 +8,7 @@ import {
   codexModelsCachePath,
   parseCodexEfforts,
   parseCodexModels,
+  readCodexEfforts,
   readCodexModels,
 } from '../../src/ai/providers/codex-models.js';
 import { tmpDataDir } from '../helpers/tmp.js';
@@ -133,5 +134,65 @@ describe('readCodexModels', () => {
     expect(codexModelsCachePath()).toBe(path.join('/somewhere/else', 'models_cache.json'));
     delete process.env['CODEX_HOME'];
     expect(codexModelsCachePath('/Users/x')).toBe(path.join('/Users/x', '.codex', 'models_cache.json'));
+  });
+});
+
+describe('a cache shape we did not expect (NEWS-360)', () => {
+  /**
+   * `~/.codex/models_cache.json` is written by the **vendor**, and its shape has
+   * already changed under this project twice (NEWS-272/274). The module's own
+   * doc promises "any shape that is not what we expect yields no models rather
+   * than an error" — that promise was kept by `readCodexModels` and broken by
+   * `readCodexEfforts`, because the parse asserted the shape with a double cast
+   * and the `try` closed before the parse ran.
+   *
+   * Each case below is a shape a vendor could plausibly ship. None may throw.
+   */
+  const CASES: [string, unknown][] = [
+    ['reasoning levels as an object, not an array', { models: [{ slug: 'a', supported_reasoning_levels: { effort: 'high' } }] }],
+    ['level entries as bare strings', { models: [{ slug: 'a', supported_reasoning_levels: ['high', 'low'] }] }],
+    ['priority as a string', { models: [{ slug: 'a', priority: '2' }] }],
+    ['visibility as a number', { models: [{ slug: 'a', visibility: 1 }] }],
+    ['models not an array', { models: 'nope' }],
+    ['no models key at all', { other: true }],
+    ['a null entry', { models: [null] }],
+    ['body is an array', [{ slug: 'a' }]],
+    ['body is a string', 'nope'],
+  ];
+
+  it.each(CASES)('%s: parses to empty rather than throwing', (_label, body) => {
+    expect(() => parseCodexModels(body)).not.toThrow();
+    expect(() => parseCodexEfforts(body, 'a')).not.toThrow();
+    expect(parseCodexEfforts(body, 'a')).toEqual([]);
+  });
+
+  it('keeps the good models when one entry is malformed', () => {
+    // Per-entry parsing, not one `z.array` over the lot: a single bad row must
+    // not cost the user the rest of their catalogue.
+    expect(parseCodexModels({ models: [{ slug: 'ok1' }, 42, { slug: 'ok2' }] })).toEqual(['ok1', 'ok2']);
+  });
+
+  it('sorts an unusable priority last instead of returning NaN', () => {
+    // `(a.priority ?? MAX) - (b.priority ?? MAX)` with a string priority yields
+    // NaN, and a NaN comparator does not fail — it orders arbitrarily, which is
+    // the kind of bug that is only ever noticed as "the list looks wrong".
+    expect(parseCodexModels({ models: [{ slug: 'unranked', priority: '2' }, { slug: 'first', priority: 1 }] })).toEqual([
+      'first',
+      'unranked',
+    ]);
+  });
+
+  it('reads efforts from a file of any shape without throwing (NEWS-360)', () => {
+    // The asymmetry itself: `readCodexEfforts` threw where `readCodexModels`
+    // returned `[]`, because its `try` wrapped only the read.
+    const dir = tmpDataDir();
+    const file = path.join(dir, 'models_cache.json');
+    for (const [, body] of CASES) {
+      fs.writeFileSync(file, JSON.stringify(body));
+      expect(() => readCodexEfforts('a', file)).not.toThrow();
+      expect(() => readCodexModels(file)).not.toThrow();
+    }
+    // And an unreadable file is still `[]`, not a throw.
+    expect(readCodexEfforts('a', path.join(dir, 'absent.json'))).toEqual([]);
   });
 });
