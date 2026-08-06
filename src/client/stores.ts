@@ -292,6 +292,12 @@ export interface AppState {
    */
   backupOffer: BackupLocation[] | null;
   /**
+   * An unread notice that a database was set aside as unreadable (NEWS-340).
+   * Server-owned: dismissing deletes the row, so unlike `dismissedRunId` there
+   * is no client-side "seen" flag to keep in step with a poll.
+   */
+  quarantine: { backupPath: string; at: string } | null;
+  /**
    * Topics ticked in the onboarding flow, before they're created.
    *
    * Holds both the static starter names and anything picked from the suggestions
@@ -618,6 +624,7 @@ export const appStore = defineStore({
     settingsOpen: false,
     onboarding: 'auto',
     backupOffer: null,
+    quarantine: null,
     onboardingTopics: [],
     onboardingTopicsAtStart: 0,
     keys: [],
@@ -655,6 +662,9 @@ export const appStore = defineStore({
     toast: null,
   }),
   actions: (set, get) => ({
+    setQuarantine: (quarantine: { backupPath: string; at: string } | null) => {
+      set({ ...get(), quarantine });
+    },
     setBackupOffer: (backupOffer: BackupLocation[] | null) => {
       set({ ...get(), backupOffer });
     },

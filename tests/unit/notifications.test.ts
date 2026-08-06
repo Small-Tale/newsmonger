@@ -37,6 +37,7 @@ function state(itemIds: string[]): StateResp {
     todayByTopic: {},
     newestItemAtByTopic: {},
     settings: BASE_SETTINGS,
+    quarantine: null,
     runs: [],
     checking: [],
     appVersion: '0.1.0',

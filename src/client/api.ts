@@ -106,6 +106,21 @@ export async function refreshState(): Promise<void> {
  * and on "Show more"; each call fetches the newest `feedLimit` matches, so a
  * poll naturally folds in new stories at the top.
  */
+/**
+ * Acknowledge the "database was set aside" notice (NEWS-340).
+ *
+ * Fire-and-forget: the banner is already gone from the client's state, and a
+ * failed dismissal simply means it reappears on the next poll — which is the
+ * right way for this one to fail. Nothing is deleted by dismissing.
+ */
+export async function dismissQuarantine(): Promise<void> {
+  try {
+    await request('/api/quarantine/dismiss', { method: 'POST' });
+  } catch {
+    // Reappearing is a better failure than a banner saying the dismissal failed.
+  }
+}
+
 export async function refreshFeed(): Promise<void> {
   const s = appStore.state.value;
   const params = new URLSearchParams({ limit: String(s.feedLimit) });

@@ -5,6 +5,7 @@ import {
   CheckRunSchema,
   MAX_GUIDANCE_LENGTH,
   NewsItemSchema,
+  QuarantineSchema,
   SettingsSchema,
   TopicSchema,
 } from '../db/schemas.js';
@@ -336,6 +337,13 @@ export const StateRespSchema = z.object({
    * or a fixture without it behaves exactly as before.
    */
   checksPossibleSince: z.string().default('1970-01-01T00:00:00.000Z'),
+  /**
+   * An unread notice that a database was set aside as unreadable (NEWS-340).
+   * `null` in the overwhelmingly normal case. Defaulted so an older server —
+   * or a response cached across an upgrade — parses rather than blanking the
+   * whole state on a field the client is only going to render a banner from.
+   */
+  quarantine: QuarantineSchema.nullable().default(null),
 });
 export type StateResp = z.infer<typeof StateRespSchema>;
 

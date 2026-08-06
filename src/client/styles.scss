@@ -714,6 +714,16 @@ h2.eyebrow {
     min-width: 0;
   }
 
+  // A filesystem path the reader may need to copy or type (NEWS-340). Wrapping
+  // on any character rather than overflowing: the path is the only route back
+  // to the data, so a truncated one is worse than an ugly one.
+  .banner-path {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 0.92em;
+    word-break: break-all;
+    user-select: text;
+  }
+
   &.error {
     background: var(--error-bg);
   }

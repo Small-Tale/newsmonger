@@ -1,4 +1,5 @@
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -34,6 +35,25 @@ export function workerBaseURL(): string {
   const raw = Number(process.env['TEST_PARALLEL_INDEX'] ?? '0');
   const slot = Number.isInteger(raw) && raw >= 0 ? raw : 0;
   return `http://127.0.0.1:${String(e2ePort(e2eWorkerRole(slot)))}`;
+}
+
+/**
+ * This worker's data directory, derived the same way `server.ts` builds it.
+ *
+ * For the rare state that has no API to create it — the NEWS-340 quarantine
+ * notice is written by `Store`'s constructor when a database cannot be read,
+ * which no request can provoke on a server that is already running. Writing the
+ * `meta` row directly is the only way to put the banner on screen, and WAL mode
+ * lets a second connection do it while the server holds the file open.
+ *
+ * Reach for the API first. This is a back door into another process's state, and
+ * a test that uses it is asserting on something it staged rather than something
+ * the app did.
+ */
+export function workerDataDir(): string {
+  const raw = Number(process.env['TEST_PARALLEL_INDEX'] ?? '0');
+  const slot = Number.isInteger(raw) && raw >= 0 ? raw : 0;
+  return path.join(os.tmpdir(), `newsmonger-e2e-${String(process.pid)}-w${String(slot)}`);
 }
 
 /**

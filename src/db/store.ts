@@ -7,7 +7,7 @@ import { filterNewItems } from '../ai/dedupe.js';
 import type { TokenUsage } from '../ai/types.js';
 import { NO_SUBCATEGORY_FILTER, UNCATEGORIZED_FILTER } from '../categories.js';
 import { planThreadIds } from '../threads.js';
-import type { CheckRun, DataFile, NewsItem, Settings, Topic } from './schemas.js';
+import type { CheckRun, DataFile, NewsItem, Quarantine, Settings, Topic } from './schemas.js';
 import {
   CheckRunSchema,
   DataFileSchema,
@@ -15,6 +15,7 @@ import {
   MAX_GUIDANCE_LENGTH,
   NewsItemFieldsSchema,
   NewsItemSchema,
+  QuarantineSchema,
   SettingsSchema,
   TopicSchema,
 } from './schemas.js';
@@ -211,6 +212,7 @@ export class Store {
     this.file = dbPath(dataDir);
 
     let db: DatabaseSync;
+    let quarantined: string | null = null;
     try {
       db = openDb(this.file);
     } catch (err) {
@@ -236,11 +238,17 @@ export class Store {
       const backup = backupUnreadableDb(this.file);
       console.error(`newsmonger: database unreadable (${String(err)}); backed up to ${backup} and starting fresh`);
       db = openDb(this.file);
+      quarantined = backup;
     }
     this.db = db;
 
     this.importJsonFile();
     this.settingsCache = this.loadSettings();
+    // Recorded *after* the fresh database is in place, since that is what it is
+    // written to (NEWS-340). Until this existed, the only notice was the
+    // `console.error` above — a stream the desktop app does not show — so the
+    // user's whole account of what happened was an empty topic list.
+    if (quarantined !== null) this.recordQuarantine(quarantined);
   }
 
   /**
@@ -1503,6 +1511,52 @@ export class Store {
       throw err;
     }
     return added;
+  }
+
+  // --- Quarantine notice (NEWS-340) ----------------------------------------
+
+  private recordQuarantine(backupPath: string): void {
+    const notice: Quarantine = { backupPath, at: new Date().toISOString() };
+    this.db
+      .prepare(
+        `INSERT INTO meta (key, value) VALUES ('quarantine', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value`,
+      )
+      .run(JSON.stringify(notice));
+  }
+
+  /**
+   * The unread notice that a database was set aside, or `null`.
+   *
+   * Read from the database on every call rather than cached: it is written
+   * once at startup and read by a 4-second poll, so there is nothing to gain,
+   * and a cache would have to be invalidated by `dismissQuarantine`.
+   *
+   * A malformed row reads as `null` and is cleared. This is the notice that
+   * something went wrong with storage — it must not be a second thing that can
+   * go wrong with storage.
+   */
+  getQuarantine(): Quarantine | null {
+    const row = this.db.prepare(`SELECT value FROM meta WHERE key = 'quarantine'`).get() as
+      | { value: string }
+      | undefined;
+    if (row === undefined) return null;
+    const parsed = QuarantineSchema.safeParse(JSON.parse(row.value) as unknown);
+    if (!parsed.success) {
+      this.dismissQuarantine();
+      return null;
+    }
+    return parsed.data;
+  }
+
+  /**
+   * Drop the notice for good.
+   *
+   * Deleted rather than flagged read: the row exists only to be shown once, and
+   * the backup file it names stays exactly where it is either way. Dismissing
+   * says "I have seen this", never "delete that copy".
+   */
+  dismissQuarantine(): void {
+    this.db.prepare(`DELETE FROM meta WHERE key = 'quarantine'`).run();
   }
 
   // --- Settings ------------------------------------------------------------

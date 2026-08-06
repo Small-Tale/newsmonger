@@ -101,6 +101,20 @@
 
   A migration that *backfills* the column it adds runs that backfill **only when it did the adding**. Re-running NEWS-280's `UPDATE items SET thread_id = id` on a database that has already grouped its stories would flatten every thread to a thread of one — healing must not cost data to do it.
 
+- **FR-4.17** *(Shipped, NEWS-340)* **A quarantine is recorded where the user can see it.** When FR-4.9 sets a database aside, `Store` writes a `quarantine` row to `meta` — the backup path and an ISO timestamp — which rides along on `/api/state` and raises a banner: what happened, that **nothing was deleted**, and where the old database is. Dismissing it (`POST /api/quarantine/dismiss`) deletes the row, so it cannot return on the next poll or the next launch, and never touches the backup file: dismissing says "I have read this", not "delete that copy".
+
+  In `meta` rather than in memory, because the launch that loses the data is rarely the launch where anyone notices. Read uncached on every request — it is written once at startup and read by a 4-second poll, so a cache would buy nothing and would need invalidating by the dismissal.
+
+  A malformed row reads as absent and is cleared. This row is the thing that reports a storage problem; it must not become a second storage problem.
+
+  Until this existed the only notice was a `console.error`, on a stream the desktop app does not show ([FR-32.1](32-startup-failure.md) surfaces that stream only when the server dies *before* readiness, which a quarantine specifically does not). The user's entire account of what had happened was an empty topic list — indistinguishable from total loss, and an invitation to start deleting things.
+
+- **FR-4.18** *(Shipped, NEWS-340)* **A quarantine still starts the app, rather than stopping it like FR-4.13 does.** The two look similar and are not.
+
+  FR-4.13 stops because the database is **fine** and our code failed on it: every row is intact, so the recoverable move is to change nothing and let a fix arrive. A quarantine happens when the file is genuinely unreadable — nothing in the app can repair it, no future start will do better on its own, and refusing to open would leave someone with an app that never launches again and no way to add the topics they would rather start over with.
+
+  What made starting fresh *wrong* before was not the starting fresh. It was doing it silently. With FR-4.17's banner the outcome is the same and the user is not misled, which is the whole of the difference.
+
 - **FR-4.16** *(Shipped, NEWS-337)* **A rescue copy never unlinks a write-ahead log unread.** `backupUnreadableDb` copies any `-wal`/`-shm` beside the database *before* it tries anything else, then checkpoints the database if it can open it, then copies the main file.
 
   The order is the substance. In WAL mode a committed transaction lives in `-wal` until a checkpoint folds it in, so copying the main file alone leaves the rescue copy older than what was actually committed — and closing a SQLite handle removes the log, including on a failed open. Copying first is what keeps the set restorable. This is best-effort by nature: `openDb`'s own failure path closes its handle before the backup runs, so a log often will not survive to reach this function. What it guarantees is that this function never destroys one.

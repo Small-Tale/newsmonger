@@ -15,6 +15,7 @@ import {
   deleteTopic,
   discoverTopics,
   dismissBackupPrompt,
+  dismissQuarantine,
   fetchBackupLocations,
   importStories,
   importTopics,
@@ -387,6 +388,23 @@ function appJsx(): SafeHtml {
           (Also a KF-377 workaround once; that reason expired in kerf 3.0.0 and
           this one did not. See docs/3-ui.md, NEWS-99.) */}
       <div id="banners" role="status" aria-live="polite">
+        {/* First, and above every other banner: it is the only account the user
+            gets of why their topics are missing (NEWS-340). A notice about
+            possible data loss outranks a filter chip. */}
+        {s.quarantine !== null ? (
+          <div class="banner error">
+            <span class="banner-text">
+              This app's database could not be read on {new Date(s.quarantine.at).toLocaleDateString()}, so it
+              started with an empty one. <strong>Nothing was deleted</strong> — a copy of the old database is
+              saved at <code class="banner-path">{s.quarantine.backupPath}</code>.
+            </span>
+            <button class="banner-dismiss" type="button" data-action="dismiss-quarantine" aria-label="Dismiss">
+              {icon('clear', 15)}
+            </button>
+          </div>
+        ) : (
+          ''
+        )}
         {s.savedFilter ? (
           <div class="banner saved">
             {icon('bookmark', 14)}
@@ -2127,6 +2145,14 @@ function wireEvents(root: HTMLElement): void {
 
   void delegate(root, 'click', '[data-action=dismiss-error]', () => {
     appStore.actions.setError(null);
+  });
+  // Server-owned, unlike every other banner here: dismissing deletes the row,
+  // so the notice cannot come back on the next poll or the next launch
+  // (NEWS-340). Cleared locally first so the banner goes on the click rather
+  // than up to four seconds later.
+  void delegate(root, 'click', '[data-action=dismiss-quarantine]', () => {
+    appStore.actions.setQuarantine(null);
+    void dismissQuarantine();
   });
   // The warning is derived from the runs list, so dismissal is by run id — a
   // later, different failure has a new id and shows again.

@@ -323,6 +323,24 @@ export const SettingsSchema = z.object({
   ...s,
   highPriorityIntervalMs: Math.min(s.highPriorityIntervalMs, s.checkIntervalMs),
 }));
+/**
+ * A note that a database was set aside as unreadable and the app started fresh
+ * (NEWS-340, [FR-4.9](../../docs/4-cli-server-storage.md)).
+ *
+ * Stored in `meta` rather than held in memory so it survives the restart that
+ * follows — the user is most likely to read the app's explanation on the *next*
+ * launch, once they have noticed their topics are missing — and so dismissing
+ * it can be permanent.
+ */
+export const QuarantineSchema = z.object({
+  /** Where the unreadable database was copied to. The only route back to it. */
+  backupPath: z.string(),
+  /** When it happened, ISO-8601. */
+  at: z.string(),
+});
+
+export type Quarantine = z.infer<typeof QuarantineSchema>;
+
 export type Settings = z.infer<typeof SettingsSchema>;
 
 /**
