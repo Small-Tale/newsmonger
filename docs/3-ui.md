@@ -607,3 +607,15 @@ kerf 3.x no longer infers dev mode — installing diagnostics is the app's decis
   **Topics above Stories**: a topic is the thing you own here, a story is what a topic produced, so the list you would hand to someone else comes first.
 
   Pinned as geometry in `settings-layout.spec.ts` — equal widths, a real gap, the pair filling the row, matching heights *within* and *between* the two rows, and the heading order. Every one of those was wrong in a way no selector could describe.
+
+### The rail's foot is bounded by where the rail starts (NEWS-325)
+
+- **FR-3.73** *(Shipped, NEWS-325)* **The sidebar's foot — the add-topic form and the privacy link — stays on screen whatever the topic list does**, at the top of the page as well as scrolled.
+
+  FR-3.44 bounded the rail to `100vh - 48px` so its foot stayed reachable (NEWS-138). That is the room available once the rail has **stuck**; at the top of the page it has not, because the masthead, the filter chips and the banner slot all sit above it. Measured with 18 topics in a 700px window: the privacy link sat **102px below the fold** until you scrolled, which is exactly the state a new reader is in.
+
+  So the height a sticky rail can have depends on where it currently is, and **CSS cannot ask a sticky element that**. `trackRailTop` publishes the rail's `offsetTop` as `--rail-top` and the rule is written against it — `offsetTop` rather than `getBoundingClientRect()` so the value does not move with the scroll position, recomputed on resize and on a `ResizeObserver` for the rows above it, which wrap.
+
+  Sized for the **unstuck** position, which is the binding one. Once stuck the rail ends a little above the fold rather than flush to it; the rail has no background of its own, so that slack is invisible. Preferring the flush look would mean re-measuring on every scroll frame to buy nothing a reader can see.
+
+  Tested at the top of the page *and* scrolled: only the first was ever broken, and only the second was ever covered.

@@ -2469,6 +2469,45 @@ async function installPendingUpdate(): Promise<void> {
   }
 }
 
+/**
+ * Publish the topics rail's distance from the top of the page as `--rail-top`
+ * (NEWS-325).
+ *
+ * The rail is `position: sticky` and bounded to the viewport so its foot — the
+ * add-topic form and the privacy link — stays reachable however many topics are
+ * watched (NEWS-138). That bound was `100vh - 48px`, which is the space
+ * available *once it has stuck*. At the top of the page it has not: the
+ * masthead, the filter chips and the banner slot sit above it, so it starts
+ * ~150px down and a full-height rail runs off the bottom of the window.
+ * Measured with 18 topics in a 700px window, the privacy link sat **102px below
+ * the fold** until you scrolled — which is exactly the state a new reader is in.
+ *
+ * The height it can have therefore depends on where it currently is, and CSS
+ * cannot ask that of a sticky element. So the offset is measured and the rule is
+ * written against it. Sized for the *unstuck* position, which is the binding one;
+ * once stuck the rail simply ends a little above the fold, and since the rail has
+ * no background of its own that slack is invisible.
+ *
+ * `offsetTop` rather than `getBoundingClientRect`, so the value is independent of
+ * the current scroll position and does not need recomputing as the page moves.
+ * Recomputed on resize, because the masthead and the filter row both wrap.
+ */
+function trackRailTop(root: HTMLElement): void {
+  const publish = (): void => {
+    const rail = root.querySelector<HTMLElement>('.topics-panel');
+    if (rail === null) return;
+    document.documentElement.style.setProperty('--rail-top', `${String(rail.offsetTop)}px`);
+  };
+  publish();
+  window.addEventListener('resize', publish);
+  // The rail's offset moves when the rows above it change height — a banner
+  // appearing, the filter chips wrapping — not only when the window resizes.
+  if (typeof ResizeObserver !== 'undefined') {
+    const observer = new ResizeObserver(publish);
+    observer.observe(root);
+  }
+}
+
 const root = document.getElementById('app');
 if (root) {
   mount(root, () => appJsx());
@@ -2494,4 +2533,5 @@ if (root) {
   void pollPendingUpdate();
   startPolling();
   startForegroundHeartbeat();
+  trackRailTop(root);
 }

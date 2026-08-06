@@ -711,13 +711,23 @@ h2.eyebrow {
   position: sticky;
   top: 24px;
   padding-top: 10px;
-  // Bounded to the viewport so the foot of the rail — the privacy link — is
-  // reachable however many topics are being watched (NEWS-138). Without this a
-  // long list simply runs off the bottom and the link goes back to needing a
-  // scroll, which is the thing being fixed.
+  // Bounded to the viewport so the foot of the rail — the add-topic form and the
+  // privacy link — is reachable however many topics are being watched
+  // (NEWS-138). Without this a long list simply runs off the bottom and they go
+  // back to needing a scroll, which is the thing being fixed.
   display: flex;
   flex-direction: column;
-  max-height: calc(100vh - 48px);
+  // **Measured from where the rail actually starts** (NEWS-325). This was
+  // `100vh - 48px`, which is the room available once the rail has *stuck* — and
+  // at the top of the page it has not, because the masthead, filters and banner
+  // slot are above it. With 18 topics in a 700px window the privacy link sat
+  // 102px below the fold until you scrolled, which is precisely the state a new
+  // reader is in.
+  //
+  // `--rail-top` is the rail's `offsetTop`, published by `trackRailTop` in
+  // `app.tsx` — CSS cannot ask a sticky element where it currently is. The
+  // fallback keeps this sane if the script has not run yet.
+  max-height: calc(100vh - var(--rail-top, 174px) - 24px);
 }
 
 .rail-foot {

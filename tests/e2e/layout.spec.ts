@@ -459,3 +459,65 @@ test('the dial sits on the first line, with badges stacked under it (NEWS-163)',
 
   await topicAction(page, row, 'delete');
 });
+
+test('the sidebar foot stays on screen with a long topic list (NEWS-325)', async ({ page }) => {
+  // The rail is sticky and bounded so its foot — the add-topic form and the
+  // privacy link — stays reachable however many topics are watched (NEWS-138).
+  // That bound was `100vh - 48px`, which is the room available once the rail has
+  // *stuck*; at the top of the page it has not, because the masthead, filters
+  // and banner slot sit above it. Measured with 18 topics in a 700px window, the
+  // privacy link sat 102px below the fold until you scrolled — the state a new
+  // reader is in.
+  //
+  // Asserted at the top of the page **and** scrolled, because only the first was
+  // ever broken and only the second was ever tested.
+  await page.setViewportSize({ width: 1280, height: 700 });
+  await page.goto('/');
+
+  for (let i = 1; i <= 14; i++) {
+    await page.request.post('/api/topics', { data: { name: `Rail height probe ${String(i)}` } });
+  }
+  await page.reload();
+  await expect(page.locator('.topic')).toHaveCount(14, { timeout: 20_000 });
+
+  const foot = async () =>
+    page.evaluate(() => {
+      const el = document.querySelector('.rail-foot');
+      const list = document.querySelector('.topics');
+      if (!(el instanceof HTMLElement) || !(list instanceof HTMLElement)) return null;
+      return {
+        bottom: el.getBoundingClientRect().bottom,
+        top: el.getBoundingClientRect().top,
+        viewport: window.innerHeight,
+        listScrolls: list.scrollHeight > list.clientHeight,
+      };
+    });
+
+  const atTop = await foot();
+  expect(atTop, 'the rail foot must be present').not.toBeNull();
+  if (atTop === null) return;
+  // The list has to be overflowing, or the rail fits trivially and this proves
+  // nothing.
+  expect(atTop.listScrolls, 'the topic list should overflow, or there is nothing to bound').toBe(true);
+  expect(atTop.bottom, 'the rail foot is below the fold at the top of the page').toBeLessThanOrEqual(atTop.viewport);
+  expect(atTop.top).toBeGreaterThanOrEqual(0);
+
+  // And still on screen once the page is scrolled, which is what `sticky` buys.
+  await page.evaluate(() => {
+    window.scrollTo(0, 1500);
+  });
+  const scrolled = await foot();
+  expect(scrolled).not.toBeNull();
+  if (scrolled === null) return;
+  expect(scrolled.bottom).toBeLessThanOrEqual(scrolled.viewport);
+  expect(scrolled.top).toBeGreaterThanOrEqual(0);
+
+  // Cleaned up through the API, not the row menu: `hasText` is a *substring*
+  // match, so "Rail height probe 1" also names 10 through 14 and the locator is
+  // a strict-mode violation rather than a delete.
+  const listed = (await (await page.request.get('/api/state')).json()) as { topics: { id: string; name: string }[] };
+  for (const topic of listed.topics.filter((t) => t.name.startsWith('Rail height probe'))) {
+    await page.request.delete(`/api/topics/${encodeURIComponent(topic.id)}`);
+  }
+  await page.setViewportSize({ width: 1280, height: 900 });
+});
