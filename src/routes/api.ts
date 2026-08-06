@@ -422,6 +422,25 @@ export function registerApi(app: Hono<AppEnv>): void {
     return c.json({ cleared: c.get('store').clearAllItems(), cancelledChecks: cancelled });
   });
 
+  /**
+   * Delete every topic (FR-31.1, NEWS-328).
+   *
+   * **Checks are cancelled first**, for the same reason `/api/items/clear` does
+   * it (NEWS-271): a check in flight is about to write stories for a topic that
+   * is being deleted, and the order here is what stops it. `cancelAllChecks`
+   * aborts synchronously and the delete runs before the event loop can hand
+   * control back to a check's continuation, which then finds its signal aborted
+   * and throws its results away rather than writing them.
+   *
+   * Its own route rather than a flag on `DELETE /api/topics/:id`: bolting "…and
+   * all the others" onto a single-item delete is how a route quietly becomes two
+   * routes with one name.
+   */
+  app.post('/api/topics/clear', (c) => {
+    const cancelledChecks = c.get('runner').cancelAllChecks();
+    return c.json({ deleted: c.get('store').deleteAllTopics(), cancelledChecks });
+  });
+
   app.post('/api/check', async (c) => {
     const body = await parseBody(c, CheckReqSchema);
     if (!body) return c.json({ error: 'invalid request' }, 400);

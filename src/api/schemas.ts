@@ -437,6 +437,12 @@ export const ClearItemsRespSchema = z.object({
   cancelledChecks: z.number().int().default(0),
 });
 
+/** What a bulk topic delete did (FR-31.1, NEWS-328). */
+export const ClearTopicsRespSchema = z.object({
+  deleted: z.number().int(),
+  cancelledChecks: z.number().int().default(0),
+});
+
 export const ModelsRespSchema = z.object({
   models: z.array(z.string()).default([]),
   /**

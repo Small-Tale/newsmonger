@@ -741,23 +741,34 @@ function settingsPanelJsx(s: AppState): SafeHtml {
             variant on the button carries the warning the eyebrow would be
             overstating. */}
         <h3 class="eyebrow">Reset</h3>
-        <div class="clear-row">
+        {/* Two buttons, side by side and equal halves (NEWS-328), like every
+            other pair on this tab (FR-3.72). They are the two things you can
+            throw away, and a reader deciding between them wants to see both. */}
+        <div class="io-row">
           <button class="btn danger" type="button" data-action="clear-stories" disabled={s.feedTotal === 0}>
-            {icon('clear', 15)} Clear all stories
+            {icon('clear', 15)} Delete all stories
           </button>
-          {/* Note weight, not hint (NEWS-306): the bold clause answers "am I
-              about to lose my topics too", which is the fear this control
-              raises, and it is the same promise the confirm dialog makes. The
-              third sentence — each topic resuming from a sensible window — went
-              to FR-27.11, where it was already written. */}
-          <p class="note">
-            {s.feedTotal === 0
-              ? 'Nothing to clear — there are no stories yet.'
-              : ''}{' '}
-            Deletes every story from every topic. <strong>Your topics, settings and API keys stay</strong>, and each
-            one starts covering news again on its next check.
-          </p>
+          {/* **Delete**, not Clear (NEWS-328). "Clear all stories" reads as
+              tidying — emptying a view — and this removes them from the
+              database. The two controls also had to agree with each other: one
+              called Clear beside one called Delete would imply a difference in
+              severity that does not exist. */}
+          <button class="btn danger" type="button" data-action="clear-topics" disabled={s.topics.length === 0}>
+            {icon('delete', 15)} Delete all topics
+          </button>
         </div>
+        {/* Note weight, not hint (NEWS-306): the bold clause answers the fear
+            both controls raise — "does this take my settings and keys too" —
+            and it is the promise both confirm dialogs make.
+
+            One sentence for two buttons, not two. The Data tab has six groups to
+            Schedule's two, so its prose budget is tight (NEWS-306's ratio), and
+            the detail each control needs is in the dialog it opens, where the
+            decision is actually made. */}
+        <p class="note">
+          {s.feedTotal === 0 && s.topics.length === 0 ? 'Nothing to delete yet.' : ''} Deleting topics takes their
+          stories with them. <strong>Your settings and API keys stay</strong>, and neither can be undone.
+        </p>
 
         </div>
       );

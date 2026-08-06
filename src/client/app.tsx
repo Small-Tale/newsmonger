@@ -10,6 +10,7 @@ import {
   backupNow,
   clearAllStories,
   countItemsForTopic,
+  deleteAllTopics,
   deleteKey,
   deleteTopic,
   discoverTopics,
@@ -1525,7 +1526,7 @@ function wireEvents(root: HTMLElement): void {
             ? `${running === 1 ? 'The check' : `All ${String(running)} checks`} running now will be stopped. `
             : '') +
           `Your topics, settings and API keys are not touched. This cannot be undone.`,
-        { confirmLabel: 'Clear stories', danger: true },
+        { confirmLabel: 'Delete stories', danger: true },
       );
       if (!ok) return;
       try {
@@ -1534,13 +1535,13 @@ function wireEvents(root: HTMLElement): void {
         appStore.actions.clearStoryOverlays();
         const { cleared, cancelledChecks } = await clearAllStories();
         showToast(
-          `Cleared ${String(cleared)} stor${cleared === 1 ? 'y' : 'ies'}` +
+          `Deleted ${String(cleared)} stor${cleared === 1 ? 'y' : 'ies'}` +
             (cancelledChecks > 0
               ? `, stopped ${String(cancelledChecks)} check${cancelledChecks === 1 ? '' : 's'}`
               : ''),
         );
       } catch (err) {
-        showToast(`Clear failed: ${err instanceof Error ? err.message : String(err)}`);
+        showToast(`Delete failed: ${err instanceof Error ? err.message : String(err)}`);
       }
     })();
   });
@@ -1600,6 +1601,50 @@ function wireEvents(root: HTMLElement): void {
         showToast(`Import failed: ${err instanceof Error ? err.message : String(err)}`);
       } finally {
         input.value = '';
+      }
+    })();
+  });
+
+  /**
+   * Delete every topic (FR-31.1, NEWS-328).
+   *
+   * The confirm names the count and says what **survives**, like its neighbour —
+   * "delete all topics" is exactly the phrase that raises the fear it means the
+   * whole app, and the answer is that settings and keys are untouched.
+   *
+   * It also names the stories going with them, which is the part someone might
+   * not have thought through: a topic owns its stories, so this is strictly more
+   * destructive than the button beside it.
+   */
+  void delegate(root, 'click', '[data-action=clear-topics]', () => {
+    void (async () => {
+      const { topics, feedTotal, checking } = appStore.state.value;
+      const running = checking.length;
+      const ok = await confirm(
+        `Delete ${topics.length > 0 ? String(topics.length) : 'all'} topic${topics.length === 1 ? '' : 's'}? ` +
+          `Every story filed under ${topics.length === 1 ? 'it' : 'them'} goes too` +
+          (feedTotal > 0 ? ` — ${String(feedTotal)} of them` : '') +
+          '. ' +
+          (running > 0
+            ? `${running === 1 ? 'The check' : `All ${String(running)} checks`} running now will be stopped. `
+            : '') +
+          'Your settings and API keys are not touched. This cannot be undone.',
+        { confirmLabel: 'Delete topics', danger: true },
+      );
+      if (!ok) return;
+      try {
+        // Before the request, for the same reason the story clear does it: no
+        // window in which a refreshed, empty rail renders with a stale overlay.
+        appStore.actions.clearStoryOverlays();
+        const { deleted, cancelledChecks } = await deleteAllTopics();
+        showToast(
+          `Deleted ${String(deleted)} topic${deleted === 1 ? '' : 's'}` +
+            (cancelledChecks > 0
+              ? `, stopped ${String(cancelledChecks)} check${cancelledChecks === 1 ? '' : 's'}`
+              : ''),
+        );
+      } catch (err) {
+        showToast(`Delete failed: ${err instanceof Error ? err.message : String(err)}`);
       }
     })();
   });

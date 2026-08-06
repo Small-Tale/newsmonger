@@ -956,6 +956,39 @@ export class Store {
   }
 
   /**
+   * Delete every topic, and everything filed under one (FR-31.1, NEWS-328).
+   *
+   * The bulk form of `deleteTopic`, and it takes the same three tables with it —
+   * a topic's stories and its run history are *about* that topic, so leaving
+   * either behind would be orphaned rows nothing can reach (`pruneOrphans` would
+   * delete the stories on the next start anyway).
+   *
+   * **Settings and API keys are untouched.** Deleting your topics is not
+   * resetting the app: the provider you configured, the schedule you chose and
+   * the keys in your keychain are all still yours, and the confirm dialog says
+   * so because "delete all topics" is exactly the phrase that raises the fear it
+   * means more.
+   *
+   * One transaction, so a failure part-way leaves the topics as they were rather
+   * than a half-emptied list nobody can explain. Returns the count for the
+   * report — a bulk action whose outcome you cannot see invites running it twice.
+   */
+  deleteAllTopics(): number {
+    this.db.exec('BEGIN');
+    try {
+      const before = this.db.prepare('SELECT count(*) AS c FROM topics').get() as { c: unknown };
+      this.db.exec('DELETE FROM items');
+      this.db.exec('DELETE FROM runs');
+      this.db.exec('DELETE FROM topics');
+      this.db.exec('COMMIT');
+      return asCount(before.c);
+    } catch (err) {
+      this.db.exec('ROLLBACK');
+      throw err;
+    }
+  }
+
+  /**
    * Delete a topic and everything filed under it.
    *
    * Cascaded by hand rather than by a foreign key — see the note in `sqlite.ts`:

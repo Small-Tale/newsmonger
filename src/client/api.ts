@@ -5,6 +5,7 @@ import {
   BackupPreviewRespSchema,
   BackupRespSchema,
   ClearItemsRespSchema,
+  ClearTopicsRespSchema,
   DiscoverRespSchema,
   ImportStoriesRespSchema,
   ImportTopicsRespSchema,
@@ -464,6 +465,20 @@ export async function clearAllStories(): Promise<{ cleared: number; cancelledChe
   const { cleared, cancelledChecks } = ClearItemsRespSchema.parse(body);
   await refreshState();
   return { cleared, cancelledChecks };
+}
+
+/**
+ * Delete every topic, and with it every story and run (FR-31.1, NEWS-328).
+ *
+ * Refreshes afterwards for the same reason `clearAllStories` does: the rail, the
+ * feed and every count are now wrong, and waiting for the 4-second poll after a
+ * destructive action reads as the action not having worked.
+ */
+export async function deleteAllTopics(): Promise<{ deleted: number; cancelledChecks: number }> {
+  const body = await request('/api/topics/clear', { method: 'POST' });
+  const { deleted, cancelledChecks } = ClearTopicsRespSchema.parse(body);
+  await refreshState();
+  return { deleted, cancelledChecks };
 }
 
 /** Load the preview into the store; a failure leaves the control hidden. */

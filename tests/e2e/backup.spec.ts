@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
-import { closeSettings, expect, openSettingsTab, resetSharedState, seedCheckedTopic, test, topicAction, workerBaseURL } from './fixtures.js';
+import { acceptConfirm, closeSettings, expect, openSettingsTab, resetSharedState, seedCheckedTopic, test, topicAction, workerBaseURL } from './fixtures.js';
 
 // Backup, restore, and clearing stories — Settings → Data's destructive half
 // (NEWS-322 split this out of app.spec.ts).
@@ -78,7 +78,9 @@ test('clear all stories, keeping topics and settings (NEWS-255)', async ({ page 
   // filed under BACKUP is still unfindable.
   const clear = page.locator('[data-action=clear-stories]');
   // The heading immediately above it is its own, not Backup's or Feed's…
-  await expect(page.locator('.clear-row').locator('xpath=preceding-sibling::h3[1]')).toHaveText('Reset');
+  // (`.io-row` since NEWS-328 put `Delete all topics` beside it — the Reset pair
+  // is now the same two-up as the import/export pairs, FR-3.72.)
+  await expect(clear.locator('xpath=ancestor::div[@class="io-row"]/preceding-sibling::h3[1]')).toHaveText('Reset');
   // …and it is the last group on the tab, which is where a destructive action
   // belongs and, more to the point, is not somewhere a reader passes through.
   await expect(page.locator('.dialog h3.eyebrow').last()).toHaveText('Reset');
@@ -103,7 +105,9 @@ test('clear all stories, keeping topics and settings (NEWS-255)', async ({ page 
   await expect(confirmDialog).toContainText('topics, settings and API keys are not touched');
   await page.locator('[data-action=confirm-ok]').click();
 
-  await expect(page.locator('.toast')).toContainText('Cleared', { timeout: 15_000 });
+  // "Deleted", not "Cleared" (NEWS-328): both Reset controls say delete now,
+  // because clearing reads as tidying a view and this removes rows.
+  await expect(page.locator('.toast')).toContainText('Deleted', { timeout: 15_000 });
   await page.locator('.dialog [data-action=close-settings]').click();
   await expect(page.locator('.dialog')).toHaveCount(0);
 
@@ -160,7 +164,9 @@ test('after a clear no topic says "checked N ago", and none starts checking itse
   await openSettingsTab(page, 'Data');
   await page.locator('[data-action=clear-stories]').click();
   await page.locator('[data-action=confirm-ok]').click();
-  await expect(page.locator('.toast')).toContainText('Cleared', { timeout: 15_000 });
+  // "Deleted", not "Cleared" (NEWS-328): both Reset controls say delete now,
+  // because clearing reads as tidying a view and this removes rows.
+  await expect(page.locator('.toast')).toContainText('Deleted', { timeout: 15_000 });
   await page.locator('.dialog [data-action=close-settings]').click();
   await expect(page.locator('.dialog')).toHaveCount(0);
 
@@ -296,5 +302,63 @@ test('the restore button fills the box it sits in (NEWS-332)', async ({ page }) 
 
   // Put the setting back so the next spec on this worker starts clean.
   await page.request.patch('/api/settings', { data: { backupDir: '' } });
+  await closeSettings(page);
+});
+
+test('delete all topics, keeping settings (FR-31.1, NEWS-328)', async ({ page }) => {
+  // The bulk delete beside `Delete all stories`, and strictly the more
+  // destructive of the two: a topic owns its stories, so this takes both.
+  await page.goto('/');
+
+  for (const name of ['Bulk Delete Alpha', 'Bulk Delete Beta']) {
+    await page.fill('.add-topic input', name);
+    await page.press('.add-topic input', 'Enter');
+    await expect(page.locator('.topic', { hasText: name })).toBeVisible();
+  }
+  await expect(page.locator('.item').first()).toBeVisible({ timeout: 20_000 });
+
+  // A setting to watch survive it — the promise the confirm dialog makes.
+  // Closed between tabs, because `openSettingsTab` clicks the gear in the header
+  // and that sits behind the dialog's own backdrop once it is open.
+  await openSettingsTab(page, 'Schedule');
+  await page.selectOption('[data-action=concurrency]', '4');
+  await closeSettings(page);
+  await openSettingsTab(page, 'Data');
+
+  // Counted, not assumed: this file's `beforeAll` seeds a topic of its own, so
+  // "the two I just added" is not what the dialog will say.
+  const topicCount = await page.locator('.topic').count();
+  expect(topicCount).toBeGreaterThanOrEqual(2);
+
+  const button = page.locator('[data-action=clear-topics]');
+  await expect(button).toBeEnabled();
+  await button.click();
+
+  // Named, not "are you sure?" — it says what goes *and* what survives, because
+  // "delete all topics" is the phrase that raises the fear it means everything.
+  const dialog = page.locator('.dialog.confirm');
+  await expect(dialog).toBeVisible();
+  await expect(dialog).toContainText(`Delete ${String(topicCount)} topics`);
+  await expect(dialog).toContainText('Every story filed under them goes too');
+  await expect(dialog, 'must say what survives').toContainText('settings and API keys are not touched');
+
+  await acceptConfirm(page);
+  await expect(page.locator('.toast')).toContainText(`Deleted ${String(topicCount)} topics`);
+  await closeSettings(page);
+
+  await expect(page.locator('.topic')).toHaveCount(0);
+  await expect(page.locator('.item')).toHaveCount(0);
+
+  // The setting is still there.
+  await openSettingsTab(page, 'Schedule');
+  await expect(page.locator('[data-action=concurrency]')).toHaveValue('4');
+  await page.selectOption('[data-action=concurrency]', '3');
+  await closeSettings(page);
+
+  // And with nothing left, both Reset controls say so by being disabled rather
+  // than by failing when pressed — the NEWS-309 rule for a dead end.
+  await openSettingsTab(page, 'Data');
+  await expect(page.locator('[data-action=clear-topics]')).toBeDisabled();
+  await expect(page.locator('[data-action=clear-stories]')).toBeDisabled();
   await closeSettings(page);
 });

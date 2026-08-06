@@ -622,3 +622,57 @@ describe('clear sequences (NEWS-291)', () => {
     expect(after?.lastCheckedAt, 'and it is still due, as the comment promises').toBeNull();
   });
 });
+
+
+describe('deleting every topic (FR-31.1, NEWS-328)', () => {
+  it('takes the topics, their stories and their runs', async () => {
+    const store = new Store(tmpDataDir());
+    const runner = new CheckRunner(store, asResolver(createMockProvider()));
+    const a = store.addTopic('Alpha');
+    store.addTopic('Beta');
+    await runner.checkTopic(a.id);
+    expect(store.listItems().length).toBeGreaterThan(0);
+    expect(store.listRuns(10).length).toBeGreaterThan(0);
+
+    expect(store.deleteAllTopics()).toBe(2);
+    expect(store.listTopics()).toEqual([]);
+    // A topic owns its stories and its run history, so leaving either behind
+    // would be rows nothing can reach — `pruneOrphans` would delete the stories
+    // on the next start anyway, which is a slower way to the same place.
+    expect(store.listItems()).toEqual([]);
+    expect(store.listRuns(10)).toEqual([]);
+  });
+
+  it('leaves settings alone', () => {
+    // "Delete all topics" is exactly the phrase that raises the fear it means
+    // the whole app. It does not: the provider you configured and the schedule
+    // you chose are still yours.
+    const store = new Store(tmpDataDir());
+    store.addTopic('Alpha');
+    store.updateSettings({ provider: 'openai', checkConcurrency: 4 });
+
+    store.deleteAllTopics();
+    const after = store.getSettings();
+    expect(after.provider).toBe('openai');
+    expect(after.checkConcurrency).toBe(4);
+  });
+
+  it('answers zero on an install with no topics rather than failing', () => {
+    expect(new Store(tmpDataDir()).deleteAllTopics()).toBe(0);
+  });
+
+  it('is reported through the route, with the checks it stopped', async () => {
+    const store = new Store(tmpDataDir());
+    const runner = new CheckRunner(store, asResolver(createMockProvider()));
+    const app = createApp({ store, runner });
+    store.addTopic('Alpha');
+    store.addTopic('Beta');
+
+    const res = await app.request('/api/topics/clear', { method: 'POST' });
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { deleted: number; cancelledChecks: number };
+    expect(body.deleted).toBe(2);
+    expect(body.cancelledChecks).toBe(0);
+    expect(store.listTopics()).toEqual([]);
+  });
+});

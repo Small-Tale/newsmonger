@@ -517,7 +517,10 @@ test('import and export sit as equal halves, in matching rows (NEWS-327)', async
     }),
   );
 
-  expect(rows, 'both the Topics and the Stories pair').toHaveLength(2);
+  // Every `.io-row` on the tab, not a fixed count: NEWS-328 gave the Reset pair
+  // the same treatment, and the property being asserted belongs to the class
+  // rather than to the two rows that had it first.
+  expect(rows.length, 'the Topics, Stories and Reset pairs').toBeGreaterThanOrEqual(3);
   const heights: number[] = [];
   for (const row of rows) {
     expect(row.btns, 'an export and an import').toHaveLength(2);
@@ -535,9 +538,11 @@ test('import and export sit as equal halves, in matching rows (NEWS-327)', async
     expect(Math.abs(first.h - second.h), 'export and import must be the same height').toBeLessThanOrEqual(1);
     heights.push(first.h);
   }
-  // And the two rows match each other, not just themselves.
-  expect(Math.abs(heights[0] - heights[1]), 'both rows must share a button height').toBeLessThanOrEqual(1);
-  expect(Math.abs(rows[0].left - rows[1].left), 'and start at the same place').toBeLessThanOrEqual(1);
+  // And the rows match *each other*, not just themselves — which is the half
+  // that was actually wrong: each pair was internally consistent and sized off
+  // its own labels, so no two pairs lined up.
+  for (const h of heights) expect(Math.abs(h - heights[0]), 'every row must share a button height').toBeLessThanOrEqual(1);
+  for (const row of rows) expect(Math.abs(row.left - rows[0].left), 'and start at the same place').toBeLessThanOrEqual(1);
 
   // Topics above Stories: a topic is the thing you own, a story is what it
   // produced. And the group that moves stories in and out is now called what it

@@ -16,7 +16,7 @@ Topic-based news tracker. The user enters topics; on a configurable interval (de
 
 `src/cli.ts` parses flags → constructs `Store` (SQLite), a `ProviderResolver` (resolves the active AI provider per check from settings, or the forced mock under `--ai-test`), and a `CheckRunner` → starts the Hono server (`src/server.ts`, DI via middleware) and the minute-tick scheduler (`src/scheduler.ts`). The client (`src/client/app.tsx`) is a kerf app polling `/api/state` every 4 s. AI providers live behind `NewsProvider` in `src/ai/providers/` (see `docs/6-providers.md`).
 
-**Start every fresh session by reading `docs/ai/code-summary.md` and `docs/ai/requirements-summary.md`.** Requirements docs are numbered `docs/N-topic.md` (1–30).
+**Start every fresh session by reading `docs/ai/code-summary.md` and `docs/ai/requirements-summary.md`.** Requirements docs are numbered `docs/N-topic.md` (1–31).
 
 ## Conventions
 
@@ -99,7 +99,7 @@ Maintain two synthesis docs an AI assistant reads at the start of a fresh sessio
 <!-- hotsheet:begin specifics=requirements-documentation v=1 -->
 ### This project's docs layout
 
-- Requirements docs: numbered `docs/N-topic.md` (currently 1–30), FR-N.M requirement ids, cross-referenced with relative links. New functional area → next number.
+- Requirements docs: numbered `docs/N-topic.md` (currently 1–31), FR-N.M requirement ids, cross-referenced with relative links. New functional area → next number.
 - **An FR id is declared once, ever** (NEWS-302). A new requirement takes the next free `M` in that document — **grep for what is taken rather than reading the last bullet**, since sections are appended out of order and the numbers are not contiguous. `scripts/build-requirements-summary.mjs` fails the run on a collision, naming the id and the doc; it used to tabulate them, which is how six ids came to name two requirements each.
 - Manual test plan: `docs/manual-test-plan.md`.
 - **The two AI summaries are not maintained the same way, and the bullets above are the generic rule, not this project's** (NEWS-310):
