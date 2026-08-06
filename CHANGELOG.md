@@ -14,6 +14,44 @@ fields reject semver prerelease suffixes.
 
 <!-- Nothing released yet. The first `npm run release` inserts its entry below. -->
 
+## [0.2.0-beta.16] - 2026-08-06
+
+## Features
+
+- Story threads: stories in the same topic covering one developing subject are now grouped, so a card can say it's the "4th update" instead of arriving as if nothing came before.
+- Clicking a story card expands it in place to a detail pane showing the "story so far" — every earlier instalment on the subject, dated and attributed. An open pane now follows its thread as new instalments arrive.
+- Appearance setting in Settings → App: Light, Dark, or Match system. The chosen theme is applied server-side, so there's no flash of the wrong palette on load.
+- Export and import topic lists as a shareable, hand-editable JSON file, and import stories back from an existing `export.json`. Topic import is additive and skips duplicates case-insensitively; story import dedups on the same key a check uses.
+- Settings → Data → Recovery lists any database the app set aside as unreadable, shows what each one holds, and can restore it — the section is absent when there is nothing to recover.
+- "Delete all topics" joins "Delete all stories" in the Reset group, both behind a confirmation.
+
+## Bug Fixes
+
+- Fixed a stale schema version being mistaken for a corrupt database, which could quarantine a perfectly good database and start the app empty.
+- Cached story images are now kept for as long as the stories that use them; an empty story list no longer causes the image prune to delete the whole cache. A story whose cached image has gone missing is refetched, and a failed refetch is retried rather than abandoned for the rest of the run.
+- The Atom feed at `/feed.xml` now carries the `atom:author` element RFC 4287 requires, so strict feed readers accept it.
+- The topics rail no longer collapses when the page is scrolled — its height now tracks its real position in the viewport instead of a sticky-shifted one.
+- Clearing one topic's stories no longer leaves flagged-story overlays rendering over rows that no longer exist.
+- A failed first backup after choosing a folder now reports an error instead of being silently dropped.
+- Switching providers across vendors (e.g. ChatGPT → Claude) no longer leaves the other vendor's model selected, which would have failed every subsequent check.
+
+## UX
+
+- The app now says so when a database was set aside as unreadable, instead of silently opening onto an empty topic list.
+- When the server can't start, the desktop shell shows what went wrong — including the reason and the reassurance that your data is untouched — instead of spinning indefinitely.
+- Clearing a topic's stories resets it to its initial state: it reads as never checked on every surface, and its failure streak and cooldown are cleared.
+- Warning amber was darkened to meet WCAG AA contrast on every background it's used on.
+- Settings polish: every group on every tab is now named; each Data control has a single-line hint instead of a paragraph; the backup folder path stacks above its field so it's fully visible; import/export pairs are equal halves of a row; "Back up now" and "Restore" fill their lines; the scrolling panel spans the dialog so its scrollbar and focus rings are no longer clipped.
+- "Delete all stories" moved out of the Backup group into Reset and now uses a destructive style; quiet buttons gained a resting edge so they no longer read as captions.
+- The Source tab's status line now always says something rather than rendering an empty row.
+- Story source attribution is aligned with its headline inside the same link.
+- The restore instructions in Settings → Data now describe a path that actually works.
+
+## Removed
+
+- The Diagnostics section and its effort comparison have been removed.
+- The "Send a test notification" button has been removed.
+
 ## [0.2.0-beta.15] - 2026-08-04
 
 ## Bug Fixes
