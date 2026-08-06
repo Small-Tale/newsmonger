@@ -138,7 +138,7 @@ export const DEMO_TOPICS: DemoTopic[] = [
       {
         title: 'Dogger Bank operator says the cable repair will take eight weeks',
         summary:
-          'The estimate covers survey, vessel mobilization and jointing. Two of those eight weeks are waiting for a repair ship, which is the part of the timeline nobody can compress.',
+          'The estimate covers survey, vessel mobilisation and jointing. Two of those eight weeks are waiting for a repair ship, which is the part of the timeline nobody can compress.',
         sources: [{ title: 'Illustrative Energy Wire', url: 'https://example.org/wind/repair-estimate' }],
       },
       {
@@ -164,7 +164,7 @@ export const DEMO_TOPICS: DemoTopic[] = [
       {
         title: 'Inquiry blames an installation error for the Dogger Bank cable fault',
         summary:
-          'The report finds the cable was laid at a bend radius tighter than its specification allowed, and recommends independent sign-off on burial surveys before energization.',
+          'The report finds the cable was laid at a bend radius tighter than its specification allowed, and recommends independent sign-off on burial surveys before energisation.',
         sources: [{ title: 'Illustrative Policy Desk', url: 'https://example.org/wind/inquiry-findings' }],
       },
     ],

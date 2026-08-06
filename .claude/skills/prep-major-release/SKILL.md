@@ -72,7 +72,7 @@ then revise for:
 - **Structure & links.** Headings scan well, the feature table/bullets are
   current, internal links (`docs/…`, anchors) and the releases/npm links work.
 
-Apply the edits directly to `README.md`. Keep American-English spelling and the
+Apply the edits directly to `README.md`. Keep British-English spelling — this repo's house style, unlike glassbox's (NEWS-364) — and the
 project's no-emoji rule (see `CLAUDE.md`) — applies to README prose too.
 
 ## Step 2 — Review the demo scenarios & screenshot scenes
@@ -185,7 +185,7 @@ worklist. Otherwise pick the obvious option, state it, and proceed.
   project's git conventions in `CLAUDE.md`.
 - **Keep docs in sync** in the same pass — README claims, `docs/28-demo-capture.md`,
   and the AI summaries must all match what you changed.
-- **American-English spelling, no emoji / decorative glyphs** in any prose or UI
+- **British-English spelling** (house style here, not glassbox's American — NEWS-364), **no emoji / decorative glyphs** in any prose or UI
   string you touch.
 - **Typecheck if you touched TS** (`npm run typecheck`; `npm run lint`) so the
   capture script + demo changes still build before handoff.

@@ -16,9 +16,9 @@ Stories arrive grouped by day, each tagged with the topic that found it and carr
 
 **Finding topics worth following.** Browse by section and subject, or go deeper with the keep/skip tuner — one candidate at a time, asking *narrower than this* or *more like this*, and endable at any point.
 
-<img src="assets/stills/thread.png" alt="An expanded story card showing the story so far: every earlier installment on the same subject, dated and attributed, with a way to see the whole run." width="49%">
+<img src="assets/stills/thread.png" alt="An expanded story card showing the story so far: every earlier instalment on the same subject, dated and attributed, with a way to see the whole run." width="49%">
 
-**Following a story, not just a headline.** When several stories turn out to be the same subject unfolding, they collect into a thread: a collapsed card says where it sits ("6th update"), and opening it shows how the subject got here — dated, attributed, and linked to each installment's own source. Grouping is computed locally from the stories already stored, so it costs no AI spend.
+**Following a story, not just a headline.** When several stories turn out to be the same subject unfolding, they collect into a thread: a collapsed card says where it sits ("6th update"), and opening it shows how the subject got here — dated, attributed, and linked to each instalment's own source. Grouping is computed locally from the stories already stored, so it costs no AI spend.
 
 <img src="assets/stills/review.png" alt="Review mode: the stories flagged off-topic, gathered so the topic can be corrected." width="100%">
 

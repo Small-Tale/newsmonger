@@ -98,7 +98,7 @@ Every claim is a verified delta between the base tag and HEAD.
      structural check is fine.
    - Re-read the draft against the script output and your `git show <base>:…` probes: is
      **every** claim a real delta? Cut or re-label anything that describes the baseline.
-   - **American-English spelling** throughout (CLAUDE.md convention).
+   - **British-English spelling** throughout — this repo's house style (`behaviour`, `colour`, `catalogue`, `centre`, `instalment`). It is not written down in CLAUDE.md; it is written down in the 330-odd occurrences across 92 files, some of them identifiers. Glassbox is American; do not carry that rule over here (NEWS-364).
    - Committing is optional and follows the repo's git rules (commit when it's a clean unit;
      no `Co-Authored-By` trailer, no hard-wrapped body lines; never `git push` without
      explicit permission).
