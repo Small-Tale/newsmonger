@@ -614,11 +614,25 @@ kerf 3.x no longer infers dev mode — installing diagnostics is the app's decis
 
   FR-3.44 bounded the rail to `100vh - 48px` so its foot stayed reachable (NEWS-138). That is the room available once the rail has **stuck**; at the top of the page it has not, because the masthead, the filter chips and the banner slot all sit above it. Measured with 18 topics in a 700px window: the privacy link sat **102px below the fold** until you scrolled, which is exactly the state a new reader is in.
 
-  So the height a sticky rail can have depends on where it currently is, and **CSS cannot ask a sticky element that**. `trackRailTop` publishes the rail's `offsetTop` as `--rail-top` and the rule is written against it — `offsetTop` rather than `getBoundingClientRect()` so the value does not move with the scroll position, recomputed on resize and on a `ResizeObserver` for the rows above it, which wrap.
+  So the height a sticky rail can have depends on where it currently is, and **CSS cannot ask a sticky element that**. `trackRailTop` (`src/client/rail.ts`) publishes the rail's distance from the top of the **viewport** as `--rail-top`, and the rule is written against it.
 
-  Sized for the **unstuck** position, which is the binding one. Once stuck the rail ends a little above the fold rather than flush to it; the rail has no background of its own, so that slack is invisible. Preferring the flush look would mean re-measuring on every scroll frame to buy nothing a reader can see.
+  This originally read `offsetTop`, on the reasoning that a document-relative value "does not move with the scroll position" and so needed no scroll handler. That reasoning was wrong, and FR-3.77 is what it cost.
 
   Tested at the top of the page *and* scrolled: only the first was ever broken, and only the second was ever covered.
+
+- **FR-3.77** *(Shipped, NEWS-339)* **The topic list must not collapse when the page is scrolled**, and must not need a reload to come back.
+
+  `offsetTop` is document-relative — but on a `position: sticky` element the browser reports the **sticky-shifted** position, so it grows with the scroll after all. Measured: scrolled 3000px down, the rail's `offsetTop` read **3024** while the rail sat 24px below the top of the window. Publishing that made the bound `calc(100vh - 3024px - 24px)`, which clamps to **0** — the topic list collapsed to nothing with all sixteen of its rows still in the DOM.
+
+  Two things had to coincide, which is why FR-3.73's own scrolled assertion never saw it: the page had to be scrolled *and* something had to re-publish the variable. The 4-second poll does the second whenever a story or topic changes, through the `ResizeObserver`. And because nothing recomputed on scroll, the collapse then **survived scrolling back up** — the rail stayed empty until a reload.
+
+  The fix is `getBoundingClientRect().top`, recomputed on scroll as well as resize, coalesced through `requestAnimationFrame`. The viewport-relative reading is correct in both states with no special case: 24px once stuck, the full flow offset at the top of the page. There is no feedback loop, because this changes the rail's *height* and its top does not depend on that.
+
+  This also drops FR-3.73's "sized for the unstuck position" concession — measuring on scroll was the thing that was being avoided, and it turns out to be required for correctness rather than polish. The rail now sits flush to the fold once stuck.
+
+  Floored at 0: a negative top would *inflate* the bound, and a rail taller than the window is the one outcome this must never produce.
+
+  Covered twice, because the two halves fail differently: `tests/unit/rail-top.test.ts` pins the measurement itself (the whole fix is which of two numbers is read), and `tests/e2e/layout.spec.ts` walks the real sequence — scroll, let a poll land, assert the list still has height, scroll back, assert it recovers.
 
 ### Light, dark, or follow the system (NEWS-334)
 

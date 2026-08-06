@@ -86,6 +86,8 @@ src/
     export-url.ts     exportHref — the export dialog's scope × topic × format URL, null when the choice can't be exported (NEWS-158/160)
     menu-position.ts  placeMenu/menuStyle — clamps a context menu into the viewport so its last item stays reachable (NEWS-149)
     onboarding.ts     onboardingCountText — the Topics step's running count, which names ticked-but-not-created and already-created separately (NEWS-146)
+    rail.ts           railTopPx/trackRailTop — publishes --rail-top from the rail's VIEWPORT top
+                      (getBoundingClientRect, never offsetTop: it is sticky-shifted — NEWS-339)
     topic-sort.ts     sortTopics (NEWS-63) + topicRows — the sidebar's rows, with section headings interleaved in the By-section sort (NEWS-140)
     styles.scss       styling (light/dark via prefers-color-scheme)
 src-tauri/            Tauri v2 shell; one spawn path, dev runs tsx + release runs the sidecar

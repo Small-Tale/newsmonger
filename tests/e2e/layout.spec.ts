@@ -521,3 +521,59 @@ test('the sidebar foot stays on screen with a long topic list (NEWS-325)', async
   }
   await page.setViewportSize({ width: 1280, height: 900 });
 });
+
+test('the topic list survives a poll landing while scrolled (NEWS-339)', async ({ page }) => {
+  // The bug the test above could not see. `--rail-top` was published from the
+  // rail's `offsetTop`, which is document-relative — and on a `position: sticky`
+  // element the browser reports the sticky-*shifted* position. Scrolled 3000px
+  // down it read 3024 while the rail sat 24px below the top of the window, so
+  // `calc(100vh - 3024px - 24px)` clamped to **0** and the topic list collapsed
+  // to nothing with all its rows still in the DOM.
+  //
+  // Two things had to coincide, which is why scrolling alone never caught it:
+  // the page had to be scrolled *and* something had to re-publish the variable.
+  // The 4-second poll does the second every time a story or topic changes.
+  // Nothing recomputed on scroll, so the collapse then survived scrolling back.
+  await page.setViewportSize({ width: 1280, height: 700 });
+  await page.goto('/');
+
+  for (let i = 1; i <= 14; i++) {
+    await page.request.post('/api/topics', { data: { name: `Rail collapse probe ${String(i)}` } });
+  }
+  await page.reload();
+  await expect(page.locator('.topic')).toHaveCount(14, { timeout: 20_000 });
+
+  const listHeight = async (): Promise<number> =>
+    page.evaluate(() => {
+      const list = document.querySelector('.topics');
+      return list instanceof HTMLElement ? Math.round(list.getBoundingClientRect().height) : -1;
+    });
+
+  const before = await listHeight();
+  expect(before, 'the topic list has height to begin with').toBeGreaterThan(0);
+
+  // Scroll, then change state so the poll re-renders and the rail's bound is
+  // recomputed — the exact pairing that collapsed it.
+  await page.evaluate(() => {
+    window.scrollTo(0, 3000);
+  });
+  await page.request.post('/api/topics', { data: { name: 'Rail collapse probe trigger' } });
+  await expect(page.locator('.topic')).toHaveCount(15, { timeout: 20_000 });
+
+  expect(await listHeight(), 'the topic list still has height while scrolled').toBeGreaterThan(0);
+
+  // And it comes back on its own, which the old code could not do — it never
+  // recomputed on scroll, so a collapsed rail stayed collapsed.
+  await page.evaluate(() => {
+    window.scrollTo(0, 0);
+  });
+  await expect
+    .poll(listHeight, { message: 'the topic list recovers on scrolling back up' })
+    .toBeGreaterThanOrEqual(before);
+
+  const listed = (await (await page.request.get('/api/state')).json()) as { topics: { id: string; name: string }[] };
+  for (const topic of listed.topics.filter((t) => t.name.startsWith('Rail collapse probe'))) {
+    await page.request.delete(`/api/topics/${encodeURIComponent(topic.id)}`);
+  }
+  await page.setViewportSize({ width: 1280, height: 900 });
+});
