@@ -15,7 +15,7 @@
 //!   `resources/server/`. See `scripts/build-sidecar.sh`.
 
 use std::process::{Command, Stdio};
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 
 use tauri::{AppHandle, Manager};
 
@@ -87,6 +87,51 @@ async fn install_update(app: AppHandle) -> Result<(), String> {
 
 /// Substring of the readiness line printed by `src/cli.ts`. KEEP IN SYNC.
 const READY_MARKER: &str = "running at ";
+
+/// How many trailing stderr lines to keep for the startup-failure page (NEWS-338).
+///
+/// A window rather than everything: the server can be chatty, and the whole
+/// point is to hand the webview something a person will read. Forty lines
+/// comfortably holds a Node stack trace, which is the shape most failures take.
+const STDERR_TAIL_LINES: usize = 40;
+
+/// Hard cap on the detail string handed to the webview, in bytes.
+const STDERR_TAIL_BYTES: usize = 4000;
+
+/// Build the explanation shown when the server dies before it was ready (NEWS-338).
+///
+/// Split out from the thread that produces it so it can be tested — it is the
+/// part with decisions in it, and none of them need a running Tauri app.
+///
+/// Keeps the **tail** of what was written. The last thing a dying process says
+/// is generally why it died, and for the failure this was written for — a
+/// database that refuses to open ([FR-4.13](../../docs/4-cli-server-storage.md))
+/// — the whole message is the last thing on the stream.
+fn startup_failure_detail(lines: &[String], exit_code: Option<i32>) -> String {
+    let said: Vec<&String> = lines.iter().filter(|l| !l.trim().is_empty()).collect();
+    if said.is_empty() {
+        return match exit_code {
+            Some(code) => format!("It exited with code {code} without reporting a reason."),
+            None => "It exited without reporting a reason.".to_string(),
+        };
+    }
+
+    let joined = said
+        .iter()
+        .map(|l| l.as_str())
+        .collect::<Vec<_>>()
+        .join("\n");
+    if joined.len() <= STDERR_TAIL_BYTES {
+        return joined;
+    }
+    // Trim to a char boundary so the string stays valid UTF-8 — a stack trace
+    // can carry any path the user's filesystem allows.
+    let mut start = joined.len() - STDERR_TAIL_BYTES;
+    while start < joined.len() && !joined.is_char_boundary(start) {
+        start += 1;
+    }
+    format!("…{}", &joined[start..])
+}
 
 pub fn run() {
     tauri::Builder::default()
@@ -243,7 +288,12 @@ fn spawn_server(app: &AppHandle, mut cmd: Command, window: tauri::WebviewWindow)
         // (hard kill, `tauri dev` rebuild restart).
         .env("NEWSMONGER_WATCH_PARENT", "1")
         .stdout(Stdio::piped())
-        .stderr(Stdio::inherit())
+        // Piped, not inherited (NEWS-338). Inheriting sent the server's own
+        // account of why it died straight past us to a terminal a bundled .app
+        // does not have — so the shell had nothing to show and the window sat
+        // on the spinner forever. Every line is still echoed below, so running
+        // from a terminal looks the same as it always did.
+        .stderr(Stdio::piped())
         .spawn()
     {
         Ok(child) => child,
@@ -256,6 +306,26 @@ fn spawn_server(app: &AppHandle, mut cmd: Command, window: tauri::WebviewWindow)
     };
 
     *app.state::<ServerPid>().0.lock().unwrap() = Some(child.id());
+
+    // Drain stderr on its own thread, echoing every line and keeping the tail
+    // for the failure page. Its own thread because a full stderr pipe blocks
+    // the child just as a full stdout one does, and the reader below is busy
+    // waiting for a readiness line that a failing server will never print.
+    let stderr = child.stderr.take().expect("stderr not captured");
+    let captured = Arc::new(Mutex::new(Vec::<String>::new()));
+    let sink = Arc::clone(&captured);
+    let stderr_thread = std::thread::spawn(move || {
+        use std::io::{BufRead, BufReader};
+        for line in BufReader::new(stderr).lines() {
+            let Ok(line) = line else { break };
+            eprintln!("[server] {line}");
+            let mut lines = sink.lock().unwrap();
+            if lines.len() == STDERR_TAIL_LINES {
+                lines.remove(0);
+            }
+            lines.push(line);
+        }
+    });
 
     // Read stdout on a background thread to find the server URL, then keep
     // draining so the pipe doesn't block the child.
@@ -295,17 +365,40 @@ fn spawn_server(app: &AppHandle, mut cmd: Command, window: tauri::WebviewWindow)
                 }
             }
         }
-        if !navigated {
-            let _ = window.eval("window.showExited && window.showExited()");
+        if navigated {
+            let _ = child.wait();
+            return;
         }
-        let _ = child.wait();
+        // Nothing to navigate to, so say why. Join the stderr reader first —
+        // stdout can reach EOF before the last stderr line has been read, and
+        // the reason for the failure is exactly the line that would be missed.
+        let _ = stderr_thread.join();
+        let exit_code = child.wait().ok().and_then(|status| status.code());
+        let detail = startup_failure_detail(&captured.lock().unwrap(), exit_code);
+        eprintln!("[shell] server exited before it was ready");
+        show_exited(&window, &detail);
     });
 }
 
 /// Show a failure message on the loading page (see `loading/index.html`).
+///
+/// For failures *before* the server was spawned — a missing sidecar, a command
+/// that would not start. There is no server output to report, because there was
+/// no server.
 fn show_error(window: &tauri::WebviewWindow, message: &str) {
     let escaped = serde_json::to_string(message).unwrap_or_else(|_| "\"\"".to_string());
     let _ = window.eval(format!("window.showError && window.showError({escaped})"));
+}
+
+/// Show what the server said on its way out (NEWS-338).
+///
+/// For failures *after* the spawn succeeded: the process ran, wrote something,
+/// and died before it was ready. `detail` is that something, verbatim — the
+/// server is the only thing that knows why, and paraphrasing it here would
+/// throw away the sentence the reader needs.
+fn show_exited(window: &tauri::WebviewWindow, detail: &str) {
+    let escaped = serde_json::to_string(detail).unwrap_or_else(|_| "\"\"".to_string());
+    let _ = window.eval(format!("window.showExited && window.showExited({escaped})"));
 }
 
 #[cfg(unix)]
@@ -320,4 +413,79 @@ fn kill_server(pid: u32) {
     let _ = std::process::Command::new("taskkill")
         .args(["/PID", &pid.to_string(), "/T", "/F"])
         .status();
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn lines(raw: &[&str]) -> Vec<String> {
+        raw.iter().map(|s| (*s).to_string()).collect()
+    }
+
+    #[test]
+    fn reports_the_exit_code_when_the_server_said_nothing() {
+        let detail = startup_failure_detail(&[], Some(1));
+        assert_eq!(detail, "It exited with code 1 without reporting a reason.");
+    }
+
+    #[test]
+    fn copes_with_a_server_killed_by_a_signal() {
+        // No exit code at all on unix when a signal did it, and "exited with
+        // code null" is not a sentence to show anybody.
+        let detail = startup_failure_detail(&[], None);
+        assert_eq!(detail, "It exited without reporting a reason.");
+    }
+
+    #[test]
+    fn treats_blank_output_as_no_output() {
+        // A process that writes only newlines has told the reader nothing, and
+        // rendering that as an empty detail box is the dead end this replaces.
+        let detail = startup_failure_detail(&lines(&["", "   ", "\t"]), Some(2));
+        assert_eq!(detail, "It exited with code 2 without reporting a reason.");
+    }
+
+    #[test]
+    fn passes_the_server_message_through_verbatim() {
+        // The sentence this whole ticket exists to deliver. It must arrive
+        // unedited — the reassurance is the load-bearing half of it.
+        let detail = startup_failure_detail(
+            &lines(&[
+                "newsmonger: cannot open the database at /home/x/.newsmonger/newsmonger.db — Error: duplicate column name: thread_id",
+                "Your data has NOT been touched. This is a schema problem in newsmonger itself, not a damaged file; please report it rather than deleting anything.",
+            ]),
+            Some(1),
+        );
+        assert!(detail.contains("cannot open the database"));
+        assert!(detail.contains("Your data has NOT been touched."));
+        assert!(!detail.starts_with('…'));
+    }
+
+    #[test]
+    fn drops_blank_lines_from_between_real_ones() {
+        let detail = startup_failure_detail(&lines(&["first", "", "second"]), Some(1));
+        assert_eq!(detail, "first\nsecond");
+    }
+
+    #[test]
+    fn keeps_the_tail_when_the_output_is_too_long() {
+        // The end is where a dying process says why, so a cap has to cut the
+        // front. Cutting the back would drop the one line worth showing.
+        let mut raw = vec!["x".repeat(STDERR_TAIL_BYTES)];
+        raw.push("the actual error".to_string());
+        let detail = startup_failure_detail(&raw, Some(1));
+        assert!(detail.starts_with('…'));
+        assert!(detail.ends_with("the actual error"));
+        assert!(detail.len() <= STDERR_TAIL_BYTES + 4);
+    }
+
+    #[test]
+    fn truncates_on_a_character_boundary() {
+        // A stack trace carries whatever paths the filesystem allows, so the
+        // cut can land mid-codepoint. Slicing there panics.
+        let raw = vec!["é".repeat(STDERR_TAIL_BYTES)];
+        let detail = startup_failure_detail(&raw, Some(1));
+        assert!(detail.starts_with('…'));
+        assert!(detail.ends_with('é'));
+    }
 }

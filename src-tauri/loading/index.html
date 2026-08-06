@@ -9,7 +9,9 @@
         display: flex;
         align-items: center;
         justify-content: center;
-        height: 100vh;
+        min-height: 100vh;
+        padding: 32px;
+        box-sizing: border-box;
         font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
         background: #f6f5f2;
         color: #1d1f24;
@@ -26,24 +28,73 @@
         animation: spin 0.9s linear infinite;
       }
       @keyframes spin { to { transform: rotate(360deg); } }
+
+      /* The failure state (NEWS-338). Left-aligned and wide, because what goes
+         in it is a paragraph and a stack trace, not a status word — centring a
+         message someone has to *read* makes it harder to. */
+      .box.failed { text-align: left; max-width: 640px; }
+      .box.failed .spinner { display: none; }
+      h1 {
+        margin: 0 0 10px;
+        font-size: 1.15rem;
+        font-weight: 600;
+      }
+      #msg { margin: 0 0 14px; line-height: 1.5; }
+      #detail {
+        margin: 0 0 16px;
+        padding: 12px 14px;
+        max-height: 40vh;
+        overflow: auto;
+        border-radius: 8px;
+        background: rgba(127, 127, 127, 0.12);
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        font-size: 0.82rem;
+        line-height: 1.45;
+        /* Selectable and wrapped: the first useful thing anyone does with an
+           error like this is copy it into a bug report. */
+        white-space: pre-wrap;
+        word-break: break-word;
+        user-select: text;
+      }
+      #detail:empty { display: none; }
+      .reassure {
+        margin: 0;
+        font-size: 0.88rem;
+        line-height: 1.5;
+        opacity: 0.8;
+      }
     </style>
   </head>
   <body>
-    <div class="box">
+    <div class="box" id="box">
       <div class="spinner"></div>
+      <h1 id="title" hidden></h1>
       <p id="msg">Starting the news server…</p>
+      <pre id="detail"></pre>
+      <p class="reassure" id="reassure" hidden>
+        A failed start does not delete your topics or stories. Please don't remove anything to try to fix
+        this — copy the message above and report it.
+      </p>
     </div>
     <script>
-      window.showExited = () => {
-        document.querySelector('.spinner').style.display = 'none';
-        document.getElementById('msg').textContent =
-          'The news server exited before it was ready. Check the terminal output.';
+      // Both failure paths render the same shape; only the lead sentence
+      // differs. `detail` is shown verbatim — the server is the only thing that
+      // knows why it stopped, and paraphrasing it here would throw away the
+      // sentence the reader needs (NEWS-338).
+      const fail = (lead, detail) => {
+        document.getElementById('box').className = 'box failed';
+        document.getElementById('title').hidden = false;
+        document.getElementById('title').textContent = "Newsmonger couldn't start";
+        document.getElementById('msg').textContent = lead;
+        document.getElementById('detail').textContent = detail ?? '';
+        document.getElementById('reassure').hidden = false;
       };
-      window.showError = (detail) => {
-        document.querySelector('.spinner').style.display = 'none';
-        document.getElementById('msg').textContent =
-          'The news server could not be started: ' + detail;
-      };
+
+      // The server ran, then stopped before it was ready.
+      window.showExited = (detail) => fail('The news server stopped before it was ready. It reported:', detail);
+
+      // The server never started — a missing sidecar, a command that wouldn't run.
+      window.showError = (detail) => fail('The news server could not be started:', detail);
     </script>
   </body>
 </html>

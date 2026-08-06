@@ -98,6 +98,18 @@ The E2E suite drives discovery end to end, but only against the deterministic mo
 3. Quit the app — the spawned `node` server process must exit too (`pgrep -f cli.ts`).
 4. **Export a file (NEWS-157)**: Settings → Data → click each export link. Each must save a file via the system browser (`<a download>` is a no-op in the WKWebView — this is why the click is routed through `/api/open-external`). Automated in a browser and with a simulated `window.__TAURI__`, but the real webview's download behaviour is what this confirms.
 5. **Delete a topic (NEWS-39)**: select it and press Delete, or right-click → Delete. The **in-app** confirmation must appear (not a native OS dialog), and confirming must actually remove the topic. This is the case that failed with `window.confirm`, which no-ops in the WKWebView — and which no headless test can catch, since Playwright auto-accepts native dialogs. Also verify **Remove** on a stored API key confirms and removes.
+6. **A server that won't start says why (NEWS-338, [32 — When the App Can't Start](32-startup-failure.md))**. Give the app a database it must refuse to open, then launch it:
+
+   ```sh
+   D=/tmp/nm-broken && mkdir -p $D
+   node --import tsx/esm -e "new (await import('./src/db/store.ts')).Store('$D')" && \
+     node -e "const {DatabaseSync}=require('node:sqlite');const d=new DatabaseSync('$D/newsmonger.db');d.exec('ALTER TABLE topics DROP COLUMN cleared_at');d.exec('PRAGMA user_version = 5');d.exec(\"INSERT INTO topics (id,name,created_at) VALUES ('a','Apple','2026-01-01T00:00:00.000Z'),('b','apple','2026-01-01T00:00:00.000Z')\");d.close()"
+   NEWSMONGER_DATA_DIR=$D npm run tauri:dev
+   ```
+
+   The window must leave the spinner and show **"Newsmonger couldn't start"**, the server's own message including *"Your data has NOT been touched"*, and the line saying a failed start does not delete topics or stories. The text must be selectable.
+
+   This is the one part of the feature no test reaches — the unit tests cover the Rust's formatting and the page's contract with it, but nothing drives a real shell spawning a real failing server. **Run it after touching `spawn_server`, `loading/index.html`, or the store's open path.**
 
 ## Global npm install — ✅ macOS verified 2026-07-31 (NEWS-216)
 

@@ -89,7 +89,9 @@ src/
     topic-sort.ts     sortTopics (NEWS-63) + topicRows — the sidebar's rows, with section headings interleaved in the By-section sort (NEWS-140)
     styles.scss       styling (light/dark via prefers-color-scheme)
 src-tauri/            Tauri v2 shell; one spawn path, dev runs tsx + release runs the sidecar
-  src/lib.rs          server_command() picks the command; spawn_server() watches stdout + navigates
+  src/lib.rs          server_command() picks the command; spawn_server() watches stdout + navigates,
+                      captures stderr, and startup_failure_detail() explains a server that died first
+  loading/index.html  the pre-navigation page: spinner, and the failure state showExited/showError paint
   binaries/           gitignored: newsmonger-node-<triple> (real Node binary, externalBin sidecar)
   server/             gitignored: staged cli.js + client/ + node_modules (bundled as `resources`)
 scripts/
@@ -173,6 +175,7 @@ Data dir: `--data-dir` flag → `NEWSMONGER_DATA_DIR` → `~/.newsmonger`. Also 
 | `--help` / `--version` | `earlyExitFlag` + `HELP_TEXT`/`USAGE_LINE` in `src/config.ts`, answered at the top of `main()` in `cli.ts` before the store opens. Both go to stdout and exit 0 (NEWS-216) |
 | What the published npm package ships / whether a global install works | `package.json` `files`/`bin`/`prepublishOnly` + `tests/unit/npm-package.test.ts`; asset lookup is `clientDir()` in `server.ts` (module-relative, not cwd). Pack-install-run procedure in `docs/manual-test-plan.md` |
 | Tauri shell | `src-tauri/src/lib.rs` (`running at ` marker must match `src/cli.ts`) |
+| A window stuck on the loading spinner / a server that won't start | `spawn_server` pipes **stderr** (never `Stdio::inherit`) and `startup_failure_detail()` in `src-tauri/src/lib.rs`; painted by `window.showExited(detail)` in `src-tauri/loading/index.html`. Shown **verbatim** — the server is the only thing that knows why. Tests: the Rust `mod tests` for the formatting, `tests/unit/startup-failure.test.ts` for the contract between the two halves. See `docs/32-startup-failure.md` (NEWS-338) |
 | Rust-only CI jobs failing on missing bundle paths | `scripts/ensure-sidecar-stub.sh` — `tauri-build` validates `externalBin`/`resources` in its build script, so plain `cargo clippy` fails before compiling. Used by `ci.yml` and `release-candidate.yml`; stubs only, idempotent (NEWS-191/201) |
 | Release bundling / sidecar | `scripts/build-sidecar.sh` + `src-tauri/tauri.conf.json` (`externalBin`, `resources`) |
 | A new runtime dependency | just add it to `package.json` `dependencies` — tsup externalizes it and the sidecar script installs it; no list to update |

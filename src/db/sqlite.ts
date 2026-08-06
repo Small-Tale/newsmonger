@@ -282,9 +282,9 @@ export function openDb(file: string): DatabaseSyncType {
  * Signatures SQLite uses for a file that is not a usable database at all.
  *
  * Deliberately a short list of *file* problems (NEWS-336). Everything else a
- * failed open can throw — `duplicate column name`, `no such column`, `no
- * migration from schema vN` — is our own schema code failing on a database that
- * is perfectly readable, and must never be answered by setting the user's data
+ * failed open can throw — a duplicate column, a missing column, a missing
+ * migration — is our own schema code failing on a database that is perfectly
+ * readable, and must never be answered by setting the user's data
  * aside. Matching on the narrow list means an error we have not seen before is
  * treated as *not* corruption, which is the direction that keeps data.
  */
