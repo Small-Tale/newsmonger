@@ -78,6 +78,7 @@
     "eslint-plugin-simple-import-sort": "^12.1.1",
     "eslint-plugin-tsdoc": "^0.5.2",
     "gitgist": "^1.2.0",
+    "monocart-coverage-reports": "2.12.12",
     "sass": "^1.97.3",
     "tsup": "^8.5.1",
     "tsx": "^4.22.4",

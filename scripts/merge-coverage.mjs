@@ -41,6 +41,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import MCR from 'monocart-coverage-reports';
+
 import { npxSpawn } from './npm-command.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -67,6 +69,59 @@ function c8Report(tempDir, reportDir) {
     ],
     { stdio: ['ignore', 'inherit', 'inherit'], shell: npx.shell },
   );
+  const lcov = path.join(reportDir, 'lcov.info');
+  return fs.existsSync(lcov) ? lcov : null;
+}
+
+/**
+ * Convert the browser's V8 dumps, which c8 cannot read usefully (NEWS-359).
+ *
+ * The client ships as one source-mapped `--format=iife` bundle, and c8 answers
+ * that shape by marking **every line of every source as covered** — 41 files,
+ * 11,513 lines, zero unhit, from a single page load. Measured, and not fixable
+ * from our side: trimming the enclosing whole-bundle ranges changed nothing,
+ * because c8 is not doing range-based remapping here at all, it is attributing
+ * whole files. NEWS-357 had to exclude the whole source to stop it reporting
+ * every client file as 100%.
+ *
+ * `monocart-coverage-reports` handles exactly this case — Playwright's V8 output
+ * against a source-mapped bundle — and produces real per-file numbers from the
+ * same dumps: 89.5% overall, with `tauri.ts` at 57% (desktop-only paths) and
+ * `attribution.ts` at 24%. The data was always good; only the converter was
+ * losing it.
+ *
+ * **The bundle source is attached here rather than in the dump.** `fixtures.ts`
+ * writes `source: undefined` deliberately — there are 234 dumps per run and the
+ * bundle is ~950 KB, so carrying it in each would be a gigabyte of duplicated
+ * text. One read at merge time gives the converter what it needs for nothing.
+ */
+async function browserReport(tempDir, reportDir) {
+  if (!fs.existsSync(tempDir) || fs.readdirSync(tempDir).length === 0) {
+    console.warn(`merge-coverage: no V8 coverage in ${tempDir} — skipping`);
+    return null;
+  }
+  const bundle = 'dist/client/app.global.js';
+  if (!fs.existsSync(bundle)) {
+    console.warn(`merge-coverage: ${bundle} is missing — cannot map browser coverage back to source`);
+    return null;
+  }
+  const source = fs.readFileSync(bundle, 'utf8');
+  const mcr = MCR({
+    name: 'e2e-browser',
+    outputDir: reportDir,
+    reports: [['lcovonly']],
+    logging: 'error',
+    // Our own source only. The bundle also carries kerfjs and signals-core,
+    // which are dependencies rather than code this project is answerable for.
+    sourceFilter: (p) => /(^|\/)src\//.test(p) && !p.includes('node_modules'),
+  });
+  await mcr.cleanCache();
+  for (const name of fs.readdirSync(tempDir)) {
+    if (!name.endsWith('.json')) continue;
+    const dump = JSON.parse(fs.readFileSync(path.join(tempDir, name), 'utf8'));
+    await mcr.add(dump.result.map((entry) => ({ ...entry, source })));
+  }
+  await mcr.generate();
   const lcov = path.join(reportDir, 'lcov.info');
   return fs.existsSync(lcov) ? lcov : null;
 }
@@ -169,7 +224,7 @@ export function coverageOf(lines) {
 const sources = [
   { name: 'unit', lcov: 'coverage/unit/lcov.info' },
   { name: 'e2e-server', lcov: c8Report('.coverage-tmp/server', 'coverage/e2e-server') },
-  { name: 'e2e-browser', lcov: c8Report('.coverage-tmp/browser', 'coverage/e2e-browser') },
+  { name: 'e2e-browser', lcov: await browserReport('.coverage-tmp/browser', 'coverage/e2e-browser') },
 ];
 
 const loaded = [];
@@ -247,7 +302,7 @@ if (excluded.length > 0) {
   // untested" — when it is heavily exercised by E2E and merely unmeasured.
   // Saying which is which is the whole point of the NEWS-357 fix.
   console.log(
-    `\n  NOTE: ${excluded.join(', ')} excluded, so any file covered only from the browser reads 0%.` +
-      `\n  Client code is exercised by the E2E suite; it is not currently *measured*. See NEWS-359.`,
+    `\n  NOTE: ${excluded.join(', ')} excluded as unmeasured, so any file covered only from there reads 0%.` +
+      `\n  Those files are still exercised by the suite — this is a measurement gap, not a testing one.`,
   );
 }

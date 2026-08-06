@@ -104,7 +104,9 @@ scripts/
   build-requirements-summary.mjs
                       regenerates requirements-summary.md's status block from the FR docs' markers; --check is the gate (NEWS-296)
   merge-coverage.mjs  merges unit + E2E coverage. **The unit run is the basis** — it alone remaps through source maps;
-                      c8's LF is the file's whole line count (NEWS-357). Refuses a source with no unhit lines at all
+                      c8's LF is the file's whole line count (NEWS-357). Refuses a source with no unhit lines at all.
+                      The browser leg goes through monocart, not c8: c8 cannot read a source-mapped iife bundle and
+                      marked every client line covered (NEWS-359)
   npm-command.mjs     npmSpawn/npxSpawn — Windows needs the `.cmd` name AND `shell: true`, together (NEWS-348/354/356)
 .github/              CI: gate job (test:all) + rust job (fmt + clippy, BOTH profiles); dependabot
 tests/
