@@ -628,11 +628,15 @@ function settingsPanelJsx(s: AppState): SafeHtml {
     case 'data':
       return (
         <div>
-        {/* Two groups, not one (NEWS-307). Retention and export shared the tab's
-            anonymous opening cluster, and naming it is what showed they are
-            unrelated: one decides what the app throws away, the other takes a
-            copy out. */}
-        <h3 class="eyebrow">Stories</h3>
+        {/* Three groups, and the names had to change to keep them honest
+            (NEWS-327). NEWS-307 split retention out of export and called it
+            `Stories` — right then, wrong once *both* halves of the tab grew an
+            import: the group that moves stories in and out is the one a reader
+            looks for under "Stories", and retention answers a different question
+            entirely. So retention becomes `Retention`, which is what it is, and
+            `Export` becomes `Stories`, which is what it holds now that it
+            imports too. */}
+        <h3 class="eyebrow">Retention</h3>
         <label class="field">
           <span>Keep stories for</span>
           <select data-action="retention">
@@ -651,41 +655,17 @@ function settingsPanelJsx(s: AppState): SafeHtml {
             lives in docs/4-cli-server-storage.md and docs/27-data-location.md,
             which is where it was already written down. */}
         <p class="field-hint">Bookmarked and flagged stories are kept whatever you choose here.</p>
-        <h3 class="eyebrow">Export</h3>
-        {/* One button, one dialog (NEWS-158). Three fixed buttons covered three
-            of the four scope × format combinations — "Saved only (.json)" simply
-            had no way to be asked for — and adding the fourth would have made a
-            row of four buttons naming a two-part choice. */}
-        <div class="export-row">
-          {/* `download`, not `share` (NEWS-161): this writes a file to disk, it
-              does not hand anything to another person or app — the share graph
-              named the wrong action. `primary` because it is the only action in
-              the Data tab and was reading as an afterthought. */}
-          <button class="btn primary" type="button" data-action="open-export">
-            {icon('download', 15)} Export stories…
-          </button>
-          {/* Beside the button whose output it reads (FR-30.15, NEWS-319) — an
-              export nothing could read was the whole complaint, and putting the
-              two anywhere but together would leave that half-answered. */}
-          <label class="btn import-topics">
-            {icon('upload', 15)} Import stories…
-            <input type="file" accept="application/json,.json" data-action="import-stories" />
-          </label>
-        </div>
-        <p class="field-hint">Markdown to paste into notes, JSON as the escape hatch.</p>
-        {/* Its own group, not a scope inside the export dialog (FR-30.15,
-            NEWS-317). That dialog asks two questions — which stories, in what
-            format — and a topic list answers neither: it is not a selection of
-            stories, and it renders as neither Markdown nor Atom. Folding it in
-            would have meant a third axis on a control that already has two.
+        {/* Topics **above** stories (NEWS-327). A topic is the thing you own
+            here and a story is what a topic produced, so the list you would hand
+            to someone else comes first.
 
-            A plain link rather than a button: this is a `GET` that returns a
-            file, so the browser's own download is the whole mechanism, and an
-            anchor gets right-click → Save As for free. `data-external` so the
-            desktop shell hands it to the system browser like every other
+            The export is a plain link rather than a button: it is a `GET` that
+            returns a file, so the browser's own download is the whole mechanism
+            and an anchor gets right-click → Save As for free. `data-external` so
+            the desktop shell hands it to the system browser like every other
             outbound link (FR-3.8). */}
         <h3 class="eyebrow">Topics</h3>
-        <div class="topics-row">
+        <div class="io-row">
           <a class="btn" href="/api/export-topics.json" download data-external="1">
             {icon('download', 15)} Export topics…
           </a>
@@ -697,7 +677,7 @@ function settingsPanelJsx(s: AppState): SafeHtml {
               No confirmation anywhere near it (FR-30.16). This adds, skips and
               reports — it cannot destroy anything — and putting a safe action
               behind the ceremony the Reset group uses would dilute the ceremony. */}
-          <label class="btn import-topics">
+          <label class="btn file-btn">
             {icon('upload', 15)} Import topics…
             <input type="file" accept="application/json,.json" data-action="import-topics" />
           </label>
@@ -706,9 +686,30 @@ function settingsPanelJsx(s: AppState): SafeHtml {
             raises rather than by describing the button (FR-3.69). "No stories,
             no keys" is FR-30.4: the file looks like a config file and someone
             will assume otherwise. Two sentences here pushed the Data tab past
-            NEWS-306's prose-density ceiling — the tab has five groups to
+            NEWS-306's prose-density ceiling — the tab has six groups to
             Schedule's two, so each one's hint has to be genuinely one line. */}
         <p class="field-hint">Names, guidance and categories — no stories, no keys.</p>
+        {/* One button, one dialog (NEWS-158). Three fixed buttons covered three
+            of the four scope × format combinations — "Saved only (.json)" simply
+            had no way to be asked for — and adding the fourth would have made a
+            row of four buttons naming a two-part choice. */}
+        <h3 class="eyebrow">Stories</h3>
+        <div class="io-row">
+          {/* `download`, not `share` (NEWS-161): this writes a file to disk, it
+              does not hand anything to another person or app — the share graph
+              named the wrong action. */}
+          <button class="btn primary" type="button" data-action="open-export">
+            {icon('download', 15)} Export stories…
+          </button>
+          {/* Beside the button whose output it reads (FR-30.15, NEWS-319) — an
+              export nothing could read was the whole complaint, and putting the
+              two anywhere but together would leave that half-answered. */}
+          <label class="btn file-btn">
+            {icon('upload', 15)} Import stories…
+            <input type="file" accept="application/json,.json" data-action="import-stories" />
+          </label>
+        </div>
+        <p class="field-hint">Markdown to paste into notes, JSON as the escape hatch.</p>
         {/* Backups (NEWS-192, FR-27.6). The path is typed rather than picked:
             a browser cannot hand a Node server a real filesystem path, and the
             desktop shell has no dialog plugin yet — see docs/27-data-location.md. */}
@@ -724,8 +725,9 @@ function settingsPanelJsx(s: AppState): SafeHtml {
             autocorrect="off"
           />
         </label>
-        {/* Its own class, not `export-row`: two rows with one class in the same
-            tab makes every selector that names it ambiguous. */}
+        {/* Its own class, not `io-row`: that one is the import/export pair, and
+            this is a single button with different spacing needs. Two rows under
+            one class also makes every selector naming it ambiguous. */}
         <div class="backup-row">
           <button class="btn" type="button" data-action="backup-now" disabled={s.settings.backupDir === ''}>
             {icon('database', 15)} Back up now

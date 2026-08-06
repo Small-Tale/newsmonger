@@ -84,7 +84,7 @@ So the gap is real and specific: **there is no additive way in.** Restore replac
 
   Placed **after** `Export` rather than before it, which is where this doc first put it: "Export stories…" and "Export topics…" are the same verb on two different nouns, and a reader looking for one will look at the other. `Stories` (retention) is a different question and does not want to sit between them.
 
-  A plain `<a download>`, not a button — the route is a `GET` returning a file, so the browser's own download is the whole mechanism and an anchor gets right-click → Save As for free. `data-external="1"` so the desktop shell hands it to the system browser like every other outbound link (FR-3.8). Its own `.topics-row` class rather than a second `.export-row`: reusing that one made every `.export-row` locator in the E2E suite ambiguous, so "add a button" broke an assertion about a different feature.
+  A plain `<a download>`, not a button — the route is a `GET` returning a file, so the browser's own download is the whole mechanism and an anchor gets right-click → Save As for free. `data-external="1"` so the desktop shell hands it to the system browser like every other outbound link (FR-3.8). Both pairs share one `.io-row` class (NEWS-327). They were `.export-row` and `.topics-row` — separate classes for the same control twice, which is what let them drift into two different button heights with no gap between them.
 
 - **FR-30.16** *(Shipped, NEWS-318)* Import is **not** in the danger zone and takes no confirm dialog. It cannot destroy anything: it adds, skips and reports. The `Reset` group ([FR-27.11](27-data-location.md)) is for actions with no way back, and putting a safe action there would dilute it.
 

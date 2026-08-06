@@ -20,7 +20,7 @@ test.beforeAll(async () => {
 test('the feed and exports are served over HTTP (NEWS-85)', async ({ page, request }) => {
   await page.goto('/');
   await openSettingsTab(page, 'Data');
-  await expect(page.locator('.export-row')).toBeVisible();
+  await expect(page.locator('.io-row').first()).toBeVisible();
   // Real hrefs, not blob URLs built in JS. That was originally justified here as
   // "so they work in the Tauri webview too" — which turned out to be false, and
   // is NEWS-157: `<a download>` is a no-op in the WKWebView. The href is still
@@ -59,7 +59,9 @@ test('the export button is filled, and its icon says download (NEWS-161)', async
   // `.btn.primary`, not `.btn`: the row gained an *Import stories…* control
   // beside it (NEWS-319), and this test is about the export button specifically
   // — its fill and its glyph. Naming the variant says which one it means.
-  const button = page.locator('.export-row .btn.primary');
+  // One `.io-row` class for both pairs since NEWS-327, so the button is named
+  // by its variant rather than by its row.
+  const button = page.locator('.io-row .btn.primary');
   await expect(button).toBeVisible();
 
   const m = await button.evaluate((el) => {

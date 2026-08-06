@@ -526,3 +526,57 @@ test('the settings scrollbar rides the dialog edge, and a focus ring is not clip
 
   await closeSettings(page);
 });
+
+test('import and export sit as equal halves, in matching rows (NEWS-327)', async ({ page }) => {
+  // The Data tab grew an import beside each export and they drifted: different
+  // button heights, no gap at all, and widths sized off their own labels so the
+  // two pairs did not line up with each other. They are the same control twice
+  // and now share one class, which is the thing this pins.
+  await page.goto('/');
+  await openSettingsTab(page, 'Data');
+
+  const rows = await page.evaluate(() =>
+    [...document.querySelectorAll('.io-row')].map((row) => {
+      const r = row.getBoundingClientRect();
+      const btns = [...row.querySelectorAll('.btn')].map((b) => {
+        const x = b.getBoundingClientRect();
+        return { w: x.width, h: x.height, left: x.left, right: x.right };
+      });
+      return { width: r.width, left: r.left, right: r.right, btns };
+    }),
+  );
+
+  expect(rows, 'both the Topics and the Stories pair').toHaveLength(2);
+  const heights: number[] = [];
+  for (const row of rows) {
+    expect(row.btns, 'an export and an import').toHaveLength(2);
+    const [first, second] = row.btns;
+
+    // Equal halves. Sized off their labels they are not, and two ragged rows
+    // read as two unrelated pairs rather than as the same control twice.
+    expect(Math.abs(first.w - second.w), 'the two buttons must be the same width').toBeLessThanOrEqual(1);
+    // Together they fill the row, less exactly one gap.
+    const gap = second.left - first.right;
+    expect(gap, 'a visible gap, not two buttons touching').toBeGreaterThanOrEqual(6);
+    expect(first.w + second.w + gap, 'the pair should fill the row').toBeCloseTo(row.width, 0);
+    // A `<button>` and a `<label>` only match if `.btn` states its line-height —
+    // the UA gives `<button>` `normal` and lets the others inherit the body's.
+    expect(Math.abs(first.h - second.h), 'export and import must be the same height').toBeLessThanOrEqual(1);
+    heights.push(first.h);
+  }
+  // And the two rows match each other, not just themselves.
+  expect(Math.abs(heights[0] - heights[1]), 'both rows must share a button height').toBeLessThanOrEqual(1);
+  expect(Math.abs(rows[0].left - rows[1].left), 'and start at the same place').toBeLessThanOrEqual(1);
+
+  // Topics above Stories: a topic is the thing you own, a story is what it
+  // produced. And the group that moves stories in and out is now called what it
+  // holds, rather than "Export" while carrying an import too.
+  const headings = await page
+    .locator('#settings-panel h3.eyebrow')
+    .allTextContents()
+    .then((all) => all.map((h) => h.trim()));
+  expect(headings.slice(0, 3)).toEqual(['Retention', 'Topics', 'Stories']);
+  expect(headings, 'nothing may still be called Export').not.toContain('Export');
+
+  await closeSettings(page);
+});

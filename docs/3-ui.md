@@ -417,7 +417,7 @@ Both are measured in `tests/e2e/layout.spec.ts` rather than eyeballed, and both 
 
   Three tabs used to open with an anonymous cluster of controls and only *start* labelling at the second group — Data went unnamed → `BACKUP` → `FEED`, Source unnamed → `API KEYS`, App unnamed → the Diagnostics disclosure. That says "the first group is not a group" about a group, and it costs the reader the one landmark they most need: the controls at the top of a tab are the ones most people came for, and they were the only region with no name to scan back to. Schedule had no eyebrows at all, which made it internally consistent and externally the odd one out.
 
-  The groups are now: Schedule → **Cadence** / **Concurrency**; Source → **Provider** / **API keys**; Data → **Stories** / **Export** / **Backup** / **Feed** / **Reset** (FR-27.11); App → **Notifications** / **Setup** / **Updates** (desktop only) / Diagnostics.
+  The groups are now: Schedule → **Cadence** / **Concurrency**; Source → **Provider** / **API keys**; Data → **Retention** / **Topics** / **Stories** / **Backup** / **Feed** / **Reset** (FR-27.11); App → **Notifications** / **Setup** / **Updates** (desktop only) / Diagnostics. (Data's first three were renamed and reordered in NEWS-327 — see FR-3.72.)
 
   Naming them settled two things that had been hiding inside the anonymous clusters. Data's opening group was **two** groups — how long stories are kept and how to take a copy out are unrelated questions. So was Schedule's *Check at once*: how often to check and how many to run at a time are different decisions, and only one of them is a cadence.
 
@@ -589,3 +589,15 @@ kerf 3.x no longer infers dev mode — installing diagnostics is the app's decis
   The guard is verified non-vacuous — a spec whose body passes but which injects an uncaught error does fail.
 
 **Why `invariants` is the valuable one:** it audits kerf's list bookkeeping against the live DOM after every render and fails *at the render that broke it*, rather than leaving a wrong picture to be found several interactions later. That is precisely the shape KF-377 had. The full 76-test suite passes with it active, which is also independent corroboration that the kerf 3 upgrade is clean.
+
+### Import and export are one control, twice (NEWS-327)
+
+- **FR-3.72** *(Shipped, NEWS-327)* **The Topics and Stories groups hold the same pair of controls, and are built from one class.** Each is an export and an import, side by side, `flex: 1 1 0` so they take equal halves of the row whatever their labels say, with a 10px gap.
+
+  They were two classes — `.export-row` and `.topics-row` — for the same control twice, and they drifted exactly as duplicated markup does: the buttons touched with no gap, the two rows sized themselves off their own label widths so they did not line up with each other, and an *Import* label stood several pixels taller than the *Export* button beside it. That last one is worth naming because it is not obvious: `.btn` is worn by `<button>`, `<a>` and `<label>`, and only `<button>` gets `line-height: normal` from the UA stylesheet while the others inherit the body's 1.55. `.btn` now states its own.
+
+  **Two renames came with it, and one of them was forced.** The group holding the story export was called `Export` while it had gained an import — so it is now `Stories`, named for what it holds. That collided with the retention group, which NEWS-307 had called `Stories`; retention is now `Retention`, which is what it actually is. Splitting those two apart was right (they answer different questions) and the old names simply stopped distinguishing them once both halves of the tab could import.
+
+  **Topics above Stories**: a topic is the thing you own here, a story is what a topic produced, so the list you would hand to someone else comes first.
+
+  Pinned as geometry in `settings-layout.spec.ts` — equal widths, a real gap, the pair filling the row, matching heights *within* and *between* the two rows, and the heading order. Every one of those was wrong in a way no selector could describe.

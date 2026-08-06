@@ -665,6 +665,12 @@ h2.eyebrow {
   padding: 7px 14px;
   font-size: 13px;
   font-weight: 500;
+  // **Stated, not inherited** (NEWS-327). `.btn` is worn by `<button>`, `<a>`
+  // and `<label>`, and only the first gets `line-height: normal` from the UA
+  // stylesheet — the other two inherit the body's 1.55. So an *Import* label sat
+  // several pixels taller than the *Export* button next to it, which is exactly
+  // the kind of difference that reads as sloppiness without naming its cause.
+  line-height: 1.35;
 
   &:hover:not(:disabled) {
     border-color: var(--pine);
@@ -2268,12 +2274,29 @@ h2.eyebrow {
 
 // Same layout, two rows: the export button and the backup button (NEWS-192).
 // Separate classes because a selector naming one must not also match the other.
-.export-row,
-// The shareable topic list (NEWS-317). Its own class rather than a second
-// `.export-row`: the two rows look identical and sit two groups apart, and
-// reusing the class made every `.export-row` locator in the suite ambiguous —
-// which is how "add a button" broke an assertion about a different feature.
-.topics-row,
+// A pair of import/export controls, side by side (NEWS-327).
+//
+// One class for both the Topics and the Stories rows: they are the same control
+// twice, and giving them separate classes — as NEWS-317 did — is what let them
+// drift apart into two different button heights and no gap at all.
+//
+// **Equal halves, not intrinsic widths.** `flex: 1 1 0` with a `min-width: 0`
+// makes each take half the row whatever its label says, so "Export topics…" and
+// "Import topics…" line up with "Export stories…" and "Import stories…" one
+// group below. Sized off the labels they would not, and the eye reads two
+// ragged rows as two unrelated pairs.
+.io-row {
+  display: flex;
+  gap: 10px;
+
+  .btn {
+    flex: 1 1 0;
+    min-width: 0;
+    justify-content: center;
+  }
+}
+
+.io-row,
 // Clear all stories (NEWS-255). Plain, not boxed like `.restore-row`: it is
 // destructive but far less so — topics, settings and keys all survive — and
 // making every dangerous-ish control shout the same way teaches people to stop
@@ -2378,11 +2401,14 @@ h2.eyebrow {
 
 // A `<label>` styled as a button, wrapping the file input it opens (NEWS-318).
 //
+// Named for what it is rather than for the first thing that used it (NEWS-327):
+// it was `.import-topics`, and then story import wanted the same treatment.
+//
 // The input is hidden rather than absent: a file picker can only be opened by a
 // real user gesture on a real `<input type=file>`, and a label *is* that gesture.
 // `display: none` would take it out of the accessibility tree along with the
 // keyboard path to it, so it is clipped instead — present, focusable, invisible.
-.btn.import-topics {
+.btn.file-btn {
   position: relative;
   cursor: pointer;
 
