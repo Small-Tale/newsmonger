@@ -78,7 +78,7 @@ Unit tests inject usage; the mapping from a *real* `message.usage` block is manu
 
 The E2E suite drives discovery end to end, but only against the deterministic mock: it proves the plumbing, the exclusions, the cache, the tuner's state machine and the round bound. What it cannot judge is whether the model's *answers* are any good, and that is most of the feature's value. See [24 — Topic Discovery](24-topic-discovery.md).
 
-1. `npm run dev` with a real provider configured. Open the compass button beside the add-topic field.
+1. `npm run dev` with a real provider configured. Open the grid button beside the add-topic field.
 2. **The describe door** — type something real and mixed ("i cycle and work in biotech"). Expect suggestions that follow from *both* interests rather than blending them, grouped under sections that make sense.
 3. **Surprise me** — submit an empty box. Expect a genuine spread across different areas of life, not several variations on one theme. This is the instruction most likely to be ignored by a model reaching for its defaults.
 4. **The mix (FR-24.10)** — confirm both `Ongoing story` and `Evergreen` badges appear, and that they are *right*: an ongoing label on a standing subject like "Formula 1" is the failure worth catching, since it promises news that will keep coming and then goes quiet.

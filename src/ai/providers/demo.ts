@@ -164,7 +164,7 @@ export function createDemoProvider(): NewsProvider {
     isAvailable: () => Promise.resolve(true),
 
     suggestTopics(request: SuggestRequest): Promise<SuggestResult> {
-      // Discovery offers the demo topics not already followed, so the compass
+      // Discovery offers the demo topics not already followed, so the browse
       // dialog has something realistic in it.
       const exclude = new Set(request.exclude.map((n) => n.toLowerCase()));
       return Promise.resolve({

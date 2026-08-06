@@ -645,7 +645,7 @@ function appJsx(): SafeHtml {
             aria-label="Discover topics"
             title="Discover topics"
           >
-            {icon('compass')}
+            {icon('grid')}
           </button>
         </form>
         {/* Privacy sits at the foot of the rail rather than the foot of the page

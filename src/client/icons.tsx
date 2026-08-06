@@ -44,7 +44,7 @@ export type IconName =
   | 'bell'
   | 'database'
   | 'bot'
-  | 'compass'
+  | 'grid'
   | 'funnel'
   | 'blend'
   | 'pencil'
@@ -72,11 +72,12 @@ function paths(name: IconName): SafeHtml {
           <circle cx="15" cy="15" r="7" />
         </g>
       );
-    case 'compass':
+    case 'grid': // lucide grid-2x2 — browsing a set of topics, not navigating (NEWS-362)
       return (
         <g>
-          <circle cx="12" cy="12" r="10" />
-          <path d="m16.24 7.76-1.804 5.411a2 2 0 0 1-1.265 1.265L7.76 16.24l1.804-5.411a2 2 0 0 1 1.265-1.265z" />
+          <rect width="18" height="18" x="3" y="3" rx="2" />
+          <path d="M3 12h18" />
+          <path d="M12 3v18" />
         </g>
       );
     case 'shield':

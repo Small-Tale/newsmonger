@@ -201,7 +201,7 @@ function onboardingSourceJsx(s: AppState): SafeHtml {
  * second batch. Two implementations of one idea, and the reduced one was the copy
  * a new user met first. So this is now a door to the real thing (NEWS-146), and
  * it opens with `data-action=open-discover` — the *same* attribute the sidebar's
- * compass uses, so there is still exactly one delegate for "open discovery".
+ * grid button uses, so there is still exactly one delegate for "open discovery".
  */
 function onboardingSuggestJsx(s: AppState): SafeHtml {
   // Onboarding runs before a provider is necessarily configured — Source comes
@@ -224,7 +224,7 @@ function onboardingSuggestJsx(s: AppState): SafeHtml {
   return (
     <div>
       <button class="btn" type="button" data-action="open-discover">
-        {icon('compass')} Discover topics
+        {icon('grid')} Discover topics
       </button>
       <p class="suggest-note">
         Describe what you’re into, or browse by section. Anything you add there is created straight away.

@@ -145,7 +145,9 @@ Four shapes were wireframed before the one above was chosen. Recorded because th
 
 ## The dialog (NEWS-126, shipped)
 
-- **FR-24.25** *(Shipped)* Both doors live in one dialog, opened from a compass button beside the add-topic field (FR-24.17). The box and the section grid are visible together — neither is presented as the primary route.
+- **FR-24.25** *(Shipped)* Both doors live in one dialog, opened from a grid button beside the add-topic field (FR-24.17).
+
+  **The button was a compass until NEWS-362**, and the grid is the more honest picture: a compass says *navigate somewhere*, which is what a map does, and this control opens a set of topics to look through. It is lucide's `grid-2x2`, and it matches what is behind it — the section grid the dialog actually shows. The box and the section grid are visible together — neither is presented as the primary route.
 
 - **FR-24.26** *(Shipped)* Adding a suggestion sends the name, guidance and classification in a **single** `POST /api/topics`. Creating a topic fires its first check immediately (FR-1.12), so a follow-up PATCH would land *after* that check had already run unsteered — which is exactly what FR-24.12's guidance exists to prevent. `categorySource` stays `auto`: the classification came from the model, so a manual change must still win (FR-22.7).
 
