@@ -14,6 +14,12 @@ fields reject semver prerelease suffixes.
 
 <!-- Nothing released yet. The first `npm run release` inserts its entry below. -->
 
+## [0.2.0-beta.17] - 2026-08-06
+
+## Other Changes
+
+- Spawn npm by a name Windows can resolve (NEWS-348) (`6f1bc37`)
+
 ## [0.2.0-beta.16] - 2026-08-06
 
 ## Features
