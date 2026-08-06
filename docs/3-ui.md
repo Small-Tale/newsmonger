@@ -183,6 +183,14 @@ The settings dialog is the only one whose content can exceed the viewport. It al
 
 **The finding outlived the tab it named**, which is why the test asserts geometry rather than a tab. The review reported this against `DIAGNOSTICS` on **App**; measured afterwards, App ends at ~464px in a 900px window — NEWS-306 thinned the prose and NEWS-307 reorganised it — while **Data measures ~982px**. The symptom migrates between tabs as content changes; the property (the dialog fits, the panel takes the overflow, the tabs do not move) does not.
 
+- **FR-3.71** *(Shipped, NEWS-326)* **The scrolling panel spans the dialog's full width, and carries the horizontal padding itself.** It used to sit inside `.dialog`'s 24px padding and add 4px of its own, which put two defects on screen at once — and they are the same defect from two sides.
+
+  Its scrollbar floated ~28px in from the dialog's edge, reading as a scrollbar for some inner box rather than for the dialog. And because a scroll container **clips on both axes** and the panel had *no* left padding, a focused field's ring — drawn outside its own box by `outline-offset` — was sliced off flush against the container. Measured before the fix: the ring's left edge fell **3px outside** the clip box, exactly its own extent.
+
+  Negative margins pull the scroll container out to the dialog's edges and the same 24px moves onto the panel, so every control stays where it was. `4px` of padding would not have been enough for the ring; it needs the outline's width *plus* its offset.
+
+  Pinned as geometry in `settings-layout.spec.ts` — "inset too much" and "looks cut off" are claims about pixels, which no selector can carry. The test also asserts the Data tab still overflows, because otherwise there is no scrollbar and it would be proving nothing.
+
 ### Say why a control is disabled, beside the control (NEWS-309)
 
 `Back up now` is disabled until a backup folder is named; `Clear all stories` is disabled when there are no stories. Both states were correct and neither said so, which is the NEWS-40 / NEWS-260 failure mode — a dead end with no adjacent explanation. Each now carries one conditional line in the hint it already had, shown only while the control is actually disabled, so the reason appears and disappears with the state rather than sitting there permanently as a caption.

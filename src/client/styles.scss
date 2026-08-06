@@ -277,10 +277,27 @@ body {
 
   .settings-panel {
     overflow-y: auto;
-    // Room for the scrollbar so it never sits on top of a control, and a little
-    // bottom padding so the last row does not touch the dialog's edge when
-    // scrolled to the end.
-    padding-right: 4px;
+
+    // **The scrollbar belongs on the dialog's edge, and the panel's own padding
+    // is what puts it there** (NEWS-326).
+    //
+    // The panel used to sit inside `.dialog`'s 24px horizontal padding and add
+    // 4px of its own, so its scrollbar floated ~28px in from the dialog's edge —
+    // reading as a scrollbar for some inner box rather than for the dialog.
+    // Negative margins pull the *scroll container* out to the dialog's edges;
+    // the same 24px moves onto the panel, so every control stays exactly where
+    // it was.
+    //
+    // It also fixes the focus ring, which is the same bug from the other side.
+    // A scroll container clips its overflow on both axes, the panel had **no
+    // left padding**, and a focused field's ring is drawn *outside* its box
+    // (`outline-offset`) — so the ring's left edge was sliced off flush against
+    // the container. With the padding inside the container there is room for it.
+    // `4px` would not have been enough; a ring needs its width plus its offset.
+    margin: 0 -24px;
+    padding: 0 24px;
+    // A little bottom padding so the last row does not touch the dialog's edge
+    // when scrolled to the end.
     padding-bottom: 4px;
   }
 }

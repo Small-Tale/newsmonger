@@ -462,3 +462,67 @@ test('the feed URL is a field you can copy (NEWS-309)', async ({ page, context }
 
   await closeSettings(page);
 });
+
+test('the settings scrollbar rides the dialog edge, and a focus ring is not clipped (NEWS-326)', async ({ page }) => {
+  // Two symptoms, one cause: the scrolling panel sat *inside* `.dialog`'s 24px
+  // padding and carried no horizontal padding of its own.
+  //
+  // So its scrollbar floated ~28px in from the dialog's edge, reading as a
+  // scrollbar for some inner box rather than for the dialog — and a focused
+  // field's ring, drawn *outside* its own box by `outline-offset`, was sliced
+  // off flush against the scroll container, which clips on both axes.
+  //
+  // Measured as geometry rather than asserted as a class, because both
+  // complaints are about pixels: "inset too much" and "looks cut off" are not
+  // properties any selector can carry.
+  await page.goto('/');
+  await openSettingsTab(page, 'Data');
+
+  const edges = await page.evaluate(() => {
+    const dialog = document.querySelector('.settings-dialog');
+    const panel = document.querySelector('.settings-panel');
+    if (!dialog || !panel) return null;
+    const d = dialog.getBoundingClientRect();
+    const p = panel.getBoundingClientRect();
+    return {
+      scrolls: panel.scrollHeight > panel.clientHeight,
+      rightGap: d.right - p.right,
+      leftGap: p.left - d.left,
+    };
+  });
+  expect(edges, 'the settings dialog and its panel must both be present').not.toBeNull();
+  if (edges === null) return;
+
+  // The Data tab is the one that overflows (NEWS-309); if it stopped, this test
+  // would be asserting nothing about a scrollbar.
+  expect(edges.scrolls, 'the Data tab should overflow, or there is no scrollbar to place').toBe(true);
+  // Flush to the dialog, give or take its 1px border.
+  expect(edges.rightGap, 'the scroll container must reach the dialog edge').toBeLessThanOrEqual(2);
+  expect(edges.leftGap, 'and be symmetric on the other side').toBeLessThanOrEqual(2);
+
+  // The focus ring, on the field the report named.
+  const feed = page.locator('.settings-panel input[readonly]').first();
+  await expect(feed).toBeVisible();
+  await feed.focus();
+  const ring = await page.evaluate(() => {
+    const panel = document.querySelector('.settings-panel');
+    const el = document.activeElement;
+    if (!panel || !(el instanceof HTMLElement)) return null;
+    const cs = getComputedStyle(el);
+    // How far the ring is drawn outside the element's own box.
+    const extent = Number.parseFloat(cs.outlineWidth) + Number.parseFloat(cs.outlineOffset);
+    const e = el.getBoundingClientRect();
+    const p = panel.getBoundingClientRect();
+    return { extent, slackLeft: e.left - extent - p.left, slackRight: p.right - (e.right + extent) };
+  });
+  expect(ring, 'a field must be focused for there to be a ring').not.toBeNull();
+  if (ring === null) return;
+
+  expect(ring.extent, 'the ring must actually be drawn outside the box, or this proves nothing').toBeGreaterThan(0);
+  // Measured at -3px before the fix — the ring's left edge fell outside the
+  // container's clip box by exactly its own extent.
+  expect(ring.slackLeft, 'the focus ring is clipped on the left').toBeGreaterThanOrEqual(0);
+  expect(ring.slackRight, 'the focus ring is clipped on the right').toBeGreaterThanOrEqual(0);
+
+  await closeSettings(page);
+});
