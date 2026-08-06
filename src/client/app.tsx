@@ -20,11 +20,13 @@ import {
   importStories,
   importTopics,
   loadThread,
+  recoverSetAside,
   refreshBackupPreview,
   refreshFeed,
   refreshKeys,
   refreshModels,
   refreshProviders,
+  refreshSetAside,
   refreshState,
   renameTopic,
   reportForeground,
@@ -396,7 +398,8 @@ function appJsx(): SafeHtml {
             <span class="banner-text">
               This app's database could not be read on {new Date(s.quarantine.at).toLocaleDateString()}, so it
               started with an empty one. <strong>Nothing was deleted</strong> — a copy of the old database is
-              saved at <code class="banner-path">{s.quarantine.backupPath}</code>.
+              saved at <code class="banner-path">{s.quarantine.backupPath}</code>. You can try to get it back in
+              Settings → Data → Recovery.
             </span>
             <button class="banner-dismiss" type="button" data-action="dismiss-quarantine" aria-label="Dismiss">
               {icon('clear', 15)}
@@ -1392,7 +1395,13 @@ function wireEvents(root: HTMLElement): void {
     if (tab === 'source') void refreshModels().then(applyModelCorrection);
     // The backup folder's contents can change under us — another device syncing,
     // or a backup written since the dialog last opened (NEWS-252).
-    if (tab === 'data') void refreshBackupPreview();
+    if (tab === 'data') {
+      void refreshBackupPreview();
+      // Loaded here rather than on the poll: inspecting a candidate means
+      // copying and opening a database, and the list is empty on essentially
+      // every install (NEWS-342).
+      void refreshSetAside();
+    }
   });
 
   // Arrow keys move between tabs, which the WAI-ARIA tabs pattern requires:
@@ -1692,6 +1701,37 @@ function wireEvents(root: HTMLElement): void {
         showToast(`Restored ${String(done.topics)} topics. Previous data saved to ${safetyCopy}`);
       } catch (err) {
         showToast(`Restore failed: ${err instanceof Error ? err.message : String(err)}`);
+      }
+    })();
+  });
+
+  void delegate(root, 'click', '[data-action=recover-db]', (_e, el) => {
+    void (async () => {
+      const file = el.getAttribute('data-file');
+      if (file === null) return;
+      const db = appStore.state.value.setAsideDatabases.find((d) => d.file === file);
+      if (db?.contents == null) return;
+      // Named quantities and what survives, the FR-31.3 shape: the decision is
+      // only makeable if you can see what replaces what. This one especially —
+      // whoever is reading it has already lost data once today.
+      const ok = await confirm(
+        `Replace everything on this device with the database set aside ${relativeTime(db.setAsideAt)}? ` +
+          `It has ${String(db.contents.topics)} topic${db.contents.topics === 1 ? '' : 's'} and ` +
+          `${String(db.contents.items)} stor${db.contents.items === 1 ? 'y' : 'ies'}. ` +
+          `Your current data is saved to the data folder first, and the set-aside file is left where it is. ` +
+          `This cannot be undone.`,
+        { confirmLabel: 'Recover', danger: true },
+      );
+      if (!ok) return;
+      try {
+        const done = await recoverSetAside(file);
+        // Everything on screen is now different data. Refresh what the poll
+        // does not cover — the provider probe reads restored settings, and the
+        // candidate list's own contents have not changed but the app's have.
+        await Promise.all([refreshState(), refreshProviders(), refreshKeys(), refreshSetAside()]);
+        showToast(`Recovered ${String(done.topics)} topics. Previous data saved to ${done.safetyCopy}`);
+      } catch (err) {
+        showToast(`Recovery failed: ${err instanceof Error ? err.message : String(err)}`);
       }
     })();
   });

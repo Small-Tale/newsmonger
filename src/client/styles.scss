@@ -759,6 +759,31 @@ h2.eyebrow {
   max-height: calc(100vh - var(--rail-top, 174px) - 24px);
 }
 
+// Recovering a set-aside database (NEWS-342). Deliberately shaped like
+// `.restore-row` — the two are the same kind of decision, and making the rarer
+// one look novel would suggest it is riskier than the one beside it.
+.recover-row {
+  margin: 10px 0 12px;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+
+  .recover-found {
+    margin-bottom: 10px;
+    font-size: 13px;
+    line-height: 1.5;
+  }
+
+  // The file name is what someone types into a terminal if they would rather do
+  // this by hand, so it wraps rather than overflows.
+  .recover-path {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 0.9em;
+    word-break: break-all;
+    user-select: text;
+  }
+}
+
 .rail-foot {
   margin-top: 14px;
   padding-top: 12px;

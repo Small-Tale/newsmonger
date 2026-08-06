@@ -6,6 +6,7 @@ import type {
   ItemsResp,
   KeysResp,
   ProviderInfo,
+  SetAsideDatabase,
   StateResp,
   ThreadSummary,
   TopicSuggestion,
@@ -297,6 +298,12 @@ export interface AppState {
    * is no client-side "seen" flag to keep in step with a poll.
    */
   quarantine: { backupPath: string; at: string } | null;
+  /**
+   * Databases FR-4.9 set aside, offered for recovery (NEWS-342). Loaded when the
+   * Data tab opens, not on the poll — inspecting one means copying and opening
+   * it, and the list is empty on essentially every install.
+   */
+  setAsideDatabases: SetAsideDatabase[];
   /**
    * Topics ticked in the onboarding flow, before they're created.
    *
@@ -625,6 +632,7 @@ export const appStore = defineStore({
     onboarding: 'auto',
     backupOffer: null,
     quarantine: null,
+    setAsideDatabases: [],
     onboardingTopics: [],
     onboardingTopicsAtStart: 0,
     keys: [],
@@ -662,6 +670,9 @@ export const appStore = defineStore({
     toast: null,
   }),
   actions: (set, get) => ({
+    setSetAside: (setAsideDatabases: SetAsideDatabase[]) => {
+      set({ ...get(), setAsideDatabases });
+    },
     setQuarantine: (quarantine: { backupPath: string; at: string } | null) => {
       set({ ...get(), quarantine });
     },

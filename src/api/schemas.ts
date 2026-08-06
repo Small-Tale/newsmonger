@@ -446,6 +446,35 @@ export const ClearItemsRespSchema = z.object({
   cancelledChecks: z.number().int().default(0),
 });
 
+/** A database FR-4.9 set aside, and what is in it (FR-33.1, NEWS-342). */
+export const SetAsideDatabaseSchema = z.object({
+  file: z.string(),
+  setAsideAt: z.string(),
+  sizeBytes: z.number().int(),
+  contents: z.object({ topics: z.number().int(), items: z.number().int(), runs: z.number().int() }).nullable(),
+  error: z.string().nullable(),
+});
+
+export const SetAsideRespSchema = z.object({
+  databases: z.array(SetAsideDatabaseSchema).default([]),
+});
+
+/** Which set-aside database to recover. A bare file name, never a path. */
+export const RecoverReqSchema = z.object({
+  file: z.string().min(1),
+});
+
+export const RecoverRespSchema = z.object({
+  topics: z.number().int(),
+  items: z.number().int(),
+  runs: z.number().int(),
+  safetyCopy: z.string(),
+});
+
+export type SetAsideDatabase = z.infer<typeof SetAsideDatabaseSchema>;
+export type SetAsideResp = z.infer<typeof SetAsideRespSchema>;
+export type RecoverResp = z.infer<typeof RecoverRespSchema>;
+
 /** What a bulk topic delete did (FR-31.1, NEWS-328). */
 export const ClearTopicsRespSchema = z.object({
   deleted: z.number().int(),

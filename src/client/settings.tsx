@@ -672,6 +672,56 @@ function settingsPanelJsx(s: AppState): SafeHtml {
             ''
           )}
         </div>
+        {/* Recovering a set-aside database (FR-33.2, NEWS-342). Always-present
+            container so the panel doesn't restructure when one is found
+            (docs/3-ui.md), and the eyebrow is *inside* the conditional
+            (NEWS-307) — a "Recovery" heading over nothing is a question with no
+            answer, and on essentially every install there is nothing here.
+
+            Its own group rather than part of Backup: a backup is a snapshot the
+            user asked for, and this is the database the app took away from
+            them. Reading them as one thing would suggest the second is as
+            routine as the first. */}
+        <div class="recover-slot">
+          {s.setAsideDatabases.length > 0 ? (
+            <div>
+              <h3 class="eyebrow">Recovery</h3>
+              <p class="note">
+                <strong>Newsmonger set {s.setAsideDatabases.length === 1 ? 'a database' : 'databases'} aside</strong>{' '}
+                after failing to read {s.setAsideDatabases.length === 1 ? 'it' : 'them'} at startup. Nothing was
+                deleted.
+              </p>
+              {s.setAsideDatabases.map((db) => (
+                <div class="recover-row" data-key={db.file}>
+                  <div class="recover-found">
+                    <strong>Set aside {relativeTime(db.setAsideAt)}</strong>
+                    {db.contents !== null
+                      ? ` — ${String(db.contents.topics)} topic${db.contents.topics === 1 ? '' : 's'} and ${String(db.contents.items)} stor${db.contents.items === 1 ? 'y' : 'ies'} readable.`
+                      : ' — still unreadable.'}
+                    <br />
+                    <code class="recover-path">{db.file}</code>
+                  </div>
+                  {db.contents !== null ? (
+                    <button class="btn danger" type="button" data-action="recover-db" data-file={db.file}>
+                      {icon('database', 15)} Recover this database
+                    </button>
+                  ) : (
+                    /* No button, and the reason beside where it would be
+                       (NEWS-309): a disabled control whose explanation is
+                       elsewhere is the dead end this app keeps re-learning. */
+                    <p class="field-hint">{db.error ?? 'It cannot be opened.'}</p>
+                  )}
+                </div>
+              ))}
+              <p class="note">
+                Recovering replaces everything on this device with that database. What you have now is saved to your
+                data folder first, and the set-aside file is left where it is.
+              </p>
+            </div>
+          ) : (
+            ''
+          )}
+        </div>
         {/* Progressive disclosure for the longest paragraph on the tab
             (NEWS-306). It answers a question most readers never ask — why the
             snapshot is a JSON file rather than the database — and answering it

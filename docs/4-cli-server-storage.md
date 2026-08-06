@@ -107,6 +107,8 @@
 
   A malformed row reads as absent and is cleared. This row is the thing that reports a storage problem; it must not become a second storage problem.
 
+  The notice names the file; [33 — Getting a Set-Aside Database Back](33-recovery.md) is how to act on it.
+
   Until this existed the only notice was a `console.error`, on a stream the desktop app does not show ([FR-32.1](32-startup-failure.md) surfaces that stream only when the server dies *before* readiness, which a quarantine specifically does not). The user's entire account of what had happened was an empty topic list — indistinguishable from total loss, and an invitation to start deleting things.
 
 - **FR-4.18** *(Shipped, NEWS-340)* **A quarantine still starts the app, rather than stopping it like FR-4.13 does.** The two look similar and are not.

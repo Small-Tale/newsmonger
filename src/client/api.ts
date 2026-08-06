@@ -1,5 +1,5 @@
 import type { Effort,ProviderName} from '../ai/types.js';
-import type { BackupPreview, DiscoverReq, DiscoverResp, ImportStoriesResp, ImportTopicsResp, TopicSuggestion } from '../api/schemas.js';
+import type { BackupPreview, DiscoverReq, DiscoverResp, ImportStoriesResp, ImportTopicsResp, RecoverResp, TopicSuggestion } from '../api/schemas.js';
 import {
   BackupLocationsRespSchema,
   BackupPreviewRespSchema,
@@ -13,7 +13,9 @@ import {
   KeysRespSchema,
   ModelsRespSchema,
   ProvidersRespSchema,
+  RecoverRespSchema,
   RestoreRespSchema,
+  SetAsideRespSchema,
   StateRespSchema,
   ThreadRespSchema,
 } from '../api/schemas.js';
@@ -502,6 +504,29 @@ export async function deleteAllTopics(): Promise<{ deleted: number; cancelledChe
 }
 
 /** Load the preview into the store; a failure leaves the control hidden. */
+/**
+ * Databases FR-4.9 set aside, with what each holds (FR-33.2, NEWS-342).
+ *
+ * Fetched when the Data tab opens rather than on the 4-second poll: each
+ * candidate is inspected by copying and opening it, which is far too much to do
+ * every four seconds for a list that is empty on essentially every install.
+ */
+export async function refreshSetAside(): Promise<void> {
+  try {
+    const body = await request('/api/recover/candidates');
+    appStore.actions.setSetAside(SetAsideRespSchema.parse(body).databases);
+  } catch {
+    // A list we could not fetch is shown as no list. The banner still names the
+    // path, so this failing costs discoverability and never the route back.
+    appStore.actions.setSetAside([]);
+  }
+}
+
+/** Replace everything with a set-aside database (FR-33.4). Throws with a reason. */
+export async function recoverSetAside(file: string): Promise<RecoverResp> {
+  return RecoverRespSchema.parse(await request('/api/recover', { method: 'POST', body: JSON.stringify({ file }) }));
+}
+
 export async function refreshBackupPreview(): Promise<void> {
   try {
     appStore.actions.setBackupPreview(await fetchBackupPreview());
