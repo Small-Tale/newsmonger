@@ -96,7 +96,9 @@ The feed's source links carried a pine arrow glyph — a bullet saying "this is 
 
   This does **not** reopen FR-8.9's open-proxy hole, and the distinction is the whole design: the URL comes from a story already stored, never from the request. A hash nothing references resolves to nothing and no request is made — exactly as when the route never fetched at all, which is still asserted. The refetch re-runs the SSRF checks, because a `sourceUrl` was checked when it was first seen and the name it resolves to today is not the name it resolved to then.
 
-  **One attempt per image per run**, keyed by data directory *and* hash. A broken `<img>` is retried by the browser on every repaint, so an unreachable URL would otherwise become a fetch per frame; keying by hash alone would let one `--data-dir` suppress a repair in another. Not persisted — a URL that fails today may work tomorrow, and a permanent "don't try" record would need something to invalidate it.
+  **At most one attempt per image per five minutes**, keyed by data directory *and* hash. A broken `<img>` is retried by the browser on every repaint, so an unreachable URL would otherwise become a fetch per frame; keying by hash alone would let one `--data-dir` suppress a repair in another. Not persisted — a URL that fails today may work tomorrow, and a durable "don't try" record would need something to invalidate it.
+
+  The window shipped as "once per process", on the reasoning that a restart was a cheap way to ask again. It is not: this is a desktop app people leave open for days, and the first report back was an image left permanently broken by a single slow response from a CDN — the URL fetched perfectly a minute later. **A negative cache with no way out is a bug, not a safeguard**: the failure it prevents (a few redundant requests) is cheap, and the one it causes is invisible and permanent.
 
   The downloader is **injected** (`refetchImage` on `createApp`), following the NEWS-315 precedent, so the repair path is testable without a network and `null` switches it off.
 

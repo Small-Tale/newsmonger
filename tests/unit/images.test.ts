@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import { createMockProvider } from '../../src/ai/providers/index.js';
 import { CheckRunner } from '../../src/checks.js';
@@ -372,8 +372,8 @@ describe('repairing a cached image that has gone missing (NEWS-341)', () => {
     expect(asked).toEqual([]);
   });
 
-  it('tries a given image once, however many times it is requested', async () => {
-    // A broken `<img>` is retried by the browser on every repaint, so an
+  it('does not refetch on every repaint while an image stays broken', async () => {
+    // A broken `<img>` is retried by the browser on every render, so an
     // unreachable URL would otherwise become a fetch per frame.
     const dir = tmpDataDir();
     const { store, hash } = storeWithMissingImage(dir);
@@ -387,6 +387,37 @@ describe('repairing a cached image that has gone missing (NEWS-341)', () => {
       expect((await app.request(`/api/image/${hash}`)).status).toBe(404);
     }
     expect(calls).toBe(1);
+  });
+
+  it('tries again after the retry window, rather than giving up for the run', async () => {
+    // The first version of this suppressed retries for the life of the process,
+    // reasoning that "a restart is a cheap way to ask again". It is not — this
+    // is an app people leave open for days, and the first report back was an
+    // image left permanently broken by one slow response from a CDN. A negative
+    // cache with no way out is a bug, not a safeguard.
+    const dir = tmpDataDir();
+    const { store, hash } = storeWithMissingImage(dir);
+    let calls = 0;
+    const app = appFor(dir, store, (_url, dataDir) => {
+      calls++;
+      // Fails the first time, succeeds the second — a transient failure.
+      if (calls === 1) return Promise.resolve(null);
+      fs.mkdirSync(path.join(dataDir, 'images'), { recursive: true });
+      fs.writeFileSync(cachedImagePath(dataDir, hash), PNG);
+      return Promise.resolve({ hash, sourceUrl: IMAGE_URL });
+    });
+
+    expect((await app.request(`/api/image/${hash}`)).status).toBe(404);
+
+    // Six minutes later, past the five-minute window.
+    vi.useFakeTimers();
+    try {
+      vi.setSystemTime(Date.now() + 6 * 60_000);
+      expect((await app.request(`/api/image/${hash}`)).status).toBe(200);
+    } finally {
+      vi.useRealTimers();
+    }
+    expect(calls).toBe(2);
   });
 
   it('404s without attempting anything when repair is switched off', async () => {
