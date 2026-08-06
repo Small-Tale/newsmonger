@@ -131,3 +131,8 @@ The copy is **"keep a backup here"**, never "move your data here" — the second
 The offer fires on the third topic, and most E2E specs create three or more — so `resetSharedState` in `tests/e2e/fixtures.ts` sets `backupPromptNever` for every spec except `backup-prompt.spec.ts`, which clears it and drives the real thing. That suppression lives in the **harness**; the app has no test-only branch for it.
 
 See also: [4 — CLI, Server, and Storage](4-cli-server-storage.md) (FR-4.1 data-dir resolution, FR-4.9 corrupt-database recovery), [21 — Export and Feed](21-export-and-feed.md) (the JSON export a backup would reuse), [7 — API Keys](7-api-keys.md) (why keys are not affected).
+
+- **FR-27.13** *(Shipped, NEWS-331)* **The backup folder field takes its own line, and `Back up now` the line below it.** `.field` puts a label beside its control, which suits a `<select>` and fails a path: `/Users/…/Mobile Documents/com~apple~CloudDocs/Newsmonger` had roughly half the dialog to show itself in, so the one value the field exists to display was always scrolled out of view.
+
+  A `.field.stacked` modifier rather than a change to every field — most hold a short value and read better on one line. The button below it is full width with `14px` above, which is `.field`'s own top margin: the same gap every other control on the tab gets from the one above it. It had none, so it sat tight under the field with less air than anything else there.
+

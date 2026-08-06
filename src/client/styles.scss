@@ -1533,6 +1533,30 @@ h2.eyebrow {
   }
 }
 
+// A field whose control needs the whole line (NEWS-331).
+//
+// `.field` is a label *beside* its control, which is right for a `<select>` and
+// wrong for a path: `/Users/…/Mobile Documents/com~apple~CloudDocs/Newsmonger`
+// had roughly half the dialog to show itself in, so the one value the field
+// exists to display was always scrolled out of view.
+//
+// Stacking is the whole fix — the label goes above and the input takes the full
+// width. Kept as a modifier rather than changed for every field, because most of
+// them hold a short value and read better on one line.
+.field.stacked {
+  display: block;
+
+  > span {
+    display: block;
+    margin-bottom: 6px;
+  }
+
+  input,
+  select {
+    width: 100%;
+  }
+}
+
 .field-label {
   flex: 0 0 $field-label-w;
   font-size: 13px;
@@ -2354,9 +2378,12 @@ h2.eyebrow {
 
 .backup-row {
   display: flex;
-  flex-wrap: wrap;
+  // **Its own line, and the whole of it** (NEWS-331). It was a wrapping row with
+  // no top margin, so `Back up now` sat tight under the folder field with less
+  // air than any other pair of controls on the tab. `14px` is `.field`'s own top
+  // margin — the same gap every other control gets from the one above it.
   gap: 8px;
-  margin: 0 0 10px;
+  margin: 14px 0 10px;
 
   // The button is a flex row so its icon sits on the label's centre line
   // (NEWS-161). Without it the glyph is an inline box on the text baseline, and
@@ -2364,7 +2391,10 @@ h2.eyebrow {
   .btn {
     display: inline-flex;
     align-items: center;
+    justify-content: center;
     gap: 7px;
+    // The whole line, since it is the only control on it (NEWS-331).
+    flex: 1 1 0;
   }
 }
 

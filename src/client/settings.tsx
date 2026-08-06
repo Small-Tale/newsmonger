@@ -714,7 +714,10 @@ function settingsPanelJsx(s: AppState): SafeHtml {
             a browser cannot hand a Node server a real filesystem path, and the
             desktop shell has no dialog plugin yet — see docs/27-data-location.md. */}
         <h3 class="eyebrow">Backup</h3>
-        <label class="field">
+        {/* Stacked, not beside its label (NEWS-331): a backup path is long
+            enough that half a dialog cannot show it, so the one value this field
+            exists to display was always scrolled out of view. */}
+        <label class="field stacked">
           <span>Backup folder</span>
           <input
             type="text"

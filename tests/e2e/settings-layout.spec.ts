@@ -281,7 +281,12 @@ test('every settings field lines its label up with its control (NEWS-147)', asyn
   for (const tab of ['Schedule', 'Source', 'Data'] as const) {
     await openSettingsTab(page, tab);
 
-    const rows = await page.locator('.dialog .field').evaluateAll((els) =>
+    // `.field:not(.stacked)` — a stacked field puts its label *above* the
+    // control on purpose (FR-27.13, NEWS-331), so "line the two up
+    // horizontally" is not a property it has. Excluded by name rather than by
+    // loosening the threshold: the rule below is exactly as strict as it was,
+    // and the stacked ones get their own assertions underneath.
+    const rows = await page.locator('.dialog .field:not(.stacked)').evaluateAll((els) =>
       els
         .map((el) => {
           const label = el.firstElementChild;
@@ -308,6 +313,26 @@ test('every settings field lines its label up with its control (NEWS-147)', asyn
       expect(row.alignItems, `${tab} / ${row.label} alignment mode`).toBe('baseline');
       // And the outcome, which catches gross drift whatever the cause.
       expect(row.offset, `${tab} / ${row.label} label vs control`).toBeLessThan(3);
+    }
+
+    // A stacked field has the other alignment property: its label sits fully
+    // above the control and their left edges agree. Untested, "stacked" would be
+    // a way to opt out of alignment altogether.
+    const stacked = await page.locator('.dialog .field.stacked').evaluateAll((els) =>
+      els
+        .map((el) => {
+          const label = el.firstElementChild;
+          const control = el.querySelector('select, input');
+          if (!(label instanceof HTMLElement) || !(control instanceof HTMLElement)) return null;
+          const l = label.getBoundingClientRect();
+          const c = control.getBoundingClientRect();
+          return { label: label.textContent.trim(), clears: c.top - l.bottom, indent: Math.abs(c.left - l.left) };
+        })
+        .filter((row) => row !== null),
+    );
+    for (const row of stacked) {
+      expect(row.clears, `${tab} / ${row.label} label must clear the control`).toBeGreaterThanOrEqual(0);
+      expect(row.indent, `${tab} / ${row.label} label must start where the control does`).toBeLessThan(2);
     }
 
     await page.locator('.dialog [data-action=close-settings]').click();
@@ -577,6 +602,52 @@ test('import and export sit as equal halves, in matching rows (NEWS-327)', async
     .then((all) => all.map((h) => h.trim()));
   expect(headings.slice(0, 3)).toEqual(['Retention', 'Topics', 'Stories']);
   expect(headings, 'nothing may still be called Export').not.toContain('Export');
+
+  await closeSettings(page);
+});
+
+test('the backup folder gets its own line, and Back up now the one below (NEWS-331)', async ({ page }) => {
+  // A backup path is long — `/Users/…/Mobile Documents/com~apple~CloudDocs/…` —
+  // and `.field` puts the label *beside* the control, so the one value this
+  // field exists to display had half a dialog to show itself in and was always
+  // scrolled out of view.
+  await page.goto('/');
+  await openSettingsTab(page, 'Data');
+
+  const m = await page.evaluate(() => {
+    const input = document.querySelector('[data-action=backup-dir]');
+    const btn = document.querySelector('[data-action=backup-now]');
+    const field = input?.closest('.field');
+    const label = field?.querySelector('span');
+    if (!(input instanceof HTMLElement) || !(btn instanceof HTMLElement) || !(label instanceof HTMLElement)) return null;
+    const r = (el: HTMLElement) => el.getBoundingClientRect();
+    return {
+      labelBottom: r(label).bottom,
+      inputTop: r(input).top,
+      inputLeft: r(input).left,
+      inputWidth: r(input).width,
+      inputBottom: r(input).bottom,
+      btnTop: r(btn).top,
+      btnLeft: r(btn).left,
+      btnWidth: r(btn).width,
+      rowWidth: field === null ? 0 : r(field as HTMLElement).width,
+    };
+  });
+  expect(m, 'the backup controls must be present').not.toBeNull();
+  if (m === null) return;
+
+  // Stacked: the label sits entirely above the input rather than beside it.
+  expect(m.inputTop, 'the label must be on its own line above the field').toBeGreaterThanOrEqual(m.labelBottom);
+  // And the field takes the whole line, which is the point — it is what makes a
+  // long path readable.
+  expect(m.inputWidth).toBeCloseTo(m.rowWidth, 0);
+
+  // The button below it, full width, with the same gap every other control on
+  // this tab gets from the one above it.
+  expect(m.btnTop, 'the button belongs on the line below the field').toBeGreaterThanOrEqual(m.inputBottom);
+  expect(m.btnTop - m.inputBottom, 'usual spacing above the button').toBeGreaterThanOrEqual(10);
+  expect(m.btnWidth).toBeCloseTo(m.rowWidth, 0);
+  expect(m.btnLeft).toBeCloseTo(m.inputLeft, 0);
 
   await closeSettings(page);
 });

@@ -411,6 +411,8 @@ Both are measured in `tests/e2e/layout.spec.ts` rather than eyeballed, and both 
 
   Both are pinned in `tests/e2e/settings-layout.spec.ts` twice over: the computed **outcome** (label/control offset under 3px on every field of every tab; hint gap at least 4px, where the bug measured `-4`) and the **declaration** (`align-items: baseline`), because the point of FR-3.49 is that alignment no longer depends on a hand-tuned number — reintroducing one fails the test even on a machine where the pixels happen to land well. Verified non-vacuous by restoring each original value and watching the matching test fail.
 
+  **`.field.stacked` is excluded, and has its own rule** (NEWS-331). A stacked field puts its label *above* the control deliberately (FR-27.13), so "line the two up horizontally" is not a property it has. It is excluded by name rather than by loosening the threshold — the rule above is exactly as strict as it was — and the stacked ones are asserted separately: the label clears the control entirely and their left edges agree. Without that second assertion, `stacked` would be a way to opt out of alignment altogether.
+
 - **FR-3.48** *(Shipped, NEWS-117)* The high-priority interval is labelled just **"High-priority"**. It read "High-priority topics every", which restated the column it sits in — directly under "Check every" — and wrapped to a second line to do it.
 
 - **FR-3.68** *(Shipped, NEWS-307)* **Every group on every tab carries a section eyebrow, and the first one carries no rule.**
