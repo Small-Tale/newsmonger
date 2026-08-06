@@ -357,7 +357,7 @@ const SCENES: Scene[] = [
   },
   {
     name: 'thread',
-    alt: 'An expanded story card showing the story so far: every earlier instalment on the same subject, dated and attributed, with a way to see the whole run.',
+    alt: 'An expanded story card showing the story so far: every earlier installment on the same subject, dated and attributed, with a way to see the whole run.',
     // The card alone. The timeline is a detail *inside* one card in a two-column
     // feed, so a 1440px frame would make the thing this scene is about a few
     // hundred pixels in the middle of a page of other stories — the same reason
@@ -386,7 +386,7 @@ const SCENES: Scene[] = [
       // the thread is still arriving — a timeline caught mid-fill would ship a
       // screenshot of the wrong number.
       await waitForStories(page, DEMO_FIRST_CHECK_STORIES + THREAD_TOPIC.second.length);
-      // The newest instalment, which is the card a reader would open: it is the
+      // The newest installment, which is the card a reader would open: it is the
       // one with the most history behind it, and its badge reads "6th update".
       const card = page
         .locator('.item:not(.flagged-row)', { has: page.locator('.item-topic', { hasText: THREAD_TOPIC.name }) })

@@ -72,7 +72,7 @@ interface Beat {
    * every other beat uses.
    *
    * Per-beat since NEWS-263, for one beat: the theme switch. A crossfade
-   * between two frames of the same layout in different colours just looks like
+   * between two frames of the same layout in different colors just looks like
    * a slow dim — the eye reads it as one picture changing brightness. A wipe
    * reads as what it is, the new theme sweeping across the window, precisely
    * because the geometry underneath does not move.
