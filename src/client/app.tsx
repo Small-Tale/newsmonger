@@ -913,6 +913,15 @@ function runTopicAction(action: string, ids: string[]): void {
 }
 
 /**
+ * Issue-order guard for discovery responses (NEWS-324) — see `runDiscovery`.
+ *
+ * Module-scoped like `refreshState`'s counters, and for the same reason: there
+ * is one dialog per page, so one pair of counters describes it.
+ */
+let discoverSeq = 0;
+let discoverApplied = 0;
+
+/**
  * Run one discovery request and fold the answer into the pane (NEWS-126).
  *
  * The `discover === null` guards are the point of doing this in one place: the
@@ -921,6 +930,30 @@ function runTopicAction(action: string, ids: string[]): void {
  * only shows up on a slow provider.
  */
 async function runDiscovery(source: DiscoverSource): Promise<void> {
+  // Discovery answers apply in **issue** order, not arrival order (NEWS-324).
+  //
+  // The same guard `refreshState` and `refreshFeed` carry (NEWS-104), and
+  // **defence in depth rather than a live bug**: measured, the UI already
+  // serialises these. While `loading` is true the submit button is disabled and
+  // `discoverPaneJsx` replaces the whole body with the waiting state, so there
+  // is no control on screen that can issue a second request. An attempt to
+  // demonstrate the race through the UI could not — the second search never
+  // fired, which is what `discoverWaitingJsx` is asserted to guarantee in
+  // `discover.spec.ts`.
+  //
+  // Kept because that protection is *incidental*: it falls out of a rendering
+  // decision, not a stated invariant. Keeping results on screen during a
+  // re-search — a reasonable future change, and the sort of thing a design pass
+  // asks for — would expose the race immediately, and the failure would be a
+  // list of results for a query the heading no longer names, plus `source` and
+  // `suggestions` disagreeing about which search they came from. Four lines to
+  // make that impossible ahead of time is worth it; four lines pretending to fix
+  // something reachable today would not be.
+  //
+  // `loadMoreSuggestions` guards itself by comparing `source`; that works for
+  // *append* and cannot work here, because re-searching the same source is a
+  // legitimate thing to do twice.
+  const seq = ++discoverSeq;
   appStore.actions.patchDiscover({
     loading: true,
     error: null,
@@ -936,10 +969,14 @@ async function runDiscovery(source: DiscoverSource): Promise<void> {
     // Only a real call informs the estimate — a cache hit returns instantly and
     // would drag the next bar's target down to nothing (NEWS-137).
     if (!cached) recordDuration(Date.now() - startedAt);
-    if (appStore.state.value.discover === null) return;
+    if (appStore.state.value.discover === null || seq < discoverApplied) return;
+    discoverApplied = seq;
     appStore.actions.patchDiscover({ loading: false, suggestions, cached, view: 'results' });
   } catch (err) {
-    if (appStore.state.value.discover === null) return;
+    // Gated too: a stale *failure* must not raise an error over results a newer,
+    // successful request already applied.
+    if (appStore.state.value.discover === null || seq < discoverApplied) return;
+    discoverApplied = seq;
     // Shown inside the dialog next to a retry, not in the global banner: the
     // user is mid-task here, and the message is about this request.
     appStore.actions.patchDiscover({
@@ -1117,9 +1154,18 @@ async function undoClear(id: string): Promise<void> {
 /** Create a topic from a suggestion, keeping its card in place (FR-24.12/24.13). */
 async function addSuggestion(name: string): Promise<void> {
   const current = appStore.state.value.discover;
-  const suggestion = current?.suggestions.find((s) => s.name === name);
-  if (current === null || suggestion === undefined) return;
-  if (current.added.includes(name)) return;
+  if (current === null) return; // The dialog closed under the click; nothing to say.
+  if (current.added.includes(name)) return; // Already done, and the card says so.
+  const suggestion = current.suggestions.find((s) => s.name === name);
+  if (suggestion === undefined) {
+    // The list was replaced between the render and the click — a slower earlier
+    // search landing late used to do this (NEWS-324, now guarded), and a
+    // re-search still can. Silence was the bug worth fixing here: the button
+    // did nothing, said nothing, and left the card looking un-added forever,
+    // which is indistinguishable from a broken button.
+    showToast(`“${name}” is no longer in these results — search again to add it`);
+    return;
+  }
   try {
     await addSuggestedTopic(suggestion);
     if (appStore.state.value.discover === null) return;

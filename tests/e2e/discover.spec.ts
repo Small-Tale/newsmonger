@@ -717,3 +717,46 @@ test('collapsing the sidebar keeps privacy reachable via the footer', async ({ p
 
   await page.click('[data-action=toggle-sidebar]');
 });
+
+test('a search in flight cannot be raced by a second one (NEWS-324)', async ({ page }) => {
+  // What actually stops two discovery responses arriving out of order, which is
+  // worth pinning because it is *incidental*: while a request is in flight the
+  // submit button is disabled and the whole results body is replaced by the
+  // waiting state, so no control on screen can issue a second one.
+  //
+  // Written after trying to demonstrate the opposite. `runDiscovery` carries the
+  // issue-order guard `refreshState` and `refreshFeed` have (NEWS-104), and the
+  // race it defends against turned out to be unreachable through the UI — the
+  // second search simply never fires. This test is the reason that guard is
+  // documented as defence in depth rather than as a fix: if a future change
+  // keeps results on screen during a re-search, this fails and says so, which is
+  // exactly the moment the guard starts earning its keep.
+  await page.goto('/');
+  await page.click('[data-action=open-discover]');
+
+  let seen = 0;
+  await page.route('**/api/discover', async (route) => {
+    seen += 1;
+    if (seen === 1) await new Promise((r) => setTimeout(r, 2000));
+    await route.continue();
+  });
+
+  await page.fill('.discover-search input', 'sailing');
+  await page.press('.discover-search input', 'Enter');
+
+  // Mid-flight: the waiting state owns the body, and the submit is disabled.
+  await expect(page.locator('.discover-bar')).toBeVisible();
+  await expect(page.locator('.discover-search button[type=submit]')).toBeDisabled();
+  await expect(page.locator('.suggestion')).toHaveCount(0);
+
+  // So a second Enter cannot start anything.
+  await page.fill('.discover-search input', 'climbing');
+  await page.press('.discover-search input', 'Enter');
+  expect(seen, 'a second search must not be issuable while one is in flight').toBe(1);
+
+  await page.unroute('**/api/discover');
+  await expect(page.locator('.suggestion').first()).toBeVisible();
+  await expect(page.locator('.discover-results-head h3')).toContainText('sailing');
+
+  await page.click('[data-action=close-discover]');
+});

@@ -553,7 +553,43 @@ export const test = base.extend<TestFixtures, WorkerFixtures>({
         .then((r) => r.json())
         .then((b: unknown) => (b as { settings?: unknown }).settings ?? null)
         .catch(() => null);
-      writeDiagnostic('dom-state.json', JSON.stringify({ serverSettings, selects }, null, 2));
+      /**
+       * The open dialog's own contents (NEWS-324).
+       *
+       * Added after an unreproducible flake in `discover.spec.ts` cost fourteen
+       * full-suite runs and still was not settled: the trace named the assertion
+       * that timed out, and `dom-state.json` answered questions about
+       * `<select>`s and settings — neither of which the failing test touches.
+       * What nobody could answer afterwards was the only question that mattered:
+       * *what was in the dialog when it gave up*.
+       *
+       * Cards, their added state, and whatever the pane is saying. A timeout on
+       * "this card should say Added" is then self-explaining — the card is
+       * missing (the list was replaced), present-but-unadded (the add failed or
+       * did nothing), or the pane is showing an error nobody asserted on.
+       *
+       * Capped and best-effort: a diagnostic that can fail a passing teardown,
+       * or bury the useful line in two hundred, is worse than none.
+       */
+      const dialog = await page
+        .evaluate(() => {
+          const open = document.querySelector('.dialog');
+          if (!open) return null;
+          const text = (el: Element | null): string | null =>
+            el === null ? null : el.textContent.trim().slice(0, 200);
+          return {
+            classes: open.className,
+            heading: text(open.querySelector('h2, h3')),
+            status: text(open.querySelector('.discover-status, .item-pane-note, .banner')),
+            cards: [...open.querySelectorAll('.suggestion')].slice(0, 12).map((card) => ({
+              name: card.querySelector('.suggestion-name')?.textContent.trim() ?? null,
+              added: card.querySelector('.suggestion-added') !== null,
+              addable: card.querySelector('[data-add-suggestion]') !== null,
+            })),
+          };
+        })
+        .catch(() => null);
+      writeDiagnostic('dom-state.json', JSON.stringify({ serverSettings, selects, dialog }, null, 2));
     }
     expect(pageErrors.map((e) => e.message), 'uncaught errors in the page').toEqual([]);
     expect(memoWarnings, 'kerf reported colliding each() cacheKeys — rows will serve each other stale HTML').toEqual(
