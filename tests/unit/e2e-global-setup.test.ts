@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url';
 
 import { describe, expect, it } from 'vitest';
 
-import { npmSpawn } from '../e2e/global-setup.js';
+import { npmSpawn, npxSpawn } from '../../scripts/npm-command.mjs';
 
 /**
  * The E2E harness spawns npm in a way Windows will actually run (NEWS-348, NEWS-354).
@@ -49,9 +49,18 @@ const code = source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, '');
  * whole-file scan for that string cannot tell a correct answer from a hardcoded
  * one. The distinction the assertions below care about is where it appears.
  */
-const callSite = code.slice(code.indexOf('export default function globalSetup'), code.indexOf('export function npmSpawn'));
+/**
+ * `globalSetup`'s body — the call site.
+ *
+ * The whole file, now that `npmSpawn` lives in `scripts/npm-command.mjs`
+ * (NEWS-356). It used to be sliced up to that function, because `npmSpawn`
+ * legitimately contains `shell: false` in its POSIX branch and a whole-file
+ * scan could not tell a correct answer from a hardcoded one. Kept as a named
+ * constant so moving the helper back would not silently widen the scan.
+ */
+const callSite = code;
 
-describe('npmSpawn (NEWS-348, NEWS-354)', () => {
+describe('npmSpawn / npxSpawn (NEWS-348, NEWS-354, NEWS-356)', () => {
   it('uses npm.cmd AND a shell on Windows', () => {
     // Both halves, in one assertion, because either alone is a broken release:
     // the name alone gives EINVAL, the shell alone gives ENOENT.
@@ -66,6 +75,13 @@ describe('npmSpawn (NEWS-348, NEWS-354)', () => {
 
   it('defaults to the running platform', () => {
     expect(npmSpawn().command).toBe(process.platform === 'win32' ? 'npm.cmd' : 'npm');
+  });
+
+  it('treats npx exactly the same way', () => {
+    // `scripts/merge-coverage.mjs` and `scripts/e2e-scramble.mjs` spawn npx, and
+    // it is the same `.cmd` shim with the same two requirements (NEWS-356).
+    expect(npxSpawn('win32')).toEqual({ command: 'npx.cmd', shell: true });
+    expect(npxSpawn('linux')).toEqual({ command: 'npx', shell: false });
   });
 });
 

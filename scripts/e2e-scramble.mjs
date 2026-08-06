@@ -18,6 +18,8 @@ import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 
+import { npxSpawn } from './npm-command.mjs';
+
 const seed = Number(process.argv[2] ?? 1);
 const root = process.cwd();
 const src = path.join(root, 'tests/e2e');
@@ -58,8 +60,12 @@ fs.writeFileSync(
 console.log(`[scramble seed=${seed}] ${order.join(' → ')}\n`);
 let failed = false;
 try {
-  execFileSync('npx', ['playwright', 'test', '--config=playwright.scramble.config.ts', '--reporter=line'], {
+  // `npxSpawn`, not a bare 'npx' (NEWS-356) — Windows needs the .cmd name and
+  // a shell, and this script is meant to be runnable by anyone.
+  const npx = npxSpawn();
+  execFileSync(npx.command, ['playwright', 'test', '--config=playwright.scramble.config.ts', '--reporter=line'], {
     stdio: 'inherit',
+    shell: npx.shell,
   });
 } catch {
   failed = true;

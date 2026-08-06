@@ -33,24 +33,39 @@ import { describe, expect, it } from 'vitest';
 
 const root = path.join(path.dirname(fileURLToPath(import.meta.url)), '../..');
 
-/** Files that spawn node on this project's source, and could reach for tsx. */
-const SPAWNERS = [
-  'package.json',
-  'playwright.config.ts',
-  'scripts/test-all.sh',
-  'scripts/gate-quick.sh',
-  'src-tauri/src/lib.rs',
-  // The demo captures spawn a server too. They cannot run sandboxed regardless
-  // (Chromium needs a Mach port, NEWS-311), but the one remaining `tsx` CLI
-  // spawn in the tree was here — which is how a rule stops being one.
-  'scripts/demo/capture-stills.ts',
-  'scripts/demo/capture-demo.ts',
-  // Spawns Playwright, which spawns the server through the config above
-  // (NEWS-314). Listed for the same reason the demo captures are: it is a
-  // spawner, and the rule is on the pattern rather than on the files that
-  // happened to break it.
-  'scripts/e2e-scramble.mjs',
-];
+/**
+ * Every file that could spawn a process, found by walking rather than by list.
+ *
+ * This **was** a hand-maintained array (NEWS-356), which is the failure its own
+ * doc comment above predicts: the rule is on the pattern, but a curated list
+ * silently exempts anything nobody remembered to add. `tests/e2e/real-providers.spec.ts`
+ * spawned `npx tsx` and was simply not on it — and neither was
+ * `tests/e2e/server.ts`, the single most important spawner in the repo.
+ *
+ * A walk cannot go stale. Adding a spawner cannot opt out of the rule by
+ * omission, only by deliberately editing this function.
+ */
+function spawners(): string[] {
+  const skip = new Set(['node_modules', '.git', 'dist', 'target', 'coverage', 'test-results', 'playwright-report', 'binaries', 'server']);
+  const found: string[] = [];
+  const walk = (dir: string): void => {
+    for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+      if (skip.has(entry.name)) continue;
+      const full = path.join(dir, entry.name);
+      if (entry.isDirectory()) walk(full);
+      else if (/\.(ts|tsx|mjs|js|sh|rs)$/.test(entry.name)) found.push(path.relative(root, full));
+    }
+  };
+  for (const sub of ['src', 'scripts', 'tests', 'src-tauri/src']) walk(path.join(root, sub));
+  // Root-level config that carries commands but lives in no scanned directory.
+  for (const file of ['package.json', 'playwright.config.ts', 'vitest.config.ts']) {
+    if (fs.existsSync(path.join(root, file))) found.push(file);
+  }
+  return found.sort();
+}
+
+const SPAWNERS = spawners();
+
 
 /**
  * `tsx` used as a **command**, rather than as a loader argument.
@@ -65,9 +80,17 @@ const TSX_CLI =
   /(?:^|[\s&|;"'`(])(?<!--import )(?<!--loader )(?<!--require )(?:npx\s+)?tsx(?=\s+[^\s]*\.[cm]?ts\b)/;
 
 describe('every spawned entry point stays sandbox-safe (NEWS-299)', () => {
+  it('scans a plausible number of files, so a broken walk cannot pass silently', () => {
+    // The failure mode of replacing a list with a walk: match nothing, assert
+    // nothing, stay green forever.
+    expect(SPAWNERS.length).toBeGreaterThan(100);
+    for (const required of ['tests/e2e/server.ts', 'playwright.config.ts', 'package.json', 'src-tauri/src/lib.rs']) {
+      expect(SPAWNERS, `${required} is scanned`).toContain(required);
+    }
+  });
+
   it.each(SPAWNERS)('%s does not invoke the tsx CLI', (file) => {
     const full = path.join(root, file);
-    expect(fs.existsSync(full), `${file} is named here but does not exist`).toBe(true);
     // Comments are stripped first: `playwright.config.ts` and `test-all.sh` both
     // *explain* the trap at length, and a guard that fails on its own
     // explanation teaches people to delete the explanation.

@@ -67,20 +67,14 @@ describe('Windows portability conventions', () => {
     expect(offenders.map((f) => path.relative(root, f))).toEqual([]);
   });
 
-  it('never spawns a bare npm or npx from anything Windows CI runs (NEWS-348, NEWS-354)', () => {
-    // Both need `.cmd` *and* a shell on Windows. `tests/e2e/global-setup.ts`
-    // routes through `npmSpawn()`, which is checked in its own test.
-    //
-    // **Scoped to the E2E harness on purpose.** `npm-package.test.ts`,
-    // `scripts/merge-coverage.mjs` and `scripts/e2e-scramble.mjs` still spawn a
-    // bare tool; none of them runs in the Windows job (which runs `test:e2e`
-    // only), so widening this today would assert something false about work
-    // nobody has done. They are NEWS-356 — this stays narrow and true rather
-    // than broad and skipped.
+  it('never spawns a bare npm or npx, anywhere (NEWS-348, NEWS-354, NEWS-356)', () => {
+    // Both need the `.cmd` name *and* a shell on Windows. Every caller now goes
+    // through `scripts/npm-command.mjs`, so this is the whole tree rather than
+    // just what the Windows CI job happens to run — the scoped version was a
+    // placeholder for exactly this, kept narrow while three call sites were
+    // still unfixed.
     const pattern = /(?:spawn|spawnSync|exec|execSync|execFile|execFileSync)\(\s*['"]np[mx]['"]/;
-    const onWindowsCI = (f: string): boolean =>
-      /tests[\\/](e2e|helpers)[\\/]/.test(f) || f.endsWith('playwright.config.ts');
-    const offenders = sourceFiles().filter((f) => onWindowsCI(f) && pattern.test(codeOf(f)));
+    const offenders = sourceFiles().filter((f) => pattern.test(codeOf(f)));
     expect(offenders.map((f) => path.relative(root, f))).toEqual([]);
   });
 

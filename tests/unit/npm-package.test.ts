@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { z } from 'zod';
 
+import { npmSpawn } from '../../scripts/npm-command.mjs';
 import { PROVIDER_NAMES } from '../../src/ai/types.js';
 
 /**
@@ -71,7 +72,10 @@ function newestMtimeMs(dir: string): number {
 function ensureBuilt(): void {
   const built = fs.existsSync(CLI_BIN) ? fs.statSync(CLI_BIN).mtimeMs : 0;
   if (built > newestMtimeMs(path.join(root, 'src'))) return;
-  execFileSync('npm', ['run', 'build'], { cwd: root, stdio: 'pipe' });
+  // `npmSpawn`, not a bare 'npm' — Windows needs the .cmd name and a shell
+  // (NEWS-348/354/356). This runs in every `npm test`.
+  const npm = npmSpawn();
+  execFileSync(npm.command, ['run', 'build'], { cwd: root, stdio: 'pipe', shell: npm.shell });
 }
 
 /**

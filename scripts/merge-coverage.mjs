@@ -41,6 +41,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { npxSpawn } from './npm-command.mjs';
+
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 process.chdir(root);
 
@@ -49,8 +51,10 @@ function c8Report(tempDir, reportDir) {
     console.warn(`merge-coverage: no V8 coverage in ${tempDir} — skipping`);
     return null;
   }
+  // `npxSpawn`, not a bare 'npx' (NEWS-356) — this runs in every `test:all`.
+  const npx = npxSpawn();
   execFileSync(
-    'npx',
+    npx.command,
     [
       'c8',
       'report',
@@ -61,7 +65,7 @@ function c8Report(tempDir, reportDir) {
       '--include', 'src/**',
       '--all=false',
     ],
-    { stdio: ['ignore', 'inherit', 'inherit'] },
+    { stdio: ['ignore', 'inherit', 'inherit'], shell: npx.shell },
   );
   const lcov = path.join(reportDir, 'lcov.info');
   return fs.existsSync(lcov) ? lcov : null;
