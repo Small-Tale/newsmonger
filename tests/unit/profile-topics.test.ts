@@ -136,3 +136,40 @@ describe('choosing topics for a selection', () => {
     expect(topicsForProfiles(['foodie'], { cap: -1 })).toEqual([]);
   });
 });
+
+describe('the discovery strip’s selection (NEWS-406, FR-24.40)', () => {
+  // The strip renders `topicsForProfiles` with a small cap and the user's own
+  // topics excluded. Its behaviour is that call, so it is tested here rather
+  // than through a rendered dialog — the same reason `onboarding.ts` exists.
+  const STRIP_CAP = 6;
+
+  it('offers nothing when no profiles are set', () => {
+    // The one part of the dialog with nothing to say without them. An empty
+    // result is what lets the container collapse instead of rendering a shell.
+    expect(topicsForProfiles([], { cap: STRIP_CAP })).toEqual([]);
+  });
+
+  it('offers nothing once every candidate is already followed', () => {
+    // FR-24.11 applies to the strip as much as to a live suggestion — a static
+    // list is not an excuse to offer something the user already watches.
+    const all = topicsForProfile('gardener');
+    expect(topicsForProfiles(['gardener'], { cap: STRIP_CAP, exclude: [...all] })).toEqual([]);
+  });
+
+  it('stays short enough to read at a glance', () => {
+    // Six, not twelve: this sits above the section grid and competes with it for
+    // attention. A row long enough to scroll would be a third door, not a nudge.
+    const many = ALL_PROFILES.slice(0, 12).map((p) => p.id);
+    expect(topicsForProfiles(many, { cap: STRIP_CAP })).toHaveLength(STRIP_CAP);
+  });
+
+  it('still spreads across the ticked profiles at strip size', () => {
+    // The rank-first rule has to survive the smaller cap, or a six-slot strip
+    // shows one profile's top six and ignores the other five.
+    const ids = ALL_PROFILES.slice(0, 6).map((p) => p.id);
+    const picked = topicsForProfiles(ids, { cap: STRIP_CAP });
+    for (const id of ids) {
+      expect(picked, `${id} should be represented`).toContain(topicsForProfile(id)[0]);
+    }
+  });
+});

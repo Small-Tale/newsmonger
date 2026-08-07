@@ -21,6 +21,8 @@ import { each } from 'kerfjs';
 
 import type { TopicSuggestion } from '../api/schemas.js';
 import { MAX_DISCOVER_QUERY_LENGTH, MAX_TUNE_ROUNDS } from '../api/schemas.js';
+import { topicsForProfiles } from '../profile-topics.js';
+import { profileLabels } from '../profiles.js';
 import type { TunerState } from './discover.js';
 import {
   currentCandidate,
@@ -35,6 +37,7 @@ import {
 import { animationDurationMs, DEFAULT_TARGET_MS, estimateTargetMs, readDurations } from './discover-progress.js';
 import { icon } from './icons.js';
 import type { DiscoverState } from './stores.js';
+import { appStore } from './stores.js';
 
 /**
  * Topic discovery (NEWS-126, `docs/24-topic-discovery.md`).
@@ -132,6 +135,62 @@ function discoverWaitingJsx(): SafeHtml {
   );
 }
 
+
+/**
+ * How many profile-derived topics the strip offers.
+ *
+ * Six, not twelve: this is a nudge beside two other doors, not the onboarding
+ * seed. A row long enough to scroll would compete with the section grid it sits
+ * above, and the whole point is that it reads at a glance.
+ */
+const FOR_YOU_COUNT = 6;
+
+/**
+ * Topics drawn from the reader profiles (NEWS-406, FR-24.40).
+ *
+ * **Static, from the same table onboarding uses — no call, no latency, and it
+ * works with no provider configured.** That is what makes it safe to render on
+ * open: FR-24.16 keeps every discovery call user-initiated, and that property is
+ * load-bearing because NEWS-119 left no spend cap, so "user-initiated" *is* the
+ * protection. A strip that fetched on open would quietly turn opening the dialog
+ * into a billable call.
+ *
+ * There is no "get fresh ideas" button beside it, deliberately: the box directly
+ * above already does that, and since NEWS-386 an empty submission is biased by
+ * the same profiles. A second control for the same request would be the reduced
+ * second implementation NEWS-146 unpicked.
+ *
+ * Renders nothing at all when no profiles are set. This is the one part of the
+ * dialog with nothing to say without them, and a hollow shell reads as a fault.
+ */
+function forYouJsx(): SafeHtml {
+  const s = appStore.state.value;
+  const names = topicsForProfiles(s.settings.profiles, {
+    cap: FOR_YOU_COUNT,
+    // FR-24.11 applies here as everywhere: never offer something already
+    // followed. Static or not, a suggestion the user is already watching is the
+    // most obviously-broken thing this pane could show.
+    exclude: s.topics.map((t) => t.name),
+  });
+  if (names.length === 0) return <span />;
+  const labels = profileLabels(s.settings.profiles);
+  return (
+    <div class="discover-foryou">
+      {/* Names the profiles it is drawing on. That is what makes it read as
+          personal rather than arbitrary, and it doubles as the hint that these
+          are editable. */}
+      <p class="discover-hint">Because you said you’re into {labels.join(', ').toLowerCase()}:</p>
+      <div class="foryou-row">
+        {names.map((name) => (
+          <button class="chip starter" type="button" data-key={name} data-foryou-topic={name}>
+            {name}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 /**
  * The section tiles (FR-24.2).
  *
@@ -142,6 +201,10 @@ function discoverWaitingJsx(): SafeHtml {
 function sectionGridJsx(): SafeHtml {
   return (
     <div class="discover-pane">
+      {/* Between the box and the grid (NEWS-406): the pane reads *say what you're
+          into* → *here's what we think* → *or browse*. Always-present container so
+          the strip appearing cannot restructure the grid below it (docs/3-ui.md). */}
+      <div class="discover-foryou-slot">{forYouJsx()}</div>
       <p class="discover-hint">…or browse by section.</p>
       <div class="section-grid">
         {sectionTiles().map((category) => (

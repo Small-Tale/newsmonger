@@ -56,6 +56,18 @@ That last part is the decision worth stating plainly, because it is what the bra
 
 - **FR-24.10** *(Shipped)* Every request asks for a deliberate **mix of ongoing and evergreen** topics, and each suggestion is labelled with which it is. An ongoing story burns out and an evergreen topic does not; that is the honest answer to "why is this topic quiet now?" three months later, and it belongs on the card rather than in a support conversation.
 
+- **FR-24.40** *(Shipped, NEWS-406)* **A "because you're into…" strip sits between the two doors**, so the browse pane reads *say what you're into* → *here's what we think* → *or browse*. It fills the gap the two doors leave: someone who cannot yet name what they want has to type something or start drilling, and this answers the question before it is asked.
+
+  **Drawn statically from the same table onboarding uses** (NEWS-382), not from a call. That is what makes it safe to render on open. **FR-24.16 keeps every discovery call user-initiated, and that property is load-bearing precisely because NEWS-119 removed the spend cap** — "user-initiated" *is* the protection. A strip that fetched on open would quietly turn opening the dialog into a billable call, which is the one thing this surface must not do. It also costs no latency and works with no provider configured at all.
+
+  **No "get fresh ideas" button beside it**, deliberately. The box directly above already does that, and since FR-24.36 an empty submission is biased by the same profiles. A second control for the same request would be the reduced second implementation NEWS-146 unpicked.
+
+  **It names the profiles it is drawing on** — "Because you said you're into foodie, gamer" — which is what makes it read as personal rather than arbitrary, and doubles as the hint that they are editable.
+
+  **FR-24.11 applies unchanged**: anything already followed is excluded, static or not. And when there is nothing to say — no profiles set, or every candidate already followed — the container renders **empty and collapses**, rather than a shell. This is the one part of the dialog with nothing to offer without profiles, and a hollow frame reads as a fault.
+
+  Six entries, not twelve: it sits above the section grid and competes with it for attention, so a row long enough to scroll would be a third door rather than a nudge.
+
 - **FR-24.36** *(Shipped, NEWS-386)* **An unscoped request is biased by the user's reader profiles** (FR-20.12). The empty box was previously the same answer for everybody; with profiles it becomes "surprise me, *given* you said you're a Parent, an Investor and into Crafts" — a materially better answer for no extra user effort.
 
   **Only where the user has not already said what they want** (`profilesApplyTo`). An empty free-text box (FR-24.3) and a bare section (FR-24.2) are requests for a spread. A typed query, a drilled-in subcategory and a tuner round are the opposite — the user named the thing, and quietly re-ranking that by something ticked once during setup produces exactly the heading-says-one-thing / results-say-another gap **FR-24.12a** had to write a "closest matches" note to explain. There it is inherent; here it would be self-inflicted.

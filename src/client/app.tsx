@@ -1381,6 +1381,15 @@ function wireEvents(root: HTMLElement): void {
     if (name !== null) void addSuggestion(name);
   });
 
+  // The profile strip (NEWS-406). Plain `addTopic`, not `addSuggestion`: these
+  // are names from a static table with no reason, kind or classification behind
+  // them, so there is no suggestion to mark as added — the chip disappears on
+  // the next render because the topic now excludes itself (FR-24.11).
+  void delegate(root, 'click', '[data-foryou-topic]', (_e, el) => {
+    const name = el.getAttribute('data-foryou-topic');
+    if (name !== null) void addTopic(name);
+  });
+
   void delegate(root, 'change', '[data-action=interval]', (_e, el) => {
     const ms = Number.parseInt((el as HTMLSelectElement).value, 10);
     if (Number.isNaN(ms)) return;

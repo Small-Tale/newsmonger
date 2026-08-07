@@ -2407,6 +2407,26 @@ h2.eyebrow {
   display: none;
 }
 
+// The profile strip in discovery (NEWS-406).
+//
+// The slot collapses when there is nothing to show — no profiles set, or every
+// suggestion already followed — so the section grid moves up rather than sitting
+// below an empty gap.
+.discover-foryou-slot:empty {
+  display: none;
+}
+
+.discover-foryou {
+  margin-bottom: 16px;
+}
+
+.foryou-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 8px;
+}
+
 .detected {
   list-style: none;
   margin: 0 0 14px;
