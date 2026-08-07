@@ -1,8 +1,15 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 
 import { describe, expect, it } from 'vitest';
+
+import {
+  BINARY_EXTENSIONS,
+  MIN_SCANNED_FILES,
+  MUST_BE_SCANNED,
+  repoRoot as root,
+  sourceFiles,
+} from '../helpers/source-tree.js';
 
 /**
  * No source file may carry a raw control byte (NEWS-403).
@@ -34,106 +41,17 @@ import { describe, expect, it } from 'vitest';
  *
  * Scope is the C0 range plus DEL — the bytes that make a file "binary" to the
  * tools above. Tab, newline and carriage return are the three that legitimately
- * appear in text. C1 (U+0080–U+009F) and the Unicode line separators are not
- * checked: they are multi-byte in UTF-8, do not trip the binary heuristics, and
- * would need a different (decode-then-scan) test to find.
+ * appear in text. This scan stays **byte-level on purpose**: it is the one that
+ * answers "would grep skip this file?", and a decoded scan cannot answer that.
+ *
+ * The rest of the invisible-character family — C1 (U+0080–U+009F), the Unicode
+ * line separators, a mid-file BOM, and the zero-width and bidi-override
+ * characters of Trojan Source — is multi-byte in UTF-8, so none of it trips a
+ * binary heuristic and none of it belongs here. It is caught by
+ * `invisible-characters.test.ts` (NEWS-408), which decodes first and then scans.
+ * The two share `tests/helpers/source-tree.ts` so they cover the same files, and
+ * stay separate so each keeps a guarantee you can state in one sentence.
  */
-
-const SELF = fileURLToPath(import.meta.url);
-const root = path.join(path.dirname(SELF), '../..');
-
-/**
- * Extensions whose files are *supposed* to contain control bytes.
- *
- * Excluded **by extension, deliberately**, rather than by "skip whatever fails to
- * decode" — a decode-failure skip would exempt the next mangled source file for
- * the same reason it exempts a PNG, which is the bug this test exists to catch.
- *
- * Nothing git-tracked under `src/`, `tests/` or `scripts/` matches any of these
- * today; the only binaries on disk are captured stills and a demo SQLite file
- * under the gitignored `scripts/demo/.debug/` and `.review/`, already skipped
- * with the other dot-directories. The list is here so that a legitimate binary
- * fixture arriving later is excluded on purpose, in one named place, instead of
- * by a mechanism that would also excuse a broken `.ts`.
- */
-const BINARY_EXTENSIONS = new Set([
-  '.png',
-  '.jpg',
-  '.jpeg',
-  '.gif',
-  '.webp',
-  '.avif',
-  '.ico',
-  '.icns',
-  '.db',
-  '.sqlite',
-  '.zip',
-  '.gz',
-  '.tgz',
-  '.tar',
-  '.woff',
-  '.woff2',
-  '.ttf',
-  '.otf',
-  '.pdf',
-  '.mp3',
-  '.mp4',
-  '.mov',
-  '.webm',
-  // Design sources under `docs/graphics/` (NEWS-409). Both are binary container
-  // formats — a Rhino model and a Sketch document — and both tripped the scan the
-  // moment `docs/` was added. Listed explicitly rather than skipping whatever
-  // fails to decode, for the reason the whole list exists: a decode-failure skip
-  // would exempt the next mangled `.md` too.
-  '.3dm',
-  '.sketch',
-]);
-
-/**
- * Every file under the source roots, found by walking rather than by list.
- *
- * A hand-kept list is how `real-providers.spec.ts` kept its `npx tsx` through
- * NEWS-356: the rule was right, the file was simply not enumerated. A walk cannot
- * go stale — a new file is covered the moment it exists, and opting out takes a
- * deliberate edit here.
- *
- * Unlike its two siblings this walk is **not** filtered to source extensions. A
- * control byte is a defect in a `.json` fixture, a `.sh` gate script or a `.scss`
- * stylesheet just as much as in a `.ts`, and the point is to catch the file
- * nobody thought to include.
- *
- * Dot-directories are skipped along with the build outputs: under these roots
- * they are gitignored local artifacts — captured demo stills, a scratch SQLite
- * db, agent working dirs — and nothing tracked lives in one.
- */
-function sourceFiles(): string[] {
-  const skip = new Set(['node_modules', 'dist', 'target', 'coverage', 'test-results', 'playwright-report']);
-  const out: string[] = [];
-  const walk = (dir: string): void => {
-    for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
-      if (skip.has(entry.name) || entry.name.startsWith('.')) continue;
-      const full = path.join(dir, entry.name);
-      if (entry.isDirectory()) walk(full);
-      else if (!BINARY_EXTENSIONS.has(path.extname(entry.name).toLowerCase())) out.push(full);
-    }
-  };
-  for (const sub of ['src', 'tests', 'scripts', 'docs']) walk(path.join(root, sub));
-  // Root-level prose and config too (NEWS-409). `docs/` earns its place for a
-  // sharper reason than the code roots: this project *greps its own docs* as a
-  // workflow step — CLAUDE.md says to "grep for what is taken rather than
-  // reading the last bullet" when allocating an FR id, and
-  // `build-requirements-summary.mjs` parses every one. A requirements doc that
-  // silently vanished from search would break id allocation while looking fine,
-  // and NEWS-302 already records what a collision costs: six ids naming two
-  // requirements each.
-  for (const file of fs.readdirSync(root, { withFileTypes: true })) {
-    if (!file.isFile() || file.name.startsWith('.')) continue;
-    if (['.md', '.json', '.yml', '.yaml'].includes(path.extname(file.name).toLowerCase())) {
-      out.push(path.join(root, file.name));
-    }
-  }
-  return out.sort();
-}
 
 /** A C0 control byte other than tab (0x09), newline (0x0a) or CR (0x0d), or DEL (0x7f). */
 function isForbidden(byte: number): boolean {
@@ -169,16 +87,8 @@ describe('no source file carries a raw control byte (NEWS-403)', () => {
     // The failure mode of a scan-based test: match nothing, assert nothing, stay
     // green forever.
     const files = sourceFiles();
-    expect(files.length).toBeGreaterThan(100);
-    for (const required of [
-      'src/routes/api.ts',
-      'tests/e2e/server.ts',
-      'scripts/e2e-scramble.mjs',
-      'src/client/styles.scss',
-      'docs/22-topic-categories.md',
-      'CLAUDE.md',
-      'package.json',
-    ]) {
+    expect(files.length).toBeGreaterThan(MIN_SCANNED_FILES);
+    for (const required of MUST_BE_SCANNED) {
       expect(files.map((f) => path.relative(root, f)), `${required} is scanned`).toContain(required);
     }
   });
