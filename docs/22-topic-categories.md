@@ -105,6 +105,22 @@ Six rows were **widened in place** rather than moved — Space → Space & Astro
 
   A **manual** choice is still never revisited. The clause sits behind the `categorySource` check, so a user who hand-filed a topic into a section that later disappeared is not quietly overruled.
 
+- **FR-22.18** *(Shipped, NEWS-404)* **A manual override is recorded as a classifier correction**, on `topics.auto_category`, and read back from `GET /api/classifier/corrections`.
+
+  This is the only instrument for classifier accuracy that costs nothing. A wrong-but-reasonable section is otherwise **invisible**: the pill looks plausible, no check fails, and nobody reports it. An override is the one moment a user says, inside the app, that the classifier missed — and it needed no new call, no provider and no schedule, because the data is already in the row.
+
+  **The pair is the point, not the count.** NEWS-397's hypothesis is that NEWS-388's widening hurt by adding *near-neighbours* — Money beside Business, Media beside Culture, Living beside Style — so `from` → `to` can confirm or refute that where a bare miss total cannot. The endpoint returns the number of classified topics alongside, because a rate needs a denominator: five misses out of six and five out of five hundred are different facts.
+
+  Three rules the recording has to get right, all tested:
+
+  - **Only when a manual choice replaces an automatic one that existed.** A user filing a never-classified topic corrects nothing, and counting it would inflate the only number this produces.
+  - **Never overwritten.** The disagreement is with the *classifier*; a user changing their own mind afterwards is not a second miss, and overwriting would erase the pair that mattered. Written with `COALESCE` in SQL rather than read-then-write, which would race a check finishing its own classification.
+  - **Outlives clearing.** Clearing resets `categorySource` to `auto` so the topic can be re-classified (FR-22.7), but the miss already happened — forgetting it would make the measurement depend on what the user did next.
+
+  Nullable, and **never backfilled**: a topic predating the column has no observed correction, which is exactly true. Filling it with the current category would invent agreement that was never observed and poison the measurement. Schema v7.
+
+  This does **not** replace the two instruments NEWS-404 also asks for — a recorded classifying CLI session catches *handling* regressions, and a live-spec assertion catches vendor drift. Neither is built. What this replaces is having no measurement at all.
+
 - **FR-22.7a** *(Shipped, NEWS-407)* **The edit dialog lets a person set the section and subject by hand.** Two selects — section, then the subjects of that section — rather than one flat list of ~150, which would be a worse menu than the classifier's own.
 
   **This is what made FR-22.7 reachable.** The route, the `manual` promise and the re-read-after-check rule below had all shipped with NEWS-97; nothing in the UI could make the choice they were about. FR-22.7 was marked Shipped and was, from a user's seat, unreachable — the kind of gap a status marker cannot show.

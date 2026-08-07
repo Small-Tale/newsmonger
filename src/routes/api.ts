@@ -641,6 +641,37 @@ export function registerApi(app: Hono<AppEnv>): void {
   });
 
   /**
+   * Where the classifier and the user disagreed (NEWS-404, FR-22.18).
+   *
+   * Its own endpoint rather than a field on `/api/state`, for the reason stated
+   * on `/api/discover/usage` directly above: a list that grows with usage does
+   * not belong on a payload polled every four seconds.
+   *
+   * **The pair is the point, not the count.** NEWS-397's hypothesis is that
+   * NEWS-388's widening hurt by adding *near-neighbours* — Money beside
+   * Business, Media beside Culture, Living beside Style — so `from` → `to` can
+   * confirm or refute that where a bare miss total cannot.
+   *
+   * Reads only what a user already did. There is no call, no provider, and
+   * nothing to schedule: this is the one instrument for classifier accuracy that
+   * costs nothing and works offline, which is why it exists at all.
+   */
+  app.get('/api/classifier/corrections', (c) => {
+    const store = c.get('store');
+    const corrections = store
+      .listTopics()
+      .filter((t) => t.autoCategory !== null)
+      .map((t) => ({ topic: t.name, from: t.autoCategory, to: t.category }));
+    return c.json({
+      corrections,
+      // Both halves, because a rate needs a denominator: five corrections out of
+      // six classified topics and five out of five hundred are different facts,
+      // and `corrections.length` alone cannot tell them apart.
+      classified: store.listTopics().filter((t) => t.category !== null).length,
+    });
+  });
+
+  /**
    * Serve a cached article image.
    *
    * Reads from the cache only — it never fetches a URL on request. That's the

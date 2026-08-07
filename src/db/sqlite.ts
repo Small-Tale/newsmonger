@@ -31,7 +31,7 @@ const { DatabaseSync } = createRequire(import.meta.url)('node:sqlite') as {
  */
 
 /** Bumped when `TABLES` changes in a way an existing database must be migrated for. */
-export const SCHEMA_VERSION = 6;
+export const SCHEMA_VERSION = 7;
 
 /**
  * Add a column only if it isn't already there, reporting whether it did.
@@ -107,6 +107,14 @@ const MIGRATIONS: Partial<Record<number, (db: DatabaseSyncType) => void>> = {
   5: (db) => {
     addColumn(db, 'topics', 'cleared_at', `cleared_at TEXT`);
   },
+  // v6 → v7: what the classifier had said before a person overruled it
+  // (NEWS-404). Additive and nullable, and nullable is load-bearing: a topic
+  // that predates this column has no recorded correction, which is exactly true
+  // — backfilling it with the current category would invent agreement that was
+  // never observed and poison the only measurement this column exists to make.
+  6: (db) => {
+    addColumn(db, 'topics', 'auto_category', `auto_category TEXT`);
+  },
 };
 
 /**
@@ -144,6 +152,7 @@ CREATE TABLE IF NOT EXISTS topics (
   category           TEXT,
   subcategory        TEXT,
   category_source    TEXT NOT NULL DEFAULT 'auto',
+  auto_category      TEXT,
   consecutive_failures INTEGER NOT NULL DEFAULT 0,
   retry_after        TEXT,
   cleared_at         TEXT

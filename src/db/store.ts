@@ -358,6 +358,7 @@ export class Store {
       category: row['category'] ?? null,
       subcategory: row['subcategory'] ?? null,
       categorySource: row['category_source'] ?? 'auto',
+      autoCategory: row['auto_category'] ?? null,
       consecutiveFailures: asCount(row['consecutive_failures']),
       retryAfter: row['retry_after'] ?? null,
       clearedAt: row['cleared_at'] ?? null,
@@ -404,8 +405,8 @@ export class Store {
       .prepare(
         `INSERT INTO topics (id, name, paused, high_priority, guidance, created_at, last_checked_at,
                              covered_through_at, category, subcategory, category_source,
-                             consecutive_failures, retry_after, cleared_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                             consecutive_failures, retry_after, cleared_at, auto_category)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         topic.id,
@@ -422,6 +423,7 @@ export class Store {
         topic.consecutiveFailures,
         topic.retryAfter,
         topic.clearedAt,
+        topic.autoCategory,
       );
   }
 
@@ -703,6 +705,7 @@ export class Store {
       category: init.category ?? null,
       subcategory: init.category == null ? null : (init.subcategory ?? null),
       categorySource: 'auto',
+      autoCategory: null,
       consecutiveFailures: 0,
       retryAfter: null,
       clearedAt: null,
@@ -925,9 +928,24 @@ export class Store {
     subcategory: string | null,
     source: 'auto' | 'manual',
   ): Topic {
+    // Record what the classifier had said, the one moment a user contradicts it
+    // (NEWS-404). Written only when a *manual* choice replaces an *auto*
+    // category that actually existed — a manual choice over nothing corrects
+    // nothing — and **never overwritten**, so a second correction does not erase
+    // the first miss. `COALESCE` in SQL rather than a read-then-write, which
+    // would race a concurrent check finishing its own classification.
+    const previous = this.getTopic(id);
+    const correcting =
+      source === 'manual' && previous?.categorySource === 'auto' && previous.category !== null
+        ? previous.category
+        : null;
     const info = this.db
-      .prepare('UPDATE topics SET category = ?, subcategory = ?, category_source = ? WHERE id = ?')
-      .run(category, subcategory, source, id);
+      .prepare(
+        `UPDATE topics SET category = ?, subcategory = ?, category_source = ?,
+                           auto_category = COALESCE(auto_category, ?)
+         WHERE id = ?`,
+      )
+      .run(category, subcategory, source, correcting, id);
     if (asCount(info.changes) === 0) throw new Error(`no such topic: ${id}`);
     const topic = this.getTopic(id);
     if (topic === undefined) throw new Error(`no such topic: ${id}`);

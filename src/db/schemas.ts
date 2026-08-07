@@ -75,6 +75,21 @@ export const TopicSchema = z.object({
    */
   categorySource: z.enum(['auto', 'manual']).default('auto').catch('auto'),
   /**
+   * What the classifier had said, on a topic a person then overruled (NEWS-404).
+   *
+   * Only ever written when a **manual** choice replaces an **auto** one, and
+   * never cleared — it is a record of a disagreement, not current state. `null`
+   * means no correction has been observed, which is different from "the
+   * classifier was right": a topic nobody has looked at reads the same way.
+   *
+   * This exists because a wrong-but-reasonable section is otherwise invisible:
+   * the pill looks plausible, no check fails, and nobody reports it. An override
+   * is the one moment a user says, inside the app, that the classifier missed —
+   * and the *pair* is what matters, since the NEWS-397 hypothesis is about
+   * near-neighbours (Money↔Business, Media↔Culture) rather than raw miss count.
+   */
+  autoCategory: z.string().nullable().default(null),
+  /**
    * Consecutive failed checks, reset to 0 by any success (NEWS-110). Drives the
    * length of `retryAfter`, so a provider that stays broken is retried less and
    * less often instead of every tick.

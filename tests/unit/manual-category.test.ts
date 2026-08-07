@@ -120,3 +120,76 @@ describe('what the picker can offer', () => {
     expect(findCategory(activeCategories(BUILTIN_CATEGORIES), null)).toBeUndefined();
   });
 });
+
+describe('recording where the classifier was overruled (NEWS-404, FR-22.18)', () => {
+  const corrections = async (app: ReturnType<typeof makeApp>['app']) =>
+    (await (await app.request('/api/classifier/corrections')).json()) as {
+      corrections: { topic: string; from: string; to: string }[];
+      classified: number;
+    };
+
+  it('records the pair when a manual choice replaces an automatic one', async () => {
+    // The pair, not the count. NEWS-397's hypothesis is about near-neighbours,
+    // so from → to is what confirms or refutes it; a bare total cannot.
+    const { app, store } = makeApp();
+    const topic = store.addTopic('Housing market');
+    store.setTopicCategory(topic.id, 'business', 'markets', 'auto');
+
+    await patch(app, topic.id, { category: 'money', subcategory: 'housing-property' });
+
+    const body = await corrections(app);
+    expect(body.corrections).toEqual([{ topic: 'Housing market', from: 'business', to: 'money' }]);
+  });
+
+  it('records nothing when a manual choice corrects nothing', async () => {
+    // A user filing a never-classified topic is not a classifier miss. Counting
+    // it would inflate the only number this exists to produce.
+    const { app, store } = makeApp();
+    const topic = store.addTopic('Never classified');
+    await patch(app, topic.id, { category: 'money' });
+    expect((await corrections(app)).corrections).toEqual([]);
+  });
+
+  it('keeps the first miss when the user corrects twice', async () => {
+    // Never overwritten: the disagreement being recorded is with the
+    // *classifier*, and a user changing their own mind afterwards is not a
+    // second miss. Overwriting would also erase the pair that mattered.
+    const { app, store } = makeApp();
+    const topic = store.addTopic('Streaming wars');
+    store.setTopicCategory(topic.id, 'culture', null, 'auto');
+
+    await patch(app, topic.id, { category: 'media' });
+    await patch(app, topic.id, { category: 'entertainment' });
+
+    const body = await corrections(app);
+    expect(body.corrections).toEqual([{ topic: 'Streaming wars', from: 'culture', to: 'entertainment' }]);
+  });
+
+  it('survives the topic being cleared back to automatic', async () => {
+    // Clearing resets `categorySource` to `auto` (FR-22.7) so the topic can be
+    // re-classified — but the miss already happened, and forgetting it would
+    // make the measurement depend on what the user did next.
+    const { app, store } = makeApp();
+    const topic = store.addTopic('Housing market');
+    store.setTopicCategory(topic.id, 'business', null, 'auto');
+    await patch(app, topic.id, { category: 'money' });
+    await patch(app, topic.id, { category: null });
+
+    expect(store.getTopic(topic.id)?.autoCategory, 'the record outlives the correction').toBe('business');
+  });
+
+  it('reports the denominator, not just the numerator', async () => {
+    // Five misses out of six classified topics and five out of five hundred are
+    // different facts, and the list length cannot tell them apart.
+    const { app, store } = makeApp();
+    const a = store.addTopic('One');
+    const b = store.addTopic('Two');
+    store.setTopicCategory(a.id, 'business', null, 'auto');
+    store.setTopicCategory(b.id, 'sports', null, 'auto');
+    await patch(app, a.id, { category: 'money' });
+
+    const body = await corrections(app);
+    expect(body.corrections).toHaveLength(1);
+    expect(body.classified).toBe(2);
+  });
+});
