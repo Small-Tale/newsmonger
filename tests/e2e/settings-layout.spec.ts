@@ -850,3 +850,50 @@ test('profile picks persist and are pre-ticked when the guide reopens (FR-20.12�
   // file that runs after it, must not inherit a profile selection (NEWS-313).
   await page.request.patch('/api/settings', { data: { profiles: [] } });
 });
+
+test('ticked profiles turn into topics at Finish (FR-36.4–36.9, NEWS-382)', async ({ page }) => {
+  // The only test that proves the chain end to end: pick a profile, finish the
+  // wizard, get topics. Every link is covered in isolation by unit tests, and
+  // none of them would notice if the last one were never wired up.
+  await page.request.patch('/api/settings', { data: { profiles: [] } });
+  await page.goto('/');
+  const before = new Set(await page.locator('.topic-name').allTextContents());
+
+  await openSettingsTab(page, 'App');
+  await page.locator('[data-action=rerun-onboarding]').click();
+  const wizard = page.locator('.dialog.onboarding');
+  await wizard.locator('[data-action=onboarding-next]').click(); // welcome → source
+  await wizard.locator('[data-action=onboarding-next]').click(); // source → profiles
+
+  await wizard.locator('[data-profile=gardener]').click();
+  await wizard.locator('[data-action=profiles-skip]').click(); // → location
+
+  // Location → topics → schedule → Finish, without touching a starter chip, so
+  // whatever appears came from the profile and nothing else.
+  await wizard.locator('[data-action=onboarding-next]').click();
+  await wizard.locator('[data-action=onboarding-next]').click();
+  await expect(wizard.locator('h2')).toHaveText('How often should it check?');
+  await wizard.locator('[data-action=onboarding-next]').click();
+  await expect(wizard).toHaveCount(0);
+
+  // Gardener's top topic. Asserted by name rather than by count — a count would
+  // pass just as well if the wizard had created twelve of the wrong things.
+  await expect(page.locator('.topic-name', { hasText: 'Seasonal planting and growing guides' })).toBeVisible({
+    timeout: 20_000,
+  });
+
+  // Capped rather than five-per-profile unbounded (FR-36.6).
+  const after = await page.locator('.topic-name').allTextContents();
+  const added = after.filter((name) => !before.has(name));
+  expect(added.length).toBeGreaterThan(0);
+  expect(added.length).toBeLessThanOrEqual(12);
+
+  // Put the server back — later files must not inherit these topics (NEWS-313).
+  // Deleted through the API rather than the UI: this is teardown, not a test of
+  // the delete flow, and a UI loop here is what made the first version hang.
+  await page.request.patch('/api/settings', { data: { profiles: [] } });
+  const state = (await (await page.request.get('/api/state')).json()) as { topics: { id: string; name: string }[] };
+  for (const topic of state.topics) {
+    if (added.includes(topic.name)) await page.request.delete(`/api/topics/${encodeURIComponent(topic.id)}`);
+  }
+});

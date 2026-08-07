@@ -4,6 +4,7 @@ import { delegate, each, effect, mount } from 'kerfjs';
 import type { Effort,ProviderName  } from '../ai/types.js';
 import { PROVIDER_MODELS } from '../ai/types.js';
 import type { NewsItem } from '../db/schemas.js';
+import { topicsForProfiles } from '../profile-topics.js';
 import { PROFILE_PAGE_COUNT } from '../profiles.js';
 import {
   addSuggestedTopic,
@@ -1981,7 +1982,16 @@ function wireEvents(root: HTMLElement): void {
       // the moment it was added, with its guidance and classification (NEWS-146) —
       // which is also how it gets a narrowed first check, something a name-only
       // create could never do.
-      const { onboardingTopics: chosen } = appStore.state.value;
+      const state = appStore.state.value;
+      // Profiles contribute topics too (NEWS-382), and the ticked chips win any
+      // overlap: a name the user typed or picked themselves is a stronger signal
+      // than one derived from "you said you like food". `exclude` also carries
+      // what already exists, so reopening the guide for an existing user cannot
+      // propose something they are already watching.
+      const fromProfiles = topicsForProfiles(state.settings.profiles, {
+        exclude: [...state.onboardingTopics, ...state.topics.map((t) => t.name)],
+      });
+      const chosen = [...state.onboardingTopics, ...fromProfiles];
       closeOnboarding();
       void (async () => {
         for (const name of chosen) {
