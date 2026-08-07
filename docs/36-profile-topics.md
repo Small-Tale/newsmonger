@@ -40,6 +40,12 @@ The table, the selection and the guidance steers are shipped. The AI-generated e
 
 - **FR-36.8** *(Shipped)* Deduplicated with **`normalizeTopicName`**, deliberately not `normalizeTitle` from `ai/dedupe.ts`: that one strips punctuation because it compares headlines, whereas in a topic name a hyphen stands in for a space. Same call FR-24.24 makes, for the same reason — the headline rule would let a re-punctuated duplicate straight through.
 
+  **It compares names, not meanings, so the table has to do its own half** (NEWS-422). *Climate science* and *Climate science and research* were two entries for one subject — two topics, two checks, two feeds — for anyone who ticked both `science-curious` and `climate-environment`, which is precisely the person likely to tick both. Fixed by making the two entries the same string, since matching the wording is what lets the dedup see them.
+
+  **A fuzzier rule was tried and rejected.** Word-overlap and containment both find this pair, and both also collapse *Food safety and recalls* into *Pet food safety and recalls*, which are different subjects. Silently dropping a topic someone asked for is worse than a visible duplicate, so the guard is a test naming the pair rather than an algorithm. A sweep of all 240 at a 0.5 overlap threshold found exactly one real duplicate; the other seven hits — *Film releases* vs *Game releases*, *Commercial space industry* vs *Commercial aviation industry* — are the false positives that rule out automating it.
+
+  One pair is left standing as a judgement call: *Schools and education policy* (`parent`) and *Education policy and funding* (`educator`) overlap without being the same beat, and someone who is both would get both.
+
 - **FR-36.9** *(Shipped)* **Explicitly chosen topics win any overlap.** At Finish, the starter chips and anything added from discovery are created first and passed as exclusions to the profile selection: a name the user typed or picked is a stronger signal than one derived from "you said you like food". Topics that already exist are excluded too, so reopening the guide for an existing user cannot propose something they are already watching — the spirit of FR-24.11, which discovery enforces server-side.
 
 ### Guidance steers

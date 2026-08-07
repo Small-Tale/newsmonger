@@ -74,6 +74,28 @@ describe('the topic table', () => {
   });
 });
 
+describe('near-duplicate topic names (NEWS-422)', () => {
+  it('does not offer the same subject under two names', () => {
+    // Dedup is `normalizeTopicName`, which compares names and not meanings, so a
+    // subject written two ways survives as two topics — two checks, two feeds,
+    // one subject. That is what "Climate science" and "Climate science and
+    // research" were, and someone interested in both science and the climate is
+    // exactly the person who ticks both profiles.
+    const chosen = topicsForProfiles(['science-curious', 'climate-environment'], { cap: 12 });
+    expect(chosen.filter((t) => t.toLowerCase().startsWith('climate science'))).toHaveLength(1);
+  });
+
+  it('leaves genuinely distinct neighbours alone', () => {
+    // The counterweight, and the reason this is a named pair rather than a rule.
+    // A containment or word-overlap check would collapse these too, and silently
+    // dropping a topic someone asked for is worse than a visible duplicate:
+    // pet food recalls are not food recalls.
+    const names = new Set(Object.values(PROFILE_TOPICS).flat());
+    expect(names.has('Food safety and recalls')).toBe(true);
+    expect(names.has('Pet food safety and recalls')).toBe(true);
+  });
+});
+
 describe('choosing topics for a selection', () => {
   it('gives a single profile its whole list', () => {
     expect(topicsForProfiles(['foodie'])).toEqual(topicsForProfile('foodie'));

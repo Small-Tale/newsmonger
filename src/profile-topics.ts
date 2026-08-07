@@ -238,7 +238,12 @@ export const PROFILE_TOPICS: Readonly<Record<string, readonly string[]>> = {
     'Astronomical events and skywatching',
   ],
   'climate-environment': [
-    'Climate science and research',
+    // Deliberately the same string as `science-curious`'s entry, not a variant of
+    // it (NEWS-422). Dedup is by `normalizeTopicName`, which compares names and
+    // not meanings, so "Climate science and research" and "Climate science" were
+    // two topics — two checks, two feeds, one subject — for anyone who ticked
+    // both profiles. Matching the wording is what makes FR-36.8 catch it.
+    'Climate science',
     'Renewable energy transition',
     'Extreme weather and adaptation',
     'Climate policy and agreements',
