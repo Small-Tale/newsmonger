@@ -10,7 +10,14 @@
 
 import { describe, expect, it } from 'vitest';
 
-import { DEFAULT_TOPIC_CAP, PROFILE_TOPICS, topicsForProfile, topicsForProfiles } from '../../src/profile-topics.js';
+import {
+  DEFAULT_TOPIC_CAP,
+  guidanceForTopic,
+  PROFILE_TOPICS,
+  TOPIC_GUIDANCE,
+  topicsForProfile,
+  topicsForProfiles,
+} from '../../src/profile-topics.js';
 import { ALL_PROFILES } from '../../src/profiles.js';
 
 describe('the topic table', () => {
@@ -171,5 +178,54 @@ describe('the discovery strip’s selection (NEWS-406, FR-24.40)', () => {
     for (const id of ids) {
       expect(picked, `${id} should be represented`).toContain(topicsForProfile(id)[0]);
     }
+  });
+});
+
+describe('guidance steers (NEWS-400, FR-36.10)', () => {
+  it('is sparse, and that is the design', () => {
+    // A steer that restates the topic name is worse than none — it spends prompt
+    // on nothing and reads as though someone had thought about it. Most of the
+    // 240 are already beats narrow enough to search on.
+    const withGuidance = Object.keys(TOPIC_GUIDANCE).length;
+    expect(withGuidance).toBeGreaterThan(0);
+    expect(withGuidance, 'a steer on most topics would mean the names are too vague').toBeLessThan(60);
+  });
+
+  it('only names topics that actually exist', () => {
+    // A steer keyed to a topic that was renamed is dead weight that looks alive.
+    const names = new Set(Object.values(PROFILE_TOPICS).flat());
+    for (const key of Object.keys(TOPIC_GUIDANCE)) {
+      expect(names.has(key), `"${key}" is not a topic in the table`).toBe(true);
+    }
+  });
+
+  it('never merely restates the topic name', () => {
+    // The failure mode this sparseness exists to avoid, asserted rather than
+    // trusted: a steer has to say something the name does not.
+    for (const [name, steer] of Object.entries(TOPIC_GUIDANCE)) {
+      expect(steer.toLowerCase(), `"${name}" restates itself`).not.toBe(name.toLowerCase());
+      expect(steer.length, `"${name}" has a steer too short to be saying anything`).toBeGreaterThan(40);
+    }
+  });
+
+  it('says nothing about place', () => {
+    // NEWS-387 expected guidance to carry the jurisdiction qualifier its four
+    // un-rewordable beats needed. It cannot — a static "in the reader's own
+    // jurisdiction" is meaningless without knowing the jurisdiction, and FR-35.4
+    // already passes the location into every check naming exactly those cases.
+    // A steer that duplicated it would be a frozen, worse copy.
+    for (const [name, steer] of Object.entries(TOPIC_GUIDANCE)) {
+      for (const word of ['jurisdiction', 'your country', 'near you', 'local to']) {
+        expect(steer.toLowerCase(), `"${name}" duplicates FR-35.4's location instruction`).not.toContain(word);
+      }
+    }
+  });
+
+  it('returns an empty steer rather than undefined for an unsteered topic', () => {
+    // `''` is what the create path checks, and what FR-24.19 treats as "no
+    // guidance". An `undefined` leaking into the POST body would send `null`.
+    expect(guidanceForTopic('Marathons and road racing')).toBe('');
+    expect(guidanceForTopic('not a topic at all')).toBe('');
+    expect(guidanceForTopic('Artificial intelligence')).not.toBe('');
   });
 });

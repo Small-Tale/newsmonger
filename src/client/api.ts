@@ -20,6 +20,7 @@ import {
   ThreadRespSchema,
 } from '../api/schemas.js';
 import type { BackupLocation } from '../backup-locations.js';
+import { guidanceForTopic } from '../profile-topics.js';
 import { noteState } from './notifications.js';
 import { appStore } from './stores.js';
 
@@ -263,7 +264,18 @@ export async function withRefresh(fn: () => Promise<unknown>): Promise<void> {
 }
 
 export function addTopic(name: string): Promise<void> {
-  return withRefresh(() => request('/api/topics', { method: 'POST', body: JSON.stringify({ name }) }));
+  // Any steer this topic has travels **with the create** (NEWS-400), never in a
+  // follow-up PATCH: creating a topic fires its first check immediately
+  // (FR-1.12), so a second request would land after that check had already run
+  // unsteered — the same reasoning `addSuggestedTopic` records below. Most
+  // topics have no steer and send exactly what they always did.
+  const guidance = guidanceForTopic(name);
+  return withRefresh(() =>
+    request('/api/topics', {
+      method: 'POST',
+      body: JSON.stringify({ name, ...(guidance === '' ? {} : { guidance }) }),
+    }),
+  );
 }
 
 /**

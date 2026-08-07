@@ -6,7 +6,7 @@ See also [24 — Topic Discovery](24-topic-discovery.md), [35 — Location](35-l
 
 ## Status: partial
 
-The topic table and the selection are shipped. Guidance steers are not — see *Not yet built*.
+The table, the selection and the guidance steers are shipped. The AI-generated enhancement over this floor is not — see *Not yet built*.
 
 ### The table
 
@@ -42,14 +42,28 @@ The topic table and the selection are shipped. Guidance steers are not — see *
 
 - **FR-36.9** *(Shipped)* **Explicitly chosen topics win any overlap.** At Finish, the starter chips and anything added from discovery are created first and passed as exclusions to the profile selection: a name the user typed or picked is a stronger signal than one derived from "you said you like food". Topics that already exist are excluded too, so reopening the guide for an existing user cannot propose something they are already watching — the spirit of FR-24.11, which discovery enforces server-side.
 
+### Guidance steers
+
+- **FR-36.10** *(Shipped, NEWS-400)* **Guidance steers, on the topics that earn one — deliberately sparse.**
+
+  FR-24.12 gives a discovery suggestion a steer because the model is writing justification prose anyway. A hand-written table pays for every one, and **a steer that restates the topic name is worse than none**: it spends prompt on nothing and reads as though someone had thought about it. So an entry exists only where the name alone would search too broadly or drift into an adjacent subject — *"Marathons and road racing"* needs nothing; *"Artificial intelligence"* does.
+
+  Three shapes earn one: **fields rather than beats** (Artificial intelligence, Medical and biology research), **names that read as the consumer subject but mean the industry behind it** (Games industry and studios, Music industry and streaming economics), and **topics that drift into their neighbour without a boundary** (Food trends, which otherwise returns recipes; Stock markets, which otherwise returns stock tips).
+
+  The steer travels **with the create**, never in a follow-up PATCH — creating a topic fires its first check immediately (FR-1.12), so a second request lands after the check the steer exists to narrow. Same reasoning as FR-24.26.
+
+- **FR-36.12** *(Shipped, NEWS-400)* **No steer mentions place, and that is the finding.**
+
+  NEWS-387 identified four beats it could not reword without making them vaguer — legal precedent, Politics watcher, and the pensions / tuition / health-funding trio — and expected guidance to carry the qualifier a name could not afford.
+
+  **It cannot.** A static steer saying "in the reader's own jurisdiction" is meaningless without knowing the jurisdiction. That residue was solved instead by **FR-35.4**, which passes the user's location into *every* check with an instruction naming exactly these cases — "local events, property, schools, transport, jobs, weather, and national politics or law". Writing them here as well would duplicate a live signal with a frozen, worse copy.
+
+  A test asserts no steer contains jurisdiction language, so the reasoning cannot quietly rot back.
+
 ## Testing
 
-- **Unit** (`tests/unit/profile-topics.test.ts`, 14 tests): every profile has five topics and no key names a profile that doesn't exist; no duplicates within a profile; the removed US-shaped phrasings stay out; no name carries a year. On selection: a single profile yields its whole list, rank-first ordering holds, the cap holds at ten profiles with every one represented, order-independence, exclusions (including a re-punctuated match), and a zero cap meaning none rather than unlimited.
+- **Unit** (`tests/unit/profile-topics.test.ts`, 23 tests): every profile has five topics and no key names a profile that doesn't exist; no duplicates within a profile; the removed US-shaped phrasings stay out; no name carries a year. On selection: a single profile yields its whole list, rank-first ordering holds, the cap holds at ten profiles with every one represented, order-independence, exclusions (including a re-punctuated match), and a zero cap meaning none rather than unlimited. On the steers: the map stays sparse, every key names a topic that exists, no steer restates its own name, none mentions place, and an unsteered topic returns `''` rather than `undefined` — which is what the create path checks and what FR-24.19 treats as "no guidance".
 
 ## Not yet built
-
-- **FR-36.10** *(Design only)* **Guidance steers.** FR-24.12 gives every discovery suggestion a ready-made steer so a topic's *first* check is already narrowed, and notes it costs nothing there because the model is writing justification prose anyway. A hand-written table gets no such ride: 240 topics need 240 hand-written steers.
-
-  The maintainer deferred these to integration time as less critical than the names. Tracked as **NEWS-400**. Until then a default topic runs its first check on the name alone — broader than ideal, but not wrong.
 
 - **FR-36.11** *(Design only)* **AI-generated topics as an enhancement over this floor.** NEWS-382 proposed the static map as the floor and an AI pass as the enhancement, on the FR-20.6b pattern: if a provider resolves, ask discovery; if not, fall back. Only the floor is built. The floor is the half that has to exist, because onboarding's Source step is skippable and a user can reach Finish with no provider at all.

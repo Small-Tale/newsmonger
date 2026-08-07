@@ -410,6 +410,78 @@ export const PROFILE_TOPICS: Readonly<Record<string, readonly string[]>> = {
   ],
 };
 
+/**
+ * Guidance steers, for the topics that earn one (NEWS-400).
+ *
+ * **Sparse on purpose — most of the 240 have no entry, and that is the finding,
+ * not a gap.** FR-24.12 gives a discovery suggestion a steer because the model is
+ * writing justification prose anyway; a hand-written table pays for every one. A
+ * steer that restates the topic name is worse than none: it spends prompt on
+ * nothing and reads as though someone had thought about it.
+ *
+ * So an entry exists only where the **name alone would search too broadly or
+ * drift into an adjacent subject**. "Marathons and road racing" needs nothing.
+ * "Artificial intelligence" does.
+ *
+ * **None of these are about *place*, and that is deliberate.** NEWS-387 flagged
+ * four beats it could not reword without making them vaguer — legal precedent,
+ * Politics watcher, and the pensions / tuition / health-funding trio — and
+ * expected guidance to carry the qualifier a name could not afford. It cannot: a
+ * static steer saying "in the reader's own jurisdiction" is meaningless without
+ * knowing the jurisdiction. That was solved instead by FR-35.4, which passes the
+ * user's location into **every** check with an instruction naming exactly these
+ * cases ("local events, property, schools, transport, jobs, weather, and national
+ * politics or law"). Writing them here as well would duplicate it with a worse,
+ * frozen version.
+ */
+export const TOPIC_GUIDANCE: Readonly<Record<string, string>> = {
+  // Vast subjects where the name is a field, not a beat.
+  'Artificial intelligence':
+    'Capabilities, products and policy a non-specialist would notice — not research papers, benchmark scores or funding rounds.',
+  'Medical and biology research':
+    'Findings a general reader can act on or be genuinely surprised by. Not trial-stage pharma business or conference abstracts.',
+  'Emerging technology markets':
+    'Where new companies are being formed and funded, and which markets are opening. Not product launches from established firms.',
+  'Regulation and compliance':
+    'Rules organisations must actually comply with, and enforcement of them. Not political debate about proposed rules.',
+
+  // Names that read as the consumer subject but mean the industry behind it.
+  'Games industry and studios':
+    'Studios, funding, layoffs, acquisitions and platform business. Not game reviews or release news — those are covered separately.',
+  'Music industry and streaming economics':
+    'How artists are paid and how platforms compete. Not new releases, tours or artist news.',
+  'Anime and comics industry':
+    'Studios, licensing, distribution and streaming rights. Not reviews or release schedules.',
+  'Fashion industry business':
+    'Brands, retail, supply chains and the business of making clothes. Not collections or street style.',
+  'Beauty industry business': 'Brands, retail and manufacturing. Not product launches or reviews.',
+
+  // Topics that drift into the neighbouring one without a boundary.
+  'Food trends and ingredients':
+    'What is changing in how people eat and what they cook with. Not recipes, and not restaurant openings.',
+  'Stock markets and indices':
+    'Index-level moves and what drove them. Not individual stock picks, tips or price targets.',
+  'Consumer deals and price trends':
+    'Durable movements in what things cost. Not individual sales, coupons or affiliate roundups.',
+  'The remote labor market':
+    'Hiring, pay and employer policy for remote roles specifically. Not general employment statistics.',
+  'Developer tools and AI coding assistants':
+    'Tools developers are actually adopting, and how they change the work. Not vendor announcements or benchmark claims.',
+  'Climate policy and agreements':
+    'Binding commitments, regulation and what is actually enforced. Not summit rhetoric or pledges without mechanisms.',
+
+  // Where the useful version is the evidence, and the default would be marketing.
+  'Supplements and performance':
+    'What the evidence supports and what it does not. Not product marketing or influencer claims.',
+  'Skincare science and ingredients':
+    'Evidence for what ingredients do. Not product launches, which are covered separately.',
+};
+
+/** The steer for a topic, or `''` when its name is narrow enough alone. */
+export function guidanceForTopic(name: string): string {
+  return TOPIC_GUIDANCE[name] ?? '';
+}
+
 /** Topics for one profile, best first. Empty for an id this build doesn't ship. */
 export function topicsForProfile(id: string): readonly string[] {
   return PROFILE_TOPICS[id] ?? [];
