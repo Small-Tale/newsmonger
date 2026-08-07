@@ -58,6 +58,49 @@ describe('the classification request', () => {
     // Labels travel with slugs — the model picks by slug but reads by label.
     expect(options.find((o) => o.slug === 'sports')?.label).toBe('Sports');
   });
+
+  /**
+   * The taxonomy's real budget, measured (NEWS-397).
+   *
+   * NEWS-392 moved the constraint on how big `BUILTIN_CATEGORIES` may get: an
+   * unpopulated section costs nothing in the filter bar (NEWS-114), so what a
+   * wider table actually costs is **this option list**, written into the check
+   * prompt for every topic that still needs a section. NEWS-388 then took the
+   * table from 11 sections / 63 subcategories to 20 / 132 — and nothing
+   * measured the constraint it had just become, which is worse than having the
+   * wrong constraint, because it leaves no argument against the next widening.
+   *
+   * So: a **budget, not a fingerprint.** The counts are exact, because adding a
+   * section or a subject is a deliberate act that should appear in a diff. The
+   * character ceiling carries headroom, because rewording a label is not a
+   * structural change and should not fail a gate.
+   *
+   * What the current numbers cost, so the next person widening this has a
+   * figure rather than a feeling: the block is ~5.4k characters, on the order
+   * of 1,300–1,800 tokens (see the ticket for the estimation method) — more
+   * than the system prompt and the rest of the user prompt put together. It is
+   * paid **once per topic**, not once per check: `needsClassifying` stops
+   * asking as soon as an answer resolves. Fractions of a cent per topic. The
+   * question worth arguing about is not the tokens; it is whether a 20-way
+   * choice with 132 leaves is one a model makes as well as an 11-way one, and
+   * nothing here can answer that.
+   */
+  it('keeps the classifier option list inside its measured budget (NEWS-397)', async () => {
+    const store = new Store(tmpDataDir());
+    const provider = createMockProvider();
+    const runner = new CheckRunner(store, asResolver(provider));
+    await runner.checkTopic(store.addTopic('Anything').id);
+    const options = provider.calls[0]?.context.categoryOptions ?? [];
+
+    expect(options).toHaveLength(20);
+    expect(options.reduce((n, o) => n + o.subcategories.length, 0)).toBe(132);
+
+    // Isolate the block by difference: the same prompt with and without the
+    // options differs by exactly the section list and its two instructions.
+    const bare = buildUserPrompt('Anything', [], null, {});
+    const asking = buildUserPrompt('Anything', [], null, { categoryOptions: options });
+    expect(asking.length - bare.length).toBeLessThanOrEqual(5700);
+  });
 });
 
 describe('applying the model’s answer', () => {
