@@ -338,8 +338,14 @@ describe('a deferred sweep is recorded, so the banner can tell why (NEWS-247)', 
   it('moves the watermark when work was waiting and was not allowed to run', async () => {
     const { store, runner } = attendedSetup();
     store.addTopic('fusion energy');
-    const before = runner.checksPossibleSince();
-    const now = before + 60_000;
+    // `afterGrace()`, not `checksPossibleSince() + 60_000` (NEWS-411). The
+    // watermark starts at the runner's construction, and `addTopic` stamps
+    // `createdAt` from the real clock *afterwards* — so a sweep an even minute
+    // past the watermark can still land inside the topic's own settling grace if
+    // the insert took a millisecond. Then no work is waiting, nothing is
+    // deferred, and the watermark does not move: a ~25% flake whose message
+    // blames the assertion rather than the clock.
+    const now = afterGrace().getTime();
 
     await runner.checkDue(new Date(now));
 
