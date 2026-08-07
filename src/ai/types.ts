@@ -171,6 +171,18 @@ export interface SuggestRequest {
    * a model will occasionally ignore this one.
    */
   exclude: string[];
+  /**
+   * Reader profile **labels** to bias an unscoped request with (NEWS-386).
+   *
+   * Labels, not the stored ids — the model reads "Foodie", not `foodie`.
+   *
+   * Absent for a request the user has already scoped: a typed query or a
+   * drilled-in subcategory says what they want, and quietly re-ranking that by
+   * something ticked once during setup is how FR-24.12a's heading/label
+   * contradiction gets made. Filled by `DiscoveryService.suggest`, never by the
+   * client — same reasoning as `exclude` (FR-24.24).
+   */
+  profiles?: string[];
   /** Taxonomy to classify into (FR-24.13). Absent or empty means don't ask. */
   categoryOptions?: CategoryOption[];
   /** How many suggestions to aim for. The provider may return fewer. */

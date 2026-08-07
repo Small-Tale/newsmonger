@@ -4,6 +4,7 @@ import type { CategoryTable } from './categories.js';
 import { activeCategories, BUILTIN_CATEGORIES, findCategory, findSubcategory } from './categories.js';
 import type { ProviderResolver } from './checks.js';
 import type { Store } from './db/store.js';
+import { profileLabels } from './profiles.js';
 
 /**
  * The server half of topic discovery (NEWS-125, `docs/24-topic-discovery.md`).
@@ -70,9 +71,48 @@ export function cacheKeyFor(request: SuggestRequest, providerSignature: string):
   return JSON.stringify({
     scope: request.scope,
     exclude: [...request.exclude].sort((a, b) => a.localeCompare(b)),
+    // In the key for the same reason `exclude` is (NEWS-386): the profiles change
+    // what a valid answer *is*, so an entry computed before the user edited them
+    // would serve a spread aimed at someone else. Sorted so the key does not
+    // depend on the order they happen to arrive in.
+    profiles: [...(request.profiles ?? [])].sort((a, b) => a.localeCompare(b)),
     limit: request.limit ?? null,
     provider: providerSignature,
   });
+}
+
+/**
+ * Whether a request is unscoped enough for the reader profiles to bias it
+ * (NEWS-386).
+ *
+ * **Only where the user has not said what they want.** An empty free-text box is
+ * "surprise me" (FR-24.3) and a bare section is "anything in here" (FR-24.2) —
+ * both are requests for a spread, and a spread aimed at this reader beats the
+ * same generic one everybody gets.
+ *
+ * A typed query, a drilled-in subcategory or a tuner round is the opposite: the
+ * user named the thing. Re-ranking that by something ticked once during setup
+ * produces exactly the heading-says-one-thing / results-say-another gap FR-24.12a
+ * had to write a "closest matches" note to explain — and here it would be
+ * self-inflicted rather than inherent.
+ */
+export function profilesApplyTo(scope: SuggestScope): boolean {
+  if (scope.kind === 'describe') return scope.query.trim() === '';
+  if (scope.kind === 'section') return scope.subcategory === null;
+  return false;
+}
+
+/**
+ * The stored profiles as prompt-ready labels, or nothing at all.
+ *
+ * Returns a spreadable object rather than an array so the caller can omit the
+ * field entirely when there is nothing to say — an empty `profiles: []` would
+ * still enter the cache key as a distinct value from absent, splitting the cache
+ * for no reason.
+ */
+function profilesFor(store: Store): { profiles?: string[] } {
+  const labels = profileLabels(store.getSettings().profiles);
+  return labels.length === 0 ? {} : { profiles: labels };
 }
 
 /**
@@ -154,6 +194,10 @@ export class DiscoveryService {
       // Topic names first and always; `seen` only *adds* to them (NEWS-136), so
       // asking for more ideas can never weaken the FR-24.11 guarantee.
       exclude: [...topics.map((t) => t.name), ...seen],
+      // Resolved here, not sent by the client, so no path can forget them — and
+      // resolved to *labels*, since ids are storage and the model reads prose.
+      // Unknown ids drop out on the way through (`profileLabels`).
+      ...(profilesApplyTo(scope) ? profilesFor(this.store) : {}),
       categoryOptions: this.categoryOptions(),
       ...(limit === undefined ? {} : { limit: Math.min(limit, MAX_SUGGESTIONS) }),
     };

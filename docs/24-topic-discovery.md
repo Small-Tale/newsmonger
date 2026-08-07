@@ -56,6 +56,16 @@ That last part is the decision worth stating plainly, because it is what the bra
 
 - **FR-24.10** *(Shipped)* Every request asks for a deliberate **mix of ongoing and evergreen** topics, and each suggestion is labelled with which it is. An ongoing story burns out and an evergreen topic does not; that is the honest answer to "why is this topic quiet now?" three months later, and it belongs on the card rather than in a support conversation.
 
+- **FR-24.36** *(Shipped, NEWS-386)* **An unscoped request is biased by the user's reader profiles** (FR-20.12). The empty box was previously the same answer for everybody; with profiles it becomes "surprise me, *given* you said you're a Parent, an Investor and into Crafts" — a materially better answer for no extra user effort.
+
+  **Only where the user has not already said what they want** (`profilesApplyTo`). An empty free-text box (FR-24.3) and a bare section (FR-24.2) are requests for a spread. A typed query, a drilled-in subcategory and a tuner round are the opposite — the user named the thing, and quietly re-ranking that by something ticked once during setup produces exactly the heading-says-one-thing / results-say-another gap **FR-24.12a** had to write a "closest matches" note to explain. There it is inherent; here it would be self-inflicted.
+
+- **FR-24.37** *(Shipped, NEWS-386)* Profiles are resolved **server-side in `DiscoveryService.suggest`**, never sent by the client — the same argument FR-24.24 makes for the exclusions: if a caller has to remember, some path will not. They are sent as **labels**, not the stored ids, because the model reads prose; unknown ids drop out on the way through.
+
+- **FR-24.38** *(Shipped, NEWS-386)* **The profiles are part of the cache key.** Omitting them would be invisible for the ten-minute TTL and then serve a spread computed for who the user used to be — the same class of bug the exclusions-in-the-key note under FR-24.15 exists to prevent. Sorted, so the key does not depend on arrival order; absent and empty produce the same key, so having no profiles does not split the cache.
+
+- **FR-24.39** *(Shipped, NEWS-386)* **The instruction steers, it does not filter**, and it asks for spread. Without "a steer, not a filter" the model returns only on-profile ideas and discovery loses the ability to surprise anyone — which is half of what it is for. Without the spread instruction, ticking six profiles returns six variations on the first one.
+
 - **FR-24.11** *(Shipped)* **Nothing already followed is ever suggested.** Existing topic names go into the request as exclusions *and* results are matched against the current topics before rendering. Two layers, because the model will occasionally ignore the first and a duplicate suggestion is the most obviously-broken thing this feature could produce.
 
 - **FR-24.12** *(Shipped)* A suggestion carries a **guidance steer** (FR-18), not just a name — "Formula 1: race results and team news, not driver gossip". Adding the topic stores it, so the *first* check is already narrowed. This costs nothing extra: the model is writing the justification prose anyway.

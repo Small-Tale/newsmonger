@@ -176,6 +176,21 @@ export function buildSuggestPrompt(request: SuggestRequest): string {
   lines.push('');
   lines.push(...scopeLines(request.scope));
 
+  // Placed before the exclusions and after the scope: it *widens* what to look
+  // for, and reads as a qualifier on the request rather than on the list of
+  // things to avoid. Only present for a request the user hasn't already scoped
+  // (NEWS-386, `profilesApplyTo`).
+  const profiles = request.profiles ?? [];
+  if (profiles.length > 0) {
+    lines.push('');
+    lines.push(
+      `The user describes themselves as: ${profiles.join(', ')}. Lean towards subjects such a person would ` +
+        'follow, and spread the suggestions across several of those interests rather than crowding them ' +
+        'into one. Treat it as a steer, not a filter — an excellent suggestion outside these is still ' +
+        'worth making, and a dull one inside them is not.',
+    );
+  }
+
   if (request.exclude.length > 0) {
     lines.push('');
     lines.push('The user ALREADY follows these. Do not suggest them, or near-duplicates of them:');
