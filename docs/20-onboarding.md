@@ -18,7 +18,18 @@ See also [6 — AI Providers](6-providers.md), [7 — API Keys and Settings Dial
 
 - **FR-20.3** *(Shipped)* Dismissal is remembered per device (`localStorage`, alongside the other view preferences — it records what *this* browser has shown, not anything about the data). After that only **Settings → "Show the setup guide again"** reopens it.
 
-  **Known consequence: there is no factory reset.** Deleting `~/.newsmonger` removes every topic and setting, but the flag is in the webview's storage and survives, so the guide does not come back — which is not what deleting the data directory looks like it should do. Reported in NEWS-421 and left open as NEWS-423, because moving the flag server-side reverses this requirement's stated reasoning and trades a desktop bug for a browser one.
+  **The flag names the install it was dismissed for** (NEWS-423), rather than being a bare `'1'`. `GET /api/state` reports an `installId` — minted once per database, stored in `meta` — and a dismissal records that id. A stored id that does not match the running one reads as unseen.
+
+  This exists because a bare boolean meant **deleting `~/.newsmonger` did not bring the guide back**: every topic and setting gone, and the app still behaving as though it had already introduced itself. Deleting the data directory is the gesture people reach for to start over, and it could not reach the one flag that decides whether the app explains itself. Reported in NEWS-421.
+
+  **Naming the install was chosen over moving the flag to the server**, which was the obvious fix and would have cost the property this requirement opens with — two browsers against one server would then share a single dismissal, and the second would never see the guide. Naming the install keeps both halves: a new database is a new id so the guide returns, the same database is the same id so it stays shut, and each browser still answers for itself.
+
+  Two smaller decisions, both load-bearing:
+
+  - **An absent or empty `installId` reads as *seen*.** It means the server did not say — an older build, or a response cached across an upgrade. The wrong guess in that direction is a missing prompt; the other direction is a wizard thrown over an established user's feed.
+  - **The pre-NEWS-423 value `'1'` is deliberately not honoured.** Reading it as "seen" was the first attempt, and it defeated the fix for the only person it was for: the report came from a webview that already held a `'1'`. It also spared nobody, since the case it was meant to protect is an existing user on upgrade, and they have topics — which FR-20.1 already treats as the whole test.
+
+  The id lives in `meta`, **not in settings**: a backup restore replaces settings wholesale, so an id kept there would arrive from whichever machine produced the backup and quietly re-suppress the guide on a fresh install. It is an identity, not a preference.
 
 ### The six steps
 

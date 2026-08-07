@@ -1531,6 +1531,39 @@ export class Store {
     return added;
   }
 
+  // --- Install identity (NEWS-423) -----------------------------------------
+
+  /**
+   * A stable id for *this database*, minted the first time it is asked for.
+   *
+   * Exists so the client can tell "the user dismissed the setup guide" from
+   * "the user dismissed the setup guide **on a database that no longer
+   * exists**". Deleting the data directory is the gesture people reach for to
+   * start over, and it could not reach the dismissal flag, which lives in the
+   * webview's `localStorage` — so the desktop app had no factory reset.
+   *
+   * **In `meta`, deliberately not in settings.** Settings are replaced wholesale
+   * by a backup restore, so an id kept there would arrive from whichever machine
+   * produced the backup and quietly re-suppress the guide on a fresh install.
+   * This is an identity, not a preference.
+   *
+   * Minted lazily rather than at schema creation so an existing database gets
+   * one without a migration. That is safe here for a reason worth stating: an
+   * existing user's stored flag will not match the new id, but they have topics,
+   * and having topics is the whole auto-open test (FR-20.1) — so the guide still
+   * does not open for them.
+   */
+  installId(): string {
+    const row = this.db.prepare(`SELECT value FROM meta WHERE key = 'install_id'`).get() as
+      | { value: string }
+      | undefined;
+    if (row !== undefined && row.value !== '') return row.value;
+    const minted = randomUUID();
+    this.db.prepare(`INSERT INTO meta (key, value) VALUES ('install_id', ?)
+       ON CONFLICT(key) DO UPDATE SET value = excluded.value`).run(minted);
+    return minted;
+  }
+
   // --- Quarantine notice (NEWS-340) ----------------------------------------
 
   private recordQuarantine(backupPath: string): void {

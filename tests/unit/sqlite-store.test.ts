@@ -974,3 +974,54 @@ describe('rescuing a database keeps its write-ahead log (NEWS-337)', () => {
     check.close();
   });
 });
+
+describe('the install id (NEWS-423)', () => {
+  it('is stable across reads and across reopening the same database', () => {
+    const dir = tmpDataDir();
+    const store = new Store(dir);
+    const first = store.installId();
+    expect(first).not.toBe('');
+    expect(store.installId()).toBe(first);
+    store.close();
+
+    // Reopening is what a restart is, and the id has to survive it — otherwise
+    // every launch would look like a fresh install and re-open the setup guide.
+    const reopened = new Store(dir);
+    expect(reopened.installId()).toBe(first);
+    reopened.close();
+  });
+
+  it('is different for a different data directory', () => {
+    const a = new Store(tmpDataDir());
+    const b = new Store(tmpDataDir());
+    expect(a.installId()).not.toBe(b.installId());
+    a.close();
+    b.close();
+  });
+
+  it('changes when the data directory is deleted and remade — the whole point', () => {
+    // The reported gesture: delete `~/.newsmonger` and expect to start over.
+    const dir = tmpDataDir();
+    const before = new Store(dir);
+    const oldId = before.installId();
+    before.close();
+
+    fs.rmSync(dir, { recursive: true, force: true });
+    fs.mkdirSync(dir, { recursive: true });
+
+    const after = new Store(dir);
+    expect(after.installId()).not.toBe(oldId);
+    after.close();
+  });
+
+  it('is not carried in by a settings write', () => {
+    // It lives in `meta` rather than in settings precisely so a backup restore —
+    // which replaces settings wholesale — cannot import another machine's
+    // identity and re-suppress the guide on a fresh install.
+    const store = new Store(tmpDataDir());
+    const id = store.installId();
+    store.updateSettings({ theme: 'dark' });
+    expect(store.installId()).toBe(id);
+    store.close();
+  });
+});

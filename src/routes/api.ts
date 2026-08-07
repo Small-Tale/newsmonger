@@ -152,6 +152,7 @@ export function registerApi(app: Hono<AppEnv>): void {
       // Almost always null. When it isn't, it is the only account the user gets
       // of why their topics are missing (NEWS-340).
       quarantine: store.getQuarantine(),
+      installId: store.installId(),
     };
     return c.json(state);
   });

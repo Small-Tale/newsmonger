@@ -309,6 +309,12 @@ export interface AppState {
    */
   quarantine: { backupPath: string; at: string } | null;
   /**
+   * A stable id for the database behind this server (NEWS-423). `''` until the
+   * first `/api/state` answers, and `''` from a server too old to send it —
+   * `readOnboardingSeen` treats both as "cannot tell".
+   */
+  installId: string;
+  /**
    * Databases FR-4.9 set aside, offered for recovery (NEWS-342). Loaded when the
    * Data tab opens, not on the poll — inspecting one means copying and opening
    * it, and the list is empty on essentially every install.
@@ -548,22 +554,52 @@ const BEHIND_GRACE_MS = 30 * 60 * 1000;
  * Whether the first-run flow has been dismissed (NEWS-78). Per-device, like the
  * other view preferences: it records what *this* browser has already shown, not
  * anything about the account's data.
+ *
+ * **It stores the install id it was dismissed for, not `'1'`** (NEWS-423). The
+ * flag being a bare boolean meant deleting `~/.newsmonger` — the gesture people
+ * reach for to start over — left it standing, so the desktop app had no factory
+ * reset: every topic and setting gone, and the app still behaving as though it
+ * had already introduced itself.
+ *
+ * Moving the flag to the server would have fixed that and broken the property
+ * this comment opens with, since two browsers against one server would then
+ * share a single dismissal. Naming the install keeps both: a new database is a
+ * new id, so the guide returns; the same database is the same id, so it stays
+ * shut; and each browser still answers for itself.
+ *
+ * **The pre-NEWS-423 value `'1'` is deliberately not honoured.** Reading it as
+ * "seen" was the first attempt at this change, and it defeated the fix for the
+ * only person it was for: the report came from someone whose webview already
+ * held a `'1'`, so honouring it would have left them with exactly the behaviour
+ * they filed. It also bought nothing — the case it was meant to spare is an
+ * existing user on upgrade, and they have topics, which is already the whole
+ * auto-open test (FR-20.1).
  */
 const ONBOARDING_KEY = 'news:onboarding-seen';
 
-export function readOnboardingSeen(): boolean {
+/**
+ * `installId` empty means the server did not say — an older build, or a state
+ * response cached across an upgrade. That reads as **seen**, because the wrong
+ * guess in that direction is a missing prompt rather than a wizard thrown over
+ * an established user's feed.
+ */
+export function readOnboardingSeen(installId: string): boolean {
   if (typeof localStorage === 'undefined') return false;
+  if (installId === '') return true;
   try {
-    return localStorage.getItem(ONBOARDING_KEY) === '1';
+    return localStorage.getItem(ONBOARDING_KEY) === installId;
   } catch {
     return false;
   }
 }
 
-export function writeOnboardingSeen(): void {
+export function writeOnboardingSeen(installId: string): void {
   if (typeof localStorage === 'undefined') return;
   try {
-    localStorage.setItem(ONBOARDING_KEY, '1');
+    // Nothing to record against an install we cannot name: a placeholder would
+    // be a dismissal that no id ever matches, so it could only read as unseen.
+    if (installId === '') return;
+    localStorage.setItem(ONBOARDING_KEY, installId);
   } catch {
     // private mode / storage disabled — the flow just reappears next launch
   }
@@ -671,6 +707,7 @@ export const appStore = defineStore({
     onboarding: 'auto',
     backupOffer: null,
     quarantine: null,
+    installId: '',
     setAsideDatabases: [],
     onboardingTopics: [],
     onboardingTopicsAtStart: 0,

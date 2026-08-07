@@ -815,7 +815,7 @@ function openTopicMenuFor(id: string, row: Element): void {
 /** Dismiss the first-run flow and remember that it has been seen. */
 function closeOnboarding(): void {
   appStore.actions.setOnboarding(null);
-  writeOnboardingSeen();
+  writeOnboardingSeen(appStore.state.value.installId);
 }
 
 /**
@@ -883,8 +883,9 @@ async function saveProfilesAndAdvance(): Promise<void> {
  * a decision that has flashed at users before.
  *
  * Once dismissed it is remembered per-device (FR-20.3) and only Settings
- * reopens it. That flag lives in `localStorage`, so it survives deleting the
- * data directory — see NEWS-423.
+ * reopens it. The flag names the install it was dismissed for (NEWS-423), so
+ * deleting the data directory brings the guide back the way people expect,
+ * without the dismissal becoming shared between two browsers.
  */
 function maybeOpenOnboarding(): void {
   const s = appStore.state.value;
@@ -894,7 +895,7 @@ function maybeOpenOnboarding(): void {
     loaded: s.loaded,
     providerCount: s.providers.length,
     topicCount: s.topics.length,
-    seen: readOnboardingSeen(),
+    seen: readOnboardingSeen(s.installId),
   });
   appStore.actions.setOnboarding(open ? 'welcome' : null);
 }

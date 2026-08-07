@@ -399,14 +399,29 @@ export const test = base.extend<TestFixtures, WorkerFixtures>({
       // `[data-action=rerun-onboarding]`. Deliberately not "give CI an API key":
       // that would paper over it and assert a state no first-run user is in.
       //
+      // **Seeded with the server's real install id** (NEWS-423), not a `'1'`.
+      // The flag names the install it was dismissed for, so a fixed literal
+      // would match nothing and suppress nothing. Asking the server for the id
+      // and storing it is exactly what a real dismissal writes — the harness
+      // simulates the user's click rather than reaching for a test-only value,
+      // which is the same line `resetSharedState` walks with the backup offer.
+      //
+      // Read once per worker: the database file outlives `resetSharedState`
+      // (which deletes topics through the API), so the id is stable for the
+      // whole run.
+      const idRes = await playwrightRequest.newContext({ baseURL: e2eServer.base });
+      const { installId } = (await (await idRes.get('/api/state')).json()) as { installId: string };
+      await idRes.dispose();
+      expect(installId, 'the server must report an install id to seed').not.toBe('');
+
       // On the context, so it applies to every page it makes.
-      await context.addInitScript(() => {
+      await context.addInitScript((id: string) => {
         try {
-          localStorage.setItem('news:onboarding-seen', '1');
+          localStorage.setItem('news:onboarding-seen', id);
         } catch {
           // Storage disabled — the wizard reappears, which is the pre-fix state.
         }
-      });
+      }, installId);
       await use(context);
       await context.close();
     },

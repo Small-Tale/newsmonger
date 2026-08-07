@@ -364,6 +364,17 @@ export const StateRespSchema = z.object({
    * whole state on a field the client is only going to render a banner from.
    */
   quarantine: QuarantineSchema.nullable().default(null),
+  /**
+   * A stable id for this database (NEWS-423), so the client can tell a dismissed
+   * setup guide from one dismissed against a database that no longer exists.
+   *
+   * Defaulted to `''` because it is read by a poll: an older server, or a
+   * response cached across an upgrade, must not blank the whole state. An empty
+   * id reads as "cannot tell", and the client treats that as *seen* rather than
+   * unseen — the wrong guess in that direction is a missing prompt, not a wizard
+   * over an established user's feed.
+   */
+  installId: z.string().default(''),
 });
 export type StateResp = z.infer<typeof StateRespSchema>;
 

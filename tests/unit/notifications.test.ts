@@ -33,6 +33,7 @@ const BASE_SETTINGS: StateResp['settings'] = {
 function state(itemIds: string[]): StateResp {
   return {
     topics: [],
+    installId: 'test-install',
     // noteState reads latestItemIds (NEWS-75); the feed lives on /api/items now.
     latestItemIds: itemIds,
     flaggedByTopic: {},
