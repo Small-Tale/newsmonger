@@ -80,6 +80,13 @@ const BINARY_EXTENSIONS = new Set([
   '.mp4',
   '.mov',
   '.webm',
+  // Design sources under `docs/graphics/` (NEWS-409). Both are binary container
+  // formats — a Rhino model and a Sketch document — and both tripped the scan the
+  // moment `docs/` was added. Listed explicitly rather than skipping whatever
+  // fails to decode, for the reason the whole list exists: a decode-failure skip
+  // would exempt the next mangled `.md` too.
+  '.3dm',
+  '.sketch',
 ]);
 
 /**
@@ -110,7 +117,21 @@ function sourceFiles(): string[] {
       else if (!BINARY_EXTENSIONS.has(path.extname(entry.name).toLowerCase())) out.push(full);
     }
   };
-  for (const sub of ['src', 'tests', 'scripts']) walk(path.join(root, sub));
+  for (const sub of ['src', 'tests', 'scripts', 'docs']) walk(path.join(root, sub));
+  // Root-level prose and config too (NEWS-409). `docs/` earns its place for a
+  // sharper reason than the code roots: this project *greps its own docs* as a
+  // workflow step — CLAUDE.md says to "grep for what is taken rather than
+  // reading the last bullet" when allocating an FR id, and
+  // `build-requirements-summary.mjs` parses every one. A requirements doc that
+  // silently vanished from search would break id allocation while looking fine,
+  // and NEWS-302 already records what a collision costs: six ids naming two
+  // requirements each.
+  for (const file of fs.readdirSync(root, { withFileTypes: true })) {
+    if (!file.isFile() || file.name.startsWith('.')) continue;
+    if (['.md', '.json', '.yml', '.yaml'].includes(path.extname(file.name).toLowerCase())) {
+      out.push(path.join(root, file.name));
+    }
+  }
   return out.sort();
 }
 
@@ -149,12 +170,20 @@ describe('no source file carries a raw control byte (NEWS-403)', () => {
     // green forever.
     const files = sourceFiles();
     expect(files.length).toBeGreaterThan(100);
-    for (const required of ['src/routes/api.ts', 'tests/e2e/server.ts', 'scripts/e2e-scramble.mjs', 'src/client/styles.scss']) {
+    for (const required of [
+      'src/routes/api.ts',
+      'tests/e2e/server.ts',
+      'scripts/e2e-scramble.mjs',
+      'src/client/styles.scss',
+      'docs/22-topic-categories.md',
+      'CLAUDE.md',
+      'package.json',
+    ]) {
       expect(files.map((f) => path.relative(root, f)), `${required} is scanned`).toContain(required);
     }
   });
 
-  it('finds none under src/, tests/ or scripts/', () => {
+  it('finds none under src/, tests/, scripts/ or docs/', () => {
     const offenders = sourceFiles().flatMap((file) => {
       const found = findControlByte(fs.readFileSync(file));
       return found === null ? [] : [`${path.relative(root, file)}: ${found} — use the escape sequence instead`];
