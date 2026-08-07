@@ -17,8 +17,13 @@
  * they are, and why the sources are transparently illustrative.
  */
 
+import fs from 'node:fs';
+import path from 'node:path';
+
 import type { KeysResp } from '../../api/schemas.js';
-import { DEMO_TOPICS, findDemoTopic } from '../../demo.js';
+import { DEMO_TOPICS, demoFaviconFor, demoFixtureDir, demoImageFor, findDemoTopic } from '../../demo.js';
+import type { FaviconFetcher, ImageFetcher } from '../../images/index.js';
+import { cachedImagePath } from '../../images/index.js';
 import type {
   CategoryOption,
   CheckResult,
@@ -203,4 +208,48 @@ export function createDemoProvider(): NewsProvider {
       });
     },
   };
+}
+
+/**
+ * Image and favicon fetchers that replay the recording instead of the network
+ * (NEWS-376).
+ *
+ * `--demo` used the **real** fetchers, which is why the screenshots had no
+ * pictures: the stories linked to `example.org`, so every fetch correctly
+ * returned nothing. Real stories alone would fix that and leave a worse problem —
+ * a capture that depends on the network, and on those particular articles still
+ * being up and still carrying the same `og:image` next month.
+ *
+ * So the recording carries the *mappings* the real pipeline produced, keyed by
+ * exactly what the real fetchers are asked — an article URL, an origin — and
+ * these are drop-in replacements. The bytes are copied into the data directory on
+ * demand, which is the same place `cacheImageUrl` would have written them, so the
+ * image route serves them without knowing the difference.
+ */
+export function createDemoImageFetcher(dataDir: string): ImageFetcher {
+  return (articleUrl) => Promise.resolve(placeRecorded(demoImageFor(articleUrl), dataDir));
+}
+
+export function createDemoFaviconFetcher(dataDir: string): FaviconFetcher {
+  return (origin) => Promise.resolve(placeRecorded(demoFaviconFor(origin), dataDir));
+}
+
+/** Copy a recorded image into the cache the image route reads, once. */
+function placeRecorded(
+  recorded: { hash: string; sourceUrl: string } | null,
+  dataDir: string,
+): { hash: string; sourceUrl: string } | null {
+  if (recorded === null) return null;
+  const from = path.join(demoFixtureDir(), 'images', `${recorded.hash}.bin`);
+  if (!fs.existsSync(from)) return null;
+  const to = cachedImagePath(dataDir, recorded.hash);
+  if (!fs.existsSync(to)) {
+    fs.mkdirSync(path.dirname(to), { recursive: true });
+    // Via a temp name, for the reason `cacheImageUrl` does it: a half-written
+    // file would be served forever as a valid cache hit.
+    const tmp = `${to}.tmp`;
+    fs.copyFileSync(from, tmp);
+    fs.renameSync(tmp, to);
+  }
+  return recorded;
 }

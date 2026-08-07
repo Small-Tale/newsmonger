@@ -1,6 +1,12 @@
 import v8 from 'node:v8';
 
-import { createDemoProvider, demoKeysResponse, demoProbeProviders } from './ai/providers/demo.js';
+import {
+  createDemoFaviconFetcher,
+  createDemoImageFetcher,
+  createDemoProvider,
+  demoKeysResponse,
+  demoProbeProviders,
+} from './ai/providers/demo.js';
 import { createMockProvider, resolveProvider } from './ai/providers/index.js';
 import { probeLink } from './ai/verify-links.js';
 import { Attendance } from './attendance.js';
@@ -87,12 +93,35 @@ async function main(): Promise<void> {
   // Likewise shared (NEWS-366): the /api/state poll asserts a hold when a topic
   // dialog is open, and the runner's sweep skips whatever is held.
   const holds = new TopicHolds();
-  // No image fetching under --ai-test: the mock provider's URLs are fake, and
-  // a test run must not reach out to the network.
-  const fetchImage = options.aiTest ? null : createImageFetcher(options.dataDir);
-  // Same gate as images: under --ai-test the mock's URLs are fictional, so
-  // there is nothing to fetch an icon from (NEWS-169).
-  const fetchFavicon = options.aiTest ? null : createFaviconFetcher(options.dataDir);
+  // Three cases, not two (NEWS-376).
+  //
+  // No image fetching under --ai-test: the mock provider's URLs are fake, and a
+  // test run must not reach out to the network. Same gate for favicons — the
+  // mock's URLs are fictional, so there is nothing to fetch an icon from
+  // (NEWS-169).
+  //
+  // Under --demo the fetchers replay the recording. They used to be the *real*
+  // ones, which is why every screenshot had no pictures: the demo's stories
+  // linked to `example.org`, so each fetch correctly returned nothing. Replaying
+  // is what keeps a capture reproducible — the real fetchers would make the
+  // stills depend on the network and on those articles still carrying the same
+  // `og:image` next month.
+  //
+  // **`--demo` is tested first, and the order is the fix** (NEWS-376). `--demo`
+  // implies `--ai-test` (see `config.ts`), so an `aiTest ? null : …` written the
+  // other way round short-circuits and the demo gets no fetchers at all — which
+  // is why every shipped screenshot had no pictures, and why pointing the demo's
+  // stories at real articles would not on its own have fixed it.
+  const fetchImage = options.demo
+    ? createDemoImageFetcher(options.dataDir)
+    : options.aiTest
+      ? null
+      : createImageFetcher(options.dataDir);
+  const fetchFavicon = options.demo
+    ? createDemoFaviconFetcher(options.dataDir)
+    : options.aiTest
+      ? null
+      : createFaviconFetcher(options.dataDir);
   // Apply the retention window at startup too (NEWS-87): an install that has
   // been closed for months should come back trimmed, not with a year of
   // backlog waiting for the first check to clear it.

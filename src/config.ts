@@ -182,8 +182,17 @@ export function parseArgs(argv: string[], env: NodeJS.ProcessEnv = process.env):
       case '--demo':
         // Implies --ai-test: both mean "don't make a real AI call", and the demo
         // provider is a fixture provider. Keeping them separate booleans would
-        // mean every `options.aiTest` guard (image fetching, link probing, key
-        // verification) needed a second condition beside it.
+        // mean every `options.aiTest` guard (link probing, key verification)
+        // needed a second condition beside it.
+        //
+        // **Image fetching is the one guard that now needs the distinction**
+        // (NEWS-376), and this convenience is why the demos shipped for months
+        // with no pictures. `--ai-test` nulls the image and favicon fetchers
+        // because the mock's URLs are fictional; `--demo` inherited that, so the
+        // demo could never show a picture *whatever* its stories linked to.
+        // Pointing them at real articles alone would not have fixed it — the
+        // fetchers were already gone by then. `cli.ts` tests `options.demo`
+        // first, so the demo's replaying fetchers win.
         options.demo = true;
         options.aiTest = true;
         break;

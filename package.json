@@ -35,6 +35,7 @@
     "test:watch": "vitest",
     "test:e2e": "npx playwright test",
     "record:cli-sessions": "node --import tsx/esm scripts/record-cli-sessions.ts",
+    "record:demo-data": "node --import tsx/esm scripts/record-demo-data.ts",
     "test:e2e:real": "NEWSMONGER_E2E_REAL=1 npx playwright test real-providers",
     "test:e2e:scramble": "node scripts/e2e-scramble.mjs",
     "docs:requirements": "node scripts/build-requirements-summary.mjs",

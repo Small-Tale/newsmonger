@@ -1,0 +1,907 @@
+{
+  "capturedAt": "2026-08-07T23:01:25.281Z",
+  "topics": [
+    {
+      "name": "Fusion energy",
+      "first": [
+        {
+          "title": "ITER passes two-thirds of tokamak core assembly, roughly six months ahead of schedule",
+          "summary": "The ITER Organization has lowered the sixth of nine tokamak sector modules into the assembly pit at Cadarache, France, putting two-thirds of the machine's torus-shaped core in place. The roughly 1,100-tonne module was moved from the Assembly Hall in a 30-hour lifting operation that concluded on 28 July, and it is built around the fourth and final vacuum vessel sector manufactured in South Korea. ITER says improvements in assembly sequencing have pulled the expected installation of the final sector module forward from December 2027 to mid-2027, close to six months ahead of the baseline. Sector modules have been going into the pit progressively since April 2025.",
+          "sources": [
+            {
+              "title": "Two-thirds of ITER tokamak core now in place",
+              "url": "https://www.iter.org/two-thirds-iter-tokamak-core-now-place",
+              "outlet": "ITER Organization",
+              "publishedAt": null,
+              "favicon": {
+                "hash": "8960326e279255b712a5f1e9bd4b2d48",
+                "sourceUrl": "https://www.iter.org/favicon.ico"
+              }
+            },
+            {
+              "title": "In pictures: ITER tokamak core assembly progressing",
+              "url": "https://world-nuclear-news.org/articles/in-pictures-iter-tokamak-core-assembly-progressing",
+              "outlet": "World Nuclear News",
+              "publishedAt": null,
+              "favicon": {
+                "hash": "ab13a7abe3c83ddab39fa1b6ebbe2ad6",
+                "sourceUrl": "https://world-nuclear-news.org/favicon.ico"
+              }
+            },
+            {
+              "title": "World's largest fusion reactor ITER fits 1,100-ton sixth core module",
+              "url": "https://interestingengineering.com/energy/largest-tokamak-iter-installs-core-module",
+              "outlet": "Interesting Engineering",
+              "publishedAt": null,
+              "favicon": {
+                "hash": "f52f993327d5bcbb782d53add29dcc2e",
+                "sourceUrl": "https://interestingengineering.com/favicon.ico"
+              }
+            }
+          ],
+          "image": null
+        },
+        {
+          "title": "Commonwealth Fusion Systems raises another $1 billion, reaching $4 billion total",
+          "summary": "Commonwealth Fusion Systems announced it had closed $1 billion in additional equity financing, the largest single fusion funding round since its own $1.8 billion Series B in 2021. The raise brings the Massachusetts company's total capital to roughly $4 billion, which it says is about 30 percent of all money raised across the fusion industry to date. Investors now include pension funds, sovereign wealth funds, infrastructure investors and industrial corporate partners. CFS will use the money to finish its SPARC demonstration tokamak in Devens, Massachusetts, and to build the ARC commercial plant planned for Chesterfield County, Virginia, targeting grid electricity in the early 2030s.",
+          "sources": [
+            {
+              "title": "Fusion power darling Commonwealth Fusion Systems raises another $1B",
+              "url": "https://techcrunch.com/2026/07/30/fusion-power-darling-commonwealth-fusion-systems-raises-another-1b/",
+              "outlet": "TechCrunch",
+              "publishedAt": "2026-07-30",
+              "favicon": {
+                "hash": "fdb2a968258558666f3a95ca79c0f077",
+                "sourceUrl": "https://techcrunch.com/favicon.ico"
+              }
+            },
+            {
+              "title": "Commonwealth Fusion Systems raises a further USD1 billion",
+              "url": "https://www.world-nuclear-news.org/articles/commonwealth-fusion-systems-raises-a-further-usd1-billion",
+              "outlet": "World Nuclear News",
+              "publishedAt": null,
+              "favicon": {
+                "hash": "7b6fac003e0927803984c042f6432346",
+                "sourceUrl": "https://www.world-nuclear-news.org/favicon.ico"
+              }
+            }
+          ],
+          "image": {
+            "hash": "3da2c649e664dfd23c23a72271b21420",
+            "sourceUrl": "https://techcrunch.com/wp-content/uploads/2025/03/CFS-cryostat-base-installation.jpeg?resize=1200,800"
+          }
+        }
+      ],
+      "second": [
+        {
+          "title": "Germany funds three national fusion hubs in bid for Europe's first commercial plant",
+          "summary": "Germany's Federal Ministry for Research, Technology and Space has announced funding for three national fusion hubs, each receiving roughly a third of an initial EUR 125 million (about USD 142 million) tranche. The hubs are VEGA for laser fusion, coordinated by Marvel Fusion and Focused Energy and sited at RWE's former Biblis nuclear plant in Hesse; STRIDE for magnetic fusion with a stellarator focus, coordinated by Proxima Fusion, Gauss Fusion and the Max Planck Institute for Plasma Physics; and MAT-TRIX for fuel cycles and materials, coordinated by the Karlsruhe Institute of Technology. Funding starts in August 2026 and expands through six successive phases to 2029, supporting Berlin's goal of operating the world's first commercial fusion power plant in Germany in the 2040s.",
+          "sources": [
+            {
+              "title": "Germany coordinates fusion R&D efforts",
+              "url": "https://world-nuclear-news.org/articles/germany-coordinates-fusion-rd-efforts",
+              "outlet": "World Nuclear News",
+              "publishedAt": null,
+              "favicon": {
+                "hash": "ab13a7abe3c83ddab39fa1b6ebbe2ad6",
+                "sourceUrl": "https://world-nuclear-news.org/favicon.ico"
+              }
+            },
+            {
+              "title": "Germany announces funding for three national fusion hubs",
+              "url": "https://www.innovationnewsnetwork.com/germany-announces-funding-for-three-national-fusion-hubs/72175/",
+              "outlet": "Innovation News Network",
+              "publishedAt": null,
+              "favicon": {
+                "hash": "aa68a20b251cf9e1850b1d867711800c",
+                "sourceUrl": "https://www.innovationnewsnetwork.com/wp-content/uploads/2023/07/inn-logo-favicon-02.png"
+              }
+            },
+            {
+              "title": "Germany to launch three new fusion hubs for research and industry",
+              "url": "https://optics.org/news/germany-to-launch-three-new-fusion-hubs-combining-research-and-industry",
+              "outlet": "optics.org",
+              "publishedAt": null,
+              "favicon": {
+                "hash": "2ed2e1dcb0d7494eb248b68f41d371d1",
+                "sourceUrl": "https://optics.org/Images/Global/Favicons/OdotOFavicon.png"
+              }
+            }
+          ],
+          "image": {
+            "hash": "5ac5865b11117a118af71a8ddd75b199",
+            "sourceUrl": "https://world-nuclear-news.org/images/articles/Wendelstein7-Xplasmavessel(MPIforPlasmaPhysics-JanMichaelHosan)_54658.jpg"
+          }
+        },
+        {
+          "title": "Oak Ridge National Laboratory and Rutherford Energy Ventures launch FULCRA fusion testbed partnership",
+          "summary": "Oak Ridge National Laboratory and Rutherford Energy Ventures, a Cambridge, Massachusetts fusion consultancy, have launched a public-private partnership called FULCRA, for Fusion Upscaled Leveraged Consortia for Rapid Acceleration. The consortium pairs national laboratory capabilities with private investment to build shared fusion testbeds, de-risk critical technologies and speed commercialization, addressing gaps flagged in the Department of Energy's Fusion Science and Technology Roadmap. In a second phase, the partners will develop a technical blueprint, financial framework and operating model for a pilot shared-use Fulcrum facility at ORNL. The model is intended to be replicated at other national laboratories.",
+          "sources": [
+            {
+              "title": "ORNL, Rutherford Energy Ventures launch fusion partnership",
+              "url": "https://www.ans.org/news/2026-08-07/article-8276/ornl-rutherford-energy-ventures-launch-fusion-partnership/",
+              "outlet": "American Nuclear Society / Nuclear Newswire",
+              "publishedAt": "2026-08-07",
+              "favicon": {
+                "hash": "b05de524ce55e82e068938c1e70cbbb2",
+                "sourceUrl": "https://www.ans.org/favicon.ico"
+              }
+            },
+            {
+              "title": "ORNL, REV launch innovative collaboration on fusion infrastructure",
+              "url": "https://www.ornl.gov/news/ornl-rev-launch-innovative-collaboration-fusion-infrastructure",
+              "outlet": "Oak Ridge National Laboratory",
+              "publishedAt": null,
+              "favicon": {
+                "hash": "537efb06881ed52146f77da065fb8e16",
+                "sourceUrl": "https://www.ornl.gov/themes/custom/ornl/images/favicons/favicon-32x32.png"
+              }
+            },
+            {
+              "title": "ORNL launches fusion testbed partnership",
+              "url": "https://www.neimagazine.com/news/ornl-launches-fusion-testbed-partnership/",
+              "outlet": "Nuclear Engineering International",
+              "publishedAt": null,
+              "favicon": {
+                "hash": "11271c7aebd9b6cbba8ea283417ba4aa",
+                "sourceUrl": "https://www.neimagazine.com/favicon.ico"
+              }
+            }
+          ],
+          "image": {
+            "hash": "a49d62ba6208ba36e9c4b3aafaf975ea",
+            "sourceUrl": "https://www.ans.org/file/25099/l/ORNL%20REV.jpg"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Antarctic ice",
+      "first": [
+        {
+          "title": "Met Office August briefing puts Antarctic winter sea ice among the lowest on record for the date",
+          "summary": "The Met Office's monthly Arctic and Antarctic sea ice briefing for August reports Antarctic sea ice extent at 16.65 million square kilometres on 2 August 2026, ranking among the five lowest values for that date in the satellite record. Extent was below average across roughly half the Southern Ocean, from the Weddell Sea through the Indian Ocean sector, while other regions sat near or above average. The briefing links some of the pattern to July's persistent low pressure and strengthened westerly winds over the Southern Ocean, offset by much higher pressure over the Amundsen Sea. The reading follows a 2026 summer minimum that was closer to average than the previous four years, suggesting a partial rebound from the record lows of 2023 but no return to pre-2016 conditions.",
+          "sources": [
+            {
+              "title": "Briefing on Arctic & Antarctic sea ice - August 2026",
+              "url": "https://www.metoffice.gov.uk/research/approach/monitoring/sea-ice/2026/briefing-on-arctic--antarctic-sea-ice---august-2026",
+              "outlet": "Met Office",
+              "publishedAt": null,
+              "favicon": {
+                "hash": "17620d6ab1233df6dec62c3d97e335df",
+                "sourceUrl": "https://www.metoffice.gov.uk/favicon.ico"
+              }
+            }
+          ],
+          "image": {
+            "hash": "6a8d4e9d3adb4b7c3487fac6d55f51b3",
+            "sourceUrl": "https://www.metoffice.gov.uk/api/images/file/icecaps-in-antarctica-1024x512.jpg?prefix=images&prefix=images"
+          }
+        }
+      ],
+      "second": []
+    },
+    {
+      "name": "Renewable energy buildout",
+      "first": [
+        {
+          "title": "Federal court injunction lets Coastal Virginia Offshore Wind restart construction",
+          "summary": "On January 16, 2026, US District Judge Jamar Walker of the Eastern District of Virginia granted Dominion Energy a preliminary injunction neutralizing the Interior Department's late-December stop-work order, which had cited national security and military radar concerns. Work at Coastal Virginia Offshore Wind resumed within days, and turbine installation by the Charybdis restarted offshore. Dominion said it would continue its underlying legal challenge against Interior and the Bureau of Ocean Energy Management while construction proceeds.",
+          "sources": [
+            {
+              "title": "Turbine Installation Begins at Coastal Virginia Offshore Wind Farm After Court Lifts Federal Halt",
+              "url": "https://gcaptain.com/turbine-installation-begins-at-coastal-virginia-offshore-wind-farm-after-court-lifts-federal-halt/",
+              "outlet": "gCaptain",
+              "publishedAt": null,
+              "favicon": {
+                "hash": "e22533d58dec9eed3f073ec16c411331",
+                "sourceUrl": "https://gcaptain.com/favicon.ico"
+              }
+            }
+          ],
+          "image": null
+        },
+        {
+          "title": "Coastal Virginia Offshore Wind cost estimate rises to $11.2 billion",
+          "summary": "Dominion Energy raised its capital estimate for Coastal Virginia Offshore Wind to roughly $11.2 billion in its late-2025 update, up from about $10.9 billion, again citing tariff exposure on imported project components alongside schedule pressure. The project was reported at roughly two-thirds complete at that point, with onshore work finishing and first power targeted for the first quarter of 2026. This figure became the baseline against which later revisions were measured.",
+          "sources": [
+            {
+              "title": "Cost increases to $11.2B for Dominion offshore wind project, with tariffs to blame",
+              "url": "https://finance.yahoo.com/news/cost-increases-11-2b-dominion-065155648.html",
+              "outlet": "Yahoo Finance",
+              "publishedAt": null,
+              "favicon": {
+                "hash": "d98b20bd4c820ceab81727d43080019b",
+                "sourceUrl": "https://finance.yahoo.com/favicon.ico"
+              }
+            },
+            {
+              "title": "Dominion says largest US offshore wind project on track",
+              "url": "https://www.utilitydive.com/news/dominion-energy-offshore-wind-earnings/804617/",
+              "outlet": "Utility Dive",
+              "publishedAt": null,
+              "favicon": {
+                "hash": "a6be9afd0961d6944585ec167a12b449",
+                "sourceUrl": "https://www.utilitydive.com/favicon.ico"
+              }
+            }
+          ],
+          "image": null
+        },
+        {
+          "title": "Charybdis arrives in Virginia to begin turbine work at Coastal Virginia Offshore Wind",
+          "summary": "The Charybdis, the first US-built and Jones Act-compliant wind turbine installation vessel, docked at Portsmouth Marine Terminal on September 17, 2025 after nearly five years of construction at the Seatrium AmFELS yard in Brownsville, Texas. The 472-foot, roughly $715 million jack-up was built with more than 14,000 tons of domestic steel and is dedicated to erecting the 176 turbines at Coastal Virginia Offshore Wind. Its arrival cleared the way for the project to move from foundations into turbine installation.",
+          "sources": [
+            {
+              "title": "First US WTIV Arrives in Virginia Ahead of CVOW Turbine Installation",
+              "url": "https://www.offshorewind.biz/2025/09/19/first-us-wtiv-arrives-in-virginia-ahead-of-cvow-turbine-installation/",
+              "outlet": "Offshore Wind",
+              "publishedAt": "2025-09-19",
+              "favicon": {
+                "hash": "29e3711b6eb384199c5b07385c876efb",
+                "sourceUrl": "https://www.offshorewind.biz/wp-content/uploads/sites/2/2019/01/cropped-Favicon_navingo_512x512-1-32x32.png"
+              }
+            },
+            {
+              "title": "First U.S.-Built WTIV Charybdis Arrives in Virginia to Begin Installations",
+              "url": "https://maritime-executive.com/article/first-u-s-built-wtiv-charybdis-arrives-in-virginia-to-begin-installations",
+              "outlet": "The Maritime Executive",
+              "publishedAt": null,
+              "favicon": {
+                "hash": "e7e74df5896ae14b7cc5e7a41fa342b9",
+                "sourceUrl": "https://maritime-executive.com/img/favicon-32x32.png"
+              }
+            }
+          ],
+          "image": null
+        },
+        {
+          "title": "Tariffs push Coastal Virginia Offshore Wind budget to about $10.9 billion",
+          "summary": "On its second-quarter 2025 earnings call in early August, Dominion Energy said Trump administration tariffs on steel, aluminum and imported components had added roughly $506 million to Coastal Virginia Offshore Wind, lifting the budget to about $10.9 billion. CEO Robert Blue characterized the increase as modest relative to the project's scale and said it would add roughly three cents a month to the average customer bill over the life of the project. Dominion maintained at the time that the project remained on schedule for completion at the end of 2026.",
+          "sources": [
+            {
+              "title": "Dominion's 2.6-GW offshore wind farm sees slight price hike from tariffs, CEO says",
+              "url": "https://www.utilitydive.com/news/dominion-energy-coastal-virginia-offshore-wind-tariffs-trump/756686/",
+              "outlet": "Utility Dive",
+              "publishedAt": null,
+              "favicon": {
+                "hash": "a6be9afd0961d6944585ec167a12b449",
+                "sourceUrl": "https://www.utilitydive.com/favicon.ico"
+              }
+            },
+            {
+              "title": "Dominion's offshore wind project sees slight price hike from tariffs, CEO says",
+              "url": "https://www.constructiondive.com/news/dominion-virginia-wind-construction-tariffs-trump/756787/",
+              "outlet": "Construction Dive",
+              "publishedAt": null,
+              "favicon": {
+                "hash": "a96e1dbb15111b2fb68723893253588f",
+                "sourceUrl": "https://www.constructiondive.com/favicon.ico"
+              }
+            }
+          ],
+          "image": null
+        },
+        {
+          "title": "First offshore substation installed at Coastal Virginia Offshore Wind",
+          "summary": "In March 2025 contractor DEME set the first of three offshore substations for Dominion Energy's Coastal Virginia Offshore Wind project, about 27 miles off Virginia Beach — the first offshore substation ever installed in US waters. The 4,300-ton topside had been delivered to Portsmouth Marine Terminal in late January 2025. The substations collect power from the project's 176 turbines and step it up for transmission ashore. Two more substations were scheduled to follow through the end of 2025 and early 2026.",
+          "sources": [
+            {
+              "title": "DEME Installs First Coastal Virginia Offshore Substation in US",
+              "url": "https://www.offshorewind.biz/2025/03/14/deme-installs-first-coastal-virginia-offshore-substation-in-us/",
+              "outlet": "Offshore Wind",
+              "publishedAt": "2025-03-14",
+              "favicon": {
+                "hash": "29e3711b6eb384199c5b07385c876efb",
+                "sourceUrl": "https://www.offshorewind.biz/wp-content/uploads/sites/2/2019/01/cropped-Favicon_navingo_512x512-1-32x32.png"
+              }
+            }
+          ],
+          "image": null
+        },
+        {
+          "title": "Coastal Virginia Offshore Wind hits $11.7 billion and slips six more months to end of 2027",
+          "summary": "In its second-quarter results on July 31, 2026, Dominion said Coastal Virginia Offshore Wind will now cost about $11.7 billion, an increase of roughly $288 million over its April estimate, driven by revised PJM network upgrade charges, tariffs imposed in April and updated turbine installation projections. The company also pushed installation of the 176th and final turbine to the end of 2027, six months later than its previous target, citing added contingency for weather, vessel maintenance, longer loadouts and extended jacking operations rather than a slower base installation rate. As of July 31 the project was about 81 percent complete, with all monopiles and transition pieces in place, 31 turbines installed and the 32nd underway. Dominion executives said tariffs have added roughly $800 million to the project in total.",
+          "sources": [
+            {
+              "title": "Dominion offshore wind project cost rises nearly $300M",
+              "url": "https://www.utilitydive.com/news/dominion-offshore-wind-project-cost-rises-nearly-300m/826845/",
+              "outlet": "Utility Dive",
+              "publishedAt": "2026-07-31",
+              "favicon": {
+                "hash": "a6be9afd0961d6944585ec167a12b449",
+                "sourceUrl": "https://www.utilitydive.com/favicon.ico"
+              }
+            },
+            {
+              "title": "Largest US Offshore Wind Farm 81 Pct Complete, Final Turbine Expected by End of 2027",
+              "url": "https://www.offshorewind.biz/2026/08/03/largest-us-offshore-wind-farm-81-pct-complete-final-turbine-expected-by-end-of-2027/",
+              "outlet": "Offshore Wind (offshorewind.biz)",
+              "publishedAt": "2026-08-03",
+              "favicon": {
+                "hash": "29e3711b6eb384199c5b07385c876efb",
+                "sourceUrl": "https://www.offshorewind.biz/wp-content/uploads/sites/2/2019/01/cropped-Favicon_navingo_512x512-1-32x32.png"
+              }
+            }
+          ],
+          "image": {
+            "hash": "f5c37353549fc8c82f37d07cd1f32072",
+            "sourceUrl": "https://imgproxy.divecdn.com/9Gz9V2FMNHt3xFPzBbSjNgb6b03EiS-0ZYNwFPae3Iw/g:ce/rs:fit:770:435/Z3M6Ly9kaXZlc2l0ZS1zdG9yYWdlL2RpdmVpbWFnZS9DVk9XXzAzNDMuanBn.webp"
+          }
+        },
+        {
+          "title": "Coastal Virginia Offshore Wind delivers its first power to the grid",
+          "summary": "On March 23, 2026, the Coastal Virginia Offshore Wind project sent electricity to the Virginia grid for the first time, more than a decade after planning began and following the cost increases and the federal shutdown fight. It is the largest commercial offshore wind farm in the United States and the first owned outright by a regulated electric utility. When all 176 turbines are running the array is designed to produce up to 9.5 million megawatt-hours a year, enough for about 660,000 homes.",
+          "sources": [
+            {
+              "title": "Dominion's $11.5B Virginia Offshore Wind Project Delivers First Power After Legal Fight, Cost Surge",
+              "url": "https://gcaptain.com/dominions-11-5b-virginia-offshore-wind-project-delivers-first-power-after-legal-fight-cost-surge/",
+              "outlet": "gCaptain",
+              "publishedAt": null,
+              "favicon": {
+                "hash": "e22533d58dec9eed3f073ec16c411331",
+                "sourceUrl": "https://gcaptain.com/favicon.ico"
+              }
+            }
+          ],
+          "image": {
+            "hash": "24cb027cc3aeee8557ff505659a36ba6",
+            "sourceUrl": "https://gcaptain.com/wp-content/uploads/2020/10/dominion_energy_test_wind_farm.jpeg"
+          }
+        },
+        {
+          "title": "Coastal Virginia Offshore Wind cost climbs to $11.5 billion and completion slips to 2027",
+          "summary": "On January 30, 2026, Dominion Energy raised its cost estimate for the Coastal Virginia Offshore Wind project from about $11.2 billion to roughly $11.5 billion and pushed full completion from late 2026 into early 2027. The company attributed the revision to the December 2025 federal stop-work order and to tariffs on imported project components. Dominion continued to target first power delivery in the first quarter of 2026.",
+          "sources": [
+            {
+              "title": "Dominion offshore wind project cost rises to $11.5B after stop work order, tariffs",
+              "url": "https://dredgewire.com/dominion-offshore-wind-project-cost-rises-to-11-5b-after-stop-work-order-tariffs/",
+              "outlet": "DredgeWire",
+              "publishedAt": null,
+              "favicon": {
+                "hash": "12e1b06f3bd8f1b1af7971f2020e94f8",
+                "sourceUrl": "https://dredgewire.com/favicon.ico"
+              }
+            },
+            {
+              "title": "Dominion Energy Updates Offshore Wind Project Costs and Timeline",
+              "url": "https://www.theglobeandmail.com/investing/markets/markets-news/Tipranks/37338853/dominion-energy-updates-offshore-wind-project-costs-and-timeline/",
+              "outlet": "The Globe and Mail",
+              "publishedAt": null,
+              "favicon": {
+                "hash": "feabd2c89737ffbc5464adea0520622f",
+                "sourceUrl": "https://www.theglobeandmail.com/pf/resources/assets/meta/favicon-32x32.png?d=939"
+              }
+            }
+          ],
+          "image": {
+            "hash": "6a74969b2097817da4101aa41d8f5607",
+            "sourceUrl": "https://dredgewire.com/wp-content/uploads/2026/02/Dominion-offshore-wind.jpg"
+          }
+        },
+        {
+          "title": "First production turbine installed at Coastal Virginia Offshore Wind",
+          "summary": "On January 27, 2026, days after the injunction cleared the way for work to resume, the installation vessel Charybdis set the first production wind turbine at the Coastal Virginia Offshore Wind farm. The 14.7 MW Siemens Gamesa machine is one of 176 planned for the 2.6 GW array roughly 27 miles off Virginia Beach. Charybdis, built at Seatrium's AmFELS yard in Brownsville, Texas, is the first Jones Act-compliant turbine installation vessel built in the United States.",
+          "sources": [
+            {
+              "title": "First production turbine installed at Virginia offshore wind farm",
+              "url": "https://www.workboat.com/wind/first-production-turbine-installed-at-virginia-offshore-wind",
+              "outlet": "WorkBoat",
+              "publishedAt": null,
+              "favicon": {
+                "hash": "ce17ddb0b308ef74b934d13269fa16ee",
+                "sourceUrl": "https://www.workboat.com/www.workboat.com/img/favicon-32x32.png"
+              }
+            },
+            {
+              "title": "Dominion Energy's Charybdis installs first turbine at the 2.6 GW Coastal Virginia offshore wind farm",
+              "url": "https://www.ecoportal.net/uk/coastal-virginia-offshore-wind-dominion-energy/2107/",
+              "outlet": "EcoPortal",
+              "publishedAt": null,
+              "favicon": {
+                "hash": "cef6c1004a3920336f076f7580e39ca4",
+                "sourceUrl": "https://www.ecoportal.net/favicon.ico"
+              }
+            }
+          ],
+          "image": {
+            "hash": "8a3f9d4f3998f93bec84519bb9de6e3f",
+            "sourceUrl": "https://s3.divcom.com/www.workboat.com/images/CVOW%20first%20turbine%20up.jpg.medium.800x800.jpg"
+          }
+        },
+        {
+          "title": "Dominion sues the federal government over the Coastal Virginia Offshore Wind shutdown",
+          "summary": "In late December 2025 Dominion Energy Virginia and its CVOW project entity sued the Interior Department and BOEM in the US District Court for the Eastern District of Virginia, seeking a temporary restraining order and injunction to lift the stop-work order. Dominion argued the project was fully permitted, was close to generating power, and was losing roughly $5 million per day while idle. Judge Jamar Walker declined to rule immediately on the restraining order, directed government lawyers to file their classified justification by January 9 and set a January 16 hearing on a preliminary injunction.",
+          "sources": [
+            {
+              "title": "US Offshore Wind Developer Sues Gov't Over Stop-Work Order",
+              "url": "https://www.offshorewind.biz/2025/12/29/us-offshore-wind-developer-sues-government-over-stop-work-order/",
+              "outlet": "Offshore Wind (offshorewind.biz)",
+              "publishedAt": "2025-12-29",
+              "favicon": {
+                "hash": "29e3711b6eb384199c5b07385c876efb",
+                "sourceUrl": "https://www.offshorewind.biz/wp-content/uploads/sites/2/2019/01/cropped-Favicon_navingo_512x512-1-32x32.png"
+              }
+            }
+          ],
+          "image": {
+            "hash": "2079a20fbc72626002aff64dd22935d6",
+            "sourceUrl": "https://www.offshorewind.biz/wp-content/uploads/sites/2/2025/03/CVOW-DEME.jpg?image-crop-positioner-ts=1741938569"
+          }
+        },
+        {
+          "title": "Federal stop-work order halts construction at Coastal Virginia Offshore Wind",
+          "summary": "On December 22, 2025, the Interior Department ordered a 90-day pause on construction at Coastal Virginia Offshore Wind and four other East Coast projects, citing classified national security concerns about the turbine arrays. The directive shut down most offshore work at CVOW at a point when the project was nearly finished with foundations and had just begun turbine installation. Dominion said the halt was costing it about $5 million a day and threatened its schedule to bring the array fully online.",
+          "sources": [
+            {
+              "title": "US Government Sends Stop Work Order to All Offshore Wind Projects Under Construction",
+              "url": "https://www.offshorewind.biz/2025/12/23/us-government-sends-stop-work-order-to-all-offshore-wind-projects-under-construction/",
+              "outlet": "Offshore Wind (offshorewind.biz)",
+              "publishedAt": "2025-12-23",
+              "favicon": {
+                "hash": "29e3711b6eb384199c5b07385c876efb",
+                "sourceUrl": "https://www.offshorewind.biz/wp-content/uploads/sites/2/2019/01/cropped-Favicon_navingo_512x512-1-32x32.png"
+              }
+            }
+          ],
+          "image": {
+            "hash": "6a3e8495148cd100099bb5f7c3f6895d",
+            "sourceUrl": "https://www.offshorewind.biz/wp-content/uploads/sites/2/2024/09/Orsted-Revolution-Wind.png?image-crop-positioner-ts=1725431643"
+          }
+        },
+        {
+          "title": "Charybdis commissioning problems push back turbine installation at Coastal Virginia Offshore Wind",
+          "summary": "In November 2025 Dominion confirmed that commissioning delays on Charybdis, the first US-built wind turbine installation vessel, had pushed the start of turbine installation at the Coastal Virginia Offshore Wind project from September to late November. The company said all major systems on the vessel were operational but roughly 200 quality-assurance punch-list items remained, with about 120 closed. Dominion maintained that first power would still flow late in the first quarter of 2026, while warning that reduced weather and vessel-maintenance contingency could push a handful of final turbine installations into early 2027.",
+          "sources": [
+            {
+              "title": "'Punch List' Items Delay Commissioning of Dominion Wind Turbine Vessel",
+              "url": "https://gcaptain.com/punch-list-items-delay-commissioning-of-dominion-wind-turbine-vessel/",
+              "outlet": "gCaptain",
+              "publishedAt": null,
+              "favicon": {
+                "hash": "e22533d58dec9eed3f073ec16c411331",
+                "sourceUrl": "https://gcaptain.com/favicon.ico"
+              }
+            }
+          ],
+          "image": {
+            "hash": "3fffc12b3c05f9ce15def8e117d53300",
+            "sourceUrl": "https://gcaptain.com/wp-content/uploads/2021/06/Dominion_Energy.jpg"
+          }
+        },
+        {
+          "title": "Coastal Virginia Offshore Wind completes its foundation phase with all 176 monopiles in place",
+          "summary": "Dominion finished the offshore foundation phase of the Coastal Virginia Offshore Wind project in autumn 2025, with all 176 monopiles installed across two seasons running from May 2024 through October 2025, alongside three offshore substation foundations. Supplier CS Wind confirmed in November 2025 that it had delivered all 176 transition pieces that connect the foundations to the turbine towers. Completion of the foundations cleared the way for the turbine installation campaign to begin from Portsmouth Marine Terminal.",
+          "sources": [
+            {
+              "title": "CS Wind Delivers All 176 Transition Pieces for Coastal Virginia Offshore Wind",
+              "url": "https://www.offshorewind.biz/2025/11/20/cs-wind-delivers-all-176-transition-pieces-for-coastal-virginia-offshore-wind/",
+              "outlet": "Offshore Wind (offshorewind.biz)",
+              "publishedAt": "2025-11-20",
+              "favicon": {
+                "hash": "29e3711b6eb384199c5b07385c876efb",
+                "sourceUrl": "https://www.offshorewind.biz/wp-content/uploads/sites/2/2019/01/cropped-Favicon_navingo_512x512-1-32x32.png"
+              }
+            },
+            {
+              "title": "Wind Turbine Installation to Start Soon on 2.6 GW US Offshore Project",
+              "url": "https://www.offshorewind.biz/2025/11/03/wind-turbine-installation-to-start-soon-on-2-6-gw-us-offshore-project/",
+              "outlet": "Offshore Wind (offshorewind.biz)",
+              "publishedAt": "2025-11-03",
+              "favicon": {
+                "hash": "29e3711b6eb384199c5b07385c876efb",
+                "sourceUrl": "https://www.offshorewind.biz/wp-content/uploads/sites/2/2019/01/cropped-Favicon_navingo_512x512-1-32x32.png"
+              }
+            }
+          ],
+          "image": {
+            "hash": "2585b9bb5935e13fcbd7496aa87e84da",
+            "sourceUrl": "https://www.offshorewind.biz/wp-content/uploads/sites/2/2025/11/CS-Wind-Offshore-CVOW.jpg?image-crop-positioner-ts=1763646770"
+          }
+        },
+        {
+          "title": "Coastal Virginia Offshore Wind budget rises to $10.7 billion in first cost increase",
+          "summary": "On February 3, 2025, Dominion Energy disclosed that estimated total costs for the Coastal Virginia Offshore Wind project had risen about 9 percent, from $9.8 billion to $10.7 billion, the first increase since the original budget was filed with the Virginia State Corporation Commission in November 2021. Dominion attributed the rise to higher network upgrade costs assigned by grid operator PJM and higher onshore electrical interconnection costs. At the time the 2.6 GW project was roughly 50 percent complete and Dominion said it remained on track for completion at the end of 2026.",
+          "sources": [
+            {
+              "title": "Cost of CVOW Project Rises to USD 10.7 Billion, Completion on Track for 2026",
+              "url": "https://www.offshorewind.biz/2025/02/04/cost-of-cvow-project-rises-to-usd-10-7-billion-completion-on-track-for-2026/",
+              "outlet": "Offshore Wind (offshorewind.biz)",
+              "publishedAt": "2025-02-04",
+              "favicon": {
+                "hash": "29e3711b6eb384199c5b07385c876efb",
+                "sourceUrl": "https://www.offshorewind.biz/wp-content/uploads/sites/2/2019/01/cropped-Favicon_navingo_512x512-1-32x32.png"
+              }
+            }
+          ],
+          "image": null
+        }
+      ],
+      "second": [
+        {
+          "title": "Dominion trims Coastal Virginia Offshore Wind budget to $11.4 billion as turbine pace picks up",
+          "summary": "At its first-quarter 2026 earnings call on May 1, Dominion Energy cut the Coastal Virginia Offshore Wind estimate by about $100 million to roughly $11.4 billion, mainly on revised tariff assumptions, leaving about $123 million of unused contingency. Executives said turbine installation had accelerated to roughly two days per turbine and that most turbines would be in service by the end of 2026, with the remainder by June 2027. They also warned that each additional quarter of turbine installation beyond July 2027 would add $150 million to $200 million in cost, part of which would fall to 50 percent partner Stonepeak.",
+          "sources": [
+            {
+              "title": "Dominion upbeat on offshore wind as cost estimate eases, sales rise",
+              "url": "https://www.utilitydive.com/news/dominion-upbeat-on-offshore-wind-as-cost-estimate-eases-sales-rise/819218/",
+              "outlet": "Utility Dive",
+              "publishedAt": null,
+              "favicon": {
+                "hash": "a6be9afd0961d6944585ec167a12b449",
+                "sourceUrl": "https://www.utilitydive.com/favicon.ico"
+              }
+            },
+            {
+              "title": "Dominion (D) Q1 2026 Earnings Call Transcript",
+              "url": "https://www.fool.com/earnings/call-transcripts/2026/05/01/dominion-d-q1-2026-earnings-call-transcript/",
+              "outlet": "The Motley Fool",
+              "publishedAt": "2026-05-01",
+              "favicon": {
+                "hash": "022f600908946455e37984e258f677c6",
+                "sourceUrl": "https://www.fool.com/favicon.ico"
+              }
+            }
+          ],
+          "image": null
+        },
+        {
+          "title": "Coastal Virginia Offshore Wind installs its third and final offshore substation",
+          "summary": "Dominion Energy said in late February 2026 that the third and final offshore substation for Coastal Virginia Offshore Wind had been installed, completing the offshore collection platforms for the 2.6-gigawatt project. The first two substations were set in March and November 2025 and have since finished commissioning; the third is expected to be commissioned and energized by the end of 2026. Once that platform is in service, roughly half of the project's investment will have reached in-service status.",
+          "sources": [
+            {
+              "title": "Largest US Offshore Wind Farm 81 Pct Complete, Final Turbine Expected by End of 2027",
+              "url": "https://www.offshorewind.biz/2026/08/03/largest-us-offshore-wind-farm-81-pct-complete-final-turbine-expected-by-end-of-2027/",
+              "outlet": "Offshore Wind",
+              "publishedAt": "2026-08-03",
+              "favicon": {
+                "hash": "29e3711b6eb384199c5b07385c876efb",
+                "sourceUrl": "https://www.offshorewind.biz/wp-content/uploads/sites/2/2019/01/cropped-Favicon_navingo_512x512-1-32x32.png"
+              }
+            }
+          ],
+          "image": null
+        }
+      ]
+    },
+    {
+      "name": "Semiconductor supply chain",
+      "first": [
+        {
+          "title": "US opens review of Chinese firms' offshore access to Nvidia chips",
+          "summary": "The Commerce Department's Bureau of Industry and Security has begun systematically examining how Chinese AI companies obtain and use Nvidia processors located outside China, according to reporting on August 7. The focus is on compute rental — Chinese firms leasing capacity in third countries rather than importing controlled chips, which is not currently illegal under export control rules written for physical shipments. The review was prompted by recent Chinese model releases, including Moonshot AI's Kimi K3, that matched leading Western systems; Moonshot has a compute arrangement with investor Alibaba covering roughly 20,000 Hopper-generation Nvidia chips. One estimate cited puts offshore rental at boosting China's effective access to advanced US compute by at least 60 percent beyond what export controls alone would allow.",
+          "sources": [
+            {
+              "title": "BIS Targets Legal Cloud Compute as China AI Firms Bypass Export Controls",
+              "url": "https://www.techtimes.com/articles/323532/20260807/bis-targets-legal-cloud-compute-china-ai-firms-bypass-export-controls.htm",
+              "outlet": "Tech Times",
+              "publishedAt": "2026-08-07",
+              "favicon": {
+                "hash": "e6e47bace308e84b0a197c542f56f68f",
+                "sourceUrl": "https://www.techtimes.com/favicon.ico"
+              }
+            },
+            {
+              "title": "US reviews China's remote access to Nvidia chips",
+              "url": "https://thenextweb.com/news/us-bis-review-china-remote-offshore-nvidia-chip-access",
+              "outlet": "The Next Web",
+              "publishedAt": null,
+              "favicon": {
+                "hash": "124351354ffbcaab9c7e0ccbc7b1badf",
+                "sourceUrl": "https://static.thenextweb.com/assets/img/favicon/favicon-32x32.png"
+              }
+            }
+          ],
+          "image": {
+            "hash": "f94dace26cb2f6720b023e28b8edb450",
+            "sourceUrl": "https://d.techtimes.com/en/full/471851/gettyimages-632040278.jpg"
+          }
+        },
+        {
+          "title": "Kumamoto chip fabs restart in stages after magnitude 7.1 earthquake",
+          "summary": "A magnitude 7.1 earthquake struck Kumamoto Prefecture in southern Japan on July 28, forcing evacuations and shutdowns across one of Asia's densest clusters of chip and auto plants. Over the past week the industry moved into recovery: Tokyo Electron and Sony resumed operations, with Sony phasing production back up from August 4 and targeting pre-quake levels by mid-August, while Renesas planned a partial restart of its Kawashiri wafer plant on August 5 and full wafer input capacity roughly three weeks later. TSMC's JASM Fab 1 remained temporarily halted for equipment inspection, though construction on the adjacent Fab 2 restarted. Downstream, Toyota suspended production at three regional factories through August 5, and analysts flagged renewed risk to an already fragile automotive chip supply.",
+          "sources": [
+            {
+              "title": "Kumamoto Fab Restart Update: TEL, Sony Resume Operations; TSMC's JASM Fab 1 Under Inspection after M7.1 Quake",
+              "url": "https://www.trendforce.com/news/2026/08/03/news-kumamoto-fab-restart-update-tel-sony-resume-operations-tsmcs-jasm-fab-1-under-inspection-after-m7-1-quake/",
+              "outlet": "TrendForce",
+              "publishedAt": "2026-08-03",
+              "favicon": {
+                "hash": "773f2a7d0b030fdf01bd4578ea39a2c1",
+                "sourceUrl": "https://www.trendforce.com/images/favicon.ico"
+              }
+            },
+            {
+              "title": "Japan quake halts chip and auto production in Kyushu",
+              "url": "https://www.upi.com/Top_News/World-News/2026/07/30/japan-kumamoto-earthquake-semiconductors-supply-chain/7601785452429/",
+              "outlet": "UPI",
+              "publishedAt": "2026-07-30",
+              "favicon": {
+                "hash": "778a93d7401a85c969e8bf72b985b19b",
+                "sourceUrl": "https://www.upi.com/favicon.ico"
+              }
+            },
+            {
+              "title": "Japan earthquake forces Toyota, Nissan and more to halt production as automotive and semiconductor supply chains impacted",
+              "url": "https://www.automotivelogistics.media/supply-chain/japan-earthquake-forces-toyota-nissan-and-more-to-halt-production-as-automotive-and-semiconductor-supply-chains-impacted/2713433",
+              "outlet": "Automotive Logistics",
+              "publishedAt": null,
+              "favicon": {
+                "hash": "09a7d5ad75a3e1a2c453d0e97659a4d1",
+                "sourceUrl": "https://www.automotivelogistics.media/favicon.ico"
+              }
+            }
+          ],
+          "image": {
+            "hash": "295dd8e074b7edc4d5bb17dca3457fa3",
+            "sourceUrl": "https://img.trendforce.com/blog/wp-content/uploads/2025/06/11132859/TSMC-JASM-624x416.jpg"
+          }
+        }
+      ],
+      "second": [
+        {
+          "title": "Memory crunch reaches Apple, with MacBook Air shipments slipping into September",
+          "summary": "The AI-driven memory shortage that has been squeezing DRAM and NAND supply moved visibly into consumer hardware in early August, with reports that MacBook Air inventory is more constrained than retailers can recall. Delivery estimates on Apple's US online store stretched to two to six weeks, with higher-RAM configurations pushed into September — this despite a June price increase that lifted the base model from $1,099 to $1,299. The squeeze had already hit the Mac mini and Mac Studio before spreading to Apple's highest-volume laptop. The underlying cause is capacity reallocation: Samsung, SK hynix and Micron, which together control over 95 percent of DRAM output, have shifted production toward high-bandwidth memory for AI accelerators, leaving conventional DRAM and NAND short.",
+          "sources": [
+            {
+              "title": "The global memory shortage hits the MacBook Air",
+              "url": "https://techcrunch.com/2026/08/02/the-global-memory-shortage-hits-the-macbook-air/",
+              "outlet": "TechCrunch",
+              "publishedAt": "2026-08-02",
+              "favicon": {
+                "hash": "fdb2a968258558666f3a95ca79c0f077",
+                "sourceUrl": "https://techcrunch.com/favicon.ico"
+              }
+            },
+            {
+              "title": "MacBook Air Experiencing 'Major' Shortage Despite $200 Price Increase",
+              "url": "https://www.macrumors.com/2026/08/02/macbook-air-shortage-report/",
+              "outlet": "MacRumors",
+              "publishedAt": "2026-08-02",
+              "favicon": {
+                "hash": "0485802e47939e8ad93774bd12466ff5",
+                "sourceUrl": "https://www.macrumors.com/favicon.ico"
+              }
+            },
+            {
+              "title": "Apple faces MacBook Air shortages amid AI-driven memory crunch",
+              "url": "https://macdailynews.com/2026/08/03/apple-faces-macbook-air-shortages-amid-ai-driven-memory-crunch-eyes-health-features-for-future-glasses-and-headsets/",
+              "outlet": "MacDailyNews",
+              "publishedAt": "2026-08-03",
+              "favicon": {
+                "hash": "5a513858353de16034689be774305ecb",
+                "sourceUrl": "https://macdailynews.com/favicon.ico"
+              }
+            }
+          ],
+          "image": {
+            "hash": "f6d2c374435f5265a89adc56bfd998db",
+            "sourceUrl": "https://techcrunch.com/wp-content/uploads/2024/10/macbook-air-2024-update.png?resize=1200,618"
+          }
+        },
+        {
+          "title": "Global chip sales hit $403.3 billion in the second quarter, up 35 percent from Q1",
+          "summary": "The Semiconductor Industry Association reported on August 6 that worldwide semiconductor sales reached $403.3 billion in the second quarter of 2026, a 35.1 percent increase over the first quarter. June sales alone were $134.5 billion, up 123.6 percent year over year and 9.7 percent over May. SIA chief executive John Neuffer said global chip sales are now expected to exceed $1.5 trillion for the full year, far above earlier industry forecasts of roughly $1 trillion. The figures reflect AI infrastructure demand and sharply higher memory pricing rather than proportional unit growth.",
+          "sources": [
+            {
+              "title": "Global Semiconductor Sales Increase 35.1% from Q1 2026 to Q2 2026",
+              "url": "https://www.semiconductors.org/global-semiconductor-sales-increase-35-1-from-q1-2026-to-q2-2026/",
+              "outlet": "Semiconductor Industry Association",
+              "publishedAt": "2026-08-06",
+              "favicon": {
+                "hash": "d9f4e9e1e3c02f2b1474fbdf0a6e7865",
+                "sourceUrl": "https://www.semiconductors.org/favicon.ico"
+              }
+            },
+            {
+              "title": "Global semiconductor sales jump 35% in Q2 2026",
+              "url": "https://www.eenewseurope.com/en/global-semiconductor-sales-jump-35-in-q2-2026/",
+              "outlet": "eeNews Europe",
+              "publishedAt": null,
+              "favicon": {
+                "hash": "a0e1c04a9cb31511026a269b693eda40",
+                "sourceUrl": "https://www.eenewseurope.com/favicon.ico"
+              }
+            }
+          ],
+          "image": {
+            "hash": "10fc61cf876277b2668e42bd4e8a51a3",
+            "sourceUrl": "https://www.semiconductors.org/wp-content/uploads/2026/08/Screenshot-2026-08-06-at-11.50.01-AM.png"
+          }
+        }
+      ]
+    }
+  ],
+  "imagesByArticle": {
+    "https://www.utilitydive.com/news/dominion-offshore-wind-project-cost-rises-nearly-300m/826845/": {
+      "hash": "f5c37353549fc8c82f37d07cd1f32072",
+      "sourceUrl": "https://imgproxy.divecdn.com/9Gz9V2FMNHt3xFPzBbSjNgb6b03EiS-0ZYNwFPae3Iw/g:ce/rs:fit:770:435/Z3M6Ly9kaXZlc2l0ZS1zdG9yYWdlL2RpdmVpbWFnZS9DVk9XXzAzNDMuanBn.webp"
+    },
+    "https://gcaptain.com/dominions-11-5b-virginia-offshore-wind-project-delivers-first-power-after-legal-fight-cost-surge/": {
+      "hash": "24cb027cc3aeee8557ff505659a36ba6",
+      "sourceUrl": "https://gcaptain.com/wp-content/uploads/2020/10/dominion_energy_test_wind_farm.jpeg"
+    },
+    "https://dredgewire.com/dominion-offshore-wind-project-cost-rises-to-11-5b-after-stop-work-order-tariffs/": {
+      "hash": "6a74969b2097817da4101aa41d8f5607",
+      "sourceUrl": "https://dredgewire.com/wp-content/uploads/2026/02/Dominion-offshore-wind.jpg"
+    },
+    "https://www.workboat.com/wind/first-production-turbine-installed-at-virginia-offshore-wind": {
+      "hash": "8a3f9d4f3998f93bec84519bb9de6e3f",
+      "sourceUrl": "https://s3.divcom.com/www.workboat.com/images/CVOW%20first%20turbine%20up.jpg.medium.800x800.jpg"
+    },
+    "https://www.offshorewind.biz/2025/12/29/us-offshore-wind-developer-sues-government-over-stop-work-order/": {
+      "hash": "2079a20fbc72626002aff64dd22935d6",
+      "sourceUrl": "https://www.offshorewind.biz/wp-content/uploads/sites/2/2025/03/CVOW-DEME.jpg?image-crop-positioner-ts=1741938569"
+    },
+    "https://www.offshorewind.biz/2025/12/23/us-government-sends-stop-work-order-to-all-offshore-wind-projects-under-construction/": {
+      "hash": "6a3e8495148cd100099bb5f7c3f6895d",
+      "sourceUrl": "https://www.offshorewind.biz/wp-content/uploads/sites/2/2024/09/Orsted-Revolution-Wind.png?image-crop-positioner-ts=1725431643"
+    },
+    "https://gcaptain.com/punch-list-items-delay-commissioning-of-dominion-wind-turbine-vessel/": {
+      "hash": "3fffc12b3c05f9ce15def8e117d53300",
+      "sourceUrl": "https://gcaptain.com/wp-content/uploads/2021/06/Dominion_Energy.jpg"
+    },
+    "https://www.offshorewind.biz/2025/11/20/cs-wind-delivers-all-176-transition-pieces-for-coastal-virginia-offshore-wind/": {
+      "hash": "2585b9bb5935e13fcbd7496aa87e84da",
+      "sourceUrl": "https://www.offshorewind.biz/wp-content/uploads/sites/2/2025/11/CS-Wind-Offshore-CVOW.jpg?image-crop-positioner-ts=1763646770"
+    },
+    "https://techcrunch.com/2026/08/02/the-global-memory-shortage-hits-the-macbook-air/": {
+      "hash": "f6d2c374435f5265a89adc56bfd998db",
+      "sourceUrl": "https://techcrunch.com/wp-content/uploads/2024/10/macbook-air-2024-update.png?resize=1200,618"
+    },
+    "https://www.semiconductors.org/global-semiconductor-sales-increase-35-1-from-q1-2026-to-q2-2026/": {
+      "hash": "10fc61cf876277b2668e42bd4e8a51a3",
+      "sourceUrl": "https://www.semiconductors.org/wp-content/uploads/2026/08/Screenshot-2026-08-06-at-11.50.01-AM.png"
+    },
+    "https://www.techtimes.com/articles/323532/20260807/bis-targets-legal-cloud-compute-china-ai-firms-bypass-export-controls.htm": {
+      "hash": "f94dace26cb2f6720b023e28b8edb450",
+      "sourceUrl": "https://d.techtimes.com/en/full/471851/gettyimages-632040278.jpg"
+    },
+    "https://www.trendforce.com/news/2026/08/03/news-kumamoto-fab-restart-update-tel-sony-resume-operations-tsmcs-jasm-fab-1-under-inspection-after-m7-1-quake/": {
+      "hash": "295dd8e074b7edc4d5bb17dca3457fa3",
+      "sourceUrl": "https://img.trendforce.com/blog/wp-content/uploads/2025/06/11132859/TSMC-JASM-624x416.jpg"
+    },
+    "https://world-nuclear-news.org/articles/germany-coordinates-fusion-rd-efforts": {
+      "hash": "5ac5865b11117a118af71a8ddd75b199",
+      "sourceUrl": "https://world-nuclear-news.org/images/articles/Wendelstein7-Xplasmavessel(MPIforPlasmaPhysics-JanMichaelHosan)_54658.jpg"
+    },
+    "https://www.ans.org/news/2026-08-07/article-8276/ornl-rutherford-energy-ventures-launch-fusion-partnership/": {
+      "hash": "a49d62ba6208ba36e9c4b3aafaf975ea",
+      "sourceUrl": "https://www.ans.org/file/25099/l/ORNL%20REV.jpg"
+    },
+    "https://techcrunch.com/2026/07/30/fusion-power-darling-commonwealth-fusion-systems-raises-another-1b/": {
+      "hash": "3da2c649e664dfd23c23a72271b21420",
+      "sourceUrl": "https://techcrunch.com/wp-content/uploads/2025/03/CFS-cryostat-base-installation.jpeg?resize=1200,800"
+    },
+    "https://www.metoffice.gov.uk/research/approach/monitoring/sea-ice/2026/briefing-on-arctic--antarctic-sea-ice---august-2026": {
+      "hash": "6a8d4e9d3adb4b7c3487fac6d55f51b3",
+      "sourceUrl": "https://www.metoffice.gov.uk/api/images/file/icecaps-in-antarctica-1024x512.jpg?prefix=images&prefix=images"
+    }
+  },
+  "faviconsByOrigin": {
+    "https://www.utilitydive.com": {
+      "hash": "a6be9afd0961d6944585ec167a12b449",
+      "sourceUrl": "https://www.utilitydive.com/favicon.ico"
+    },
+    "https://www.fool.com": {
+      "hash": "022f600908946455e37984e258f677c6",
+      "sourceUrl": "https://www.fool.com/favicon.ico"
+    },
+    "https://www.offshorewind.biz": {
+      "hash": "29e3711b6eb384199c5b07385c876efb",
+      "sourceUrl": "https://www.offshorewind.biz/wp-content/uploads/sites/2/2019/01/cropped-Favicon_navingo_512x512-1-32x32.png"
+    },
+    "https://gcaptain.com": {
+      "hash": "e22533d58dec9eed3f073ec16c411331",
+      "sourceUrl": "https://gcaptain.com/favicon.ico"
+    },
+    "https://finance.yahoo.com": {
+      "hash": "d98b20bd4c820ceab81727d43080019b",
+      "sourceUrl": "https://finance.yahoo.com/favicon.ico"
+    },
+    "https://maritime-executive.com": {
+      "hash": "e7e74df5896ae14b7cc5e7a41fa342b9",
+      "sourceUrl": "https://maritime-executive.com/img/favicon-32x32.png"
+    },
+    "https://www.constructiondive.com": {
+      "hash": "a96e1dbb15111b2fb68723893253588f",
+      "sourceUrl": "https://www.constructiondive.com/favicon.ico"
+    },
+    "https://dredgewire.com": {
+      "hash": "12e1b06f3bd8f1b1af7971f2020e94f8",
+      "sourceUrl": "https://dredgewire.com/favicon.ico"
+    },
+    "https://www.theglobeandmail.com": {
+      "hash": "feabd2c89737ffbc5464adea0520622f",
+      "sourceUrl": "https://www.theglobeandmail.com/pf/resources/assets/meta/favicon-32x32.png?d=939"
+    },
+    "https://www.workboat.com": {
+      "hash": "ce17ddb0b308ef74b934d13269fa16ee",
+      "sourceUrl": "https://www.workboat.com/www.workboat.com/img/favicon-32x32.png"
+    },
+    "https://www.ecoportal.net": {
+      "hash": "cef6c1004a3920336f076f7580e39ca4",
+      "sourceUrl": "https://www.ecoportal.net/favicon.ico"
+    },
+    "https://techcrunch.com": {
+      "hash": "fdb2a968258558666f3a95ca79c0f077",
+      "sourceUrl": "https://techcrunch.com/favicon.ico"
+    },
+    "https://www.macrumors.com": {
+      "hash": "0485802e47939e8ad93774bd12466ff5",
+      "sourceUrl": "https://www.macrumors.com/favicon.ico"
+    },
+    "https://macdailynews.com": {
+      "hash": "5a513858353de16034689be774305ecb",
+      "sourceUrl": "https://macdailynews.com/favicon.ico"
+    },
+    "https://www.semiconductors.org": {
+      "hash": "d9f4e9e1e3c02f2b1474fbdf0a6e7865",
+      "sourceUrl": "https://www.semiconductors.org/favicon.ico"
+    },
+    "https://www.eenewseurope.com": {
+      "hash": "a0e1c04a9cb31511026a269b693eda40",
+      "sourceUrl": "https://www.eenewseurope.com/favicon.ico"
+    },
+    "https://www.techtimes.com": {
+      "hash": "e6e47bace308e84b0a197c542f56f68f",
+      "sourceUrl": "https://www.techtimes.com/favicon.ico"
+    },
+    "https://thenextweb.com": {
+      "hash": "124351354ffbcaab9c7e0ccbc7b1badf",
+      "sourceUrl": "https://static.thenextweb.com/assets/img/favicon/favicon-32x32.png"
+    },
+    "https://www.trendforce.com": {
+      "hash": "773f2a7d0b030fdf01bd4578ea39a2c1",
+      "sourceUrl": "https://www.trendforce.com/images/favicon.ico"
+    },
+    "https://www.upi.com": {
+      "hash": "778a93d7401a85c969e8bf72b985b19b",
+      "sourceUrl": "https://www.upi.com/favicon.ico"
+    },
+    "https://www.automotivelogistics.media": {
+      "hash": "09a7d5ad75a3e1a2c453d0e97659a4d1",
+      "sourceUrl": "https://www.automotivelogistics.media/favicon.ico"
+    },
+    "https://world-nuclear-news.org": {
+      "hash": "ab13a7abe3c83ddab39fa1b6ebbe2ad6",
+      "sourceUrl": "https://world-nuclear-news.org/favicon.ico"
+    },
+    "https://www.innovationnewsnetwork.com": {
+      "hash": "aa68a20b251cf9e1850b1d867711800c",
+      "sourceUrl": "https://www.innovationnewsnetwork.com/wp-content/uploads/2023/07/inn-logo-favicon-02.png"
+    },
+    "https://optics.org": {
+      "hash": "2ed2e1dcb0d7494eb248b68f41d371d1",
+      "sourceUrl": "https://optics.org/Images/Global/Favicons/OdotOFavicon.png"
+    },
+    "https://www.ans.org": {
+      "hash": "b05de524ce55e82e068938c1e70cbbb2",
+      "sourceUrl": "https://www.ans.org/favicon.ico"
+    },
+    "https://www.ornl.gov": {
+      "hash": "537efb06881ed52146f77da065fb8e16",
+      "sourceUrl": "https://www.ornl.gov/themes/custom/ornl/images/favicons/favicon-32x32.png"
+    },
+    "https://www.neimagazine.com": {
+      "hash": "11271c7aebd9b6cbba8ea283417ba4aa",
+      "sourceUrl": "https://www.neimagazine.com/favicon.ico"
+    },
+    "https://www.iter.org": {
+      "hash": "8960326e279255b712a5f1e9bd4b2d48",
+      "sourceUrl": "https://www.iter.org/favicon.ico"
+    },
+    "https://interestingengineering.com": {
+      "hash": "f52f993327d5bcbb782d53add29dcc2e",
+      "sourceUrl": "https://interestingengineering.com/favicon.ico"
+    },
+    "https://www.world-nuclear-news.org": {
+      "hash": "7b6fac003e0927803984c042f6432346",
+      "sourceUrl": "https://www.world-nuclear-news.org/favicon.ico"
+    },
+    "https://www.metoffice.gov.uk": {
+      "hash": "17620d6ab1233df6dec62c3d97e335df",
+      "sourceUrl": "https://www.metoffice.gov.uk/favicon.ico"
+    }
+  }
+}

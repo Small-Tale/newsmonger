@@ -7,13 +7,16 @@
  * and nothing claims to be real reporting.
  */
 
+import fs from 'node:fs';
+import path from 'node:path';
+
 import { describe, expect, it } from 'vitest';
 
 import { createDemoProvider } from '../../src/ai/providers/demo.js';
 import type { CategoryOption } from '../../src/ai/types.js';
 import { activeCategories, BUILTIN_CATEGORIES } from '../../src/categories.js';
 import { THREAD_ROW_CAP } from '../../src/client/thread-view.js';
-import { DEMO_TOPICS, findDemoTopic } from '../../src/demo.js';
+import { DEMO_TOPICS, demoFaviconFor, demoFixtureDir, demoImageFor, findDemoTopic } from '../../src/demo.js';
 import { planThreadIds } from '../../src/threads.js';
 
 /**
@@ -32,11 +35,73 @@ const OPTIONS: CategoryOption[] = activeCategories(BUILTIN_CATEGORIES).map((c) =
 }));
 
 describe('demo fixtures', () => {
-  it('has topics, each with first and second stories', () => {
+  it('has topics, and enough of them answer a second check to show dedup', () => {
     expect(DEMO_TOPICS.length).toBeGreaterThan(0);
     for (const t of DEMO_TOPICS) {
       expect(t.first.length, `${t.name} first`).toBeGreaterThan(0);
-      expect(t.second.length, `${t.name} second`).toBeGreaterThan(0);
+    }
+    // Every topic used to be required to have second-check stories. A recorded
+    // fixture cannot promise that (NEWS-376): the split is dealt from one real
+    // capture, so a genuinely quiet beat — Antarctic ice in midwinter returned a
+    // single story — has nothing to hold back. That is the honest behaviour a
+    // re-check has anyway.
+    //
+    // What the hero actually needs is for *some* topic to answer the second
+    // check, which is what makes dedup visible.
+    expect(DEMO_TOPICS.filter((t) => t.second.length > 0).length).toBeGreaterThan(0);
+  });
+
+  it('is recorded from real outlets, with pictures — the NEWS-376 contract', () => {
+    // This test replaces one asserting the exact opposite, and the reversal is
+    // the ticket. Sources used to be required to be named "Illustrative …" and
+    // pointed at example.org, because the summaries were invented and
+    // attributing invented reporting to a real masthead would put words in a
+    // publication's mouth.
+    //
+    // The cost of that was not the prose. It was that example.org serves no
+    // article and no favicon, so the real image pipeline ran on every capture,
+    // correctly found nothing, and every shipped screenshot showed a news reader
+    // that cannot display a picture.
+    //
+    // So the fixture is recorded rather than written, and this asserts the
+    // property whose absence was invisible before: that the pictures are there.
+    let withImage = 0;
+    for (const t of DEMO_TOPICS) {
+      for (const story of [...t.first, ...t.second]) {
+        for (const source of story.sources) {
+          expect(new URL(source.url).hostname, `${source.title} should be a real outlet`).not.toBe('example.org');
+          expect(source.title).not.toMatch(/^Illustrative /);
+        }
+        const lead = story.sources.at(0);
+        if (lead !== undefined && demoImageFor(lead.url) !== null) withImage++;
+      }
+    }
+    // Not "every story": roughly a third of real articles carry no usable
+    // `og:image`, and a fixture that demanded one from all of them would be
+    // asserting something the web does not provide. A card with no picture is a
+    // layout the feed has to handle anyway.
+    expect(withImage, 'the recording must carry lead images').toBeGreaterThan(4);
+
+    const origins = new Set(
+      DEMO_TOPICS.flatMap((t) => [...t.first, ...t.second]).flatMap((s) => s.sources.map((x) => new URL(x.url).origin)),
+    );
+    expect([...origins].filter((o) => demoFaviconFor(o) !== null).length, 'and favicons').toBeGreaterThan(4);
+  });
+
+  it('replays every recorded image from a file that is actually committed', () => {
+    // The mapping and the bytes are written by the same script but are separate
+    // artifacts, and a fixture that names a hash it does not ship would put the
+    // missing pictures back while every other assertion here stayed green.
+    for (const t of DEMO_TOPICS) {
+      for (const story of [...t.first, ...t.second]) {
+        const lead = story.sources.at(0);
+        const recorded = lead === undefined ? null : demoImageFor(lead.url);
+        if (recorded === null) continue;
+        expect(
+          fs.existsSync(path.join(demoFixtureDir(), 'images', `${recorded.hash}.bin`)),
+          `${story.title} names image ${recorded.hash}, which is not committed`,
+        ).toBe(true);
+      }
     }
   });
 
@@ -59,7 +124,7 @@ describe('demo fixtures', () => {
     };
 
     const threaded = DEMO_TOPICS.filter((t) => threadCount(t) < t.first.length + t.second.length);
-    expect(threaded.map((t) => t.name)).toEqual(['Offshore wind']);
+    expect(threaded.map((t) => t.name)).toEqual(['Renewable energy buildout']);
 
     const series = threaded[0];
     // One thread, and long enough that the pane holds some of it back — "Show
@@ -85,7 +150,7 @@ describe('demo fixtures', () => {
     // The counterweight: if everything threaded, the feed still would be one
     // subject repeated and the dedup beat in the hero would lose its contrast.
     for (const t of DEMO_TOPICS) {
-      if (t.name === 'Offshore wind') continue;
+      if (t.name === 'Renewable energy buildout') continue;
       const stories = [...t.first, ...t.second];
       const stored = stories.map((s, i) => ({
         id: `s${String(i)}`,
@@ -118,20 +183,6 @@ describe('demo fixtures', () => {
         expect(s.title.length).toBeGreaterThan(25);
         expect(s.summary.length).toBeGreaterThan(120);
         expect(s.sources.length).toBeGreaterThan(0);
-      }
-    }
-  });
-
-  it('uses transparently illustrative sources, never a real outlet', () => {
-    // These summaries are invented. Attributing invented reporting to a real
-    // masthead would be putting words in a publication's mouth, so every source
-    // is both named as illustrative and pointed at example.org.
-    for (const t of DEMO_TOPICS) {
-      for (const s of [...t.first, ...t.second]) {
-        for (const src of s.sources) {
-          expect(src.title, `${src.title} should be marked illustrative`).toMatch(/^Illustrative /);
-          expect(new URL(src.url).hostname).toBe('example.org');
-        }
       }
     }
   });
