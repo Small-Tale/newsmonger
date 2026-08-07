@@ -206,10 +206,11 @@ async function menuAction(page: Page, rowSelector: string, action: string): Prom
  * The section and subject chip the discovery scenes click through.
  *
  * Both come from **`BUILTIN_CATEGORIES`**, not from the demo topic's own
- * `category`/`subcategory` — those are free-text hints for the classifier, and
- * they do not all name real chips (a fixture says `Climate`; the taxonomy says
- * `Climate & Environment`). Reading the labels off the table that renders them
- * is the only way this can't click a chip that isn't there.
+ * `category`/`subcategory` — those are free-text hints for the classifier, held
+ * to the taxonomy by a test rather than by the type system. They did not all name
+ * real chips until NEWS-395 repaired four that a taxonomy edit had orphaned, and
+ * nothing here noticed. Reading the labels off the table that renders them is the
+ * only way this can't click a chip that isn't there.
  *
  * Which section is picked doesn't change *what* is suggested: the demo provider
  * returns every unfollowed demo topic regardless of the section asked for. The

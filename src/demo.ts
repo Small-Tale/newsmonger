@@ -32,7 +32,19 @@ export interface DemoStory {
 
 export interface DemoTopic {
   name: string;
+  /**
+   * A **label** from `BUILTIN_CATEGORIES`, matched case-insensitively by the demo
+   * provider's `classify()` (NEWS-395).
+   *
+   * A label that no longer resolves is dropped silently — correct behaviour
+   * (FR-22.8), and exactly why nobody noticed when a taxonomy edit moved Energy
+   * out of Science and left two of these pointing at nothing for four months.
+   * `tests/unit/demo.test.ts` now resolves every pair against the live table, so
+   * the next taxonomy edit fails the gate instead of quietly un-labelling the
+   * screenshots.
+   */
   category?: string;
+  /** A subcategory label of `category`, same rules. */
   subcategory?: string;
   /** Returned by the topic's first check. */
   first: DemoStory[];
@@ -43,7 +55,7 @@ export interface DemoTopic {
 export const DEMO_TOPICS: DemoTopic[] = [
   {
     name: 'Fusion energy',
-    category: 'Science',
+    category: 'Environment',
     subcategory: 'Energy',
     first: [
       {
@@ -73,7 +85,7 @@ export const DEMO_TOPICS: DemoTopic[] = [
   },
   {
     name: 'Antarctic ice',
-    category: 'Science',
+    category: 'Environment',
     subcategory: 'Climate',
     first: [
       {
@@ -123,7 +135,7 @@ export const DEMO_TOPICS: DemoTopic[] = [
      * `THREAD_ROW_CAP` (4), where "Show all 6 stories" appears.
      */
     name: 'Offshore wind',
-    category: 'Science',
+    category: 'Environment',
     subcategory: 'Energy',
     first: [
       {
@@ -172,7 +184,7 @@ export const DEMO_TOPICS: DemoTopic[] = [
   {
     name: 'Semiconductor supply chain',
     category: 'Business',
-    subcategory: 'Technology',
+    subcategory: 'Trade & Supply Chains',
     first: [
       {
         title: 'Second advanced packaging plant announced as bottleneck moves downstream',

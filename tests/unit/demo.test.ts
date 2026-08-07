@@ -11,14 +11,25 @@ import { describe, expect, it } from 'vitest';
 
 import { createDemoProvider } from '../../src/ai/providers/demo.js';
 import type { CategoryOption } from '../../src/ai/types.js';
+import { activeCategories, BUILTIN_CATEGORIES } from '../../src/categories.js';
 import { THREAD_ROW_CAP } from '../../src/client/thread-view.js';
 import { DEMO_TOPICS, findDemoTopic } from '../../src/demo.js';
 import { planThreadIds } from '../../src/threads.js';
 
-const OPTIONS: CategoryOption[] = [
-  { slug: 'science', label: 'Science', subcategories: [{ slug: 'energy', label: 'Energy' }, { slug: 'climate', label: 'Climate' }] },
-  { slug: 'business', label: 'Business', subcategories: [{ slug: 'technology', label: 'Technology' }] },
-];
+/**
+ * The taxonomy exactly as the check pipeline offers it (`classifierOptions` in
+ * `src/checks.ts`) — the real table, retired rows excluded.
+ *
+ * Built here rather than hand-written (NEWS-395): a hand-written option list is
+ * a second copy of the taxonomy, and it stays green while the real one moves out
+ * from under the fixtures. That is how `Science ▸ Energy` survived the move of
+ * Energy to Environment.
+ */
+const OPTIONS: CategoryOption[] = activeCategories(BUILTIN_CATEGORIES).map((c) => ({
+  slug: c.slug,
+  label: c.label,
+  subcategories: c.subcategories.map((s) => ({ slug: s.slug, label: s.label })),
+}));
 
 describe('demo fixtures', () => {
   it('has topics, each with first and second stories', () => {
@@ -125,6 +136,48 @@ describe('demo fixtures', () => {
     }
   });
 
+  it('declares a category and subcategory that both resolve, and neither retired (NEWS-395)', () => {
+    // The bug this pins: `classify()` drops a label it cannot resolve, which is
+    // the right behaviour (FR-22.8) and the reason nothing complained when the
+    // taxonomy moved out from under the fixtures. Two topics claimed `Science ▸
+    // Energy` for four months after NEWS-388 moved Energy under Environment, one
+    // claimed a `Science ▸ Climate` row that never existed under that name, and a
+    // fourth claimed `Business ▸ Technology`, which never existed at all. Every
+    // one of them photographed a bare section pill where a subject was meant to
+    // be, in screenshots nobody re-reads.
+    //
+    // Matched on **labels**, against the *active* table, because that is exactly
+    // what `classify()` does: a retired row would resolve in `BUILTIN_CATEGORIES`
+    // and then vanish from the options the classifier is actually handed.
+    for (const topic of DEMO_TOPICS) {
+      if (topic.category === undefined) continue;
+      const category = OPTIONS.find((c) => c.label.toLowerCase() === topic.category?.toLowerCase());
+      expect(category, `${topic.name}: no active category labelled "${topic.category ?? ''}"`).toBeDefined();
+      if (topic.subcategory === undefined) continue;
+      const sub = category?.subcategories.find((s) => s.label.toLowerCase() === topic.subcategory?.toLowerCase());
+      expect(
+        sub,
+        `${topic.name}: "${topic.category ?? ''}" has no active subcategory labelled "${topic.subcategory}"`,
+      ).toBeDefined();
+    }
+  });
+
+  it('classifies every topic through the real provider, subject and all (NEWS-395)', async () => {
+    // The same guarantee stated as behaviour rather than as data: run each topic
+    // through the provider the capture actually uses, with the options the check
+    // pipeline actually sends, and require a subject to come back out. The
+    // resolution check above could pass while `classify()` matched differently;
+    // this is the assertion the screenshots depend on.
+    const provider = createDemoProvider();
+    for (const topic of DEMO_TOPICS) {
+      const result = await provider.checkTopic(topic.name, [], null, { categoryOptions: OPTIONS });
+      expect(result.classification, `${topic.name} classified as nothing`).not.toBeNull();
+      if (topic.subcategory !== undefined) {
+        expect(result.classification?.subcategory, `${topic.name} lost its subcategory`).not.toBeNull();
+      }
+    }
+  });
+
   it('finds topics case-insensitively', () => {
     const first = DEMO_TOPICS[0];
     expect(findDemoTopic(first.name.toUpperCase())?.name).toBe(first.name);
@@ -176,7 +229,7 @@ describe('the demo provider', () => {
     // would be rejected and the topic would file itself as unclassified.
     const p = createDemoProvider();
     const r = await p.checkTopic('Fusion energy', [], null, { categoryOptions: OPTIONS });
-    expect(r.classification).toEqual({ category: 'science', subcategory: 'energy' });
+    expect(r.classification).toEqual({ category: 'environment', subcategory: 'energy' });
   });
 
   it('declines to classify when the taxonomy does not match', async () => {
