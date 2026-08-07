@@ -2394,6 +2394,19 @@ h2.eyebrow {
   margin: 10px 0 14px;
 }
 
+// Section and subject in the edit dialog (NEWS-407).
+//
+// The subject container is always in the DOM and collapses to nothing when the
+// section has no subjects — an appearing sibling would restructure the form
+// around it (docs/3-ui.md), and this one sits directly above the name field.
+.rename-section {
+  margin-top: 14px;
+}
+
+.rename-subsection:empty {
+  display: none;
+}
+
 .detected {
   list-style: none;
   margin: 0 0 14px;

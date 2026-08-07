@@ -83,6 +83,14 @@ Six rows were **widened in place** rather than moved — Space → Space & Astro
 
   Requested as "a General subcategory for all categories"; done this way because a stored row per category would have to be remembered for every category added later — reopening the same hole — and because adding *Skiing* next winter would then strand `sports/general` topics claiming to be classified. With `null` they are unclassified-at-sub-level, which is exactly what they are. It also gives the classifier an easier instruction: omit the field rather than choose a catch-all.
 
+- **FR-22.7a** *(Shipped, NEWS-407)* **The edit dialog lets a person set the section and subject by hand.** Two selects — section, then the subjects of that section — rather than one flat list of ~150, which would be a worse menu than the classifier's own.
+
+  **This is what made FR-22.7 reachable.** The route, the `manual` promise and the re-read-after-check rule below had all shipped with NEWS-97; nothing in the UI could make the choice they were about. FR-22.7 was marked Shipped and was, from a user's seat, unreachable — the kind of gap a status marker cannot show.
+
+  **"Let Newsmonger decide" is the empty option, and it is not the same as a section with no subject.** Choosing it sends `category: null`, which clears the section *and* resets `categorySource` to `auto`, making the topic eligible for automatic classification again. Changing the section resets the subject on both sides — client and route — since a subject from the previous parent resolves to nothing.
+
+  `undefined` and `null` are kept distinct all the way through: renaming a topic sends no `category` at all, so a typo fix cannot wipe a section someone chose.
+
 - **FR-22.7** *(Shipped)* Topics carry `category` / `subcategory` / `categorySource`, stored as three nullable columns on `topics` (schema v2; an existing v1 database is migrated by `ALTER TABLE`, additive and needing no backfill — an unclassified topic is exactly what `null` means).
 
   `categorySource: 'auto' | 'manual'` is a promise: automatic classification must not overwrite a choice a person made. `PATCH /api/topics/:id { category, subcategory? }` always writes `'manual'`, because that route only runs when someone chose. **Clearing** (`category: null`) resets the source to `'auto'` — otherwise a cleared topic would be permanently ineligible for classification, which is both invisible and unfixable from the UI. Changing the category drops the subcategory, since a sub from the previous parent resolves to nothing.

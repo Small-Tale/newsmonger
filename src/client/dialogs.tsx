@@ -20,6 +20,7 @@ import type { SafeHtml } from 'kerfjs';
 
 import { PROVIDER_INFO } from '../ai/types.js';
 import type { BackupLocation } from '../backup-locations.js';
+import { activeCategories, BUILTIN_CATEGORIES, findCategory } from '../categories.js';
 import type { Topic } from '../db/schemas.js';
 import { MAX_GUIDANCE_LENGTH } from '../db/schemas.js';
 import { exportHref } from './export-url.js';
@@ -240,7 +241,45 @@ export function guidanceDialogJsx(topic: Topic): SafeHtml {
  * wording — and discarding a topic's history should never be something that
  * happens because a checkbox was already ticked.
  */
-export function renameDialogJsx(topic: Topic, itemCount: number | null): SafeHtml {
+
+/**
+ * The subcategory row, or nothing (NEWS-407, FR-22.7a).
+ *
+ * Its own function so the delegate can re-render just this container when the
+ * section changes, rather than the whole form — which would blow away a
+ * half-typed name.
+ *
+ * Empty for "let Newsmonger decide" and for a section with no subjects. **Not a
+ * disabled select**: an inert control that can never be used reads as broken,
+ * where an absent one reads as "this section has no subjects", which is true.
+ */
+export function renameSubcategoryJsx(categorySlug: string | null, subSlug: string | null): SafeHtml {
+  const category = findCategory(activeCategories(BUILTIN_CATEGORIES), categorySlug);
+  const subs = category?.subcategories.filter((s) => !s.retired) ?? [];
+  if (subs.length === 0) return <span />;
+  return (
+    <label class="field stacked">
+      <span>Subject</span>
+      <select name="topic-subcategory" data-action="rename-subcategory">
+        <option value="" selected={subSlug === null ? true : undefined}>
+          No particular subject
+        </option>
+        {subs.map((sub) => (
+          <option value={sub.slug} selected={sub.slug === subSlug ? true : undefined}>
+            {sub.label}
+          </option>
+        ))}
+      </select>
+    </label>
+  );
+}
+
+export function renameDialogJsx(
+  topic: Topic,
+  itemCount: number | null,
+  categorySlug: string | null,
+  subSlug: string | null,
+): SafeHtml {
   return (
     <div class="dialog-backdrop" data-action="rename-backdrop">
       <div class="dialog rename" role="dialog" aria-modal="true" aria-label={`Edit topic ${topic.name}`}>
@@ -259,6 +298,32 @@ export function renameDialogJsx(topic: Topic, itemCount: number | null): SafeHtm
             value={topic.name}
             data-morph-skip-children
           />
+          {/* Section (NEWS-407, FR-22.7a). The API and the `manual` promise have
+              existed since NEWS-97; this is the first way for a user to reach
+              them. Two selects rather than one combined list because the
+              subcategory set depends on the section, and a flat ~150-row list
+              would be worse than the classifier's own menu.
+
+              "Let Newsmonger decide" is the empty value and it is not the same
+              as a section with no subject: choosing it clears the category *and*
+              resets `categorySource` to `auto`, making the topic eligible for
+              automatic classification again (FR-22.7). */}
+          <label class="field stacked rename-section">
+            <span>Section</span>
+            <select name="topic-category" data-action="rename-category">
+              <option value="" selected={categorySlug === null ? true : undefined}>
+                Let Newsmonger decide
+              </option>
+              {activeCategories(BUILTIN_CATEGORIES).map((category) => (
+                <option value={category.slug} selected={category.slug === categorySlug ? true : undefined}>
+                  {category.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          {/* Always present, empty when the section has no subjects or none is
+              chosen — an appearing sibling would restructure the form (docs/3-ui.md). */}
+          <div class="rename-subsection">{renameSubcategoryJsx(categorySlug, subSlug)}</div>
           {/* Always-present container so the checkbox appearing can't restructure
               the form around it (docs/3-ui.md). */}
           <div class="rename-clear">

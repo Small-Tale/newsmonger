@@ -365,7 +365,9 @@ function appJsx(): SafeHtml {
       <div id="confirm-slot">{s.confirm !== null ? confirmDialogJsx(s.confirm) : ''}</div>
       <div id="guidance-slot">{guidanceTarget !== undefined ? guidanceDialogJsx(guidanceTarget) : ''}</div>
       <div id="rename-slot">
-        {renameTarget === undefined ? '' : renameDialogJsx(renameTarget, s.renameItemCount)}
+        {renameTarget === undefined
+          ? ''
+          : renameDialogJsx(renameTarget, s.renameItemCount, s.renameCategory, s.renameSubcategory)}
       </div>
       <div id="privacy-slot">{s.privacyOpen ? privacyDialogJsx(s) : ''}</div>
       <div id="export-slot">{s.export !== null ? exportDialogJsx(s.export, sortTopics(s.topics, s.topicSort, s.newestItemAtByTopic)) : ''}</div>
@@ -1173,14 +1175,19 @@ async function loadMoreSuggestions(): Promise<void> {
  * in the field the user is already looking at, not a banner behind a closed
  * dialog. It closes only once the rename has actually landed.
  */
-async function saveRename(id: string, name: string, clearItems: boolean): Promise<void> {
+async function saveRename(
+  id: string,
+  name: string,
+  clearItems: boolean,
+  category?: { category: string | null; subcategory: string | null },
+): Promise<void> {
   try {
     // Before the request, not after (NEWS-303, following NEWS-291's rule for the
     // app-wide clear): `renameTopic` refreshes state and feed itself, so
     // clearing afterwards leaves a frame in which the emptied feed renders with
     // the stale overlay still merged into it.
     if (clearItems) appStore.actions.clearStoryOverlaysForTopic(id);
-    await renameTopic(id, name, clearItems);
+    await renameTopic(id, name, clearItems, category);
     const cleared = clearItems ? (appStore.state.value.renameItemCount ?? 0) : 0;
     appStore.actions.closeRename();
     // The count is the one the dialog already fetched when it opened (FR-25.5a),
@@ -2013,7 +2020,32 @@ function wireEvents(root: HTMLElement): void {
     if (id === null || !field) return;
     const name = field.value.trim();
     if (name === '') return;
-    void saveRename(id, name, clearBox?.checked === true);
+    const catSel = form.querySelector<HTMLSelectElement>('select[name=topic-category]');
+    const subSel = form.querySelector<HTMLSelectElement>('select[name=topic-subcategory]');
+    // Absent select means the dialog predates this field; `''` means "let
+    // Newsmonger decide", which is a real instruction (clear it *and* make the
+    // topic eligible for automatic classification again) and not the same as
+    // "leave it alone" (FR-22.7).
+    const category =
+      catSel === null
+        ? undefined
+        : {
+            category: catSel.value === '' ? null : catSel.value,
+            subcategory: catSel.value === '' || !subSel || subSel.value === '' ? null : subSel.value,
+          };
+    void saveRename(id, name, clearBox?.checked === true, category);
+  });
+
+  // Re-render only the subcategory container, not the form: the section decides
+  // which subjects exist, and re-rendering the whole dialog would discard a
+  // half-typed name (NEWS-407).
+  void delegate(root, 'change', '[data-action=rename-category]', (_e, el) => {
+    if (!(el instanceof HTMLSelectElement)) return;
+    appStore.actions.setRenameCategory(el.value === '' ? null : el.value);
+  });
+
+  void delegate(root, 'change', '[data-action=rename-subcategory]', (_e, el) => {
+    if (el instanceof HTMLSelectElement) appStore.actions.setRenameSubcategory(el.value === '' ? null : el.value);
   });
 
   void delegate(root, 'click', '[data-action=close-rename]', () => {

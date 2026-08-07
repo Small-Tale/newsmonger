@@ -452,6 +452,17 @@ export interface AppState {
   /** Id of the topic being renamed (NEWS-139), or null. Ephemeral, like every dialog. */
   renameTopicId: string | null;
   /**
+   * The section chosen in the edit dialog but not yet saved (NEWS-407).
+   *
+   * Held here rather than read off the topic, because the dialog has to render a
+   * choice the server has not been told about — and because changing the section
+   * changes which subjects exist, which is a re-render the DOM cannot drive on
+   * its own. `null` is a real value meaning "let Newsmonger decide"; the pair is
+   * seeded from the topic when the dialog opens.
+   */
+  renameCategory: string | null;
+  renameSubcategory: string | null;
+  /**
    * How many stories the topic being renamed has, or null while it is unknown.
    *
    * Fetched when the dialog opens rather than carried on `/api/state`: it is a
@@ -687,6 +698,8 @@ export const appStore = defineStore({
     confirm: null,
     guidanceTopicId: null,
     renameTopicId: null,
+    renameCategory: null,
+    renameSubcategory: null,
     renameItemCount: null,
     notifyPermissionDenied: false,
     dismissedRunId: readDismissedRunId(),
@@ -998,10 +1011,27 @@ export const appStore = defineStore({
       set({ ...get(), confirm: null });
     },
     openRename: (renameTopicId: string) => {
-      set({ ...get(), renameTopicId, renameItemCount: null });
+      const current = get();
+      const topic = current.topics.find((t) => t.id === renameTopicId);
+      set({
+        ...current,
+        renameTopicId,
+        renameItemCount: null,
+        renameCategory: topic?.category ?? null,
+        renameSubcategory: topic?.subcategory ?? null,
+      });
     },
     setRenameItemCount: (renameItemCount: number) => {
       set({ ...get(), renameItemCount });
+    },
+    setRenameCategory: (renameCategory: string | null) => {
+      // The subject always resets with the section: a subject from the previous
+      // parent resolves to nothing, which is the same call FR-22.7 records for
+      // the server side.
+      set({ ...get(), renameCategory, renameSubcategory: null });
+    },
+    setRenameSubcategory: (renameSubcategory: string | null) => {
+      set({ ...get(), renameSubcategory });
     },
     closeRename: () => {
       set({ ...get(), renameTopicId: null, renameItemCount: null });

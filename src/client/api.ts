@@ -339,10 +339,29 @@ export async function countItemsForTopic(id: string): Promise<number> {
  * Errors are thrown rather than folded into the global banner: a duplicate name
  * is something the user fixes in the dialog they are already looking at.
  */
-export async function renameTopic(id: string, name: string, clearItems: boolean): Promise<void> {
+/**
+ * Save the edit dialog (NEWS-407 added the section).
+ *
+ * `category` is `undefined` for "don't touch it" and `null` for "let Newsmonger
+ * decide" — the two are different and the route relies on the distinction:
+ * `null` clears the category **and** resets `categorySource` to `auto`, which is
+ * what makes the topic eligible for automatic classification again (FR-22.7).
+ * Sending it in the same PATCH as the name so one Save is one request, and the
+ * dialog cannot half-apply.
+ */
+export async function renameTopic(
+  id: string,
+  name: string,
+  clearItems: boolean,
+  category?: { category: string | null; subcategory: string | null },
+): Promise<void> {
   await request(`/api/topics/${encodeURIComponent(id)}`, {
     method: 'PATCH',
-    body: JSON.stringify({ name, ...(clearItems ? { clearItems: true } : {}) }),
+    body: JSON.stringify({
+      name,
+      ...(clearItems ? { clearItems: true } : {}),
+      ...(category ?? {}),
+    }),
   });
   await refreshState();
   await refreshFeed();
