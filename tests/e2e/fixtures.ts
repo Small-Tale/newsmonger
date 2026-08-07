@@ -377,16 +377,22 @@ export const test = base.extend<TestFixtures, WorkerFixtures>({
       const context = await browser.newContext({ baseURL: e2eServer.base });
       // Suppress the first-run wizard's *auto*-open (NEWS-193).
       //
-      // `maybeOpenOnboarding()` opens it when there are no topics AND no usable
-      // provider AND it hasn't been seen on this device. Every test starts with
-      // empty storage and specs reset topics, so the only term that varied was
-      // "usable provider" — and that is decided by whether the *host* has a
-      // signed-in `claude` or `codex` CLI.
+      // `maybeOpenOnboarding()` opens it when there are no topics and it hasn't
+      // been seen on this device. Every test starts with empty storage and specs
+      // reset topics, so **both** terms hold and seeding the flag is now the
+      // only thing keeping it shut.
       //
-      // So the suite passed on a dev machine and could never pass on a CI
-      // runner: there, onboarding opened and `.onboarding-backdrop` intercepted
-      // pointer events for the rest of the run. The tell was that read-only a11y
-      // scans passed and the first test that *clicked* timed out.
+      // It also used to require no usable provider, which is what originally
+      // broke here: that term is decided by whether the *host* has a signed-in
+      // `claude` or `codex` CLI, so the suite passed on a dev machine and could
+      // never pass on a CI runner — there, onboarding opened and
+      // `.onboarding-backdrop` intercepted pointer events for the rest of the
+      // run. The tell was that read-only a11y scans passed and the first test
+      // that *clicked* timed out.
+      //
+      // That host-dependence was a real bug in the app, not just in the harness,
+      // and NEWS-421 removed the term. Seeding the flag was the right fix here
+      // regardless, and is now load-bearing rather than belt-and-braces.
       //
       // Seeding the flag costs no coverage. No test asserts the auto-open, and
       // the specs that exercise onboarding open it explicitly via Settings →

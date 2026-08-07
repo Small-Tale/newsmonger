@@ -8,11 +8,17 @@ See also [6 — AI Providers](6-providers.md), [7 — API Keys and Settings Dial
 
 ### When it appears
 
-- **FR-20.1** *(Shipped)* The guide opens by itself only when the app is genuinely unusable: **no topics and no available provider**. Someone who already has either is never interrupted.
+- **FR-20.1** *(Shipped, revised NEWS-421)* The guide opens by itself when the app has not been set up, and **having no topics is the whole test**. Someone with topics is never interrupted.
+
+  It used to also require **no available provider**, on the reasoning that anyone with either was an existing user. The topic count alone already says that, and the provider half was backwards: a signed-in `claude-cli` is a fact about the *machine*, true before this app was installed, and says nothing about whether Newsmonger is set up. So anyone arriving with Claude Code or Codex already signed in got no guide, **ever** — and FR-20.5 treats a detected subscription as the *best* case, presenting it first. The condition excluded the audience the flow was written for.
+
+  It also made first-run behaviour depend on unrelated host state, which the harness had already been bitten by: the E2E suite passed on a dev machine and could not pass on CI for exactly this reason (NEWS-193), and the fix there was to seed the dismissal flag rather than to question the condition.
 
 - **FR-20.2** *(Shipped)* The decision waits for **both** `/api/state` and `/api/providers` to answer. The provider list starts empty, so acting before the probe returns would flash the wizard at every existing user on every reload — the client holds an explicit `'auto'` (undecided) state rather than treating "not yet loaded" as "nothing available".
 
 - **FR-20.3** *(Shipped)* Dismissal is remembered per device (`localStorage`, alongside the other view preferences — it records what *this* browser has shown, not anything about the data). After that only **Settings → "Show the setup guide again"** reopens it.
+
+  **Known consequence: there is no factory reset.** Deleting `~/.newsmonger` removes every topic and setting, but the flag is in the webview's storage and survives, so the guide does not come back — which is not what deleting the data directory looks like it should do. Reported in NEWS-421 and left open as NEWS-423, because moving the flag server-side reverses this requirement's stated reasoning and trades a desktop bug for a browser one.
 
 ### The six steps
 

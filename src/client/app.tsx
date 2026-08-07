@@ -75,7 +75,7 @@ import { filterBarJsx } from './filter-bar.js';
 import { icon } from './icons.js';
 import { correctedModel } from './model-choice.js';
 import { ensureNotificationPermission } from './notifications.js';
-import { nextProfilePage } from './onboarding.js';
+import { nextProfilePage, shouldOpenOnboarding } from './onboarding.js';
 import { onboardingJsx } from './onboarding-view.js';
 import { browserPollDeps, startPolling as startStatePolling } from './poll.js';
 import { trackRailTop } from './rail.js';
@@ -862,19 +862,41 @@ async function saveProfilesAndAdvance(): Promise<void> {
 }
 
 /**
- * Open the first-run flow the first time the app is plainly unusable.
+ * Open the first-run flow for someone who has not set the app up yet.
  *
- * Gated on *both* `/api/state` and `/api/providers` having answered: the
- * provider list starts empty, so acting before it loads would flash the wizard
- * at every existing user on every reload. Once dismissed it is remembered
- * per-device and only Settings reopens it.
+ * **Having no topics is the whole test** (NEWS-421). It used to also require no
+ * usable provider, on the reasoning that someone who had either was an existing
+ * user who must not be interrupted. The topic count alone already says that —
+ * an existing user has topics — and the provider half was actively harmful: a
+ * signed-in `claude-cli` is a fact about the *machine*, established before this
+ * app was ever installed, and says nothing about whether Newsmonger is set up.
+ *
+ * So anyone who already used Claude Code or Codex — which FR-20.5 treats as the
+ * *best* case, presenting a detected subscription first — got no setup guide at
+ * all, ever. The condition excluded exactly the audience the flow was written
+ * for.
+ *
+ * Still gated on `/api/state` having answered, and still on the provider list:
+ * `topics` is empty before the first load too, so `loaded` is what stops the
+ * wizard flashing at every existing user on every reload. The provider wait
+ * costs nothing to keep and the Source step needs the list anyway — and this is
+ * a decision that has flashed at users before.
+ *
+ * Once dismissed it is remembered per-device (FR-20.3) and only Settings
+ * reopens it. That flag lives in `localStorage`, so it survives deleting the
+ * data directory — see NEWS-423.
  */
 function maybeOpenOnboarding(): void {
   const s = appStore.state.value;
   if (s.onboarding !== 'auto') return;
   if (!s.loaded || s.providers.length === 0) return;
-  const usable = s.providers.some((p) => p.name !== 'auto' && p.name !== 'mock' && p.available === true);
-  appStore.actions.setOnboarding(s.topics.length === 0 && !usable && !readOnboardingSeen() ? 'welcome' : null);
+  const open = shouldOpenOnboarding({
+    loaded: s.loaded,
+    providerCount: s.providers.length,
+    topicCount: s.topics.length,
+    seen: readOnboardingSeen(),
+  });
+  appStore.actions.setOnboarding(open ? 'welcome' : null);
 }
 
 /**

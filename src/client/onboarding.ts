@@ -7,18 +7,39 @@
  */
 
 /**
- * The Topics step's running total (NEWS-146).
+ * Whether the first-run guide should open by itself (FR-20.1, NEWS-421).
  *
- * There are **two** ways to leave that step with topics, and they behave
- * differently: a ticked starter chip is a reservation that Finish turns into a
- * topic, while anything added in the discovery dialog already exists and is
- * already checking. One combined number would be a lie about the half that can
- * no longer be unticked, so each is named and told apart by what happens next.
+ * A pure function here rather than a branch inside `maybeOpenOnboarding`, for
+ * the reason this module exists: a decision that only runs against a live store
+ * inside a rendered app only ever gets tested through a browser — and this one
+ * had **no test at all**, which is how it stayed wrong.
  *
- * `added` is a *difference* against the count when the step opened rather than a
- * raw total: onboarding is normally a first run, but Settings can reopen it for
- * someone who already has topics, and those are not something they just added.
+ * **Having no topics is the whole test.** It used to also require no usable
+ * provider, on the reasoning that someone with either was an existing user who
+ * must not be interrupted. The topic count alone already says that. The provider
+ * half was actively harmful: a signed-in `claude-cli` is a fact about the
+ * *machine*, true before this app was installed, and says nothing about whether
+ * Newsmonger is set up. Anyone arriving with Claude Code or Codex already
+ * signed in — which FR-20.5 treats as the *best* case — got no guide, ever.
+ *
+ * It also made first-run behaviour depend on unrelated host state, which the
+ * E2E harness had already been bitten by: NEWS-193 records the suite passing on
+ * a dev machine and failing on CI for exactly this reason.
+ *
+ * `loaded` is essential and not paranoia: `topicCount` is 0 before the first
+ * `/api/state` answers too, so without it the wizard flashes at every existing
+ * user on every reload.
  */
+export function shouldOpenOnboarding(s: {
+  loaded: boolean;
+  providerCount: number;
+  topicCount: number;
+  seen: boolean;
+}): boolean {
+  if (!s.loaded || s.providerCount === 0) return false;
+  return s.topicCount === 0 && !s.seen;
+}
+
 /**
  * Continent quick-fills for the Location step (NEWS-394).
  *
@@ -54,6 +75,19 @@ export function nextProfilePage(page: number, pageCount: number): { page: number
   return at >= pageCount - 1 ? { page: at, advanceStep: true } : { page: at + 1, advanceStep: false };
 }
 
+/**
+ * The Topics step's running total (NEWS-146).
+ *
+ * There are **two** ways to leave that step with topics, and they behave
+ * differently: a ticked starter chip is a reservation that Finish turns into a
+ * topic, while anything added in the discovery dialog already exists and is
+ * already checking. One combined number would be a lie about the half that can
+ * no longer be unticked, so each is named and told apart by what happens next.
+ *
+ * `added` is a *difference* against the count when the step opened rather than a
+ * raw total: onboarding is normally a first run, but Settings can reopen it for
+ * someone who already has topics, and those are not something they just added.
+ */
 export function onboardingCountText(chosen: number, added: number): string {
   if (chosen <= 0 && added <= 0) return 'None yet — that’s fine, you can add topics from the sidebar.';
   const parts: string[] = [];
