@@ -282,6 +282,22 @@ export const BUILTIN_CATEGORIES: CategoryTable = [
     retiredSub('Crime & Justice'), // → Law & Justice ▸ Crime & Policing
   ]),
   cat('Transport', ['Aviation', 'Rail', 'Shipping & Logistics', 'Public Transit', 'Roads & Infrastructure']),
+  /**
+   * The explicit home for a topic nothing else fits (NEWS-405).
+   *
+   * **Deliberately has no subcategories.** Its whole meaning is "no subject
+   * fits", so offering subjects would contradict it — and it keeps the one
+   * label collision harmless: `NO_SUBCATEGORY_LABEL` is also "Other", but a
+   * section with no subcategories never renders a subject beside its name.
+   *
+   * This exists so the classifier has somewhere to *put* a topic it cannot
+   * place. Before it, declining meant `category: null`, which left
+   * `needsClassifying` true and re-sent the whole ~5,400-character option list
+   * on every check, forever, with nothing to show for it. A real section ends
+   * the asking and makes the outcome visible — and FR-22.7a lets the user move
+   * it somewhere better in two clicks.
+   */
+  cat('Other'),
 ];
 
 /**

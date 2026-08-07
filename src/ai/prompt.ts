@@ -254,8 +254,9 @@ export function buildUserPrompt(
     }
     lines.push(
       'Pick exactly one category. If no subcategory fits, set "subcategory" to null rather than forcing one — ' +
-        'a topic can legitimately belong to a section without matching any of its subsections. If no category ' +
-        'fits either, set both to null.',
+        'a topic can legitimately belong to a section without matching any of its subsections. If genuinely ' +
+        'no section fits, choose "other" — prefer a real section wherever one is defensible, but "other" is a ' +
+        'better answer than a section you had to stretch to reach. Never return null for the category.',
     );
   }
   lines.push('');

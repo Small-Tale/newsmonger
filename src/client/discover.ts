@@ -67,7 +67,15 @@ export function groupSuggestions(suggestions: TopicSuggestion[]): SuggestionGrou
     }
     const sub = category.subcategories.find((s) => s.slug === classification.subcategory);
     const key = `${category.slug}/${sub?.slug ?? ''}`;
-    push(key, `${category.label} · ${sub?.label ?? NO_SUBCATEGORY_LABEL}`, suggestion);
+    // A section with no subcategories at all renders its name alone (NEWS-405).
+    // "· Other" answers "which subject?" for a section that has none to offer,
+    // and for the *Other* section specifically it would read "Other · Other".
+    // `categoryLabel` already behaves this way; this brings the grouping in line.
+    const label =
+      category.subcategories.length === 0
+        ? category.label
+        : `${category.label} · ${sub?.label ?? NO_SUBCATEGORY_LABEL}`;
+    push(key, label, suggestion);
   }
 
   // Sorted by *both* levels: ordering only by category would leave two

@@ -83,6 +83,18 @@ Six rows were **widened in place** rather than moved — Space → Space & Astro
 
   Requested as "a General subcategory for all categories"; done this way because a stored row per category would have to be remembered for every category added later — reopening the same hole — and because adding *Skiing* next winter would then strand `sports/general` topics claiming to be classified. With `null` they are unclassified-at-sub-level, which is exactly what they are. It also gives the classifier an easier instruction: omit the field rather than choose a catch-all.
 
+- **FR-22.16** *(Shipped, NEWS-405)* **An explicit `Other` section, so the classifier always has somewhere to put a topic.**
+
+  Before it, the prompt ended *"If no category fits either, set both to null"* — a deliberately-supported answer that left `category === null`, kept `needsClassifying` true, and **re-sent the whole ~5,400-character option list on every subsequent check, for the life of the topic, with no signal that it was happening**. The cost was trivial; the silence was not. Nothing surfaced a topic stuck in that state, so nobody could learn it had happened.
+
+  **The row alone fixes nothing — the prompt reword is the actual fix.** Both prompts now say to choose `other` and never return null, *and* to prefer a real section wherever one is defensible. Both halves matter: without the second, the cheapest answer is always `other` and the taxonomy stops meaning anything.
+
+  **It deliberately has no subcategories.** Its whole meaning is "no subject fits", so offering subjects would contradict it. That emptiness also keeps the one label collision harmless — `NO_SUBCATEGORY_LABEL` is also `Other`, but a section with no subcategories never renders a subject beside its name. `visibleSubcategories` already suppressed the sub-row; `groupSuggestions` was brought into line so a discovery heading reads *Other*, not *Other · Other*.
+
+  It sits **last** in the table: a filter bar reads better with the residual section at the end than alphabetised into the middle of the real ones. And because it comes from `activeCategories` like every other section, the manual picker (FR-22.7a) offers it — so a topic that lands there is two clicks from a better home, which is the half that makes the fallback acceptable rather than a dead letter.
+
+  **One route into the old state remains open**: a topic whose stored slug stops resolving — after a taxonomy edit, or written through `PATCH` (FR-22.7a notes the boundary accepts any string) — has `category !== null` and so is never re-classified, while rendering as *Uncategorized*. `Other` does not catch that, because that path never asks the model at all.
+
 - **FR-22.7a** *(Shipped, NEWS-407)* **The edit dialog lets a person set the section and subject by hand.** Two selects — section, then the subjects of that section — rather than one flat list of ~150, which would be a worse menu than the classifier's own.
 
   **This is what made FR-22.7 reachable.** The route, the `manual` promise and the re-read-after-check rule below had all shipped with NEWS-97; nothing in the UI could make the choice they were about. FR-22.7 was marked Shipped and was, from a user's seat, unreachable — the kind of gap a status marker cannot show.

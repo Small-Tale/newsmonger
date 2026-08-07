@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import { buildUserPrompt, NEWS_JSON_SCHEMA, parseNewsResult } from '../../src/ai/prompt.js';
 import { createMockProvider } from '../../src/ai/providers/index.js';
+import { BUILTIN_CATEGORIES, categoryLabel } from '../../src/categories.js';
 import { CheckRunner } from '../../src/checks.js';
 import { Store } from '../../src/db/store.js';
 import { asResolver, fakeProvider } from '../helpers/provider.js';
@@ -92,14 +93,87 @@ describe('the classification request', () => {
     await runner.checkTopic(store.addTopic('Anything').id);
     const options = provider.calls[0]?.context.categoryOptions ?? [];
 
-    expect(options).toHaveLength(20);
+    // 21 sections since NEWS-405 added `other` as the explicit fallback. Its
+    // subcategory count is deliberately zero, so the subject total is unchanged
+    // — the widening costs one line, not a section's worth.
+    expect(options).toHaveLength(21);
     expect(options.reduce((n, o) => n + o.subcategories.length, 0)).toBe(132);
 
     // Isolate the block by difference: the same prompt with and without the
     // options differs by exactly the section list and its two instructions.
     const bare = buildUserPrompt('Anything', [], null, {});
     const asking = buildUserPrompt('Anything', [], null, { categoryOptions: options });
+    // Ceiling unchanged by NEWS-405: `- Other (other)` is ~16 characters, and
+    // the reworded closing instruction is a wash. If a change ever needs this
+    // number raised, that is the signal to argue about the taxonomy rather than
+    // to edit the constant.
     expect(asking.length - bare.length).toBeLessThanOrEqual(5700);
+  });
+});
+
+describe('the explicit fallback section (NEWS-405)', () => {
+  /** The options as the runner actually sends them, not a hand-built copy. */
+  async function optionsSent() {
+    const store = new Store(tmpDataDir());
+    const provider = createMockProvider();
+    const runner = new CheckRunner(store, asResolver(provider));
+    await runner.checkTopic(store.addTopic('Anything').id);
+    return provider.calls[0]?.context.categoryOptions ?? [];
+  }
+
+  it('offers the fallback to the classifier, with no subjects', async () => {
+    const other = (await optionsSent()).find((o) => o.slug === 'other');
+    expect(other?.label).toBe('Other');
+    expect(other?.subcategories, 'the fallback must offer no subjects').toEqual([]);
+  });
+
+  it('tells the model to choose it rather than returning null', async () => {
+    // The row alone would fix nothing. The prompt used to end "If no category
+    // fits either, set both to null" — a deliberately-supported answer that left
+    // the topic unclassified, so the whole option list was re-sent on every
+    // check, forever, with no signal. Rewording it is the actual fix.
+    const prompt = buildUserPrompt('Anything', [], null, { categoryOptions: await optionsSent() });
+    expect(prompt).toContain('choose "other"');
+    expect(prompt).toContain('Never return null for the category');
+    expect(prompt, 'the old invitation to decline must be gone').not.toContain('set both to null');
+  });
+
+  it('asks the model to prefer a real section over the fallback', async () => {
+    // Without this the cheapest answer is always "other" and the taxonomy stops
+    // meaning anything. The instruction has to make the fallback available and
+    // unattractive at once.
+    const prompt = buildUserPrompt('Anything', [], null, { categoryOptions: await optionsSent() });
+    expect(prompt).toContain('prefer a real section');
+  });
+
+  it('stops re-asking once a topic lands there', async () => {
+    // The behaviour the ticket is about, observed rather than asserted through
+    // an internal predicate: a topic with a resolved section is not asked again,
+    // so the option list is paid once instead of on every check for the life of
+    // the topic.
+    const store = new Store(tmpDataDir());
+    const provider = createMockProvider();
+    const runner = new CheckRunner(store, asResolver(provider));
+    const topic = store.addTopic('Anything');
+
+    await runner.checkTopic(topic.id);
+    expect(provider.calls[0]?.context.categoryOptions, 'the first check asks').toBeDefined();
+
+    // Whatever the mock answered, put it in the fallback and check again.
+    store.setTopicCategory(topic.id, 'other', null, 'auto');
+    await runner.checkTopic(topic.id);
+    expect(
+      provider.calls[1]?.context.categoryOptions,
+      'a topic already in a section must not be asked again',
+    ).toBeUndefined();
+  });
+
+  it('renders as its own name, not "Other · Other"', () => {
+    // `NO_SUBCATEGORY_LABEL` is also "Other". `categoryLabel` returns the section
+    // alone when no subject resolves, so the collision never surfaces there — and
+    // `groupSuggestions` was brought into line for the discovery headings.
+    expect(categoryLabel(BUILTIN_CATEGORIES, 'other', null)).toBe('Other');
+    expect(categoryLabel(BUILTIN_CATEGORIES, 'other', 'anything')).toBe('Other');
   });
 });
 

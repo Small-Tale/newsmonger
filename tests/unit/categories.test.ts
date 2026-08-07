@@ -46,15 +46,33 @@ describe('the built-in taxonomy', () => {
       'Law & Justice',
       'Society',
       'Transport',
+      // Last on purpose (NEWS-405): it is the fallback, and a filter bar reads
+      // better with the residual section at the end than alphabetised into the
+      // middle of the real ones.
+      'Other',
     ]);
   });
 
-  it('gives every section at least two subcategories', () => {
+  it('gives every section at least two subcategories, except the deliberate fallback', () => {
     // A section with one option can never offer a sub-row (FR-22.14), and a
-    // section with none is a dead end for the classifier: it would have to pick
-    // the section and then leave the subcategory null every time.
+    // section with none is normally a dead end for the classifier: it would have
+    // to pick the section and then leave the subcategory null every time.
+    //
+    // **`other` is exempt, and having none is the point** (NEWS-405). Its whole
+    // meaning is "no subject fits", so offering subjects would contradict it —
+    // and the emptiness is what keeps the label collision harmless, since
+    // `NO_SUBCATEGORY_LABEL` is also "Other" and a section with no subcategories
+    // never renders a subject beside its name.
+    //
+    // Exempted by name rather than by relaxing the rule to `>= 0`, so a second
+    // section that quietly loses its subjects still fails.
     for (const category of BUILTIN_CATEGORIES) {
-      expect(category.subcategories.filter((s) => !s.retired).length, category.label).toBeGreaterThan(1);
+      const live = category.subcategories.filter((s) => !s.retired).length;
+      if (category.slug === 'other') {
+        expect(live, 'the fallback section must stay empty').toBe(0);
+        continue;
+      }
+      expect(live, category.label).toBeGreaterThan(1);
     }
   });
 

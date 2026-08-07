@@ -210,7 +210,8 @@ export function buildSuggestPrompt(request: SuggestRequest): string {
     }
     lines.push(
       'Pick exactly one category per suggestion. If no subcategory fits, set "subcategory" to null rather ' +
-        'than forcing one. If no category fits either, set both to null.',
+        'than forcing one. If genuinely no section fits, choose "other" — prefer a real section wherever one ' +
+        'is defensible. Never return null for the category.',
     );
   }
 
