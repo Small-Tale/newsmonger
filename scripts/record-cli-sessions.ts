@@ -29,6 +29,7 @@ import { fileURLToPath } from 'node:url';
 import { buildUserPrompt, NEWS_JSON_SCHEMA, searchingSystemPrompt } from '../src/ai/prompt.js';
 import { codexExecArgs, combinePrompt, hasChatGptCredentials } from '../src/ai/providers/codex-cli.js';
 import { buildSuggestPrompt, SUGGEST_JSON_SCHEMA, suggestSystemPrompt } from '../src/ai/suggest-prompt.js';
+import { classifierOptions } from '../src/categories.js';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const OUT_DIR = path.join(ROOT, 'tests/fixtures/cli-sessions');
@@ -86,6 +87,62 @@ const SCENARIOS: Scenario[] = [
         model: undefined,
         effort: undefined,
         prompt: combinePrompt(suggestSystemPrompt(), buildSuggestPrompt({ scope: { kind: 'describe', query: 'cycling' }, exclude: [], limit: 4 })),
+      }),
+    readsOutputFile: true,
+  },
+  {
+    name: 'codex-check-classify',
+    tool: 'codex',
+    describes:
+      'A check that also classifies the topic: the option list is in the prompt and a category slug comes back.',
+    // The gap NEWS-420 was filed for. None of the original five carried
+    // `categoryOptions`, so the whole classifying path — the option list the
+    // prompt builds, and `parseNewsResult` reading a category off the answer —
+    // was replayed by nothing. It is also the path NEWS-272/274 broke.
+    //
+    // The options come from `classifierOptions()`, not a hand-written list, so
+    // the transcript is of a prompt this app actually sends.
+    argv: ({ schemaFile, outFile }) =>
+      codexExecArgs({
+        schemaFile,
+        outFile,
+        model: undefined,
+        effort: undefined,
+        prompt: combinePrompt(
+          searchingSystemPrompt(),
+          buildUserPrompt(TOPIC, [], null, { categoryOptions: classifierOptions() }),
+        ),
+      }),
+    readsOutputFile: true,
+  },
+  {
+    name: 'codex-classify-unknown-slug',
+    tool: 'codex',
+    describes:
+      'A classifying answer naming a slug this taxonomy does not have, which FR-22.8 says must degrade rather than throw.',
+    // The third deliberate failure, on the same principle as the two below: an
+    // invented error payload gets the shape wrong in the way that hides the bug.
+    //
+    // A model cannot be made to answer off-list on demand, so the *prompt* is
+    // given a fictional taxonomy instead. What comes back is a real, obedient
+    // answer to that prompt and an unknown slug to this app — which is exactly
+    // the state FR-22.8 describes, reached honestly rather than by editing a
+    // transcript by hand.
+    argv: ({ schemaFile, outFile }) =>
+      codexExecArgs({
+        schemaFile,
+        outFile,
+        model: undefined,
+        effort: undefined,
+        prompt: combinePrompt(
+          searchingSystemPrompt(),
+          buildUserPrompt(TOPIC, [], null, {
+            categoryOptions: [
+              { slug: 'zephyr', label: 'Zephyr', subcategories: [{ slug: 'zephyr-winds', label: 'Winds' }] },
+              { slug: 'quorum', label: 'Quorum', subcategories: [] },
+            ],
+          }),
+        ),
       }),
     readsOutputFile: true,
   },

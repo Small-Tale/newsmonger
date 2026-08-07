@@ -1,5 +1,7 @@
 import { z } from 'zod';
 
+import type { CategoryOption } from './ai/types.js';
+
 /**
  * The topic category taxonomy (NEWS-97, widened to 20 sections in NEWS-388).
  *
@@ -439,4 +441,20 @@ export function visibleSubcategories(
     options.push({ slug: null, label: NO_SUBCATEGORY_LABEL });
   }
   return options.length < 2 ? [] : options;
+}
+
+/**
+ * The sections offered to the classifier — retired ones excluded (FR-22.4).
+ *
+ * Here rather than in `checks.ts` so the recorder (`npm run record:cli-sessions`)
+ * sends the **same** list the app does. A fixture built from a hand-written option
+ * list would be a transcript of a prompt this app never sends, which is the one
+ * thing a recording is supposed to make impossible.
+ */
+export function classifierOptions(): CategoryOption[] {
+  return activeCategories(BUILTIN_CATEGORIES).map((c) => ({
+    slug: c.slug,
+    label: c.label,
+    subcategories: c.subcategories.map((s) => ({ slug: s.slug, label: s.label })),
+  }));
 }

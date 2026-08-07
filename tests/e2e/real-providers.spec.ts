@@ -220,6 +220,40 @@ for (const [provider, label, credentials] of [
     // quiet failure FR-9.12b warns about and the one a status check misses.
     expect(items.items.some((i) => i.sources.some((s) => s.url.startsWith('http')))).toBe(true);
   });
+
+  test(`the ${label} classifies a topic into a defensible section (NEWS-420)`, async () => {
+    test.skip(!(await credentials()), `${provider} is not signed in on this machine`);
+    test.setTimeout(CHECK_TIMEOUT + 60_000);
+
+    // The other half of NEWS-420. The recorded sessions prove our *handling* of a
+    // classifying answer stays correct, offline and in CI; they cannot notice the
+    // vendor starting to answer differently. This is the only thing that can.
+    //
+    // The subject is chosen to have exactly one defensible section, and the
+    // assertion stops at the category on purpose: the ticket's own line is that
+    // Formula 1 landing in `sports` is fair while pinning the subcategory is not
+    // — Motorsport and Motoring are both arguable, and a test that fails on a
+    // reasonable disagreement gets switched off.
+    //
+    // Named per provider because a duplicate topic name is a 409 and both tests
+    // share one server.
+    await patchSettings({ provider, effort: '' });
+    const name = `Formula 1 motor racing (${provider})`;
+    const run = await checkNewTopic(name);
+    expect(run.status, `the check failed: ${run.error ?? '(no error text)'}`).toBe('succeeded');
+
+    const state = (await (await fetch(`${base}/api/state`)).json()) as {
+      topics: { name: string; category: string | null }[];
+    };
+    const topic = state.topics.find((t) => t.name === name);
+    expect(topic, 'the probe topic should exist').toBeDefined();
+    // Not null is the load-bearing half: FR-22.16 tells the model to choose
+    // `other` rather than decline, so a null here means the classifying
+    // instruction stopped being followed at all — which is the drift this exists
+    // to catch, and it is invisible to every other assertion in this file.
+    expect(topic?.category, 'the classifier returned nothing at all').not.toBeNull();
+    expect(topic?.category).toBe('sports');
+  });
 }
 
 test('a real run records the effort level it ran at (NEWS-226, NEWS-276)', async () => {

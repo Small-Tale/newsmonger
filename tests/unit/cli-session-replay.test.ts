@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { createCodexCliProvider, spawnRunner } from '../../src/ai/providers/codex-cli.js';
+import { classifierOptions } from '../../src/categories.js';
 import { readSession, replayOne } from '../helpers/cli-session.js';
 
 /**
@@ -76,6 +77,60 @@ describe('a recorded successful check, replayed through the real provider', () =
   });
 });
 
+describe('a recorded classifying check, replayed (NEWS-420)', () => {
+  it('reads the category and subcategory off a real answer', async () => {
+    // The gap this ticket was filed for: none of the original five fixtures
+    // carried `categoryOptions`, so the classifying path — the option list the
+    // prompt builds and the category `parseNewsResult` reads back — was replayed
+    // by nothing at all. It is also the path NEWS-272/274 broke.
+    const { provider } = providerFor('codex-check-classify');
+    const result = await provider.checkTopic('semiconductor export controls', [], null, {
+      categoryOptions: classifierOptions(),
+    });
+
+    expect(result.classification?.category).toBe('technology');
+    expect(result.classification?.subcategory).toBe('chips-hardware');
+    // Still a normal check. A classifying call that returned a label and no
+    // stories would be a regression the classification assertions cannot see.
+    expect(result.items.length).toBeGreaterThan(0);
+  });
+
+  it('puts the option list in the prompt, by slug, from the live taxonomy', () => {
+    // The prompt is what the recording is evidence *about* — the real CLI
+    // accepted this argv and answered with a slug from the list. Rebuilding the
+    // list here from `classifierOptions()` rather than hardcoding it means
+    // retiring or renaming a section shows up as a failure to have re-recorded,
+    // which is exactly the staleness this file otherwise cannot detect.
+    const { session } = providerFor('codex-check-classify');
+    const prompt = session.argv.join('\n');
+    for (const option of classifierOptions()) {
+      expect(prompt, `the prompt must offer ${option.slug}`).toContain(`(${option.slug})`);
+    }
+    expect(prompt).toContain('Classify the TOPIC ITSELF');
+  });
+});
+
+describe('a recorded off-list classification, replayed (NEWS-420)', () => {
+  it('carries the slug through the provider unchanged rather than throwing', async () => {
+    // The third deliberate failure fixture, and the only way to get an honest
+    // one: a model cannot be made to answer off-list on demand, so the recording
+    // was made against a *fictional* taxonomy. What came back is a real,
+    // obedient answer to that prompt and an unknown slug to this app — the
+    // FR-22.8 state, reached without editing a transcript by hand.
+    //
+    // The provider reports what the vendor said; deciding whether a slug is real
+    // is the app's job, one layer up. A provider that "helpfully" nulled an
+    // unrecognised slug would hide vendor drift from the live spec.
+    const { provider } = providerFor('codex-classify-unknown-slug');
+    const result = await provider.checkTopic('semiconductor export controls', [], null, {
+      categoryOptions: [{ slug: 'quorum', label: 'Quorum', subcategories: [] }],
+    });
+
+    expect(result.classification?.category).toBe('quorum');
+    expect(classifierOptions().some((o) => o.slug === 'quorum')).toBe(false);
+  });
+});
+
 describe('a recorded discovery call, replayed', () => {
   it('parses suggestions out of the other schema', async () => {
     const { provider } = providerFor('codex-suggest-success');
@@ -130,6 +185,8 @@ describe('the recordings themselves', () => {
       'codex-check-success',
       'codex-check-effort-low',
       'codex-suggest-success',
+      'codex-check-classify',
+      'codex-classify-unknown-slug',
       'codex-unknown-flag',
       'codex-invalid-schema',
     ]) {

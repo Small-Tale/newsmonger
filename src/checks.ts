@@ -4,7 +4,6 @@ import { filterNewItems } from './ai/dedupe.js';
 import type { BackoffConfig, FailureKind } from './ai/retry.js';
 import { backoffDelayMs, classifyFailure, DEFAULT_BACKOFF, FAILURE_COOLDOWN, retryAfterMs } from './ai/retry.js';
 import type {
-  CategoryOption,
   CheckResult,
   Effort,
   FoundNewsItem,
@@ -18,7 +17,7 @@ import type { LinkProbe } from './ai/verify-links.js';
 import { verifyItemLinks } from './ai/verify-links.js';
 import { Attendance } from './attendance.js';
 import type { Backups } from './backup.js';
-import { activeCategories, BUILTIN_CATEGORIES, findCategory, findSubcategory } from './categories.js';
+import { activeCategories, BUILTIN_CATEGORIES, classifierOptions, findCategory, findSubcategory } from './categories.js';
 import type { NewsItem, NewsSource, Settings, Topic } from './db/schemas.js';
 import type { Store } from './db/store.js';
 import { originOf } from './images/favicon.js';
@@ -66,15 +65,6 @@ function needsClassifying(topic: Topic): boolean {
   // a topic holding that slug keeps its label; re-classifying those would undo
   // the whole reason retiring is preferred to deleting.
   return findCategory(BUILTIN_CATEGORIES, topic.category) === undefined;
-}
-
-/** The sections offered to the model — retired ones excluded (FR-22.4). */
-function classifierOptions(): CategoryOption[] {
-  return activeCategories(BUILTIN_CATEGORIES).map((c) => ({
-    slug: c.slug,
-    label: c.label,
-    subcategories: c.subcategories.map((s) => ({ slug: s.slug, label: s.label })),
-  }));
 }
 
 /** Resolves the active provider from current settings, per check. */
