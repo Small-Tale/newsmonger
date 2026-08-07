@@ -93,7 +93,17 @@ Six rows were **widened in place** rather than moved — Space → Space & Astro
 
   It sits **last** in the table: a filter bar reads better with the residual section at the end than alphabetised into the middle of the real ones. And because it comes from `activeCategories` like every other section, the manual picker (FR-22.7a) offers it — so a topic that lands there is two clicks from a better home, which is the half that makes the fallback acceptable rather than a dead letter.
 
-  **One route into the old state remains open**: a topic whose stored slug stops resolving — after a taxonomy edit, or written through `PATCH` (FR-22.7a notes the boundary accepts any string) — has `category !== null` and so is never re-classified, while rendering as *Uncategorized*. `Other` does not catch that, because that path never asks the model at all.
+  The other route into the old state is closed by **FR-22.17**.
+
+- **FR-22.17** *(Shipped, NEWS-410)* **A stored slug the taxonomy no longer has counts as unclassified**, so the topic is asked about again rather than left in a state nothing can see.
+
+  Before this, `needsClassifying` asked only whether `category === null`. A topic holding a dead slug has `category !== null`, so it was treated as classified and never re-asked — while `categoryLabel` degraded it to *Uncategorized* on screen. **It looked unclassified and was treated as classified, permanently, with nothing to say so.**
+
+  Three ways in, all real: a slug removed or renamed by a taxonomy edit (NEWS-388 renamed six labels, and a label rename regenerates its slug); a value written through `PATCH /api/topics/:id`, which accepts any string **by design** because an enum would start rejecting requests the moment a slug was renamed (FR-22.3, and FR-22.7a made that route reachable from the UI); and an import or restore from a build with a different table.
+
+  **A retired row still resolves, and must.** `retired: true` exists precisely so a topic holding that slug keeps its label — re-classifying those would undo the whole reason retiring is preferred to deleting. That negative case is tested, because it is the half most likely to be got wrong.
+
+  A **manual** choice is still never revisited. The clause sits behind the `categorySource` check, so a user who hand-filed a topic into a section that later disappeared is not quietly overruled.
 
 - **FR-22.7a** *(Shipped, NEWS-407)* **The edit dialog lets a person set the section and subject by hand.** Two selects — section, then the subjects of that section — rather than one flat list of ~150, which would be a worse menu than the classifier's own.
 

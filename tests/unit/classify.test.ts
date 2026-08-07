@@ -177,6 +177,82 @@ describe('the explicit fallback section (NEWS-405)', () => {
   });
 });
 
+describe('a stored slug that stops resolving (NEWS-410)', () => {
+  /** The options as the runner sends them — absent means "not asked". */
+  async function askedOnNextCheck(topic: { id: string }, store: Store) {
+    const provider = createMockProvider();
+    const runner = new CheckRunner(store, asResolver(provider));
+    await runner.checkTopic(topic.id);
+    return provider.calls[0]?.context.categoryOptions !== undefined;
+  }
+
+  it('asks again for a topic whose section no longer exists', async () => {
+    // The whole ticket. Before this, `category !== null` meant "classified", so
+    // the topic was never asked about again — while `categoryLabel` rendered it
+    // as *Uncategorized*. It looked unclassified and was treated as classified,
+    // permanently, with nothing to say so.
+    const store = new Store(tmpDataDir());
+    const topic = store.addTopic('Orphaned');
+    store.setTopicCategory(topic.id, 'a-section-that-was-deleted', null, 'auto');
+
+    expect(await askedOnNextCheck(topic, store), 'a dead slug must make the topic eligible again').toBe(true);
+  });
+
+  it('leaves a retired section alone', async () => {
+    // The negative case, and the one most likely to be got wrong. `retired: true`
+    // exists so a topic holding that slug keeps its label — re-classifying those
+    // would undo the entire reason retiring is preferred to deleting (NEWS-388
+    // retired nine rows on exactly that promise).
+    const retired = BUILTIN_CATEGORIES.flatMap((c) => c.subcategories.filter((sub) => sub.retired).map(() => c.slug));
+    expect(retired.length, 'this test needs at least one retired row to be meaningful').toBeGreaterThan(0);
+
+    const store = new Store(tmpDataDir());
+    const topic = store.addTopic('Retired but labelled');
+    // A *live* section holding a retired subcategory: the section resolves, so
+    // the topic is classified and must stay that way.
+    store.setTopicCategory(topic.id, retired[0] ?? '', null, 'auto');
+
+    expect(await askedOnNextCheck(topic, store), 'a retired row still resolves').toBe(false);
+  });
+
+  it('still never revisits a manual choice', async () => {
+    // `categorySource: 'manual'` is a promise (FR-22.7), and it has to survive
+    // the new clause — otherwise a user who hand-filed a topic into a section
+    // that later disappeared would find the app quietly overruling them.
+    const store = new Store(tmpDataDir());
+    const topic = store.addTopic('Hand filed');
+    store.setTopicCategory(topic.id, 'a-section-that-was-deleted', null, 'manual');
+
+    expect(await askedOnNextCheck(topic, store), 'manual wins even when the slug is dead').toBe(false);
+  });
+
+  it('walks the whole transition rather than each state from clean', async () => {
+    // classified → taxonomy moves under it → asked again → re-placed → quiet.
+    // The sequence is the point: each state on its own looks fine, and the bug
+    // lived only in the move between them.
+    const store = new Store(tmpDataDir());
+    const provider = createMockProvider();
+    const runner = new CheckRunner(store, asResolver(provider));
+    const topic = store.addTopic('Soccer transfers');
+
+    await runner.checkTopic(topic.id);
+    const placed = store.getTopic(topic.id)?.category;
+    expect(placed, 'the mock should have placed it').not.toBeNull();
+    expect(provider.calls[1]?.context.categoryOptions, 'a placed topic is not re-asked').toBeUndefined();
+
+    // The taxonomy moves under it.
+    store.setTopicCategory(topic.id, 'gone-away', null, 'auto');
+    await runner.checkTopic(topic.id);
+    expect(provider.calls.at(-1)?.context.categoryOptions, 'a dead slug is asked again').toBeDefined();
+
+    // And it settles: re-placed, then quiet once more.
+    expect(store.getTopic(topic.id)?.category).not.toBe('gone-away');
+    const before = provider.calls.length;
+    await runner.checkTopic(topic.id);
+    expect(provider.calls[before]?.context.categoryOptions, 'and stops asking again').toBeUndefined();
+  });
+});
+
 describe('applying the model’s answer', () => {
   it('stores a category and subcategory the taxonomy has', async () => {
     const { store, runner } = runnerWith();

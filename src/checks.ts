@@ -50,7 +50,22 @@ class CheckFailure extends Error {
  * would just invite it to drift.
  */
 function needsClassifying(topic: Topic): boolean {
-  return topic.category === null && topic.categorySource === 'auto';
+  if (topic.categorySource !== 'auto') return false;
+  if (topic.category === null) return true;
+  // A stored slug the taxonomy no longer has (NEWS-410). Without this the topic
+  // is treated as classified — `category !== null` — while `categoryLabel`
+  // renders it as *Uncategorized*: it looks unclassified and is never asked
+  // about again, permanently, with nothing saying so.
+  //
+  // Three ways in, all real: a slug removed or renamed by a taxonomy edit, a
+  // value written through `PATCH /api/topics/:id` (which accepts any string by
+  // design, FR-22.3), and an import or restore from a build with a different
+  // table.
+  //
+  // **Retired rows still resolve**, and must. `retired: true` exists precisely so
+  // a topic holding that slug keeps its label; re-classifying those would undo
+  // the whole reason retiring is preferred to deleting.
+  return findCategory(BUILTIN_CATEGORIES, topic.category) === undefined;
 }
 
 /** The sections offered to the model — retired ones excluded (FR-22.4). */
