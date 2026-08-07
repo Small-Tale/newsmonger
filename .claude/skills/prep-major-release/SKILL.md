@@ -88,11 +88,21 @@ The README's stills are generated from real app states. The pipeline:
   being shown, then writes `assets/stills/<name>.png`. Run with
   `npm run demo:stills`. These are the README stills — currently feed, topics,
   discover, tuner, thread, review, export, settings-source.
-- **Animated hero** — `assets/demo.svg` is produced separately by
-  `scripts/demo/capture-demo.ts` (`npm run demo:capture`). Out of scope unless the
-  hero is clearly stale **or the `domotion-svg` version changed** (see Step 2b — a
-  domotion bump means the hero must be re-captured too); if so, note it for the
-  maintainer rather than rebuilding it here.
+- **Animated hero** — `assets/demo.svg` (+ `.svgz`) is produced separately by
+  `scripts/demo/capture-demo.ts` (`npm run demo:capture`).
+
+  **Check it against the same UI changes as the stills, not just against the
+  `domotion-svg` version** (NEWS-376). A domotion bump forces a re-capture, but
+  it is not the only thing that does — the hero renders the real app, including
+  the sidebar and its add-topic row, so any chrome change that moved a still
+  moved the hero too. It was nearly missed once precisely because the version
+  check came back clean and read as an all-clear.
+
+  Cheap way to be sure: `git log -1 --date=short --format='%h %ad' -- assets/demo.svg`
+  and compare against the commits for the UI changes you found in Step 0. Or grep
+  the SVG for a path only the *new* icon has — the frames are inline SVG, so
+  `grep -c 'M3 12h18' assets/demo.svg` answers "does the hero have the grid icon"
+  directly.
 
 Review the set and decide what should change. Build the three-way map —
 **README `<img src="assets/stills/…">` ↔ the scene's `name` in `capture-stills.ts`** — and
