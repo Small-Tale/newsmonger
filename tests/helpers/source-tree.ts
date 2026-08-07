@@ -22,6 +22,25 @@ const SELF = fileURLToPath(import.meta.url);
 export const repoRoot = path.join(path.dirname(SELF), '../..');
 
 /**
+ * An absolute path as a repo-relative one with `/` separators, on every platform.
+ *
+ * `path.relative` returns the platform separator, so on Windows it hands back
+ * `src\routes\api.ts` — and every repo-relative path *written down* in this repo
+ * uses `/`: `MUST_BE_SCANNED`, `SKIPPED_PATHS`, the allow-lists in the sibling
+ * guards. Comparing the two silently fails on Windows and only on Windows
+ * (NEWS-419), which for these guards means the "is scanned" checks — the ones that
+ * exist so a broken walk cannot pass silently — would themselves be the thing that
+ * broke.
+ *
+ * It is a function rather than an idiom repeated at each call site because it *was*
+ * an idiom repeated at each call site: two of the four places that needed it had it
+ * and two did not, and nothing could tell them apart by reading.
+ */
+export function repoRelative(file: string): string {
+  return path.relative(repoRoot, file).split(path.sep).join('/');
+}
+
+/**
  * Extensions whose files are *supposed* to contain bytes that are not text.
  *
  * Excluded **by extension, deliberately**, rather than by "skip whatever fails to
@@ -141,7 +160,7 @@ export function sourceFiles(): string[] {
     for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
       if (skip.has(entry.name) || entry.name.startsWith('.')) continue;
       const full = path.join(dir, entry.name);
-      if (SKIPPED_PATHS.has(path.relative(repoRoot, full).split(path.sep).join('/'))) continue;
+      if (SKIPPED_PATHS.has(repoRelative(full))) continue;
       if (entry.isDirectory()) walk(full);
       else if (!BINARY_EXTENSIONS.has(path.extname(entry.name).toLowerCase())) out.push(full);
     }
@@ -165,6 +184,9 @@ export function sourceFiles(): string[] {
  * The failure mode of a scan-based test is to match nothing, assert nothing and
  * stay green forever, so both guards check the walk before trusting its result.
  * Shared so the two cannot drift into checking different things.
+ *
+ * Written with `/` separators, so a walk's output must go through `repoRelative`
+ * before it is compared against these — see that function for what it cost not to.
  */
 export const MUST_BE_SCANNED = [
   'src/routes/api.ts',

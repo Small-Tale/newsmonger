@@ -7,6 +7,7 @@ import {
   BINARY_EXTENSIONS,
   MIN_SCANNED_FILES,
   MUST_BE_SCANNED,
+  repoRelative,
   repoRoot as root,
   sourceFiles,
 } from '../helpers/source-tree.js';
@@ -90,10 +91,13 @@ describe('no source file carries a raw control byte (NEWS-403)', () => {
   it('scans a plausible number of files, so a broken walk cannot pass silently', () => {
     // The failure mode of a scan-based test: match nothing, assert nothing, stay
     // green forever.
+    // `repoRelative`, not `path.relative`: `MUST_BE_SCANNED` is written with `/`
+    // and Windows would hand back `\`, so every assertion below would fail there
+    // and nowhere else (NEWS-419).
     const files = sourceFiles();
     expect(files.length).toBeGreaterThan(MIN_SCANNED_FILES);
     for (const required of MUST_BE_SCANNED) {
-      expect(files.map((f) => path.relative(root, f)), `${required} is scanned`).toContain(required);
+      expect(files.map(repoRelative), `${required} is scanned`).toContain(required);
     }
   });
 
@@ -138,7 +142,7 @@ describe('no source file carries a raw control byte (NEWS-403)', () => {
     // which is the case `BINARY_EXTENSIONS` cannot express. Both are gitignored, so
     // this assertion is vacuous in a fresh clone and load-bearing in any checkout
     // that has run `npm run tauri:dev` — which is the checkout it needs to hold in.
-    const scanned = sourceFiles().map((f) => path.relative(root, f).split(path.sep).join('/'));
+    const scanned = sourceFiles().map(repoRelative);
     expect(scanned.filter((f) => f.startsWith('src-tauri/server/') || f.startsWith('src-tauri/binaries/'))).toEqual([]);
     expect(scanned).toContain('src-tauri/tauri.conf.json');
   });

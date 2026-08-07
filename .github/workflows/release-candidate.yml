@@ -231,6 +231,23 @@ jobs:
   #
   # No `--with-deps`: that flag installs Linux system libraries and is a no-op
   # at best on a Windows runner.
+  #
+  # **It also runs the unit suite, since NEWS-419.** Before that, `npm test` ran on
+  # `ubuntu-latest` and nowhere else, in this workflow and in `ci.yml` alike — so
+  # every tree-walking guard's assertion *about* Windows was only ever executed on
+  # Linux and macOS. That is not a hypothetical gap: `tests/helpers/source-tree.ts`
+  # compared `path.relative` output, which is `\`-separated on Windows, against
+  # `/`-separated constants, and all three text guards' "is scanned" checks — the
+  # ones that exist so a broken walk cannot pass silently — would have failed there
+  # and only there. Nothing could have noticed, because nothing ran them.
+  #
+  # A scan for the defect was considered and rejected: the `/` literal lives in a
+  # different module from the comparison, so no text or AST pattern can see the
+  # pair. Running the tests is the thing that catches it, and the suite is ~12 s
+  # locally — noise next to a Windows E2E run.
+  #
+  # The job's `name:` is deliberately unchanged. It gates `create-release` and
+  # `publish-beta`, and a display name is what a required-check setting refers to.
   test-e2e-windows:
     name: E2E Tests (Windows)
     needs: [version-guard, lint, typecheck, test-unit, audit, rust]
@@ -247,6 +264,10 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run build:client
+      # Before the browser, not after: it is the cheap half, and a failure here is
+      # a real answer rather than a reason to wait ten more minutes for one.
+      - name: Unit tests (the only Windows run of them — NEWS-419)
+        run: npm test
       - run: npx playwright install chromium
       - run: npm run test:e2e
       - name: Upload Playwright report + traces

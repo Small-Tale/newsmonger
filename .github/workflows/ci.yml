@@ -87,6 +87,23 @@ jobs:
   # `dorny/paths-filter`-free basis: the job always starts, and skips its work
   # when nothing relevant changed. That keeps it out of required-check plumbing
   # while costing seconds when it does not apply.
+  #
+  # **It runs the unit suite too, since NEWS-419**, for the same reason the E2E run
+  # is here rather than only in `release-candidate.yml`: `npm test` ran on
+  # `ubuntu-latest` and nowhere else, so every guard that asserts *about* Windows
+  # was only ever executed on Linux and macOS. `tests/helpers/source-tree.ts`
+  # compared `\`-separated `path.relative` output against `/`-separated constants
+  # and would have failed on Windows alone; nothing could report it.
+  #
+  # The filter already covers `tests/helpers/`, which is where that defect lived —
+  # so this job would have caught it on the push that introduced it. It is
+  # deliberately **not** widened to all of `tests/`: with double coverage nearly
+  # every commit touches `tests/unit/`, a Windows runner bills at 2x, and the
+  # residual gap (a Windows-only defect introduced purely under `tests/unit/`)
+  # closes at the next beta tag rather than staying open forever.
+  #
+  # The job's `name:` is deliberately unchanged, so a required-check setting that
+  # refers to it keeps working.
   test-e2e-windows:
     name: E2E Tests (Windows, harness changes only)
     runs-on: windows-latest
@@ -117,6 +134,14 @@ jobs:
           cache: npm
       - run: npm ci
         if: steps.changed.outputs.run == 'true'
+      # Several unit suites fetch `/static/...` through the real route and 404
+      # without `dist/client` (NEWS-191) — the same step the Ubuntu unit job needs.
+      # `test:e2e`'s globalSetup builds its own dev bundle afterwards regardless.
+      - run: npm run build:client
+        if: steps.changed.outputs.run == 'true'
+      - name: Unit tests (NEWS-419)
+        if: steps.changed.outputs.run == 'true'
+        run: npm test
       - run: npx playwright install chromium
         if: steps.changed.outputs.run == 'true'
       - run: npm run test:e2e

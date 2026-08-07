@@ -3,7 +3,13 @@ import path from 'node:path';
 
 import { describe, expect, it } from 'vitest';
 
-import { MIN_SCANNED_FILES, MUST_BE_SCANNED, repoRoot as root, sourceFiles } from '../helpers/source-tree.js';
+import {
+  MIN_SCANNED_FILES,
+  MUST_BE_SCANNED,
+  repoRelative,
+  repoRoot as root,
+  sourceFiles,
+} from '../helpers/source-tree.js';
 
 /**
  * No source file may carry a character that misrepresents the text it is in
@@ -380,10 +386,13 @@ describe('no source file carries an invisible or deceptive character (NEWS-408, 
     // green forever. The list and the floor are shared with
     // `control-bytes.test.ts` so the two guards cannot drift into disagreeing
     // about what the tree is.
+    // `repoRelative`, not `path.relative`: `MUST_BE_SCANNED` is written with `/`
+    // and Windows would hand back `\`, so every assertion below would fail there
+    // and nowhere else (NEWS-419).
     const files = sourceFiles();
     expect(files.length).toBeGreaterThan(MIN_SCANNED_FILES);
     for (const required of MUST_BE_SCANNED) {
-      expect(files.map((f) => path.relative(root, f)), `${required} is scanned`).toContain(required);
+      expect(files.map(repoRelative), `${required} is scanned`).toContain(required);
     }
   });
 

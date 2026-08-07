@@ -4,6 +4,12 @@ import { fileURLToPath } from 'node:url';
 
 import { describe, expect, it } from 'vitest';
 
+// The walk below stays this file's own, deliberately — it is scoped differently
+// from the text-hygiene guards' and filters to source extensions. The *separator
+// contract* is not walk-specific, though, and repeating it inline at each site is
+// how two of the four places that needed it came to be missing it (NEWS-419).
+import { repoRelative } from '../helpers/source-tree.js';
+
 /**
  * Nothing this repo runs may invoke the **tsx CLI** (NEWS-299).
  *
@@ -53,7 +59,10 @@ function spawners(): string[] {
       if (skip.has(entry.name)) continue;
       const full = path.join(dir, entry.name);
       if (entry.isDirectory()) walk(full);
-      else if (/\.(ts|tsx|mjs|js|sh|rs)$/.test(entry.name)) found.push(path.relative(root, full));
+      // `repoRelative`, not `path.relative`: the required names below and the
+      // `path.join(root, file)` reads are all written with `/`, and Windows would
+      // hand back `\` (NEWS-419).
+      else if (/\.(ts|tsx|mjs|js|sh|rs)$/.test(entry.name)) found.push(repoRelative(full));
     }
   };
   for (const sub of ['src', 'scripts', 'tests', 'src-tauri/src']) walk(path.join(root, sub));
