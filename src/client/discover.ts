@@ -11,7 +11,7 @@ import { activeCategories, BUILTIN_CATEGORIES, NO_SUBCATEGORY_LABEL, UNCATEGORIZ
  * without a DOM — the same split `search.ts` and `solo.ts` already use.
  */
 
-/** The 11 section tiles, retired ones excluded (FR-24.2). */
+/** The section tiles, retired ones excluded (FR-24.2). */
 export function sectionTiles(): Category[] {
   return activeCategories(BUILTIN_CATEGORIES);
 }

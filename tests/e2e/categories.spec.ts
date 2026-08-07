@@ -165,8 +165,8 @@ test('the bar composes with search rather than replacing it', async ({ page }) =
 });
 
 // Empty options are hidden (NEWS-114). A pill for a section nobody watches is a
-// button that can only ever produce an empty feed, and eleven of them crowd out
-// the two or three that mean something.
+// button that can only ever produce an empty feed, and a bar full of them crowds
+// out the two or three that mean something.
 
 test('the filter bar carries no rule under it (NEWS-155)', async ({ page }) => {
   // The masthead above already has one, and a second hairline 40px below it read

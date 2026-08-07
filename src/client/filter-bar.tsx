@@ -44,8 +44,9 @@ import type { AppState } from './stores.js';
  * shape a newspaper uses, and it keeps "which level am I on" legible without a
  * label saying so.
  *
- * The sub-row only appears once a category is selected — 11 categories plus
- * their ~60 subcategories in one bar would be a wall rather than navigation.
+ * The sub-row only appears once a category is selected — every section plus
+ * every one of their subcategories in one bar would be a wall rather than
+ * navigation.
  */
 export function filterBarJsx(selected: AppState['categoryFilter'], topics: readonly Topic[]): SafeHtml {
   // Only sections something is filed under (NEWS-114) — a pill for a section

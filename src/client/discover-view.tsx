@@ -133,7 +133,7 @@ function discoverWaitingJsx(): SafeHtml {
 }
 
 /**
- * The 11 section tiles (FR-24.2).
+ * The section tiles (FR-24.2).
  *
  * `.map()`, not `each()` — the sections are a constant array, and `each()`
  * memoizes per item by object identity, so a constant list would cache forever
