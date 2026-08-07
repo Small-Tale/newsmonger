@@ -13,8 +13,7 @@ import { fileURLToPath } from 'node:url';
  *
  * The other members of this family — `sandboxable.test.ts` and
  * `windows-portability.test.ts` — keep their own walks on purpose: they are scoped
- * differently (`src-tauri/src` matters to one, `docs/` to neither) and filter to
- * source extensions. Only these two want an identical set.
+ * differently and filter to source extensions. Only these two want an identical set.
  */
 
 const SELF = fileURLToPath(import.meta.url);
@@ -35,6 +34,12 @@ export const repoRoot = path.join(path.dirname(SELF), '../..');
  * the other dot-directories. The list is here so that a legitimate binary fixture
  * arriving later is excluded on purpose, in one named place, instead of by a
  * mechanism that would also excuse a broken `.ts`.
+ *
+ * `src-tauri/` (NEWS-412) contributes the app icons, and every extension they use —
+ * `.png`, `.ico`, `.icns` — was already on the list. The native-code extensions
+ * below are not in the tree at all; they are listed for the same reason as `.zip`
+ * and `.mp4`, so that the day one appears the exclusion is a decision somebody made
+ * rather than a decode failure nobody noticed.
  */
 export const BINARY_EXTENSIONS = new Set([
   '.png',
@@ -67,7 +72,33 @@ export const BINARY_EXTENSIONS = new Set([
   // would exempt the next mangled `.md` too.
   '.3dm',
   '.sketch',
+  // Native code (NEWS-412). A Rust/Tauri tree can grow these outside `target/` —
+  // a bundled `.dylib`, a prebuilt `.node` addon, the Windows pair.
+  '.dylib',
+  '.so',
+  '.dll',
+  '.exe',
+  '.node',
+  '.rlib',
 ]);
+
+/**
+ * Build outputs that an extension cannot describe, skipped by repo-relative path.
+ *
+ * Both are gitignored `src-tauri/` artifacts (NEWS-412). `server/` is the bundled
+ * Node sidecar — `cli.js`, the client bundle and a whole `node_modules` — and
+ * `binaries/` holds the sidecar executables themselves, which are **Mach-O and ELF
+ * files with no extension at all**. That is the case `BINARY_EXTENSIONS` cannot
+ * express, and it is not an argument for a decode-failure skip: these are excluded
+ * because of *where* they are, not because of what happens when you read them, so
+ * a mangled `.rs` two directories away is still caught.
+ *
+ * Matched by path rather than by directory name on purpose. The names are generic —
+ * a future `src/server/` is entirely plausible — and a bare `server` in the skip
+ * set would silently take it too, which is exactly the kind of quiet hole these
+ * guards exist to close.
+ */
+export const SKIPPED_PATHS = new Set(['src-tauri/binaries', 'src-tauri/server']);
 
 /**
  * Every file under the source roots, found by walking rather than by list.
@@ -93,6 +124,15 @@ export const BINARY_EXTENSIONS = new Set([
  * parses every one. A requirements doc that silently vanished from search would
  * break id allocation while looking fine, and NEWS-302 already records what a
  * collision costs: six ids naming two requirements each.
+ *
+ * `src-tauri/` was added by NEWS-412, and it is the root that needed a guard most
+ * rather than least. A `.rs` file hides a NUL exactly as well as a `.ts` file does,
+ * and the Rust gates **path-gate themselves** (NEWS-294): `scripts/rust-changed.sh`
+ * skips fmt, both clippy profiles and `cargo test` when nothing under `src-tauri/`
+ * differs, so those files get *less* routine scrutiny than everything else here,
+ * not more. `sandboxable.test.ts` already walked `src-tauri/src`, so the precedent
+ * for reaching into it was set; this walk goes wider, taking `Cargo.toml`,
+ * `tauri.conf.json`, the generated ACL schemas and `loading/index.html` with it.
  */
 export function sourceFiles(): string[] {
   const skip = new Set(['node_modules', 'dist', 'target', 'coverage', 'test-results', 'playwright-report']);
@@ -101,11 +141,14 @@ export function sourceFiles(): string[] {
     for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
       if (skip.has(entry.name) || entry.name.startsWith('.')) continue;
       const full = path.join(dir, entry.name);
+      if (SKIPPED_PATHS.has(path.relative(repoRoot, full).split(path.sep).join('/'))) continue;
       if (entry.isDirectory()) walk(full);
       else if (!BINARY_EXTENSIONS.has(path.extname(entry.name).toLowerCase())) out.push(full);
     }
   };
-  for (const sub of ['src', 'tests', 'scripts', 'docs']) walk(path.join(repoRoot, sub));
+  // `src-tauri/target` is caught by the `target` name above, with the other build
+  // outputs; its two gitignored siblings need `SKIPPED_PATHS`.
+  for (const sub of ['src', 'tests', 'scripts', 'docs', 'src-tauri']) walk(path.join(repoRoot, sub));
   for (const file of fs.readdirSync(repoRoot, { withFileTypes: true })) {
     if (!file.isFile() || file.name.startsWith('.')) continue;
     if (['.md', '.json', '.yml', '.yaml'].includes(path.extname(file.name).toLowerCase())) {
@@ -129,9 +172,21 @@ export const MUST_BE_SCANNED = [
   'scripts/e2e-scramble.mjs',
   'src/client/styles.scss',
   'docs/22-topic-categories.md',
+  // One entry per walked root, because the count below cannot police the small
+  // ones: `src-tauri` contributes 13 files of ~346, so losing it whole would not
+  // move the floor at all (NEWS-412). A named file is the only thing that notices.
+  'src-tauri/src/lib.rs',
   'CLAUDE.md',
   'package.json',
 ];
 
-/** A floor well under the ~330 files the walk finds today, but far above zero. */
-export const MIN_SCANNED_FILES = 100;
+/**
+ * A floor under the ~346 files the walk finds today, set high enough to notice a
+ * root going missing.
+ *
+ * It was 100 against ~330, which is a tripwire for a walk that broke *entirely* and
+ * nothing else. At 250, losing `src/` (95 files) or `tests/` (162) trips it. The
+ * smaller roots are `MUST_BE_SCANNED`'s job — the two checks are deliberately
+ * different instruments, and neither covers the other.
+ */
+export const MIN_SCANNED_FILES = 250;

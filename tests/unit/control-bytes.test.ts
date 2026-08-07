@@ -51,6 +51,10 @@ import {
  * `invisible-characters.test.ts` (NEWS-408), which decodes first and then scans.
  * The two share `tests/helpers/source-tree.ts` so they cover the same files, and
  * stay separate so each keeps a guarantee you can state in one sentence.
+ *
+ * The walk reaches `src-tauri/` as of NEWS-412. A `.rs` file can hide a NUL as
+ * easily as a `.ts` one, and the Rust gates path-gate themselves (NEWS-294), so
+ * those files see *less* routine tooling than the rest of the tree.
  */
 
 /** A C0 control byte other than tab (0x09), newline (0x0a) or CR (0x0d), or DEL (0x7f). */
@@ -93,7 +97,7 @@ describe('no source file carries a raw control byte (NEWS-403)', () => {
     }
   });
 
-  it('finds none under src/, tests/, scripts/ or docs/', () => {
+  it('finds none under src/, tests/, scripts/, docs/ or src-tauri/', () => {
     const offenders = sourceFiles().flatMap((file) => {
       const found = findControlByte(fs.readFileSync(file));
       return found === null ? [] : [`${path.relative(root, file)}: ${found} — use the escape sequence instead`];
@@ -124,5 +128,18 @@ describe('no source file carries a raw control byte (NEWS-403)', () => {
     expect(files).toContain('.ts');
     expect(files).toContain('.json');
     expect(files).toContain('.sh');
+    // Rust arrives with `src-tauri/` (NEWS-412), alongside `.toml` and `.plist`.
+    expect(files).toContain('.rs');
+  });
+
+  it('excludes the two src-tauri build outputs by path (NEWS-412)', () => {
+    // `src-tauri/server/` is a bundled Node sidecar with its own `node_modules`;
+    // `src-tauri/binaries/` holds Mach-O and ELF executables with *no extension*,
+    // which is the case `BINARY_EXTENSIONS` cannot express. Both are gitignored, so
+    // this assertion is vacuous in a fresh clone and load-bearing in any checkout
+    // that has run `npm run tauri:dev` — which is the checkout it needs to hold in.
+    const scanned = sourceFiles().map((f) => path.relative(root, f).split(path.sep).join('/'));
+    expect(scanned.filter((f) => f.startsWith('src-tauri/server/') || f.startsWith('src-tauri/binaries/'))).toEqual([]);
+    expect(scanned).toContain('src-tauri/tauri.conf.json');
   });
 });

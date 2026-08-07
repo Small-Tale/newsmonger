@@ -291,7 +291,7 @@ describe('no source file carries an invisible character (NEWS-408)', () => {
     }
   });
 
-  it('finds none under src/, tests/, scripts/ or docs/', () => {
+  it('finds none under src/, tests/, scripts/, docs/ or src-tauri/', () => {
     const offenders = sourceFiles().flatMap((file) => {
       const found = findInvisible(fs.readFileSync(file, 'utf8'));
       return found === null ? [] : [`${path.relative(root, file)}: ${found}`];
