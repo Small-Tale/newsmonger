@@ -289,6 +289,21 @@ export const SettingsSchema = z.object({
    */
   backupDir: z.string().default(''),
   /**
+   * Where the user is, in their own words (NEWS-393); '' means don't localize.
+   *
+   * **Free text, deliberately — no place list, no validation beyond a length
+   * cap.** A picker backed by a gazetteer would have to decide whether 東京 and
+   * "Tokyo" are the same row, and would reject the village that isn't in it. The
+   * value's whole job is to reach the check prompt as a phrase the model can
+   * read, so any string a person recognises as their own place is already
+   * correct. "Lisbon", "Lisboa", "北海道", "the Scottish Borders" are all fine.
+   *
+   * Granularity is the user's to pick: a continent is as valid an answer as a
+   * street. Nothing downstream parses this into levels — the model is told where
+   * the user is and left to judge how much of that matters per topic (FR-35.4).
+   */
+  location: z.string().default(''),
+  /**
    * "Don't ask again" on the backup offer (NEWS-230, FR-27.4). Permanent.
    *
    * A setting rather than `localStorage` because it must survive a reinstall of
@@ -405,6 +420,7 @@ export function emptyDataFile(): DataFile {
       endpoint: '',
       effort: '',
       backupDir: '',
+      location: '',
       backupPromptNever: false,
       backupPromptSnoozedUntil: '',
       notifyOnNewItems: false,

@@ -307,6 +307,35 @@ describe('API', () => {
     expect(store.getSettings().checkIntervalMs).toBe(3_600_000);
   });
 
+  it('stores a location exactly as typed, in any script (FR-35.1–35.2, NEWS-393)', async () => {
+    // Through the real route rather than the schema alone: the risk this guards
+    // is a normalise/trim/transliterate step *between* the boundary and the
+    // store, which a schema-only test cannot see.
+    const { app, store } = makeApp();
+    expect(store.getSettings().location, 'empty by default — no location means global').toBe('');
+
+    for (const location of ['Lisbon', '東京', 'Stratford-upon-Avon, Warwickshire', 'Europe']) {
+      const res = await app.request('/api/settings', { method: 'PATCH', body: JSON.stringify({ location }) });
+      expect(res.status).toBe(200);
+      expect(store.getSettings().location).toBe(location);
+    }
+
+    // '' is how you opt back out, and it must not be treated as "no change".
+    const cleared = await app.request('/api/settings', { method: 'PATCH', body: JSON.stringify({ location: '' }) });
+    expect(cleared.status).toBe(200);
+    expect(store.getSettings().location).toBe('');
+
+    // The only rule is a sanity bound (FR-35.2) — over it is rejected, and the
+    // stored value is left alone rather than half-written.
+    await app.request('/api/settings', { method: 'PATCH', body: JSON.stringify({ location: 'Porto' }) });
+    const tooLong = await app.request('/api/settings', {
+      method: 'PATCH',
+      body: JSON.stringify({ location: 'x'.repeat(201) }),
+    });
+    expect(tooLong.status).toBe(400);
+    expect(store.getSettings().location).toBe('Porto');
+  });
+
   it('updates provider settings', async () => {
     const { app, store } = makeApp();
     const res = await app.request('/api/settings', {

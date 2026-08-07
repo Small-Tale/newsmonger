@@ -45,6 +45,7 @@ import {
   updateDailyTimes,
   updateHighPriorityInterval,
   updateInterval,
+  updateLocation,
   updateProviderSettings,
   updateRetention,
   updateScheduleMode,
@@ -1548,6 +1549,13 @@ function wireEvents(root: HTMLElement): void {
   // half-typed paths on the way to a good one.
   void delegate(root, 'change', '[data-action=backup-dir]', (_e, el) => {
     if (el instanceof HTMLInputElement) void updateBackupDir(el.value.trim()).then(refreshBackupPreview);
+  });
+
+  // `change`, not `input`, for the same reason as the row above — and here it
+  // also matters for IME input: a composing keystroke in a CJK script is not a
+  // finished word, and `input` would PATCH each intermediate candidate.
+  void delegate(root, 'change', '[data-action=location]', (_e, el) => {
+    if (el instanceof HTMLInputElement) void updateLocation(el.value.trim());
   });
 
   void delegate(root, 'click', '[data-action=clear-stories]', () => {

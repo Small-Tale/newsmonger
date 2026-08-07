@@ -445,6 +445,17 @@ export function updateBackupDir(backupDir: string): Promise<void> {
   return withRefresh(() => request('/api/settings', { method: 'PATCH', body: JSON.stringify({ backupDir }) }));
 }
 
+/**
+ * Set where the user is; '' clears it (NEWS-393, FR-35.1).
+ *
+ * Trimmed but otherwise sent as typed — no normalising, no case folding, no
+ * transliteration. The value is read by a model, not matched against a table,
+ * so "Lisboa" and "東京" are as correct as anything we could rewrite them into.
+ */
+export function updateLocation(location: string): Promise<void> {
+  return withRefresh(() => request('/api/settings', { method: 'PATCH', body: JSON.stringify({ location }) }));
+}
+
 /** Sync folders the server can see (NEWS-230, FR-27.5). Empty is a valid answer. */
 export async function fetchBackupLocations(): Promise<BackupLocation[]> {
   const body = await request('/api/backup/locations');

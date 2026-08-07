@@ -1,3 +1,5 @@
+import type { Page } from '@playwright/test';
+
 import { closeSettings, expect, openSettings, openSettingsTab, resetSharedState,seedCheckedTopic, test, workerBaseURL } from './fixtures.js';
 
 // Settings as a *document*: tabs, group headings, field alignment, hints, the
@@ -697,4 +699,58 @@ test('the wordmark follows the pinned theme, not the system one (NEWS-377)', asy
 
   await closeSettings(page);
   await page.emulateMedia({ colorScheme: 'light' });
+});
+
+// The stored value, read back from the server rather than from the input — the
+// setting is what reaches the check prompt, and a client-only value would look
+// identical in the field.
+const storedLocation = async (page: Page): Promise<string> => {
+  const body = (await (await page.request.get('/api/state')).json()) as { settings: { location: string } };
+  return body.settings.location;
+};
+
+test('a location is stored as typed, in any script, and clears back to global (FR-35.1–35.3, NEWS-393)', async ({
+  page,
+}) => {
+  // The value is free text with no place list behind it (FR-35.2), so what
+  // needs proving is that nothing on the way to storage *helpfully* rewrites it.
+  // A normalise or transliterate step anywhere in the chain would pass a test
+  // that only ever typed "Lisbon".
+  await page.goto('/');
+  await openSettingsTab(page, 'App');
+
+  const field = page.locator('[data-action=location]');
+  await expect(field, 'empty by default — no location means every topic stays global').toHaveValue('');
+
+  // `blur()`, not Enter: the handler listens for `change`, deliberately, so an
+  // IME composing a CJK candidate does not PATCH each intermediate guess.
+  await field.fill('東京');
+  await field.blur();
+
+  // Round-trips through the server, not just the input — the setting is what
+  // reaches the check prompt, and a client-only value would look identical here.
+  await expect
+    .poll(async () => storedLocation(page))
+    .toBe('東京');
+
+  await page.reload();
+  await openSettingsTab(page, 'App');
+  await expect(page.locator('[data-action=location]')).toHaveValue('東京');
+
+  // A whole continent is as valid an answer as a city (FR-35.3) — the schema has
+  // no ladder to reject it with.
+  await page.locator('[data-action=location]').fill('Europe');
+  await page.locator('[data-action=location]').blur();
+  await expect
+    .poll(async () => storedLocation(page))
+    .toBe('Europe');
+
+  // And clearing it is how you opt back out.
+  await page.locator('[data-action=location]').fill('');
+  await page.locator('[data-action=location]').blur();
+  await expect
+    .poll(async () => storedLocation(page))
+    .toBe('');
+
+  await closeSettings(page);
 });

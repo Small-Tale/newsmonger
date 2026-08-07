@@ -24,6 +24,7 @@ const SETTINGS: Settings = {
   endpoint: '',
   effort: '',
   backupDir: '',
+  location: '',
   backupPromptNever: false,
   backupPromptSnoozedUntil: '',
   notifyOnNewItems: false,

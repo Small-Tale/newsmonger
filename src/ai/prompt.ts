@@ -202,6 +202,26 @@ export function buildUserPrompt(
     );
     lines.push(guidance);
   }
+  // Stated once, with the rule for using it, rather than resolved into a stored
+  // per-topic scope (NEWS-393, FR-35.4). How local a subject is varies by story
+  // as much as by topic — a national tour announcement is on-topic for a
+  // near-me "Concerts" — so the judgement belongs where the stories are, not in
+  // a field set once at classification time.
+  //
+  // Both halves of the instruction matter. Without the second, every topic
+  // drifts local and "Space exploration" starts returning the regional
+  // planetarium; without the first, the setting does nothing.
+  const location = (context.location ?? '').trim();
+  if (location !== '') {
+    lines.push('');
+    lines.push(
+      `The user is in: ${location}. Use this only where the topic is inherently about somewhere — local ` +
+        'events, property, schools, transport, jobs, weather, and national politics or law. For a subject ' +
+        'that is not tied to a place, ignore it entirely and search globally; a worldwide topic narrowed to ' +
+        "the user's town is worse than one that ignored the location. Where it applies, judge the right " +
+        'breadth yourself: some subjects mean the immediate area, others the country.',
+    );
+  }
   const recentKnown = known.slice(-MAX_KNOWN_ITEMS);
   if (recentKnown.length > 0) {
     lines.push('');

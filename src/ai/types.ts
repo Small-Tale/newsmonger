@@ -88,6 +88,18 @@ export interface TopicContext {
    * a different answer each time.
    */
   categoryOptions?: CategoryOption[];
+  /**
+   * Where the user is, in their own words (NEWS-393), or absent for none.
+   *
+   * Passed on **every** check rather than only for topics judged "local",
+   * because which topics those are is a judgement the model is better placed to
+   * make per story than we are once per topic. "Concerts" almost always means
+   * concerts within reach; "Space exploration" never does; "Elections" means the
+   * user's country but not their street. The prompt states the location and the
+   * rule, and lets the model apply it — see FR-35.4 for why there is no stored
+   * per-topic scope.
+   */
+  location?: string;
 }
 
 /**

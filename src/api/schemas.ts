@@ -183,6 +183,12 @@ export const UpdateSettingsReqSchema = z
     // itself is decided when a write is attempted, not here — a folder can be
     // unmounted between the setting and the write anyway.
     backupDir: z.string().max(1000),
+    // '' clears it. Capped and otherwise unvalidated on purpose (NEWS-393): the
+    // value is a phrase for the prompt, not an identifier, so there is nothing
+    // to validate it against. `.max` counts UTF-16 code units, which is fine —
+    // it is a sanity bound, and 200 is generous even for a place name written
+    // in a script where each character carries more.
+    location: z.string().max(200),
     backupPromptNever: z.boolean(),
     // An ISO timestamp, or '' to clear. Bounded so a junk value can't be stored.
     backupPromptSnoozedUntil: z.string().max(64),

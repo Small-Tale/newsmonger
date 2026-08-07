@@ -851,6 +851,30 @@ function settingsPanelJsx(s: AppState): SafeHtml {
         <div class="notify-note">
           {s.notifyPermissionDenied ? notifyBlockedNoteJsx() : ''}
         </div>
+        {/* Location (NEWS-393, FR-35). On this tab rather than Schedule or
+            Source because it is a fact about the *user*, not about cadence or
+            about which model runs — the same kind of thing as Theme.
+
+            Stacked and free-text: there is no place list to pick from and
+            nothing validates it (FR-35.2), so the field has to be wide enough to
+            show whatever someone typed, in whatever script they typed it in. */}
+        <h3 class="eyebrow">Location</h3>
+        <label class="field stacked">
+          <span>Where you are</span>
+          <input
+            type="text"
+            data-action="location"
+            value={s.settings.location}
+            placeholder="e.g. Lisbon · Portugal · 東京 · the Scottish Borders"
+            spellCheck="false"
+            autocorrect="off"
+          />
+        </label>
+        <p class="field-hint">
+          Used only for topics that are about somewhere — local events, property, schools, transport, national
+          politics. Global subjects ignore it. As broad or as precise as you like; a continent is a fine answer,
+          and leaving it empty keeps every topic global.
+        </p>
         {/* Appearance (FR-3.74, NEWS-334). Its own group rather than a line in
             Notifications: it is the only thing on this tab about how the app
             *looks*, and folding it under a heading about alerts is how the

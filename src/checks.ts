@@ -495,6 +495,9 @@ export class CheckRunner {
       const attempt = await this.checkWithRetry(provider, topic.name, known, topic.coveredThroughAt, controller.signal, {
         guidance: topic.guidance,
         offTopicTitles,
+        // Read per check, not captured once: the user can change it in Settings
+        // between sweeps and the next check should already be using the new one.
+        location: this.store.getSettings().location,
         // Only asked for while the topic still needs it (NEWS-97): a labelled
         // topic would otherwise spend tokens on the question every check, and
         // could answer differently each time.

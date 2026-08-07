@@ -604,6 +604,7 @@ export const appStore = defineStore({
       endpoint: '',
       effort: '',
       backupDir: '',
+      location: '',
       backupPromptNever: false,
       backupPromptSnoozedUntil: '',
       notifyOnNewItems: false,

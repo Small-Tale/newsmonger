@@ -18,6 +18,7 @@ const BASE_SETTINGS: StateResp['settings'] = {
   endpoint: '',
   effort: '',
   backupDir: '',
+  location: '',
   backupPromptNever: false,
   backupPromptSnoozedUntil: '',
   notifyOnNewItems: true,
