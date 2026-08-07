@@ -14,6 +14,26 @@ fields reject semver prerelease suffixes.
 
 <!-- Nothing released yet. The first `npm run release` inserts its entry below. -->
 
+## [0.2.0-beta.19] - 2026-08-07
+
+## Features
+
+- Newly added topics now wait a minute before their first scheduled check, so guidance written right after creating a topic is used by that first check instead of being missed.
+- A topic with its edit or guidance dialog open is skipped by the scheduler until the dialog closes, so a check never runs against guidance you're still typing.
+- README now documents the RSS feed at `/feed.xml` (with `?scope=saved` for bookmarks), Markdown/JSON export and import, search and bookmarks, per-topic scheduling and priority, automatic sections and subjects, theme selection, and backup/restore.
+
+## Bug Fixes
+
+- The masthead wordmark now follows the theme you pinned in Settings rather than the OS preference — pinning light on a dark system no longer made the word "News" vanish.
+- An expanded story card's detail pane now fills the full height of its grid row, instead of stopping mid-card with rounded corners floating in empty space.
+- Fixed five CSS rules pointing at undeclared color tokens: the high-priority star, settings field-label star and review flag now use a themed, contrast-checked color; the restore-row border, muted text and — most importantly — the file-button focus ring all render again.
+- The Codex model cache is now validated rather than trusted, so an unexpected shape from the vendor degrades to "no models" instead of crashing with `.map is not a function` or sorting arbitrarily.
+
+## UX
+
+- The topic discovery button beside the add-topic field is now a grid icon rather than a compass, matching the section grid it opens.
+- Demo screenshots and the animated hero were recaptured against the current UI.
+
 ## [0.2.0-beta.18] - 2026-08-06
 
 ## Reliability
