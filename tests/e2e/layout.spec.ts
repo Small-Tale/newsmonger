@@ -1,6 +1,14 @@
 import type { Page } from '@playwright/test';
 
-import { expect, openSettingsTab, resetSharedState, test, topicAction, workerBaseURL } from './fixtures.js';
+import {
+  expect,
+  openSettingsTab,
+  resetSharedState,
+  seedCheckedTopic,
+  test,
+  topicAction,
+  workerBaseURL,
+} from './fixtures.js';
 
 // Wide-window layout (NEWS-96). The shell used to be capped at 1060px and
 // centred, which left the feed at a fixed ~650px no matter how much room the
@@ -576,4 +584,79 @@ test('the topic list survives a poll landing while scrolled (NEWS-339)', async (
     await page.request.delete(`/api/topics/${encodeURIComponent(topic.id)}`);
   }
   await page.setViewportSize({ width: 1280, height: 900 });
+});
+
+test('an expanded card’s pane fills the height its grid row hands it (NEWS-378)', async ({ page }) => {
+  // Cards are grid items, so every card on a row is as tall as the tallest one.
+  // The detail pane bleeds to the card's foot by design — negative margins and
+  // the card's own corner radius, less its border — which is right only while
+  // the card is content-sized. Beside a longer story the extra height fell
+  // *below* the pane instead: the well stopped in mid-air with its rounded
+  // bottom corners floating and `--panel` showing beneath it to the card's edge.
+  //
+  // Geometry, so it belongs here rather than in a unit test, for the reason this
+  // file's header gives: a rendered layout is the only place it exists.
+  // Seeded here, not inherited: the two cleanup tests above delete this file's
+  // earlier topics, so by now the feed is empty (NEWS-322 — a file states its
+  // own precondition). Two topics is four mock stories, which is two full rows.
+  const seeded: string[] = [];
+  for (const name of ['Pane Fill One', 'Pane Fill Two']) {
+    seeded.push(await seedCheckedTopic(workerBaseURL(), name));
+  }
+
+  await page.setViewportSize({ width: 1280, height: 1000 });
+  await page.goto('/');
+  await expect.poll(async () => page.locator('.day > .item').count()).toBeGreaterThanOrEqual(4);
+
+  // The first two cards sharing a row — the two-column case the bug needs.
+  const pair = await page.evaluate(() => {
+    const cards = [...document.querySelectorAll('.day > .item')];
+    for (let i = 0; i + 1 < cards.length; i++) {
+      if (Math.abs(cards[i].getBoundingClientRect().top - cards[i + 1].getBoundingClientRect().top) < 4) {
+        return [i, i + 1];
+      }
+    }
+    return null;
+  });
+  expect(pair, 'need two cards sharing a row').not.toBeNull();
+  const [left, right] = pair as [number, number];
+
+  // Force the neighbour taller, which is exactly what a longer story does in
+  // production — the row takes the tallest and the other card stretches to it.
+  // Done here rather than hoped for, so the test reproduces the bug every run
+  // instead of only when the mock's two identical stories happen to differ.
+  //
+  // Through a **stylesheet**, not an inline style. Expanding re-renders the feed
+  // and kerf's morph rebuilds each card from the template, which drops an
+  // injected `style` attribute — so the first version of this test measured a
+  // card that was no longer stretched, and passed with the fix reverted. A rule
+  // in a `<style>` tag is not part of the DOM morph reconciles.
+  await page.addStyleTag({
+    content: `.day > .item:nth-of-type(${String(right + 1)}) { min-height: 700px; }`,
+  });
+
+  const card = page.locator('.day > .item').nth(left);
+  await card.locator('[data-expand-item]').click();
+  await expect(card.locator('.item-pane')).toBeVisible();
+
+  const gap = await card.evaluate((el) => {
+    const pane = el.querySelector('.item-pane');
+    if (pane === null) return null;
+    // The card's border-box bottom, less its 1px border, is where the pane's
+    // own bottom should land.
+    return el.getBoundingClientRect().bottom - pane.getBoundingClientRect().bottom;
+  });
+  expect(gap, 'the pane must reach the foot of the stretched card').not.toBeNull();
+  expect(gap as number).toBeLessThanOrEqual(2);
+
+  // And the card really was stretched — otherwise the assertion above passes
+  // trivially against a card that never had slack to absorb.
+  const heights = await page.evaluate(([l, r]) => {
+    const cards = [...document.querySelectorAll('.day > .item')];
+    return [cards[l].getBoundingClientRect().height, cards[r].getBoundingClientRect().height];
+  }, [left, right]);
+  expect(heights[0]).toBeGreaterThan(200);
+  expect(Math.abs(heights[0] - heights[1])).toBeLessThanOrEqual(2);
+
+  for (const id of seeded) await page.request.delete(`/api/topics/${encodeURIComponent(id)}`);
 });

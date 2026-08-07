@@ -444,6 +444,7 @@ body {
     height: 30px;
     width: auto;
   }
+
 }
 
 .header-controls {
@@ -1205,6 +1206,12 @@ h2.eyebrow {
   margin-top: 12px;
   box-shadow: var(--shadow);
   animation: item-enter 300ms ease backwards;
+  // A column so the pane at the foot can absorb whatever height the grid row
+  // hands this card (NEWS-378). Safe as a swap from block: every child here
+  // carries bottom-only margins (`h3`, `p`), so there is no adjacent-sibling
+  // collapsing for flex to change.
+  display: flex;
+  flex-direction: column;
 
   header {
     display: flex;
@@ -1956,6 +1963,19 @@ h2.eyebrow {
   border-top: 1px solid var(--line);
   border-radius: 0 0 9px 9px; // the card's 10px, less its 1px border
   background: var(--paper);
+  // Take the slack (NEWS-378). Cards are grid items and stretch to the tallest
+  // in their row, so an expanded card beside a longer one had the extra height
+  // fall *below* the pane: the well stopped in mid-air with its rounded bottom
+  // corners floating, and `--panel` showing beneath it to the card's edge.
+  //
+  // Growing rather than un-rounding is what keeps the design intact. The radius
+  // was never wrong — it is the card's own corner, less the border — it was only
+  // ever drawn in the wrong place, and a square-bottomed well would need the
+  // card to clip, which would cost the expanded card's halo.
+  //
+  // `flex-grow` alone: on a content-sized card there is no free space, so this
+  // is inert and nothing about the ordinary case changes.
+  flex-grow: 1;
   // Long unbroken strings (a URL in the timeline to come) must wrap rather than
   // widen the card — a grid column at 720px has no room to give.
   min-width: 0;
