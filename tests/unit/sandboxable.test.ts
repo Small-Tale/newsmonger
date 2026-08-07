@@ -8,7 +8,7 @@ import { describe, expect, it } from 'vitest';
 // from the text-hygiene guards' and filters to source extensions. The *separator
 // contract* is not walk-specific, though, and repeating it inline at each site is
 // how two of the four places that needed it came to be missing it (NEWS-419).
-import { repoRelative } from '../helpers/source-tree.js';
+import { isSkippedEntry, repoRelative, walkProblems } from '../helpers/source-tree.js';
 
 /**
  * Nothing this repo runs may invoke the **tsx CLI** (NEWS-299).
@@ -52,12 +52,16 @@ const root = path.join(path.dirname(fileURLToPath(import.meta.url)), '../..');
  * omission, only by deliberately editing this function.
  */
 function spawners(): string[] {
-  const skip = new Set(['node_modules', '.git', 'dist', 'target', 'coverage', 'test-results', 'playwright-report', 'binaries', 'server']);
   const found: string[] = [];
   const walk = (dir: string): void => {
     for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
-      if (skip.has(entry.name)) continue;
       const full = path.join(dir, entry.name);
+      // Shared with the other two walks (NEWS-424). This one used to skip
+      // `binaries` and `server` by **bare directory name**, which is the hole
+      // `SKIPPED_PATHS` was written to avoid and warns about in its own doc: a
+      // future `src/server/` would have been swallowed whole by the guard that
+      // exists to catch unfixed spawners.
+      if (isSkippedEntry(entry.name, full)) continue;
       if (entry.isDirectory()) walk(full);
       // `repoRelative`, not `path.relative`: the required names below and the
       // `path.join(root, file)` reads are all written with `/`, and Windows would
@@ -92,10 +96,26 @@ describe('every spawned entry point stays sandbox-safe (NEWS-299)', () => {
   it('scans a plausible number of files, so a broken walk cannot pass silently', () => {
     // The failure mode of replacing a list with a walk: match nothing, assert
     // nothing, stay green forever.
-    expect(SPAWNERS.length).toBeGreaterThan(100);
-    for (const required of ['tests/e2e/server.ts', 'playwright.config.ts', 'package.json', 'src-tauri/src/lib.rs']) {
-      expect(SPAWNERS, `${required} is scanned`).toContain(required);
-    }
+    //
+    // The floor was 100 against a walk that finds 278 (NEWS-424) — losing
+    // `tests/` whole, 162 files, would not have tripped it. 200 does, and so
+    // does losing `src/`. The named files below are the other instrument, one
+    // per walked root: `src-tauri/src` contributes too few for any floor to
+    // police, so only naming a file in it can notice it going missing.
+    expect(
+      walkProblems(SPAWNERS, {
+        floor: 200,
+        required: [
+          'src/cli.ts',
+          'scripts/e2e-preflight.mjs',
+          'tests/e2e/server.ts',
+          'src-tauri/src/lib.rs',
+          'playwright.config.ts',
+          'package.json',
+        ],
+        label: 'spawner walk',
+      }),
+    ).toEqual([]);
   });
 
   it.each(SPAWNERS)('%s does not invoke the tsx CLI', (file) => {

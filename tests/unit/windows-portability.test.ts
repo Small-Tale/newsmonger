@@ -4,6 +4,8 @@ import { fileURLToPath } from 'node:url';
 
 import { describe, expect, it } from 'vitest';
 
+import { isSkippedEntry, walkProblems } from '../helpers/source-tree.js';
+
 /**
  * Conventions that only Windows disagrees with (NEWS-348, NEWS-354, NEWS-355).
  *
@@ -66,12 +68,13 @@ const root = path.join(path.dirname(SELF), '../..');
  * self-pinning assertions at the bottom are how those fixtures earn their keep.
  */
 function sourceFiles(): string[] {
-  const skip = new Set(['node_modules', '.git', 'dist', 'target', 'coverage', 'test-results', 'playwright-report']);
   const out: string[] = [];
   const walk = (dir: string): void => {
     for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
-      if (skip.has(entry.name)) continue;
       const p = path.join(dir, entry.name);
+      // Shared with the two sibling walks (NEWS-424), so an exclusion cannot
+      // reach two of them and miss the third.
+      if (isSkippedEntry(entry.name, p)) continue;
       if (entry.isDirectory()) walk(p);
       else if (/\.(ts|tsx|mjs|js)$/.test(entry.name) && p !== SELF) out.push(p);
     }
@@ -129,9 +132,18 @@ describe('Windows portability conventions', () => {
   it('scans a plausible number of files, so a broken walk cannot pass silently', () => {
     // The failure mode of a scan-based test: find nothing, assert nothing, stay
     // green forever.
-    const files = sourceFiles();
-    expect(files.length).toBeGreaterThan(100);
-    expect(files.some((f) => f.endsWith(path.join('tests', 'e2e', 'server.ts')))).toBe(true);
+    //
+    // The floor was 100 against a walk that finds 261 (NEWS-424), so losing
+    // `tests/` whole — 162 files, and where most of this file's subject matter
+    // lives — would have sailed through. One named file per walked root does
+    // the work the floor cannot.
+    expect(
+      walkProblems(sourceFiles(), {
+        floor: 200,
+        required: ['src/cli.ts', 'tests/e2e/server.ts', 'scripts/npm-command.mjs'],
+        label: 'portability walk',
+      }),
+    ).toEqual([]);
   });
 
   it('actually runs the unit suite on Windows, or none of the above is ever executed there (NEWS-419)', () => {
@@ -156,6 +168,25 @@ describe('Windows portability conventions', () => {
       // `dist/client` first, or several suites 404 on `/static/...` (NEWS-191).
       expect(job.body, `${job.workflow}:${job.id} builds the client first`).toMatch(/npm run build:client/);
     }
+  });
+
+  it('lets a change to these very guards trigger the Windows job (NEWS-424)', () => {
+    // `ci.yml`'s Windows job path-gates itself, and `tests/unit/` was outside the
+    // gate — so this file, whose entire subject is Windows, could be edited
+    // without the one runner able to disagree with it ever starting. That is the
+    // NEWS-419 shape exactly: a guard whose failure mode is "the machine that
+    // would notice never runs it".
+    //
+    // Pinned rather than trusted, because the filter is a `grep -qE` in a shell
+    // step and nothing else would ever read it back.
+    const ci = fs.readFileSync(path.join(root, '.github/workflows/ci.yml'), 'utf8');
+    const filter = /grep -qE '\^\(([^']+)\)'/.exec(ci)?.[1];
+    expect(filter, 'the Windows path filter should still be a grep -qE alternation').toBeDefined();
+    expect(filter).toContain('unit');
+    // The counterweight: `src/` staying out is what keeps an ordinary feature
+    // change off a 2x-billed runner, and is a deliberate limit rather than an
+    // oversight. `src/cli.ts` is named on its own because the harness spawns it.
+    expect(filter).not.toMatch(/\|src\/\|/);
   });
 
   it('catches the exact spawn NEWS-348 fixed', () => {

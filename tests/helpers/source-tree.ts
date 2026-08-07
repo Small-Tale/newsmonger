@@ -120,6 +120,76 @@ export const BINARY_EXTENSIONS = new Set([
 export const SKIPPED_PATHS = new Set(['src-tauri/binaries', 'src-tauri/server']);
 
 /**
+ * Build outputs and vendor trees no guard should walk into.
+ *
+ * Exported so the three walks in this repo share one answer (NEWS-424). They had
+ * three, and the drift was already a live defect: `sandboxable.test.ts` skipped
+ * `binaries` and `server` **by bare directory name**, which is precisely the hole
+ * `SKIPPED_PATHS` above exists to avoid and says so in its own doc — a future
+ * `src/server/` would have been swallowed whole by the guard meant to catch
+ * unfixed spawners.
+ *
+ * Names here, paths in `SKIPPED_PATHS`, and the distinction is the point: a name
+ * belongs here only when it could not plausibly mean anything else anywhere in the
+ * tree. `target` and `node_modules` qualify. `server` does not.
+ */
+export const SKIPPED_DIR_NAMES = new Set([
+  'node_modules',
+  '.git',
+  'dist',
+  'target',
+  'coverage',
+  'test-results',
+  'playwright-report',
+]);
+
+/**
+ * Whether a walk should ignore this entry: a build-output name, a dot-directory,
+ * or one of the by-path exclusions.
+ *
+ * One predicate rather than a `skip.has(entry.name)` at each of three call sites,
+ * so adding an exclusion cannot reach two walks and miss the third.
+ */
+export function isSkippedEntry(name: string, fullPath: string): boolean {
+  if (SKIPPED_DIR_NAMES.has(name) || name.startsWith('.')) return true;
+  return SKIPPED_PATHS.has(repoRelative(fullPath));
+}
+
+/**
+ * What is wrong with a walk's output, as a list of sentences — empty when nothing is.
+ *
+ * Every scan-based guard here shares one failure mode: match nothing, assert
+ * nothing, stay green forever. Each had its own answer to that, and the answers
+ * had drifted apart (NEWS-424) — two floors of 100 against walks that actually
+ * find 260 and 278 files, so losing `tests/` whole (162 files) tripped neither.
+ *
+ * Returning problems rather than asserting keeps `expect` out of a helper module
+ * and makes the failure read as a list of what is wrong rather than as the first
+ * assertion that happened to fire.
+ *
+ * **A floor and a required-file list are different instruments and neither covers
+ * the other.** The floor notices a large root vanishing; it cannot notice a small
+ * one, since `src-tauri` contributes 13 files of ~346. That is what the named
+ * files are for, one per walked root.
+ */
+export function walkProblems(
+  files: readonly string[],
+  opts: { floor: number; required: readonly string[]; label: string },
+): string[] {
+  const problems: string[] = [];
+  if (files.length < opts.floor) {
+    problems.push(
+      `${opts.label}: found ${String(files.length)} files, below the floor of ${String(opts.floor)} — the walk is probably broken`,
+    );
+  }
+  const seen = new Set(files.map((f) => repoRelative(f)));
+  for (const required of opts.required) {
+    if (!seen.has(required)) problems.push(`${opts.label}: ${required} is not scanned`);
+  }
+  return problems;
+}
+
+/**
  * Every file under the source roots, found by walking rather than by list.
  *
  * A hand-kept list is how `real-providers.spec.ts` kept its `npx tsx` through
@@ -154,13 +224,11 @@ export const SKIPPED_PATHS = new Set(['src-tauri/binaries', 'src-tauri/server'])
  * `tauri.conf.json`, the generated ACL schemas and `loading/index.html` with it.
  */
 export function sourceFiles(): string[] {
-  const skip = new Set(['node_modules', 'dist', 'target', 'coverage', 'test-results', 'playwright-report']);
   const out: string[] = [];
   const walk = (dir: string): void => {
     for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
-      if (skip.has(entry.name) || entry.name.startsWith('.')) continue;
       const full = path.join(dir, entry.name);
-      if (SKIPPED_PATHS.has(repoRelative(full))) continue;
+      if (isSkippedEntry(entry.name, full)) continue;
       if (entry.isDirectory()) walk(full);
       else if (!BINARY_EXTENSIONS.has(path.extname(entry.name).toLowerCase())) out.push(full);
     }
