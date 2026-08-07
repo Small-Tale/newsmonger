@@ -1,10 +1,11 @@
 import { z } from 'zod';
 
 /**
- * The topic category taxonomy (NEWS-97).
+ * The topic category taxonomy (NEWS-97, widened to 20 sections in NEWS-388).
  *
- * Newspaper-section shaped, two levels deep, with subcategories only where they
- * earn their place — Sports and Technology need them, Style doesn't.
+ * Newspaper-section shaped, two levels deep. Every section carries subcategories
+ * now; the sections that don't need a drill-down simply never show one, because
+ * the sub-row appears only when two or more of them are in use (FR-22.14).
  *
  * **Edited in code, by design** (FR-22.1) — there is no settings UI and no stored
  * copy, so this module is the single source of truth for both the server and the
@@ -47,35 +48,121 @@ function slugify(label: string): string {
     .replace(/^-|-$/g, '');
 }
 
-function cat(label: string, subs: string[] = []): Category {
+/**
+ * A subcategory in the seed table: usually just its label, from which the slug
+ * is generated — or a fully-built row when the slug can't simply follow the
+ * label (`renamed`) or the row is on its way out (`retiredSub`).
+ */
+type SubSpec = string | Subcategory;
+
+/**
+ * A subcategory whose **label changed but whose slug must not** (FR-22.2).
+ *
+ * Slugs are generated from labels, so widening "Books" to "Books & Literature"
+ * would otherwise move the slug to `books-literature` and leave every topic
+ * holding `books` unlabelled. Pinning the old slug is what makes the docs'
+ * promise — "renaming touches one table row and no topic" — actually hold.
+ */
+function renamed(label: string, slug: string): Subcategory {
+  return { slug, label, retired: false };
+}
+
+/**
+ * A subcategory that **moved to another section or left the taxonomy** (FR-22.4).
+ *
+ * Kept with its original label so topics that already hold the slug still render;
+ * `activeCategories()` hides it from the filter bar and from the classifier's
+ * options, so nothing new can land in it. Deleting the row instead is what would
+ * orphan a topic.
+ */
+function retiredSub(label: string): Subcategory {
+  return { slug: slugify(label), label, retired: true };
+}
+
+function cat(label: string, subs: SubSpec[] = []): Category {
   return {
     slug: slugify(label),
     label,
     retired: false,
-    subcategories: subs.map((s) => ({ slug: slugify(s), label: s, retired: false })),
+    subcategories: subs.map((s) => (typeof s === 'string' ? { slug: slugify(s), label: s, retired: false } : s)),
   };
 }
 
 /**
- * The seeded taxonomy — 11 top-level categories, approved on NEWS-97.
+ * The seeded taxonomy — 20 top-level sections (NEWS-97, widened in NEWS-388).
  *
- * Eleven is a deliberate ceiling: the filter bar has to stay scannable, and a
- * category nobody's topics land in costs bar space permanently. Three calls the
- * owner reviewed specifically:
+ * It began at eleven. NEWS-388 took it to twenty against the brief "enough that
+ * virtually any topic one could pick would fit reasonably well": Money, Media,
+ * Living, Law & Justice and Transport are new, and Environment, Food & Drink,
+ * Travel and Education were promoted out of the sections they were buried in.
  *
- * - **Climate & Environment sits under Science**, not at the top level. Much
- *   climate news is really politics or business, and promoting it later is a
- *   one-line data edit under this design — whereas a twelfth pill is permanent.
- * - **Style is separate from Culture**, mirroring the newspaper section, so
- *   Fashion is findable on its own with Beauty and Home alongside it.
- * - **Crime & Justice sits under Society**, not Politics. The split against
- *   Politics ▸ Courts & Law is *incidents and policing* vs *rulings and the
- *   judiciary*.
+ * **An unused section costs nothing in the bar** (NEWS-114). `visibleCategories`
+ * renders only the sections topics are actually filed under, so the original
+ * argument for a hard ceiling — "a category nobody's topics land in costs bar
+ * space permanently" — has been false since then. What the taxonomy's size
+ * really buys is paid somewhere else: **the classifier's option list**. Every
+ * section and every subcategory is written into the check prompt as a choice
+ * (`categoryOptions` → `buildUserPrompt`), so the table is re-read, in tokens,
+ * on every check that still needs a classification — and a longer menu is a
+ * harder choice to make well. That is the budget to weigh before widening it
+ * again, not the width of the filter bar.
+ *
+ * The three placements the owner reviewed on NEWS-97, and where they stand:
+ *
+ * - **Climate & Environment under Science** — *superseded by NEWS-388*. The
+ *   argument for burying it was that promoting it later would be a one-line data
+ *   edit; that is what happened. **Environment** is a top-level section now, and
+ *   the Science rows are retired rather than deleted.
+ * - **Style is separate from Culture** — *still true*, mirroring the newspaper
+ *   section, so Fashion is findable on its own. Home & Garden moved to Living.
+ * - **Crime & Justice under Society, not Politics** — *superseded by NEWS-388*.
+ *   The split it drew is intact but now sits inside one section: **Law & Justice
+ *   ▸ Crime & Policing** (incidents and policing) against **Courts & Rulings**
+ *   (rulings and the judiciary). Splitting it across two top-level sections was
+ *   the part that never quite worked.
+ *
+ * Rows that moved are `retiredSub(...)`, never deleted, so topics classified
+ * under the old shape keep their labels (FR-22.4). Rows whose label was widened
+ * in place are `renamed(label, slug)`, so the slug they are stored under does
+ * not move (FR-22.2).
  */
 export const BUILTIN_CATEGORIES: CategoryTable = [
-  cat('World', ['Africa', 'Americas', 'Asia-Pacific', 'Europe', 'Middle East']),
-  cat('Politics', ['Elections', 'Policy & Legislation', 'Government', 'Courts & Law', 'Defense']),
-  cat('Business', ['Markets', 'Companies', 'Economy', 'Startups & VC', 'Real Estate', 'Jobs & Labor']),
+  cat('World', [
+    'Africa',
+    'Americas',
+    'Asia-Pacific',
+    'Europe',
+    'Middle East',
+    'Conflict & Security',
+    'Global Development',
+  ]),
+  cat('Politics', [
+    'Elections',
+    'Policy & Legislation',
+    'Government',
+    'Defense',
+    'Parties & Campaigns',
+    'Polling & Public Opinion',
+    retiredSub('Courts & Law'), // → Law & Justice ▸ Courts & Rulings
+  ]),
+  cat('Business', [
+    'Markets',
+    'Companies',
+    'Economy',
+    'Startups & VC',
+    'Jobs & Labor',
+    'Small Business',
+    'Trade & Supply Chains',
+    retiredSub('Real Estate'), // → Money ▸ Housing & Property
+  ]),
+  cat('Money', [
+    'Personal Finance',
+    'Housing & Property',
+    'Retirement & Pensions',
+    'Tax',
+    'Consumer Rights & Prices',
+    'Insurance',
+  ]),
   cat('Technology', [
     'AI',
     'Software & Internet',
@@ -83,26 +170,118 @@ export const BUILTIN_CATEGORIES: CategoryTable = [
     'Cybersecurity',
     'Crypto',
     'Consumer Tech',
+    'Developer Tools',
+    'Data & Privacy',
   ]),
-  cat('Science', ['Space', 'Climate & Environment', 'Energy', 'Biology & Medicine Research', 'Physics & Math']),
-  cat('Health', ['Medicine', 'Public Health', 'Mental Health', 'Healthcare Industry', 'Fitness & Nutrition']),
+  cat('Science', [
+    renamed('Space & Astronomy', 'space'),
+    'Biology & Medicine Research',
+    'Physics & Math',
+    'Earth Sciences',
+    'Archaeology & Anthropology',
+    'Research & Academia',
+    retiredSub('Climate & Environment'), // → Environment ▸ Climate
+    retiredSub('Energy'), // → Environment ▸ Energy
+  ]),
+  cat('Environment', [
+    'Climate',
+    'Energy',
+    'Conservation & Wildlife',
+    'Pollution & Waste',
+    'Weather & Natural Disasters',
+    'Water & Oceans',
+  ]),
+  cat('Health', [
+    'Medicine',
+    'Public Health',
+    'Mental Health',
+    'Healthcare Industry',
+    'Fitness & Nutrition',
+    'Pharma & Drug Development',
+    'Aging & Longevity',
+  ]),
   cat('Sports', [
     'Soccer',
     'Football',
     'Basketball',
     'Baseball',
     'Hockey',
+    'Cricket',
     'Tennis',
     'Golf',
     'Motorsport',
     'Combat Sports',
+    'Running & Endurance',
+    'Cycling',
+    'Winter Sports',
+    'Water Sports',
     'Olympics',
     'College',
   ]),
-  cat('Entertainment', ['Film', 'TV & Streaming', 'Music', 'Gaming', 'Celebrity']),
-  cat('Culture', ['Art & Design', 'Books', 'Food & Drink', 'Travel', 'History', 'Religion', 'Ideas']),
-  cat('Style', ['Fashion', 'Beauty', 'Home & Garden']),
-  cat('Society', ['Education', 'Crime & Justice', 'Immigration', 'Family', 'Social Issues']),
+  cat('Entertainment', [
+    'Film',
+    'TV & Streaming',
+    'Music',
+    'Gaming',
+    'Anime & Comics',
+    'Comedy & Theater',
+    'Celebrity',
+  ]),
+  cat('Media', ['Journalism & Press', 'Publishing', 'Social Platforms', 'Advertising & Marketing', 'Podcasts & Audio']),
+  cat('Culture', [
+    'Art & Design',
+    renamed('Books & Literature', 'books'),
+    'History',
+    renamed('Religion & Belief', 'religion'),
+    renamed('Ideas & Philosophy', 'ideas'),
+    'Language',
+    'Museums & Heritage',
+    retiredSub('Food & Drink'), // → the Food & Drink section
+    retiredSub('Travel'), // → the Travel section
+  ]),
+  cat('Food & Drink', [
+    'Restaurants',
+    'Cooking',
+    'Ingredients & Produce',
+    'Beer, Wine & Spirits',
+    'Coffee & Tea',
+    'Food Industry & Safety',
+  ]),
+  cat('Travel', ['Air Travel', 'Destinations', 'Hotels & Lodging', 'Rail & Road', 'Visas & Border Rules', 'Travel Industry']),
+  cat('Style', [
+    'Fashion',
+    renamed('Beauty & Skincare', 'beauty'),
+    'Watches & Jewelry',
+    'Streetwear & Sneakers',
+    retiredSub('Home & Garden'), // → Living ▸ Home & Garden
+  ]),
+  cat('Living', ['Home & Garden', 'Pets & Animals', 'Outdoors & Recreation', 'Hobbies & Making', 'Motoring', 'Photography']),
+  cat('Education', [
+    'Schools',
+    'Higher Education',
+    'Teaching & Curriculum',
+    'Student Life',
+    'Education Technology',
+    'Skills & Training',
+  ]),
+  cat('Law & Justice', [
+    'Courts & Rulings',
+    'Crime & Policing',
+    'Regulation & Compliance',
+    'Legal Profession',
+    'Civil Rights & Liberties',
+  ]),
+  cat('Society', [
+    'Social Issues',
+    'Immigration',
+    renamed('Family & Relationships', 'family'),
+    'Work & Careers',
+    'Community & Nonprofits',
+    'Demographics & Population',
+    retiredSub('Education'), // → the Education section
+    retiredSub('Crime & Justice'), // → Law & Justice ▸ Crime & Policing
+  ]),
+  cat('Transport', ['Aviation', 'Rail', 'Shipping & Logistics', 'Public Transit', 'Roads & Infrastructure']),
 ];
 
 /**
@@ -116,7 +295,7 @@ export const UNCATEGORIZED_LABEL = 'Uncategorized';
  *
  * The owner asked for a "general" subcategory on every category, so a skiing
  * topic has somewhere to sit when Sports has no Skiing row. This is that, done
- * as a **rendered fallback rather than 11 stored rows**:
+ * as a **rendered fallback rather than one stored row per section**:
  *
  * - Nothing to maintain — every category added later gets it for free, where a
  *   stored General row would have to be remembered each time or reopen the hole.
@@ -192,7 +371,10 @@ export interface CategorisedTopic {
  * The filter bar's visible options, given what the topics actually use (NEWS-114).
  *
  * A pill for a section nobody watches is a button that can only ever produce an
- * empty feed, and eleven of them crowd out the two or three that mean something.
+ * empty feed, and twenty of them crowd out the two or three that mean something.
+ *
+ * This is also why the taxonomy can afford to be broad (NEWS-388): an unused
+ * section is never rendered, so it costs nothing here.
  *
  * `selected` is always kept, even when nothing uses it any more. Deleting the
  * last Sports topic while filtered to Sports would otherwise remove the only

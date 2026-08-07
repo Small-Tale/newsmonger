@@ -1,6 +1,14 @@
 import type { Page } from '@playwright/test';
 
+import { activeCategories, BUILTIN_CATEGORIES } from '../../src/categories.js';
 import { acceptConfirm, expect, openSettingsTab, resetSharedState, test, topicAction, workerBaseURL } from './fixtures.js';
+
+/**
+ * The grid shows the whole taxonomy, so this follows the table rather than a
+ * literal — widening it (NEWS-388 took it from 11 sections to 20) is a data
+ * edit, and it should not also be a test edit.
+ */
+const SECTION_TILE_COUNT = activeCategories(BUILTIN_CATEGORIES).length;
 
 // Topic discovery — both doors and the result list (NEWS-126, FR-24.1–24.4, 24.17).
 //
@@ -31,7 +39,7 @@ test('it opens on the section grid, showing the whole taxonomy', async ({ page }
   await page.goto('/');
   await page.click('[data-action=open-discover]');
 
-  await expect(page.locator('.section-tile')).toHaveCount(11);
+  await expect(page.locator('.section-tile')).toHaveCount(SECTION_TILE_COUNT);
   await expect(page.locator('.section-tile', { hasText: 'Sports' })).toBeVisible();
   // Both doors are present at once — neither is primary (FR-24.1).
   await expect(page.locator('.discover-search input')).toBeVisible();
@@ -145,7 +153,7 @@ test('Back returns to the section that produced the results', async ({ page }) =
   await expect(page.locator('.chip.anything')).toHaveText('Anything in Sports');
 
   await page.click('[data-action=discover-back]');
-  await expect(page.locator('.section-tile')).toHaveCount(11);
+  await expect(page.locator('.section-tile')).toHaveCount(SECTION_TILE_COUNT);
 });
 
 test('a provider failure is shown in the dialog with a retry, not as a dead end', async ({ page }) => {
@@ -410,7 +418,7 @@ test('closing the dialog mid-tune ends the session', async ({ page }) => {
   await page.click('[data-action=open-discover]');
   // A tuner that outlived the list it came from would reopen here.
   await expect(page.locator('.tuner-card')).toHaveCount(0);
-  await expect(page.locator('.section-tile')).toHaveCount(11);
+  await expect(page.locator('.section-tile')).toHaveCount(SECTION_TILE_COUNT);
 });
 
 // --- Discovery inside onboarding (NEWS-128, FR-24.18) ----------------------

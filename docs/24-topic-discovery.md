@@ -17,7 +17,7 @@ That last part is the decision worth stating plainly, because it is what the bra
    "Discover" ───▶│   describe it (a box)    │──┐
                   └──────────────────────────┘  │
                   ┌──────────────────────────┐  ├──▶  result list  ──▶ [ + Add ]
-                  │  browse the 11 sections  │──┘         │
+                  │  browse the 20 sections  │──┘         │
                   └──────────────────────────┘            │  [ ⌄ narrower ] / [ ≈ similar ]
                                                           ▼
                                                    keep / skip tuner
@@ -26,7 +26,7 @@ That last part is the decision worth stating plainly, because it is what the bra
                                                           └──▶ back to the list, enriched
 ```
 
-- **FR-24.1** *(Shipped)* Discovery is reachable from **two doors that produce the same result list**: a free-text box ("what are you into?") and a grid of the 11 taxonomy sections. Neither is primary. The box serves the user who sort of knows; the grid serves the user who wants to see what exists. Each covers the other's failure, which is why both ship together rather than one first.
+- **FR-24.1** *(Shipped)* Discovery is reachable from **two doors that produce the same result list**: a free-text box ("what are you into?") and a grid of the taxonomy's 20 sections. Neither is primary. The box serves the user who sort of knows; the grid serves the user who wants to see what exists. Each covers the other's failure, which is why both ship together rather than one first.
 
 - **FR-24.2** *(Shipped)* The section grid drills **section → subcategory → suggestions**, reusing the NEWS-97 taxonomy rather than a discovery-specific list. A section offers an "Anything in *X*" escape for the user who doesn't recognise the subcategory names.
 

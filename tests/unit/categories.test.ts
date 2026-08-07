@@ -24,20 +24,38 @@ describe('the built-in taxonomy', () => {
     expect(() => CategoryTableSchema.parse(BUILTIN_CATEGORIES)).not.toThrow();
   });
 
-  it('has the eleven approved top-level categories', () => {
+  it('has the twenty approved top-level sections (NEWS-388)', () => {
     expect(BUILTIN_CATEGORIES.map((c) => c.label)).toEqual([
       'World',
       'Politics',
       'Business',
+      'Money',
       'Technology',
       'Science',
+      'Environment',
       'Health',
       'Sports',
       'Entertainment',
+      'Media',
       'Culture',
+      'Food & Drink',
+      'Travel',
       'Style',
+      'Living',
+      'Education',
+      'Law & Justice',
       'Society',
+      'Transport',
     ]);
+  });
+
+  it('gives every section at least two subcategories', () => {
+    // A section with one option can never offer a sub-row (FR-22.14), and a
+    // section with none is a dead end for the classifier: it would have to pick
+    // the section and then leave the subcategory null every time.
+    for (const category of BUILTIN_CATEGORIES) {
+      expect(category.subcategories.filter((s) => !s.retired).length, category.label).toBeGreaterThan(1);
+    }
   });
 
   it('uses slugs distinct from labels, so a rename touches no topic', () => {
@@ -61,20 +79,78 @@ describe('the built-in taxonomy', () => {
   it('generates slugs that survive punctuation', () => {
     expect(findSubcategory(BUILTIN_CATEGORIES, 'business', 'startups-vc')?.label).toBe('Startups & VC');
     expect(findSubcategory(BUILTIN_CATEGORIES, 'world', 'asia-pacific')?.label).toBe('Asia-Pacific');
-    expect(findSubcategory(BUILTIN_CATEGORIES, 'style', 'home-garden')?.label).toBe('Home & Garden');
+    expect(findSubcategory(BUILTIN_CATEGORIES, 'living', 'home-garden')?.label).toBe('Home & Garden');
+    expect(findSubcategory(BUILTIN_CATEGORIES, 'food-drink', 'beer-wine-spirits')?.label).toBe('Beer, Wine & Spirits');
+    expect(findCategory(BUILTIN_CATEGORIES, 'law-justice')?.label).toBe('Law & Justice');
   });
 
-  it('places the three categories the owner reviewed where they were approved', () => {
-    expect(findSubcategory(BUILTIN_CATEGORIES, 'science', 'climate-environment')).toBeDefined();
+  it('keeps the NEWS-97 placements that NEWS-388 did not supersede', () => {
+    // Style stayed separate from Culture — the newspaper section, so Fashion is
+    // findable on its own.
     expect(findCategory(BUILTIN_CATEGORIES, 'style')).toBeDefined();
-    expect(findSubcategory(BUILTIN_CATEGORIES, 'society', 'crime-justice')).toBeDefined();
-    // ...and not where they were not.
-    expect(findSubcategory(BUILTIN_CATEGORIES, 'politics', 'crime-justice')).toBeUndefined();
+    expect(findSubcategory(BUILTIN_CATEGORIES, 'style', 'fashion')).toBeDefined();
+    expect(findSubcategory(BUILTIN_CATEGORIES, 'culture', 'fashion')).toBeUndefined();
   });
 
-  it('ships nothing retired', () => {
+  it('promotes Environment out of Science and keeps the crime/courts split (NEWS-388)', () => {
+    // Two of the three reviewed placements were superseded. Environment is
+    // top-level now...
+    const environment = findCategory(BUILTIN_CATEGORIES, 'environment');
+    expect(environment?.retired).toBe(false);
+    expect(environment?.subcategories.map((s) => s.slug)).toContain('climate');
+    // ...and the incidents-vs-rulings split now sits inside one section rather
+    // than straddling Society and Politics.
+    expect(findSubcategory(BUILTIN_CATEGORIES, 'law-justice', 'crime-policing')).toBeDefined();
+    expect(findSubcategory(BUILTIN_CATEGORIES, 'law-justice', 'courts-rulings')).toBeDefined();
+  });
+
+  it('retires the rows NEWS-388 moved rather than deleting them', () => {
+    // The point of retiring: a topic classified under the old shape still gets a
+    // label, and nothing new can land there. Deleting would orphan it silently.
+    const moved: [string, string, string][] = [
+      ['politics', 'courts-law', 'Politics · Courts & Law'],
+      ['business', 'real-estate', 'Business · Real Estate'],
+      ['science', 'climate-environment', 'Science · Climate & Environment'],
+      ['science', 'energy', 'Science · Energy'],
+      ['culture', 'food-drink', 'Culture · Food & Drink'],
+      ['culture', 'travel', 'Culture · Travel'],
+      ['style', 'home-garden', 'Style · Home & Garden'],
+      ['society', 'education', 'Society · Education'],
+      ['society', 'crime-justice', 'Society · Crime & Justice'],
+    ];
+    for (const [category, sub, label] of moved) {
+      expect(findSubcategory(BUILTIN_CATEGORIES, category, sub)?.retired, `${category}/${sub}`).toBe(true);
+      expect(categoryLabel(BUILTIN_CATEGORIES, category, sub)).toBe(label);
+      // Gone from what the bar and the classifier are offered.
+      expect(
+        findSubcategory(activeCategories(BUILTIN_CATEGORIES), category, sub),
+        `${category}/${sub} is still offered`,
+      ).toBeUndefined();
+    }
+  });
+
+  it('keeps a widened label on its original slug (FR-22.2)', () => {
+    // "Books" became "Books & Literature". Slugs are generated from labels, so
+    // this is exactly where a rename would silently orphan every topic holding
+    // the old slug — the row pins it instead.
+    for (const [category, slug, label] of [
+      ['science', 'space', 'Space & Astronomy'],
+      ['culture', 'books', 'Books & Literature'],
+      ['culture', 'religion', 'Religion & Belief'],
+      ['culture', 'ideas', 'Ideas & Philosophy'],
+      ['style', 'beauty', 'Beauty & Skincare'],
+      ['society', 'family', 'Family & Relationships'],
+    ] as const) {
+      const sub = findSubcategory(BUILTIN_CATEGORIES, category, slug);
+      expect(sub?.label, `${category}/${slug}`).toBe(label);
+      expect(sub?.retired, `${category}/${slug}`).toBe(false);
+    }
+  });
+
+  it('ships nothing retired at the top level', () => {
+    // Whole sections are a different matter from subcategories: none has ever
+    // been removed, so a retired one here would be a mistake rather than history.
     expect(BUILTIN_CATEGORIES.every((c) => !c.retired)).toBe(true);
-    expect(BUILTIN_CATEGORIES.flatMap((c) => c.subcategories).every((s) => !s.retired)).toBe(true);
   });
 
   it('has no stored "general" subcategory — that is a rendered fallback', () => {
@@ -173,6 +249,22 @@ describe('filter-bar visibility (NEWS-114)', () => {
 
     it('shows nothing when no topic is classified', () => {
       expect(visibleCategories(BUILTIN_CATEGORIES, [t(null), t(null)])).toEqual([]);
+    });
+
+    it('omits every unpopulated section, whatever the taxonomy costs (NEWS-392)', () => {
+      // This is the invariant the taxonomy's size rests on. `src/categories.ts`
+      // used to justify an eleven-section ceiling with "a category nobody's
+      // topics land in costs bar space permanently" — false since NEWS-114, and
+      // the reason NEWS-388 could widen the table to twenty. Asserted against
+      // the *whole* table rather than a hand-picked pair, so growing the
+      // taxonomy can never quietly grow the bar.
+      const shown = visibleCategories(BUILTIN_CATEGORIES, [t('sports', 'soccer')]);
+      expect(shown.map((c) => c.slug)).toEqual(['sports']);
+      expect(BUILTIN_CATEGORIES.length).toBeGreaterThan(shown.length);
+      for (const category of activeCategories(BUILTIN_CATEGORIES)) {
+        if (category.slug === 'sports') continue;
+        expect(shown.map((c) => c.slug), `${category.slug} should not be in the bar`).not.toContain(category.slug);
+      }
     });
 
     it('keeps the selected section even once nothing uses it', () => {

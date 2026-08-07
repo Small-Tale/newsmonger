@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import type { TopicSuggestion } from '../../src/api/schemas.js';
 import { MAX_TUNE_ROUNDS } from '../../src/api/schemas.js';
+import { activeCategories, BUILTIN_CATEGORIES } from '../../src/categories.js';
 import type { SuggestionGroup, TunerState } from '../../src/client/discover.js';
 import {
   currentCandidate,
@@ -34,7 +35,10 @@ function suggestion(name: string, category: string | null, subcategory: string |
 describe('sectionTiles', () => {
   it('offers the whole taxonomy', () => {
     const tiles = sectionTiles();
-    expect(tiles).toHaveLength(11);
+    // Whatever the taxonomy holds — 20 since NEWS-388. Asserted against the
+    // table rather than a literal, so a taxonomy edit doesn't need this test
+    // edited too; the grid's job is to show all of it.
+    expect(tiles).toHaveLength(activeCategories(BUILTIN_CATEGORIES).length);
     expect(tiles.map((t) => t.slug)).toContain('sports');
   });
 

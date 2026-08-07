@@ -6,29 +6,60 @@ Topics are classified into newspaper-style sections so the sidebar can label the
 
 ## The taxonomy
 
-Two levels. Eleven top-level categories, with subcategories only where they earn their place — Sports and Technology need them, Style doesn't.
+Two levels. **Twenty top-level sections** since NEWS-388, each with subcategories.
 
 | # | Category | `slug` | Subcategories |
 |---|---|---|---|
-| 1 | World | `world` | Africa · Americas · Asia-Pacific · Europe · Middle East |
-| 2 | Politics | `politics` | Elections · Policy & Legislation · Government · Courts & Law · Defense |
-| 3 | Business | `business` | Markets · Companies · Economy · Startups & VC · Real Estate · Jobs & Labor |
-| 4 | Technology | `technology` | AI · Software & Internet · Chips & Hardware · Cybersecurity · Crypto · Consumer Tech |
-| 5 | Science | `science` | Space · Climate & Environment · Energy · Biology & Medicine Research · Physics & Math |
-| 6 | Health | `health` | Medicine · Public Health · Mental Health · Healthcare Industry · Fitness & Nutrition |
-| 7 | Sports | `sports` | Soccer · Football · Basketball · Baseball · Hockey · Tennis · Golf · Motorsport · Combat Sports · Olympics · College |
-| 8 | Entertainment | `entertainment` | Film · TV & Streaming · Music · Gaming · Celebrity |
-| 9 | Culture | `culture` | Art & Design · Books · Food & Drink · Travel · History · Religion · Ideas |
-| 10 | Style | `style` | Fashion · Beauty · Home & Garden |
-| 11 | Society | `society` | Education · Crime & Justice · Immigration · Family · Social Issues |
+| 1 | World | `world` | Africa · Americas · Asia-Pacific · Europe · Middle East · Conflict & Security · Global Development |
+| 2 | Politics | `politics` | Elections · Policy & Legislation · Government · Defense · Parties & Campaigns · Polling & Public Opinion |
+| 3 | Business | `business` | Markets · Companies · Economy · Startups & VC · Jobs & Labor · Small Business · Trade & Supply Chains |
+| 4 | Money | `money` | Personal Finance · Housing & Property · Retirement & Pensions · Tax · Consumer Rights & Prices · Insurance |
+| 5 | Technology | `technology` | AI · Software & Internet · Chips & Hardware · Cybersecurity · Crypto · Consumer Tech · Developer Tools · Data & Privacy |
+| 6 | Science | `science` | Space & Astronomy · Biology & Medicine Research · Physics & Math · Earth Sciences · Archaeology & Anthropology · Research & Academia |
+| 7 | Environment | `environment` | Climate · Energy · Conservation & Wildlife · Pollution & Waste · Weather & Natural Disasters · Water & Oceans |
+| 8 | Health | `health` | Medicine · Public Health · Mental Health · Healthcare Industry · Fitness & Nutrition · Pharma & Drug Development · Aging & Longevity |
+| 9 | Sports | `sports` | Soccer · Football · Basketball · Baseball · Hockey · Cricket · Tennis · Golf · Motorsport · Combat Sports · Running & Endurance · Cycling · Winter Sports · Water Sports · Olympics · College |
+| 10 | Entertainment | `entertainment` | Film · TV & Streaming · Music · Gaming · Anime & Comics · Comedy & Theater · Celebrity |
+| 11 | Media | `media` | Journalism & Press · Publishing · Social Platforms · Advertising & Marketing · Podcasts & Audio |
+| 12 | Culture | `culture` | Art & Design · Books & Literature · History · Religion & Belief · Ideas & Philosophy · Language · Museums & Heritage |
+| 13 | Food & Drink | `food-drink` | Restaurants · Cooking · Ingredients & Produce · Beer, Wine & Spirits · Coffee & Tea · Food Industry & Safety |
+| 14 | Travel | `travel` | Air Travel · Destinations · Hotels & Lodging · Rail & Road · Visas & Border Rules · Travel Industry |
+| 15 | Style | `style` | Fashion · Beauty & Skincare · Watches & Jewelry · Streetwear & Sneakers |
+| 16 | Living | `living` | Home & Garden · Pets & Animals · Outdoors & Recreation · Hobbies & Making · Motoring · Photography |
+| 17 | Education | `education` | Schools · Higher Education · Teaching & Curriculum · Student Life · Education Technology · Skills & Training |
+| 18 | Law & Justice | `law-justice` | Courts & Rulings · Crime & Policing · Regulation & Compliance · Legal Profession · Civil Rights & Liberties |
+| 19 | Society | `society` | Social Issues · Immigration · Family & Relationships · Work & Careers · Community & Nonprofits · Demographics & Population |
+| 20 | Transport | `transport` | Aviation · Rail · Shipping & Logistics · Public Transit · Roads & Infrastructure |
 
-Eleven is a deliberate ceiling: the filter bar has to stay scannable, and a category nobody's topics land in costs bar space permanently.
+### What limits the size of this table
 
-Three placements were reviewed specifically:
+It began at eleven, and the reason given at the time was that "a category nobody's topics land in costs bar space permanently". **That stopped being true three tickets later** and nobody updated the comment: since NEWS-114 the bar renders only the sections topics are actually filed under (FR-22.13), so an unused section costs nothing at all. NEWS-392 found the stale claim; NEWS-388 spent the room it was hiding.
 
-- **Climate & Environment sits under Science**, not at the top level. Much climate news is really politics or business, and promoting it later is a one-line data edit under the model below — whereas a twelfth pill is permanent.
-- **Style is separate from Culture**, mirroring the newspaper section, so Fashion is findable on its own with Beauty and Home alongside it.
-- **Crime & Justice sits under Society**, not Politics. The split against Politics ▸ Courts & Law is *incidents and policing* vs *rulings and the judiciary*.
+The real budget is the **classifier's option list**. Every section and every subcategory is written into the check prompt as a choice (`categoryOptions` → `buildUserPrompt`), so the table is re-read, in tokens, on every check that still needs a classification — and a longer menu is a harder choice for a model to make well. That, not the width of the bar, is what to weigh before widening it again.
+
+### The NEWS-97 placements, and what NEWS-388 did to them
+
+- **Climate & Environment under Science** — *superseded*. The case for burying it was that promoting it later would be a one-line data edit; that is exactly what happened. **Environment** is a top-level section now, with Climate and Energy under it, and the Science rows are retired rather than deleted.
+- **Style separate from Culture** — *still true*, mirroring the newspaper section, so Fashion is findable on its own. Home & Garden went to Living.
+- **Crime & Justice under Society, not Politics** — *superseded*. The distinction it drew survives, but inside one section: **Law & Justice ▸ Crime & Policing** (incidents and policing) against **Courts & Rulings** (rulings and the judiciary). Splitting one subject across two top-level sections was the part that never quite worked.
+
+### What NEWS-388 moved, and what that cost
+
+Nothing was deleted (FR-22.4). Rows that changed section are retired in place, so a topic classified under the old shape still renders its old label and nothing new can land there:
+
+| Was | Now | Retired row |
+|---|---|---|
+| Politics ▸ Courts & Law | Law & Justice ▸ Courts & Rulings | `politics`/`courts-law` |
+| Business ▸ Real Estate | Money ▸ Housing & Property | `business`/`real-estate` |
+| Science ▸ Climate & Environment | Environment ▸ Climate | `science`/`climate-environment` |
+| Science ▸ Energy | Environment ▸ Energy | `science`/`energy` |
+| Culture ▸ Food & Drink | the Food & Drink section | `culture`/`food-drink` |
+| Culture ▸ Travel | the Travel section | `culture`/`travel` |
+| Style ▸ Home & Garden | Living ▸ Home & Garden | `style`/`home-garden` |
+| Society ▸ Education | the Education section | `society`/`education` |
+| Society ▸ Crime & Justice | Law & Justice ▸ Crime & Policing | `society`/`crime-justice` |
+
+Six rows were **widened in place** rather than moved — Space → Space & Astronomy, Books → Books & Literature, Religion → Religion & Belief, Ideas → Ideas & Philosophy, Beauty → Beauty & Skincare, Family → Family & Relationships. Slugs are generated from labels, so each of those would have quietly moved its slug and orphaned every topic holding the old one. They are declared with `renamed(label, slug)`, which pins the slug — which is what makes FR-22.2's promise ("renaming touches one table row and no topic") actually hold.
 
 ## Requirements
 
@@ -76,13 +107,15 @@ Three placements were reviewed specifically:
 
   An unclassified topic gets **no label at all** rather than an "Uncategorized" badge — a badge on every unclassified row is noise, and absence already reads as "not yet".
 
-- **FR-22.10** *(Shipped)* A horizontally scrollable filter bar sits directly under the header, above the banners and the sidebar+feed area. **All** · the 11 sections · **Uncategorized** — 13 pills, which is why the taxonomy stops at 11.
+- **FR-22.10** *(Shipped)* A horizontally scrollable filter bar sits directly under the header, above the banners and the sidebar+feed area. **All** · the sections in use · **Uncategorized**. It was originally "All · the 11 sections · Uncategorized — 13 pills, which is why the taxonomy stops at 11"; FR-22.13 replaced the fixed row with one that renders only what topics are filed under, so the bar's length now follows the user's topics rather than the taxonomy's size (NEWS-392).
 
   Selecting a section reveals a **second row of its subsections**, styled deliberately unlike the first: the top row is small-caps sans, the sub-row is italic serif separated by hairlines. A newspaper masthead and its subsections — which is what makes "which level am I on" legible without a label saying so. The sub-row is always in the DOM (empty when nothing is selected) rather than conditionally rendered, since it sits above the keyed topics list.
 
   Both rows scroll horizontally rather than wrapping: a wrapped bar changes height as you select, shifting the whole feed down.
 
-- **FR-22.13** *(Shipped, NEWS-114)* The bar shows **only options something is filed under**. A pill for a section nobody watches is a button that can only ever produce an empty feed, and eleven of them crowd out the two or three that mean something. *Uncategorized* appears only when a topic actually lacks a section.
+- **FR-22.13** *(Shipped, NEWS-114)* The bar shows **only options something is filed under**. A pill for a section nobody watches is a button that can only ever produce an empty feed, and twenty of them crowd out the two or three that mean something. *Uncategorized* appears only when a topic actually lacks a section.
+
+  This is what lets the taxonomy be broad (NEWS-388) — an unused section is never rendered, so it costs the bar nothing. Pinned by a unit test asserting the omission against the *whole* table rather than a hand-picked pair, so growing the taxonomy can never quietly grow the bar (NEWS-392).
 
 - **FR-22.14** *(Shipped, NEWS-114)* A section offers **no subsection row at all** when fewer than two subsections are in use. A lone option is not a choice: with every Sports topic under Soccer, "All Sports" and "Soccer" select exactly the same stories.
 
@@ -110,6 +143,8 @@ Recorded so they aren't re-litigated. All three were the owner's calls on 2026-0
 
 3. **Sub-pills ship as a second row** below the top-level row, styled differently — the newspaper masthead-and-subsection look — rather than being deferred.
 
+4. **The taxonomy goes broad** (NEWS-388, 2026-08-07). Asked for as "enough that virtually any topic one could pick would fit reasonably well", and approved as such. Eleven sections left obvious topics with nowhere sensible to sit — personal finance, a court ruling, a restaurant opening, a rail strike — and the ceiling that kept them out had already been dissolved by NEWS-114 without anyone noticing (see *What limits the size of this table*). Twenty sections, nine of them new or promoted, and nothing deleted.
+
 ## Testing
 
 `tests/e2e/categories.spec.ts` asserts the label is not clipped by **measuring** it — `scrollWidth` against `clientWidth` for the longest path the taxonomy can produce — and that it sits below the name rather than beside it. The measurement carries a guard against its own vacuous pass: a row re-rendered by the 4 s poll can report `scrollWidth === clientWidth === 0` for an instant, and `0 <= 0 + 1` would "prove" the label fits. It did exactly that at first, passing against a deliberately re-broken layout until the non-zero-width check was added.
@@ -122,6 +157,8 @@ Visibility (FR-22.13–22.15) is decided by `visibleCategories` / `visibleSubcat
 
 The mock provider classifies deterministically from the topic name: a name containing a category or subcategory **label** yields that section (so a fixture called "Soccer transfers" is Sports · Soccer and reads as its own documentation), a name containing "uncategorized" declines, and one containing "bogus" returns a slug the taxonomy doesn't have.
 
-`tests/unit/categories.test.ts` covers the seed table's shape (slug uniqueness at both levels, punctuation-safe slugs, the three reviewed placements, nothing shipped retired) and label resolution (each fallback, retired-but-still-labelled, a subcategory belonging to a different category).
+`tests/unit/categories.test.ts` covers the seed table's shape (the twenty sections in order, slug uniqueness at both levels, punctuation-safe slugs, at least two live subcategories per section, no section shipped retired) and label resolution (each fallback, retired-but-still-labelled, a subcategory belonging to a different category).
+
+Three of its cases exist because of NEWS-388 specifically: every row it moved still resolves to its old label *and* is gone from `activeCategories()`; every row it widened in place still sits on its original slug (FR-22.2); and `visibleCategories` omits every unpopulated section — asserted across the whole table, because that invariant is now the only thing keeping the bar short (NEWS-392).
 
 Two tests exist specifically to defend decisions rather than behaviour: that no `general`/`other` row is stored, and that the *Other* label is a constant rather than a table entry. Both would pass silently if someone later "fixed" FR-22.6 by adding the rows.
