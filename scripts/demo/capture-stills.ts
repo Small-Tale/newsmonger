@@ -60,7 +60,7 @@ import {
   setRenderTextMode,
 } from 'domotion-svg';
 
-import { BUILTIN_CATEGORIES } from '../../src/categories.js';
+import { activeCategories, BUILTIN_CATEGORIES } from '../../src/categories.js';
 import { THREAD_ROW_CAP } from '../../src/client/thread-view.js';
 import type { DemoTopic } from '../../src/demo.js';
 import { DEMO_FIRST_CHECK_STORIES, DEMO_TOPICS } from '../../src/demo.js';
@@ -203,47 +203,54 @@ async function menuAction(page: Page, rowSelector: string, action: string): Prom
 }
 
 /**
+ * The one demo topic the discovery scenes hold back, and therefore the one they
+ * photograph a suggestion for.
+ *
+ * Discovery only ever suggests topics you are **not** already following, so the
+ * discovery scenes follow every topic but the last. Without that they photograph
+ * an empty result.
+ */
+const DISCOVERABLE_TOPIC = DEMO_TOPICS.at(-1);
+const ALL_BUT_DISCOVERABLE = DEMO_TOPICS.slice(0, -1);
+
+/**
  * The section and subject chip the discovery scenes click through.
  *
- * Both come from **`BUILTIN_CATEGORIES`**, not from the demo topic's own
- * `category`/`subcategory` — those are free-text hints for the classifier, held
- * to the taxonomy by a test rather than by the type system. They did not all name
- * real chips until NEWS-395 repaired four that a taxonomy edit had orphaned, and
- * nothing here noticed. Reading the labels off the table that renders them is the
- * only way this can't click a chip that isn't there.
+ * Both are **labels read off `BUILTIN_CATEGORIES`**, because those are the
+ * strings the tiles and chips actually render — naming them any other way is how
+ * a walk ends up clicking a chip that is not there. *Which* row is read is the
+ * held-back topic's own declared `category`/`subcategory` pair, resolved against
+ * the **active** table: a retired row still exists in `BUILTIN_CATEGORIES` and
+ * renders no chip.
  *
  * Which section is picked doesn't change *what* is suggested: the demo provider
  * returns every unfollowed demo topic regardless of the section asked for. The
  * walk is here to photograph the real navigation path, not to filter — but it
- * should still pick the section the held-back topic actually files itself
- * under, or the screenshot shows a "World · Africa" heading above a result
- * grouped under Business, which reads as a bug.
+ * still has to agree with the result. The heading is the *request* and the group
+ * label is where the topic will actually file itself (FR-24.13), so a mismatch
+ * puts two contradicting labels a few pixels apart, and the natural reading is
+ * that the filter failed.
  *
- * **That workaround only ever matched the category, not the subcategory**, which
- * is why the shipped screenshot still showed "Business · Markets" over a group
- * labelled "BUSINESS · OTHER" — `subcategories[0]` is a guess at the chip. The UI
- * now explains that gap itself with a "closest matches" note (NEWS-269, FR-24.5),
- * so the mismatch is no longer misread as a broken filter and this alignment is a
- * nicety rather than a requirement.
+ * **The subject used to be `subcategories[0]` — a guess** (NEWS-399), which is
+ * exactly why the shipped `discover` still shows a "Business · Markets" heading
+ * over a group labelled "BUSINESS · OTHER". The fixture knows its own subject;
+ * there was never anything to guess. The UI does explain such a gap itself, with
+ * a "closest matches" note (NEWS-269, FR-24.12a) — but that note exists for a
+ * classification the *model* placed elsewhere, and spending it on a mismatch the
+ * capture manufactured is photographing our own bug.
+ *
+ * An unresolvable pair throws rather than falling back. `tests/unit/demo.test.ts`
+ * holds every demo pair to the live taxonomy (NEWS-395), so reaching this means
+ * that gate is already red — and a fallback is how the guess got here.
  */
-// `.at(0)` rather than `[0]`: this project does not run
-// `noUncheckedIndexedAccess`, so `BUILTIN_CATEGORIES[0]` is typed as definitely
-// present and the guard below then reads as dead code. `.at()` returns
-// `T | undefined`, which is the truth — the array could be empty — so the guard
-// is honest and the linter agrees with it (NEWS-264).
-const DISCOVER_CATEGORY =
-  BUILTIN_CATEGORIES.find((c) => c.label === DEMO_TOPICS.at(-1)?.category) ?? BUILTIN_CATEGORIES.at(0);
+const DISCOVER_CATEGORY = activeCategories(BUILTIN_CATEGORIES).find((c) => c.label === DISCOVERABLE_TOPIC?.category);
 const DISCOVER_SECTION = DISCOVER_CATEGORY?.label;
-const DISCOVER_CHIP = DISCOVER_CATEGORY?.subcategories[0]?.label;
+const DISCOVER_CHIP = DISCOVER_CATEGORY?.subcategories.find((s) => s.label === DISCOVERABLE_TOPIC?.subcategory)?.label;
 if (DISCOVER_SECTION === undefined || DISCOVER_CHIP === undefined) {
-  throw new Error('BUILTIN_CATEGORIES[0] needs at least one subcategory for the discovery scenes');
+  throw new Error(
+    `the discovery scenes need "${DISCOVERABLE_TOPIC?.name ?? '(no demo topics)'}" to declare a category and subcategory that both resolve against the active taxonomy — it declares "${DISCOVERABLE_TOPIC?.category ?? ''} ▸ ${DISCOVERABLE_TOPIC?.subcategory ?? ''}"`,
+  );
 }
-
-/**
- * Discovery only ever suggests topics you are **not** already following, so the
- * discovery scenes hold one back. Without this they photograph an empty result.
- */
-const ALL_BUT_DISCOVERABLE = DEMO_TOPICS.slice(0, -1);
 
 /**
  * The one demo topic whose stories are a single unfolding subject (NEWS-292).

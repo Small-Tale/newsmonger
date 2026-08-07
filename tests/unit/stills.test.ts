@@ -119,4 +119,21 @@ describe('the stills pipeline (NEWS-214)', () => {
     expect(code).toContain('tmpdir()');
     expect(code).not.toMatch(/homedir\(\)|\.newsmonger/);
   });
+
+  it('picks the discovery chip from the held-back topic, not by index (NEWS-399)', () => {
+    // The `discover` still is a picture of a section drill-in whose one result is
+    // the held-back topic. The heading is the *request* and the group label is
+    // where that topic files itself (FR-24.13), so the two are eight pixels apart
+    // and must agree — `subcategories[0]` was a guess, and it shipped a
+    // "Business · Markets" heading over a group labelled "BUSINESS · OTHER".
+    //
+    // Asserted on the source because nothing in a unit run can execute the
+    // capture: the script needs Chromium outside the sandbox, and its constants
+    // are module-level beside a top-level `await main()`. `demo.test.ts` already
+    // guarantees the *pair resolves*; this is the other half — that the walk
+    // actually reads it.
+    const code = script().replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, '');
+    expect(code).toMatch(/DISCOVER_CHIP\s*=[^;]*subcategory/);
+    expect(code, 'the subject chip is being guessed again').not.toMatch(/subcategories\[0\]/);
+  });
 });
