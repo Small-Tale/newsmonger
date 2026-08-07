@@ -37,6 +37,29 @@ Topic-based news tracker. The user enters topics; on a configurable interval (de
 - `npm run commit:msg` drafts a message from the staged diff with [gitgist](https://www.npmjs.com/package/gitgist). **Its output is a starting point, not a message to paste**: gitgist emits *Conventional Commits* (`feat:`, `build:`, …), which is not this project's convention. Take the summary of *what changed* from it and rewrite it in the style above — the subject line with the ticket id, and prose explaining why. gitgist reads the actual diff, so it is good at noticing changes a human would forget to mention, and bad at knowing which of them mattered.
 - Commits land on `main` — that's this repo's history and the user's workflow. Don't open a branch unless asked.
 
+## Background Tasks
+
+**Anything that runs longer than a couple of minutes goes through [pueue](https://github.com/Nukesor/pueue), not a bare background shell.** The archetype is `npm run test:all` (~4 min), but the rule covers any gate, build, capture or suite — anything you would otherwise start and then poll.
+
+**Every `pueue` invocation needs `dangerouslyDisableSandbox: true`.** The client talks to the daemon over a unix socket at `~/Library/Application Support/pueue/`, and a command sandbox refuses it — `Operation not permitted (os error 1)`. This is the same class as the `tsx` CLI rule above, and it is not worth re-testing: `pueue status` fails sandboxed even once the config exists. Start the daemon once per machine with `pueued -d` (also unsandboxed — it cannot create its config dir otherwise).
+
+**Wait on the exit code, never on a string in the log.** This is the whole reason for the rule. A `until grep -q "phase summary" out.log; do sleep 5; done` loop once spun for **43 minutes** waiting for a sentinel that `| tail -12` had already truncated out of the file — the condition could never match, and nothing said so. `pueue` reports `Success` or `Failed (7)` from the process itself, so there is no sentinel to get wrong and no truncation to be defeated by.
+
+```bash
+ID=$(pueue add -p -l news-gate -- npm run test:all)   # -p prints the id, -l labels it
+pueue wait "$ID"                                       # blocks; prints the terminal status
+pueue log "$ID" -l 40                                  # tail; -f for the whole thing
+```
+
+- **`pueue add` inherits the current directory** (`-w` overrides), so a task sees the repo it was queued from.
+- **`--after <id>`** chains without a round trip — queue the gate `--after` the build and let the daemon sequence them.
+- **`pueue follow <id>`** is `tail -f`; **`pueue kill <id>`** stops one; **`pueue clean`** clears finished tasks.
+- **`pueue status "label %= news-"`** lists by label prefix, and `status` takes a small query language (`columns=`, filters, `order_by`, `limit`). Label tasks per session so a listing is legible when several are in flight.
+- Tasks **outlive the session**, which is the point — but it also means a forgotten one keeps running. Check `pueue status` before assuming the queue is empty.
+- **Queued tasks run outside the sandbox, by construction.** The daemon is unsandboxed (it has to be), and every task is its child — so `pueue add` is a sandbox exemption whatever the client needed to reach it. Worth knowing because the call site does not look like one. Queue only what you would have been willing to run with `dangerouslyDisableSandbox` anyway, which for this repo means its own gates and builds.
+
+**Do not use it for short commands.** A `git status` or a single vitest file through pueue is pure overhead and costs a sandbox exemption; run those directly.
+
 ## Editing this file
 
 `CLAUDE.md` is part Hot Sheet **managed** and part ours, and the boundary is invisible unless you look for it:
