@@ -6,7 +6,14 @@ import { describe, expect, it } from 'vitest';
 import { MIN_SCANNED_FILES, MUST_BE_SCANNED, repoRoot as root, sourceFiles } from '../helpers/source-tree.js';
 
 /**
- * No source file may carry an invisible character (NEWS-408).
+ * No source file may carry a character that misrepresents the text it is in
+ * (NEWS-408, NEWS-413, NEWS-414).
+ *
+ * Most of them are invisible, which is where the filename comes from and still the
+ * best one-line description. Two are not: U+00A0 looks exactly like the space it is
+ * not, and U+FFFD is a visible marker that some other text used to be there. The
+ * property they all share is the one worth gating — **what you read is not what is
+ * on disk**.
  *
  * The companion to `control-bytes.test.ts`, and the more dangerous half of the
  * problem. That test is byte-level and answers exactly one question: would grep
@@ -35,23 +42,79 @@ import { MIN_SCANNED_FILES, MUST_BE_SCANNED, repoRoot as root, sourceFiles } fro
  *   encoding marker and is allowed. Anywhere else it is a zero-width no-break
  *   space sitting inside an identifier, a JSON key or a shell command, and the
  *   error it produces names neither the character nor the line.
- * - **Zero-width and bidi characters** — U+200B, U+200C, and the Trojan Source set
- *   (CVE-2021-42574): U+061C, U+200E, U+200F, U+202A–U+202E, U+2066–U+2069. A bidi
- *   override makes source **display in one order and compile in another**: the
- *   reviewer reads a comment, the compiler reads a statement. That is a documented
- *   supply-chain attack, not a typo, and there is no benign use of one here.
+ * - **Zero-width and bidi characters** — U+200B, U+200C, U+2060, and the Trojan
+ *   Source set (CVE-2021-42574): U+061C, U+200E, U+200F, U+202A–U+202E,
+ *   U+2066–U+2069. A bidi override makes source **display in one order and compile
+ *   in another**: the reviewer reads a comment, the compiler reads a statement.
+ *   That is a documented supply-chain attack, not a typo, and there is no benign
+ *   use of one here. U+2060 WORD JOINER joined them in NEWS-413 — it is U+200B with
+ *   different line-breaking behaviour, and leaving it out was an arbitrary hole in
+ *   a rule that already rejects its two neighbours.
+ * - **U+FFF9–U+FFFB, the interlinear annotation characters** (NEWS-413). Unicode
+ *   states outright that these are not for interchanged plain text: they delimit an
+ *   annotation whose base and body a renderer may show quite differently from the
+ *   stored order. That is the Trojan Source theme with a different mechanism.
+ * - **U+00A0 NO-BREAK SPACE and U+00AD SOFT HYPHEN** — the NEWS-413 judgement call;
+ *   the reasoning is below, because "obviously yes" was not the answer and the next
+ *   person deserves the argument rather than the verdict.
+ * - **U+FFFD REPLACEMENT CHARACTER** (NEWS-414), the gap between the two guards.
+ *   `readFileSync(file, 'utf8')` does not throw on invalid UTF-8; it *substitutes*.
+ *   So a genuinely corrupted text file decodes "successfully", holds no control
+ *   byte for `control-bytes.test.ts` to find and no bidi character for this one,
+ *   and sails through both while being mojibake. It belongs here rather than there
+ *   because it is a property of *decoding*: the byte scan reads a `Buffer` and by
+ *   construction can never see one. Nothing in the tree contains a U+FFFD today —
+ *   checked, because a sanitisation fixture holding one deliberately would have
+ *   been a legitimate exception, and there is none.
  *
- * Deliberately **not** scanned, each for a stated reason rather than because it
- * would have failed:
+ * ## Why U+00A0 and U+00AD are rejected outright (NEWS-413)
+ *
+ * The case against gating them is real and is the same one that shaped the ZWJ rule
+ * below: NBSP is *correct typography* — in "10 MB", in "Figure 1" — and a guard
+ * that fires on legitimate prose is a guard somebody switches off, taking the bidi
+ * overrides with it. This repo is 39 files of prose under `docs/`, plus README and
+ * CLAUDE.md. That is not a small surface to bet.
+ *
+ * It is still the right call, for four reasons:
+ *
+ * 1. **The scan found zero of either, in all ~346 files.** Every doc, every README,
+ *    every requirements document has been written without one. Compare U+FE0F,
+ *    which is *actually in* `docs/5-desktop-app.md` and is therefore left alone.
+ *    The prose argument is real in general and hypothetical here.
+ * 2. **There is a visible alternative, and that is the whole difference from ZWJ.**
+ *    A woman-technologist emoji cannot be written without a joiner, so rejecting
+ *    ZWJ outright would have forced people to choose between the guard and their
+ *    content. NBSP has `&nbsp;`, soft hyphen has `&shy;`, and both render
+ *    identically while staying greppable. A rule you can satisfy in five seconds
+ *    with a *better* answer is a rule people follow. The failure message says so.
+ * 3. **The obvious compromise — reject in code, allow in prose — exempts exactly
+ *    the wrong files.** NBSP's canonical damage is to shell commands and YAML,
+ *    where the error names neither the character nor the line; and the fenced
+ *    command blocks people copy out of are in the Markdown. CLAUDE.md alone hands
+ *    the reader `pueue add -p -l news-gate -- npm run test:all` to paste. An
+ *    extension-based prose exemption would protect the files nobody pastes from.
+ * 4. **Soft hyphen barely needs the argument.** It is invisible in plain text,
+ *    breaks a grep for the word it sits inside exactly as U+200B does, travels
+ *    silently through a copy-paste out of rendered output, and is not hand-authored
+ *    in a repo like this one.
+ *
+ * If a doc ever does need a literal NBSP, the exemption gets written then, narrow,
+ * with the actual case in hand — which is the order the ZWJ rule was arrived at,
+ * and the right one. Widening an allow-list to make a scan pass is the wrong one.
+ *
+ * Deliberately **not** scanned, for a stated reason rather than because it would
+ * have failed:
  *
  * - **U+FE0E / U+FE0F, the variation selectors.** They only choose the text or
  *   emoji presentation of the character *before* them; they cannot hide, reorder
  *   or terminate anything. `docs/5-desktop-app.md` uses U+FE0F twice, in its two
  *   warning callouts. Flagging those would be the first step towards a guard
  *   somebody switches off.
- * - **U+00A0 no-break space and U+00AD soft hyphen.** Both are real typography and
- *   both need a judgement call this ticket did not make. Neither appears in the
- *   tree today.
+ * - **The rest of the Unicode space family** — U+2000–U+200A, U+202F NARROW
+ *   NO-BREAK SPACE, U+205F, U+3000. None is in the tree. They are arguably NBSP's
+ *   equals and a case can be made, but it is a different case from the one
+ *   NEWS-413 weighed and it should be made on its own terms, not smuggled in
+ *   because the diff was open.
  *
  * And one **narrow, conditional** allowance — see `PICTOGRAPHIC` below.
  */
@@ -129,6 +192,10 @@ const C1_NAMES = [
 /** The shared tail of every bidi entry: one attack, told once. */
 const TROJAN_SOURCE = 'Trojan Source, CVE-2021-42574: source can display in one order and compile in another';
 
+/** Likewise for the three interlinear annotation characters (NEWS-413). */
+const INTERLINEAR =
+  'an interlinear annotation delimiter, which Unicode states is not for interchanged plain text: it lets a renderer show something other than the stored order';
+
 /**
  * Every codepoint rejected unconditionally, with the name and the reason that go
  * into the failure message.
@@ -150,6 +217,31 @@ const REJECTED = new Map<number, { name: string; why: string }>([
   ],
   [0x200b, { name: 'ZERO WIDTH SPACE', why: 'invisible, and splits a token for the reader while the parser sees one' }],
   [0x200c, { name: 'ZERO WIDTH NON-JOINER', why: 'invisible, and splits a token for the reader while the parser sees one' }],
+  [0x2060, { name: 'WORD JOINER', why: 'invisible, and splits a token for the reader while the parser sees one' }],
+  [
+    0x00a0,
+    {
+      name: 'NO-BREAK SPACE',
+      why: 'indistinguishable from a space it is not: it arrives silently from a web paste and breaks shell commands and YAML with an error naming neither the character nor the line. Write a plain space, or `&nbsp;` where the typography matters',
+    },
+  ],
+  [
+    0x00ad,
+    {
+      name: 'SOFT HYPHEN',
+      why: 'invisible until a renderer breaks the line, and until then it splits the word for grep exactly as a zero-width space would. Write `&shy;` if a break hint is really wanted',
+    },
+  ],
+  [
+    0xfffd,
+    {
+      name: 'REPLACEMENT CHARACTER',
+      why: 'mojibake: either invalid UTF-8 that `readFileSync(…, "utf8")` silently substituted for, or already-broken text committed as-is. Either way the file is no longer the text it appears to be, and the original bytes are gone',
+    },
+  ],
+  [0xfff9, { name: 'INTERLINEAR ANNOTATION ANCHOR', why: INTERLINEAR }],
+  [0xfffa, { name: 'INTERLINEAR ANNOTATION SEPARATOR', why: INTERLINEAR }],
+  [0xfffb, { name: 'INTERLINEAR ANNOTATION TERMINATOR', why: INTERLINEAR }],
   [0x061c, { name: 'ARABIC LETTER MARK', why: `a bidi control (${TROJAN_SOURCE})` }],
   [0x200e, { name: 'LEFT-TO-RIGHT MARK', why: `a bidi control (${TROJAN_SOURCE})` }],
   [0x200f, { name: 'RIGHT-TO-LEFT MARK', why: `a bidi control (${TROJAN_SOURCE})` }],
@@ -277,8 +369,12 @@ const ZWJ = '\u{200d}';
 const ZWNJ = '\u{200c}';
 const ZWSP = '\u{200b}';
 const VS16 = '\u{fe0f}';
+const NBSP = '\u{a0}';
+const SHY = '\u{ad}';
+const WJ = '\u{2060}';
+const FFFD = '\u{fffd}';
 
-describe('no source file carries an invisible character (NEWS-408)', () => {
+describe('no source file carries an invisible or deceptive character (NEWS-408, NEWS-413, NEWS-414)', () => {
   it('scans a plausible number of files, so a broken walk cannot pass silently', () => {
     // The failure mode of a scan-based test: match nothing, assert nothing, stay
     // green forever. The list and the floor are shared with
@@ -350,9 +446,73 @@ describe('no source file carries an invisible character (NEWS-408)', () => {
     );
   });
 
-  it('rejects the zero-width space and non-joiner', () => {
+  it('rejects the zero-width space, non-joiner and word joiner', () => {
     expect(findInvisible(`adm${ZWSP}in`)).toContain('U+200B ZERO WIDTH SPACE at line 1, column 4');
     expect(findInvisible(`adm${ZWNJ}in`)).toContain('U+200C ZERO WIDTH NON-JOINER at line 1, column 4');
+    // U+2060 is U+200B with different line-breaking behaviour and identical
+    // deniability; NEWS-413 closed the hole rather than leaving one of the three.
+    expect(findInvisible(`adm${WJ}in`)).toContain('U+2060 WORD JOINER at line 1, column 4');
+  });
+
+  it('rejects a no-break space, and offers the alternative in the message (NEWS-413)', () => {
+    // The whole message, because for this one the *message* is what keeps the guard
+    // switched on: it has to name a fix that is quicker than an exemption. The
+    // context window is the other half — an NBSP printed raw would print as a space
+    // and the report would look like it was complaining about nothing.
+    expect(findInvisible(`See docs/2-checks.md${NBSP}for the interval.\n`)).toBe(
+      'U+00A0 NO-BREAK SPACE at line 1, column 21 — indistinguishable from a space it is not: it arrives silently from a web paste and breaks shell commands and YAML with an error naming neither the character nor the line. Write a plain space, or `&nbsp;` where the typography matters. Context: See docs/2-checks.md<U+00A0>for the interval.\\n',
+    );
+  });
+
+  it('rejects a soft hyphen (NEWS-413)', () => {
+    // Invisible here, and the reason it is not merely cosmetic: a grep for
+    // "deduplicates" misses this line, exactly as it would past a U+200B.
+    expect(findInvisible(`dedu${SHY}plicates against previous stories\n`)).toContain(
+      'U+00AD SOFT HYPHEN at line 1, column 5 — invisible until a renderer breaks the line',
+    );
+  });
+
+  it('rejects the interlinear annotation characters (NEWS-413)', () => {
+    for (const [cp, expected] of [
+      [0xfff9, 'INTERLINEAR ANNOTATION ANCHOR'],
+      [0xfffa, 'INTERLINEAR ANNOTATION SEPARATOR'],
+      [0xfffb, 'INTERLINEAR ANNOTATION TERMINATOR'],
+    ] as const) {
+      expect(findInvisible(`a${String.fromCodePoint(cp)}b`), `${asCodepoint(cp)} is rejected`).toContain(
+        `${asCodepoint(cp)} ${expected} at line 1, column 2`,
+      );
+    }
+  });
+
+  it('leaves an ordinary space and hyphen alone', () => {
+    // The pair the two rules above are distinguished from, asserted so that a
+    // careless widening — matching on "space-like" or "hyphen-like" — fails here
+    // rather than in every file in the tree.
+    expect(findInvisible('a plain space and a real-hyphen\n')).toBeNull();
+  });
+
+  it('catches mojibake that both guards would otherwise pass (NEWS-414)', () => {
+    // The actual gap. 0xff is not a legal UTF-8 byte anywhere; `readFileSync` does
+    // not throw on it, it *substitutes*. So the file decodes, holds no control byte
+    // for `control-bytes.test.ts` and no bidi character for this scan, and used to
+    // pass both while being corrupt. Built through a real Buffer decode rather than
+    // by writing U+FFFD directly, because the substitution is the thing under test.
+    const decoded = Buffer.from([0x63, 0x6f, 0x6e, 0x73, 0x74, 0x20, 0x78, 0x20, 0x3d, 0x20, 0xff, 0x3b, 0x0a]).toString(
+      'utf8',
+    );
+    expect(decoded).toContain(FFFD);
+    expect(findInvisible(decoded)).toBe(
+      'U+FFFD REPLACEMENT CHARACTER at line 1, column 11 — mojibake: either invalid UTF-8 that `readFileSync(…, "utf8")` silently substituted for, or already-broken text committed as-is. Either way the file is no longer the text it appears to be, and the original bytes are gone. Context: const x = <U+FFFD>;\\n',
+    );
+  });
+
+  it('catches a U+FFFD that was committed already encoded (NEWS-414)', () => {
+    // The other way it arrives: someone pastes text that was mangled upstream, so
+    // the bytes on disk are a valid EF BF BD and nothing is invalid about the file
+    // at all. Same defect, same rule — the guard does not try to tell them apart,
+    // because the answer in both cases is "recover the original text".
+    expect(Buffer.from(FFFD, 'utf8')).toEqual(Buffer.from([0xef, 0xbf, 0xbd]));
+    expect(findInvisible(`title: "Caf${FFFD} closes"\n`)).toContain('U+FFFD REPLACEMENT CHARACTER at line 1, column 12');
   });
 
   it('allows a zero-width joiner between pictographs, including across a modifier', () => {
