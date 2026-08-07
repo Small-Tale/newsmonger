@@ -22,8 +22,12 @@ test.beforeAll(async () => {
 test('loads the app shell', async ({ page }) => {
   await page.goto('/');
   // The masthead is the wordmark asset (NEWS-175), so the accessible name comes
-  // from its `alt` rather than from text content.
-  await expect(page.locator('h1 img')).toHaveAttribute('alt', 'Newsmonger');
+  // from the markup rather than from text content. Asserted as the *computed*
+  // name, not as an `alt` attribute: since NEWS-377 both marks ship and CSS
+  // hides one, so the name lives on the <h1> and the images are decorative.
+  // Which element carries it is an implementation detail; that a screen reader
+  // reads "Newsmonger" is not.
+  await expect(page.locator('h1')).toHaveAccessibleName('Newsmonger');
   await expect(page.locator('.add-topic input')).toBeVisible();
 });
 
@@ -32,8 +36,9 @@ test('the masthead wordmark actually loads', async ({ page }) => {
   // `alt` alone would still pass with a 404 behind it, and the asset reaches
   // dist/client only via the build's copy list — exactly the step a future
   // change forgets. Assert the decoded image, not just the markup.
+  // The *visible* mark, since both are in the DOM and one is display:none.
   const decoded = await page
-    .locator('h1 img')
+    .locator('h1 img:visible')
     .evaluate((el) => (el as HTMLImageElement).decode().then(() => (el as HTMLImageElement).naturalWidth));
   expect(decoded).toBeGreaterThan(0);
 

@@ -445,6 +445,39 @@ body {
     width: auto;
   }
 
+  // Light is the default and dark is hidden, so the served HTML is already
+  // correct for the light theme before any query is evaluated (NEWS-377).
+  .mark-dark {
+    display: none;
+  }
+}
+
+// Which wordmark is drawn follows the resolved theme, not the system preference
+// (NEWS-377) — the same distinction, and the same two selectors, as every other
+// `dark-*` mixin in this file. It is a mixin for exactly that reason: this is
+// the sixth thing that has to agree about what "dark" means, and the one that
+// got it wrong did so by expressing the choice outside CSS, in a `<picture>`
+// `media` attribute that cannot see `data-theme`.
+@mixin dark-wordmark {
+  .wordmark {
+    .mark-light {
+      display: none;
+    }
+
+    .mark-dark {
+      display: block;
+    }
+  }
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    @include dark-wordmark;
+  }
+}
+
+:root[data-theme='dark'] {
+  @include dark-wordmark;
 }
 
 .header-controls {

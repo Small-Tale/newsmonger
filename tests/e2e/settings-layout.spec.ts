@@ -655,3 +655,46 @@ test('the theme can be pinned, and beats the system preference (FR-3.74–3.76, 
   await closeSettings(page);
   await page.emulateMedia({ colorScheme: 'light' });
 });
+
+test('the wordmark follows the pinned theme, not the system one (NEWS-377)', async ({ page }) => {
+  // The bug this exists for: the masthead swapped on a `<picture media=...>`,
+  // which can only ask the *system* preference. Pin light on a dark system and
+  // the white-ink mark stayed, so the word "News" was white on porcelain and
+  // simply vanished.
+  //
+  // Everything around it already passed. `brand-assets.test.ts` proves each SVG
+  // matches its palette, `app.spec.ts` proves both files load, and the test
+  // above proves `--paper` flips. None of them asked **which mark is on screen**,
+  // which is the only question the reader cares about.
+  const visibleMark = () =>
+    page.locator('.wordmark img:visible').evaluate((el) => el.getAttribute('src') ?? '');
+
+  await page.emulateMedia({ colorScheme: 'dark' });
+  await page.goto('/');
+
+  await openSettingsTab(page, 'App');
+  await page.selectOption('[data-action=theme]', 'light');
+  await expect(page.locator('html')).toHaveAttribute('data-theme', 'light');
+  expect(await visibleMark(), 'a light pin on a dark system must show the dark-ink mark').toContain(
+    'wordmark-light.svg',
+  );
+
+  await page.emulateMedia({ colorScheme: 'light' });
+  await page.selectOption('[data-action=theme]', 'dark');
+  await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
+  expect(await visibleMark(), 'a dark pin on a light system must show the white-ink mark').toContain(
+    'wordmark-dark.svg',
+  );
+
+  // Exactly one is ever drawn — two visible marks would be a layout bug even if
+  // the right one were among them.
+  await expect(page.locator('.wordmark img:visible')).toHaveCount(1);
+
+  // And `auto` hands the choice back to the system.
+  await page.selectOption('[data-action=theme]', 'auto');
+  await expect(page.locator('html')).not.toHaveAttribute('data-theme', /.*/);
+  expect(await visibleMark()).toContain('wordmark-light.svg');
+
+  await closeSettings(page);
+  await page.emulateMedia({ colorScheme: 'light' });
+});

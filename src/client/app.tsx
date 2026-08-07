@@ -278,15 +278,27 @@ function appJsx(): SafeHtml {
           >
             {icon('panel', 17)}
           </button>
-          {/* The wordmark is the brand asset, not styled text (NEWS-175). The
-              <picture> swaps it on `prefers-color-scheme` with no JS — the app
-              has no manual theme toggle — so it can never flash the wrong one.
-              The <h1> and the `alt` keep the outline and accessible name. */}
-          <h1 class="wordmark">
-            <picture>
-              <source srcSet="/static/wordmark-dark.svg" media="(prefers-color-scheme: dark)" />
-              <img src="/static/wordmark-light.svg" alt="Newsmonger" width="480" height="100" />
-            </picture>
+          {/* The wordmark is the brand asset, not styled text (NEWS-175).
+              Both marks ship and CSS shows one (NEWS-377).
+
+              This was a `<picture>` swapping on `prefers-color-scheme`, whose
+              comment said the app "has no manual theme toggle" — true when it
+              was written, and untrue from NEWS-334. A `media` attribute can
+              only ask the *system* preference, so pinning the app to light on a
+              dark OS kept serving the white-ink mark onto porcelain, where the
+              word "News" simply vanished.
+
+              The resolved theme is a CSS fact — `prefers-color-scheme` unless
+              `data-theme` overrides it — so the choice belongs in the
+              stylesheet beside the other `dark-*` mixins that already encode
+              it, not in an attribute that cannot see the override. Still no JS
+              and still no flash: both are static and one is hidden.
+
+              Both images are decorative; the accessible name is on the <h1>, so
+              it survives whichever mark is display:none. */}
+          <h1 class="wordmark" aria-label="Newsmonger">
+            <img class="mark-light" src="/static/wordmark-light.svg" alt="" width="480" height="100" />
+            <img class="mark-dark" src="/static/wordmark-dark.svg" alt="" width="480" height="100" />
           </h1>
         </div>
         <div class="header-controls">
