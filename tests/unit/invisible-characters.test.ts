@@ -63,6 +63,10 @@ import {
  * - **U+00A0 NO-BREAK SPACE and U+00AD SOFT HYPHEN** — the NEWS-413 judgement call;
  *   the reasoning is below, because "obviously yes" was not the answer and the next
  *   person deserves the argument rather than the verdict.
+ * - **U+2000–U+200A, U+202F NARROW NO-BREAK SPACE and U+205F MEDIUM MATHEMATICAL
+ *   SPACE** — the NEWS-418 judgement call, and a *split* one: U+3000 IDEOGRAPHIC
+ *   SPACE was weighed with these twelve and is deliberately allowed. The reasoning
+ *   for both halves is below.
  * - **U+FFFD REPLACEMENT CHARACTER** (NEWS-414), the gap between the two guards.
  *   `readFileSync(file, 'utf8')` does not throw on invalid UTF-8; it *substitutes*.
  *   So a genuinely corrupted text file decodes "successfully", holds no control
@@ -108,6 +112,77 @@ import {
  * with the actual case in hand — which is the order the ZWJ rule was arrived at,
  * and the right one. Widening an allow-list to make a scan pass is the wrong one.
  *
+ * ## Why the rest of the space family splits 12–1 (NEWS-418)
+ *
+ * NEWS-413 left these for their own argument rather than taking them with the diff
+ * that was open: U+2000–U+200A, U+202F, U+205F, U+3000. Its four grounds are the
+ * frame, and applying them one at a time is what produces a split rather than a
+ * verdict.
+ *
+ * **Ground 1 — zero occurrences — holds for all fourteen**, re-checked over the same
+ * ~346 files. So none of this is retrofitting a rule onto content that exists.
+ *
+ * **Ground 3 — the refused prose exemption — holds unchanged.** Every one of these
+ * is whitespace to a human and *not* whitespace to bash (IFS is space, tab and
+ * newline), to YAML (space and tab) or to JSON (space, tab, CR, LF). A fenced block
+ * in a Markdown file is still the thing people paste from.
+ *
+ * **Ground 4 — grep — holds too, and more sharply than for NBSP.** These characters
+ * are not word-internal; they sit *between* words, which is where a search puts its
+ * space. A grep for "topic categories" simply misses the line.
+ *
+ * **Ground 2 — a visible alternative exists — is the load-bearing one, and it is
+ * where the family comes apart.** For twelve of them the alternative is real and
+ * was checked against the HTML5 entity table rather than recalled: `&ensp;`,
+ * `&emsp;`, `&emsp13;`, `&emsp14;`, `&numsp;`, `&puncsp;`, `&thinsp;`, `&hairsp;`,
+ * `&MediumSpace;`. U+2000 and U+2001 are *canonically equivalent* to U+2002 and
+ * U+2003, so `&ensp;` and `&emsp;` cover them exactly; U+2006 has no name and takes
+ * `&#8198;`. U+202F has no named entity either, and needs none: nobody in this repo
+ * has a reason to type one, and a plain space or `&nbsp;` says what was meant.
+ *
+ * **U+202F is the clearest of the fourteen.** It is NBSP with a narrower advance —
+ * same paste origin (a browser, a word processor, macOS text substitution), same
+ * non-breaking behaviour, same damage to a shell command, a YAML key or a JSON
+ * document, and it is *harder* to spot than NBSP rather than easier, because it is
+ * narrow rather than the width of the space it is impersonating. Rejecting NBSP and
+ * allowing this would be an arbitrary hole in the rule, the same shape as the one
+ * NEWS-413 closed by adding U+2060 next to U+200B and U+200C.
+ *
+ * ### The exception: U+3000 IDEOGRAPHIC SPACE is allowed
+ *
+ * Ground 2 fails for it, and a second, independent ground fails as well.
+ *
+ * **There is no comfortable substitute.** U+3000 is not a typographic flourish in
+ * CJK text; it is *the* space, the full-width one that belongs between and around
+ * CJK. It has no HTML named entity — checked, along with the others — so the
+ * alternative on offer is `&#12288;`, which does not render CJK prose readable in
+ * source, it renders it unreadable. That is the ZWJ situation exactly: a
+ * woman-technologist emoji cannot be written without a joiner, and a Japanese
+ * sentence cannot be spaced without this. A rule you can only satisfy by mangling
+ * your content is a rule that gets the guard switched off, and the bidi overrides go
+ * with it.
+ *
+ * **And this is not hypothetical here.** FR-35.2 ships a location field explicitly
+ * designed to hold any script and refuses to normalise, case-fold or transliterate
+ * what is typed — `docs/35-location.md` and `src/db/schemas.ts` argue the point in
+ * prose, `src/client/onboarding-view.tsx` puts 東京 in the placeholder a user reads,
+ * and `tests/unit/location-prompt.test.ts` pins コンサート and 北海道 precisely so a
+ * stray slugify cannot turn them into nothing. CJK is already in nine files of this
+ * tree. The next fixture or doc sentence that spaces it properly is not a
+ * far-fetched scenario, it is the feature working.
+ *
+ * **It also fails this file's own criterion.** The property shared by everything
+ * rejected above is stated at the top: *what you read is not what is on disk*.
+ * U+3000 is double-width. In the monospace font every one of these files is read in
+ * it is a conspicuous gap, not a space wearing a disguise — which is the one thing
+ * that can be said for it and cannot be said for U+2009 or U+202F.
+ *
+ * So it goes on the same shelf as the variation selectors: not scanned, for a stated
+ * reason, and the reason is written down so the next person does not have to
+ * rediscover it. If a U+3000 ever *does* turn up somewhere it has no business being,
+ * that is a narrow rule to write then — "outside a CJK context" — with the actual
+ * case in hand.
+ *
  * Deliberately **not** scanned, for a stated reason rather than because it would
  * have failed:
  *
@@ -116,11 +191,10 @@ import {
  *   or terminate anything. `docs/5-desktop-app.md` uses U+FE0F twice, in its two
  *   warning callouts. Flagging those would be the first step towards a guard
  *   somebody switches off.
- * - **The rest of the Unicode space family** — U+2000–U+200A, U+202F NARROW
- *   NO-BREAK SPACE, U+205F, U+3000. None is in the tree. They are arguably NBSP's
- *   equals and a case can be made, but it is a different case from the one
- *   NEWS-413 weighed and it should be made on its own terms, not smuggled in
- *   because the diff was open.
+ * - **U+3000 IDEOGRAPHIC SPACE** (NEWS-418) — the one member of the space family
+ *   that survived the argument above. Pinned by a test, so that a later widening to
+ *   "anything with the White_Space property" fails there rather than in whichever
+ *   file first writes a Japanese sentence properly.
  *
  * And one **narrow, conditional** allowance — see `PICTOGRAPHIC` below.
  */
@@ -203,6 +277,24 @@ const INTERLINEAR =
   'an interlinear annotation delimiter, which Unicode states is not for interchanged plain text: it lets a renderer show something other than the stored order';
 
 /**
+ * One entry in the fixed-width space family (NEWS-418), with the alternative that
+ * keeps the guard switched on.
+ *
+ * The message has to name a *better* answer, not just a prohibition — that is
+ * NEWS-413's second ground and the reason the NBSP rule survives contact with a
+ * repo that is 39 files of prose. Every entity below was verified against the HTML5
+ * table rather than recalled, because a message that names an entity which does not
+ * exist is worse than one that names none.
+ */
+function spaceEntry(name: string, alternative: string): { name: string; why: string } {
+  return {
+    name,
+    why:
+      `a Unicode space that no parser treats as one: bash splits words on space, tab and newline, YAML on space and tab, JSON on space, tab, CR and LF, and this is none of them — so it survives a paste as whitespace that is not whitespace. It also sits between words, which is where a search puts its space, so a grep for the phrase around it finds nothing. Write a plain space, or ${alternative} where the width genuinely matters`,
+  };
+}
+
+/**
  * Every codepoint rejected unconditionally, with the name and the reason that go
  * into the failure message.
  *
@@ -236,6 +328,31 @@ const REJECTED = new Map<number, { name: string; why: string }>([
     {
       name: 'SOFT HYPHEN',
       why: 'invisible until a renderer breaks the line, and until then it splits the word for grep exactly as a zero-width space would. Write `&shy;` if a break hint is really wanted',
+    },
+  ],
+  // The fixed-width space family (NEWS-418). U+2000 and U+2001 are canonically
+  // equivalent to U+2002 and U+2003, so they take the same entity; U+2006 has no
+  // named entity and takes the numeric reference.
+  [0x2000, spaceEntry('EN QUAD', '`&ensp;`')],
+  [0x2001, spaceEntry('EM QUAD', '`&emsp;`')],
+  [0x2002, spaceEntry('EN SPACE', '`&ensp;`')],
+  [0x2003, spaceEntry('EM SPACE', '`&emsp;`')],
+  [0x2004, spaceEntry('THREE-PER-EM SPACE', '`&emsp13;`')],
+  [0x2005, spaceEntry('FOUR-PER-EM SPACE', '`&emsp14;`')],
+  [0x2006, spaceEntry('SIX-PER-EM SPACE', '`&#8198;`')],
+  [0x2007, spaceEntry('FIGURE SPACE', '`&numsp;`')],
+  [0x2008, spaceEntry('PUNCTUATION SPACE', '`&puncsp;`')],
+  [0x2009, spaceEntry('THIN SPACE', '`&thinsp;`')],
+  [0x200a, spaceEntry('HAIR SPACE', '`&hairsp;`')],
+  [0x205f, spaceEntry('MEDIUM MATHEMATICAL SPACE', '`&MediumSpace;`')],
+  [
+    // NBSP's twin, and the strongest candidate of the fourteen NEWS-418 weighed:
+    // same paste origin, same non-breaking behaviour, same damage — and narrower
+    // than the space it impersonates, so harder to spot rather than easier.
+    0x202f,
+    {
+      name: 'NARROW NO-BREAK SPACE',
+      why: 'U+00A0 with a narrower advance, and every word of that entry applies: it arrives silently from a web paste, breaks shell commands and YAML with an error naming neither the character nor the line, and is harder to see than a no-break space rather than easier. Write a plain space, or `&nbsp;` where the line must not break',
     },
   ],
   [
@@ -379,6 +496,9 @@ const NBSP = '\u{a0}';
 const SHY = '\u{ad}';
 const WJ = '\u{2060}';
 const FFFD = '\u{fffd}';
+const NNBSP = '\u{202f}';
+const THINSP = '\u{2009}';
+const IDEOSP = '\u{3000}';
 
 describe('no source file carries an invisible or deceptive character (NEWS-408, NEWS-413, NEWS-414)', () => {
   it('scans a plausible number of files, so a broken walk cannot pass silently', () => {
@@ -491,6 +611,61 @@ describe('no source file carries an invisible or deceptive character (NEWS-408, 
         `${asCodepoint(cp)} ${expected} at line 1, column 2`,
       );
     }
+  });
+
+  it('rejects the narrow no-break space, in full (NEWS-418)', () => {
+    // The whole message for the strongest of the fourteen, for the reason NBSP gets
+    // one: this is where the guard either hands over a quicker fix than an
+    // exemption, or does not. The context window matters doubly here — printed raw,
+    // a U+202F would print as a slightly narrow space and the report would look like
+    // it was complaining about nothing at all.
+    expect(findInvisible(`run npm${NNBSP}test before committing.\n`)).toBe(
+      'U+202F NARROW NO-BREAK SPACE at line 1, column 8 — U+00A0 with a narrower advance, and every word of that entry applies: it arrives silently from a web paste, breaks shell commands and YAML with an error naming neither the character nor the line, and is harder to see than a no-break space rather than easier. Write a plain space, or `&nbsp;` where the line must not break. Context: run npm<U+202F>test before committing.\\n',
+    );
+  });
+
+  it('names each fixed-width space and the entity that replaces it (NEWS-418)', () => {
+    // Every entity here was checked against the HTML5 table. Asserting them keeps a
+    // remembered-but-wrong name — `&nnbsp;`, `&ideosp;`, neither of which exists —
+    // from reaching a failure message, where it would send someone to write markup
+    // that renders as literal text.
+    for (const [cp, name, alternative] of [
+      // `&ensp;` and `&emsp;` are the right answer for the quads because U+2000 and
+      // U+2001 *are* U+2002 and U+2003 under canonical equivalence. The message says
+      // only the fix; the equivalence is the table comment's job, not the reader's
+      // problem at the moment they are staring at a failure.
+      [0x2000, 'EN QUAD', '`&ensp;`'],
+      [0x2001, 'EM QUAD', '`&emsp;`'],
+      [0x2002, 'EN SPACE', '`&ensp;`'],
+      [0x2003, 'EM SPACE', '`&emsp;`'],
+      [0x2004, 'THREE-PER-EM SPACE', '`&emsp13;`'],
+      [0x2005, 'FOUR-PER-EM SPACE', '`&emsp14;`'],
+      [0x2006, 'SIX-PER-EM SPACE', '`&#8198;`'],
+      [0x2007, 'FIGURE SPACE', '`&numsp;`'],
+      [0x2008, 'PUNCTUATION SPACE', '`&puncsp;`'],
+      [0x2009, 'THIN SPACE', '`&thinsp;`'],
+      [0x200a, 'HAIR SPACE', '`&hairsp;`'],
+      [0x205f, 'MEDIUM MATHEMATICAL SPACE', '`&MediumSpace;`'],
+    ] as const) {
+      const found = findInvisible(`two${String.fromCodePoint(cp)}words`);
+      expect(found, `${asCodepoint(cp)} is rejected`).toContain(`${asCodepoint(cp)} ${name} at line 1, column 4`);
+      expect(found, `${asCodepoint(cp)} names its alternative`).toContain(alternative);
+    }
+  });
+
+  it('allows U+3000 IDEOGRAPHIC SPACE, which is the point of the split (NEWS-418)', () => {
+    // The one member of the family that is *not* rejected, pinned so a later
+    // widening to "anything with the White_Space property" fails here rather than in
+    // whichever file first writes a Japanese sentence properly. FR-35.2 ships a
+    // location field designed to hold any script and refuses to normalise it, so CJK
+    // is a feature of this app rather than a hypothetical: `東京` is already the
+    // placeholder a user reads in `src/client/onboarding-view.tsx`.
+    expect(findInvisible(`\u{6771}\u{4eac}${IDEOSP}\u{306e}\u{30cb}\u{30e5}\u{30fc}\u{30b9}\n`)).toBeNull();
+    // And it is rejected nowhere else either — no accidental coverage via a range.
+    expect(findInvisible(`a${IDEOSP}b`)).toBeNull();
+    // Its narrow-space neighbours are still caught in the same sentence, so the
+    // allowance is for this codepoint and not for "spaces near CJK".
+    expect(findInvisible(`\u{6771}\u{4eac}${THINSP}\u{306e}\n`)).toContain('U+2009 THIN SPACE');
   });
 
   it('leaves an ordinary space and hyphen alone', () => {
