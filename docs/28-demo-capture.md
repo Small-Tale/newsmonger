@@ -25,6 +25,15 @@ The README's images are **photographs of the real application**, produced by dri
 - **FR-28.5** *(Shipped)* **State is reached through the real UI or the real HTTP API**, never by writing to the database behind the server's back — topics are added with `POST /api/topics`, stories arrive from the check that firing that endpoint triggers (FR-1.12).
 - **FR-28.6** *(Shipped)* **Trees are captured live and rendered to SVG after teardown.** domotion's macOS glyph-path extraction is flaky under contention and falls back *silently* to CSS `<text>`, which renders as tofu on any machine without the font. Rendering once the browser and server are gone makes it reliable, and an **`@font-face` assertion** on the output is what stops a silent regression.
 - **FR-28.7** *(Shipped)* Both must run **outside the command sandbox** — Chromium needs Mach ports.
+- **FR-28.24** *(Shipped, NEWS-376)* **Every image is inlined as a `data:` URI before the server is torn down.**
+
+  domotion serialises an `<img src>` as `<image href>` carrying the page's *absolute* URL, which here is `http://127.0.0.1:<ephemeral port>/…`. That server is gone seconds later and the port differs every run, so a committed SVG referencing one can never resolve — it renders a blank box in Preview, QuickLook, a Finder thumbnail, and anywhere the file is served from disk.
+
+  It shipped that way for months and was easy to miss: the only remote image was the wordmark, so it was one dead link per file, in a corner. Recording real stories (FR-28.23) put a lead image on most cards and a favicon on most sources, and the defect became most of the picture.
+
+  **The ordering is the part that will break again.** `embedRemoteImages` turns URLs into bytes and therefore needs the server *alive* — which is the opposite requirement from FR-28.6's "render the SVG after teardown", and both are load-bearing. `tests/unit/stills.test.ts` fails on any `href="http…"` in the hero or any still, matching the scheme rather than a port, so it catches the next one rather than only this one.
+
+  `resizeEmbeddedImages` follows, at **`hiDPIFactor: 2`, which is measurably the smallest output and is not the obvious answer**. On the hero: factor 2 gives 2.8 MB, factor 1 gives 3.1 MB, and factor 1 is byte-identical to running no resize at all — the pass does not act at 1. The recorder already caps sources at 900px (2x a ~430px card), so there is little headroom left to reclaim. Re-measure before "optimising" it.
 
 ### The capture photographs the app, not the machine (NEWS-315)
 

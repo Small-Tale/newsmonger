@@ -43,11 +43,13 @@ import {
   captureElementTree,
   clearEmbeddedFonts,
   elementTreeToSvgInner,
+  embedRemoteImages,
   generateAnimatedSvg,
   getEmbeddedFontFaceCss,
   gzipSvg,
   launchChromium,
   optimizeSvg,
+  resizeEmbeddedImages,
   setRenderTextMode,
 } from 'domotion-svg';
 
@@ -213,6 +215,22 @@ async function main(): Promise<void> {
         width: CONTENT_W,
         height: CONTENT_H,
       });
+      // Inline the images while the server is still up (NEWS-376). domotion
+      // serialises `<img src>` as `<image href>` carrying the page's absolute
+      // URL — `http://127.0.0.1:<ephemeral port>/…` — which resolves to nothing
+      // the moment this run ends, so every picture in a committed hero would be
+      // a blank box. The tree holds URLs, not bytes; this is the pass that turns
+      // one into the other, and after teardown there is nothing left to fetch.
+      await embedRemoteImages(tree);
+      // `hiDPIFactor: 2`, and that is the *smallest* output, which is not the
+      // obvious answer. Measured across three captures of this file: factor 2
+      // gives 2.8 MB, factor 1 gives 3.1 MB, and factor 1 is byte-identical to
+      // running no resize at all — so at 1 the pass simply does not act, while
+      // at 2 it re-encodes and wins. The recorder already caps sources at 900px
+      // (2x a ~430px card), so there is little headroom left for it to reclaim.
+      // Do not "optimise" this down without re-measuring; the intuition is
+      // backwards here.
+      await resizeEmbeddedImages(tree, { hiDPIFactor: 2 });
       beats.push({ tree, title, caption, durationMs });
     };
 

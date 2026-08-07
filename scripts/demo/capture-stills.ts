@@ -55,8 +55,10 @@ import {
   captureElementTree,
   clearEmbeddedFonts,
   elementTreeToSvg,
+  embedRemoteImages,
   launchChromium,
   optimizeSvg,
+  resizeEmbeddedImages,
   setRenderTextMode,
 } from 'domotion-svg';
 
@@ -572,6 +574,35 @@ async function clipFor(page: Page, scene: Scene): Promise<Clip> {
   };
 }
 
+/**
+ * Inline every image the tree references as a `data:` URI (NEWS-376).
+ *
+ * domotion serialises an `<img src>` as `<image href>` carrying the page's
+ * **absolute URL**, which here means `http://127.0.0.1:<ephemeral port>/…`. That
+ * server is gone seconds later and the port differs every run, so a committed
+ * SVG referencing one can never resolve: it renders a blank box in Preview,
+ * QuickLook, a Finder thumbnail, and anywhere the file is served from disk.
+ *
+ * Survivable while the only remote image was the wordmark — one dead reference
+ * per file, in a corner. Recording real stories put a lead image on most cards
+ * and a favicon on most sources, so it became most of the picture.
+ *
+ * **Must run before the scene's server is torn down.** The tree holds URLs, not
+ * bytes, and this is the pass that turns one into the other; afterwards every
+ * fetch fails and the SVG keeps the dead links. That is the opposite order from
+ * FR-28.6's "render after teardown", which is about glyph extraction and needs
+ * no network — the two passes have opposite requirements and both are load-bearing.
+ *
+ * The resize pass follows because these are news-site lead images: domotion
+ * measures each consumer's render rect and re-encodes to it. Per-URL failures are
+ * warnings rather than errors, by domotion's contract — a missing picture is a
+ * worse screenshot, not a broken capture.
+ */
+async function inlineImages(tree: Awaited<ReturnType<typeof captureElementTree>>): Promise<void> {
+  await embedRemoteImages(tree);
+  await resizeEmbeddedImages(tree, { hiDPIFactor: 2 });
+}
+
 async function main(): Promise<void> {
   // Wiped only on a **full** run. The wipe is what removes a renamed scene's
   // stale file — `stills.test.ts` fails on a captured file belonging to no scene
@@ -661,7 +692,9 @@ async function main(): Promise<void> {
 
       const clip = await clipFor(page, scene);
       await page.screenshot({ path: resolve(OUT_DIR, `${scene.name}.png`), clip });
-      captured.push({ name: scene.name, tree: await captureElementTree(page, undefined, clip), clip });
+      const tree = await captureElementTree(page, undefined, clip);
+      await inlineImages(tree);
+      captured.push({ name: scene.name, tree, clip });
       console.log(`[stills] ${scene.name} (${String(clip.width)}×${String(clip.height)})`);
     } finally {
       await page.close().catch(() => undefined);

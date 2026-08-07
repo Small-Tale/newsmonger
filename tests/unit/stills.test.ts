@@ -96,6 +96,37 @@ describe('the stills pipeline (NEWS-214)', () => {
     }
   });
 
+  it('embeds every image rather than linking one, so a shipped SVG resolves offline (NEWS-376)', () => {
+    // domotion serialises `<img src>` as `<image href>` carrying the page's
+    // absolute URL, and the capture server is on an ephemeral localhost port
+    // that is gone seconds later and different every run. A committed SVG
+    // referencing one renders a blank box — in Preview, in QuickLook, in a
+    // Finder thumbnail, and anywhere the file is served from disk.
+    //
+    // It shipped that way for months while the only remote image was the
+    // wordmark: one dead link per file, in a corner, easy to miss. Recording
+    // real stories put a lead image on most cards and a favicon on most
+    // sources, which is what made it visible — and is exactly why this is a
+    // test rather than a note. The fix is a pre-pass that must run *before*
+    // teardown, so the way it breaks again is a reordering, silently.
+    //
+    // Both pipelines, because they capture independently: the hero is the file
+    // a reader sees first and would have been missed by a stills-only check.
+    const svgs = [
+      path.join(ROOT, 'assets/demo.svg'),
+      ...fs.readdirSync(STILLS_DIR).filter((f) => f.endsWith('.svg')).map((f) => path.join(STILLS_DIR, f)),
+    ];
+    const offenders: string[] = [];
+    for (const file of svgs) {
+      const text = fs.readFileSync(file, 'utf8');
+      // Any http(s) reference at all: the port varies per run, so matching the
+      // scheme is what makes this catch the next one rather than only this one.
+      const hit = /href="https?:\/\/[^"]+"/.exec(text);
+      if (hit !== null) offenders.push(`${path.relative(ROOT, file)} → ${hit[0].slice(0, 72)}`);
+    }
+    expect(offenders).toEqual([]);
+  });
+
   it('is reachable through an npm script, so it is not a file nobody knows to run', () => {
     const pkg = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8')) as {
       scripts: Record<string, string>;
