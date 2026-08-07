@@ -15,10 +15,11 @@
 
 import type { SafeHtml } from 'kerfjs';
 
+import { PROFILE_PAGE_COUNT, PROFILE_PAGES } from '../profiles.js';
 import { providerLikelyUsable } from './discover.js';
 import { icon } from './icons.js';
 import { keyRowJsx } from './key-row.js';
-import { onboardingCountText } from './onboarding.js';
+import { LOCATION_QUICK_PICKS, onboardingCountText } from './onboarding.js';
 import type { AppState, OnboardingStep } from './stores.js';
 import { appStore, INTERVAL_OPTIONS, ONBOARDING_STEPS, STARTER_TOPICS } from './stores.js';
 
@@ -79,6 +80,8 @@ function onboardingStepJsx(step: OnboardingStep, s: AppState): SafeHtml {
     );
   }
   if (step === 'source') return onboardingSourceJsx(s);
+  if (step === 'profiles') return onboardingProfilesJsx(s);
+  if (step === 'location') return onboardingLocationJsx(s);
   if (step === 'topics') {
     return (
       <div>
@@ -135,6 +138,103 @@ function onboardingStepJsx(step: OnboardingStep, s: AppState): SafeHtml {
  * the shortest path to a working app. Burying it under two key fields would
  * hide the easy answer behind the hard one.
  */
+/**
+ * The profile picker (NEWS-383) — three pages of sixteen, one page at a time.
+ *
+ * The paging lives in this step rather than in the wizard: `Continue` advances
+ * the *page* until the last one and only then advances the step, so the wizard's
+ * dots keep counting steps and there is still one primary button. `app.tsx`
+ * owns that branch; this file only draws the current page.
+ */
+function onboardingProfilesJsx(s: AppState): SafeHtml {
+  const page = Math.max(0, Math.min(PROFILE_PAGE_COUNT - 1, s.onboardingProfilePage));
+  const profiles = PROFILE_PAGES[page] ?? [];
+  const picked = s.onboardingProfiles.length;
+  return (
+    <div>
+      <h2>What are you into?</h2>
+      <p class="onboarding-lead">
+        Pick anything that sounds like you — as many or as few as you like. This is only used to suggest topics
+        worth watching, and you can change it later in Settings.
+      </p>
+      <div class="profile-grid">
+        {profiles.map((profile) => (
+          <button
+            class={`chip profile ${s.onboardingProfiles.includes(profile.id) ? 'on' : ''}`}
+            type="button"
+            data-key={profile.id}
+            data-profile={profile.id}
+            aria-pressed={s.onboardingProfiles.includes(profile.id) ? 'true' : 'false'}
+          >
+            {profile.label}
+          </button>
+        ))}
+      </div>
+      <p class="note profile-foot">
+        <span>
+          Page {String(page + 1)} of {String(PROFILE_PAGE_COUNT)}
+          {picked === 0 ? '' : ` · ${String(picked)} chosen`}
+        </span>
+        {/* Skips the remaining *pages*, not the whole wizard — the foot's "Skip
+            setup" already does that, and a user who has seen one page of these
+            should be able to leave the rest without leaving setup. */}
+        <button class="btn link" type="button" data-action="profiles-skip">
+          Skip these
+        </button>
+      </p>
+    </div>
+  );
+}
+
+/**
+ * Where the user is (NEWS-394, FR-35.9).
+ *
+ * Free text and nothing else — no place list, no validation, any script
+ * (FR-35.2). The continent buttons are six hardcoded strings that fill the same
+ * field, not a picker: they exist to make "a continent is enough" believable,
+ * because the hint text alone does not convince anyone.
+ */
+function onboardingLocationJsx(s: AppState): SafeHtml {
+  return (
+    <div>
+      <h2>Where are you?</h2>
+      <p class="onboarding-lead">
+        Some topics are about <em>somewhere</em> — local events, property, schools, transport, national politics.
+        Tell Newsmonger as much or as little as you like; a continent is enough, and global subjects ignore it
+        either way.
+      </p>
+      <label class="field stacked">
+        <span>Your location</span>
+        <input
+          type="text"
+          data-action="onboarding-location"
+          value={s.settings.location}
+          placeholder="e.g. Lisbon · Portugal · 東京 · the Scottish Borders"
+          spellCheck="false"
+          autocorrect="off"
+        />
+      </label>
+      <div class="location-quick">
+        {LOCATION_QUICK_PICKS.map((name) => (
+          <button
+            class={`chip starter ${s.settings.location === name ? 'on' : ''}`}
+            type="button"
+            data-key={name}
+            data-location-pick={name}
+            aria-pressed={s.settings.location === name ? 'true' : 'false'}
+          >
+            {name}
+          </button>
+        ))}
+      </div>
+      <p class="note">
+        Leaving this empty keeps every topic global. It is sent to your AI provider only with checks for topics
+        that are about somewhere.
+      </p>
+    </div>
+  );
+}
+
 function onboardingSourceJsx(s: AppState): SafeHtml {
   const ready = s.providers.filter((p) => p.name !== 'auto' && p.name !== 'mock' && p.available === true);
   const subscriptions = ready.filter((p) => p.name === 'claude-cli' || p.name === 'codex-cli');

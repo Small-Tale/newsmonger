@@ -12,6 +12,7 @@ import type {
   TopicSuggestion,
 } from '../api/schemas.js';
 import type { BackupLocation } from '../backup-locations.js';
+import { PROFILE_PAGE_COUNT } from '../profiles.js';
 import type { TunerState } from './discover.js';
 import type { ExportChoice } from './export-url.js';
 
@@ -64,7 +65,16 @@ export const INTERVAL_OPTIONS: { label: string; ms: number }[] = [
   { label: 'Every week', ms: 7 * 24 * 60 * 60 * 1000 },
 ];
 
-export const ONBOARDING_STEPS = ['welcome', 'source', 'topics', 'schedule'] as const;
+/**
+ * Steps of the first-run flow, in order (NEWS-78, extended NEWS-383/NEWS-394).
+ *
+ * `profiles` and `location` sit **between Source and Topics**, and the order is
+ * not arbitrary. Both come *after* Source because a provider may be needed to
+ * act on them; both come *before* Topics because that step creates topics and
+ * each fires its first check immediately (FR-1.12) — anything asked afterwards
+ * would land too late to steer the very first check it was meant to steer.
+ */
+export const ONBOARDING_STEPS = ['welcome', 'source', 'profiles', 'location', 'topics', 'schedule'] as const;
 export type OnboardingStep = (typeof ONBOARDING_STEPS)[number];
 
 /**
@@ -322,6 +332,22 @@ export interface AppState {
    * for someone who already has topics.
    */
   onboardingTopicsAtStart: number;
+  /**
+   * Profile ids ticked so far in the picker (NEWS-383), across all three pages.
+   *
+   * Seeded from the stored setting when the step is entered, so reopening the
+   * guide from Settings shows previous picks already ticked rather than a blank
+   * grid that misrepresents what is saved.
+   */
+  onboardingProfiles: string[];
+  /**
+   * Which of the three profile pages is showing (NEWS-383).
+   *
+   * The step owns its own paging: Continue advances the *page* until the last
+   * one, then advances the step. One button, and the wizard's dots keep counting
+   * steps rather than suddenly counting pages.
+   */
+  onboardingProfilePage: number;
   /**
    * Per-provider key status. Never holds a key value — the server doesn't
    * return one (see `KeyStatusSchema`), so there is nothing here to leak into
@@ -605,6 +631,7 @@ export const appStore = defineStore({
       effort: '',
       backupDir: '',
       location: '',
+      profiles: [],
       backupPromptNever: false,
       backupPromptSnoozedUntil: '',
       notifyOnNewItems: false,
@@ -636,6 +663,8 @@ export const appStore = defineStore({
     setAsideDatabases: [],
     onboardingTopics: [],
     onboardingTopicsAtStart: 0,
+    onboardingProfiles: [],
+    onboardingProfilePage: 0,
     keys: [],
     keysLoaded: false,
     keychainAvailable: false,
@@ -690,6 +719,35 @@ export const appStore = defineStore({
           ? current.topics.length
           : current.onboardingTopicsAtStart;
       set({ ...current, onboarding, onboardingTopicsAtStart });
+    },
+    toggleOnboardingProfile: (id: string) => {
+      const current = get();
+      const chosen = current.onboardingProfiles.includes(id)
+        ? current.onboardingProfiles.filter((p) => p !== id)
+        : [...current.onboardingProfiles, id];
+      set({ ...current, onboardingProfiles: chosen });
+    },
+    /**
+     * Move within the profile picker's own pages (NEWS-383).
+     *
+     * Clamped rather than validated: the caller is a delegate reading the DOM,
+     * and a page index out of range should land on a real page rather than
+     * render nothing.
+     */
+    setOnboardingProfilePage: (page: number) => {
+      const current = get();
+      const last = PROFILE_PAGE_COUNT - 1;
+      set({ ...current, onboardingProfilePage: Math.max(0, Math.min(last, page)) });
+    },
+    /**
+     * Seed the picker from what is already saved (NEWS-383).
+     *
+     * Called on entering the step, not on load: onboarding can be reopened from
+     * Settings by someone who ticked profiles months ago, and showing them an
+     * empty grid would say their choices were lost.
+     */
+    seedOnboardingProfiles: (ids: readonly string[]) => {
+      set({ ...get(), onboardingProfiles: [...ids], onboardingProfilePage: 0 });
     },
     toggleOnboardingTopic: (name: string) => {
       const current = get();

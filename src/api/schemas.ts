@@ -9,6 +9,7 @@ import {
   SettingsSchema,
   TopicSchema,
 } from '../db/schemas.js';
+import { ProfileIdsSchema } from '../profiles.js';
 
 // Request schemas (validated server-side).
 //
@@ -189,6 +190,11 @@ export const UpdateSettingsReqSchema = z
     // it is a sanity bound, and 200 is generous even for a place name written
     // in a script where each character carries more.
     location: z.string().max(200),
+    // Profile **ids**, deduplicated (NEWS-383). Unknown ids are accepted here
+    // and dropped on read rather than rejected — an export written by a build
+    // with one extra profile must import, and losing one chip beats losing the
+    // import. Same call `categories.ts` makes for an unresolvable slug.
+    profiles: ProfileIdsSchema,
     backupPromptNever: z.boolean(),
     // An ISO timestamp, or '' to clear. Bounded so a junk value can't be stored.
     backupPromptSnoozedUntil: z.string().max(64),

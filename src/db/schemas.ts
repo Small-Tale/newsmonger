@@ -304,6 +304,19 @@ export const SettingsSchema = z.object({
    */
   location: z.string().default(''),
   /**
+   * Reader profiles the user ticked during setup (NEWS-383), by **id**.
+   *
+   * Ids rather than labels so rewording a chip cannot orphan everyone who
+   * ticked it — see `src/profiles.ts`. Unknown ids survive storage and are
+   * dropped on read (`resolveProfiles`), which is what lets an export from a
+   * build with one extra profile import without failing wholesale.
+   *
+   * Read by the picker (to pre-tick) and, in time, by topic suggestion —
+   * NEWS-382 and NEWS-386. Persisted rather than consumed once precisely
+   * because those readers exist.
+   */
+  profiles: z.array(z.string()).default([]).catch([]),
+  /**
    * "Don't ask again" on the backup offer (NEWS-230, FR-27.4). Permanent.
    *
    * A setting rather than `localStorage` because it must survive a reinstall of
@@ -421,6 +434,7 @@ export function emptyDataFile(): DataFile {
       effort: '',
       backupDir: '',
       location: '',
+      profiles: [],
       backupPromptNever: false,
       backupPromptSnoozedUntil: '',
       notifyOnNewItems: false,

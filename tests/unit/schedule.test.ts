@@ -14,6 +14,7 @@ const SETTINGS: StateResp['settings'] = {
   effort: '',
   backupDir: '',
   location: '',
+  profiles: [],
   backupPromptNever: false,
   backupPromptSnoozedUntil: '',
   notifyOnNewItems: false,

@@ -14,7 +14,9 @@ See also [6 — AI Providers](6-providers.md), [7 — API Keys and Settings Dial
 
 - **FR-20.3** *(Shipped)* Dismissal is remembered per device (`localStorage`, alongside the other view preferences — it records what *this* browser has shown, not anything about the data). After that only **Settings → "Show the setup guide again"** reopens it.
 
-### The four steps
+### The six steps
+
+**Order: welcome → source → profiles → location → topics → schedule.** Profiles and Location sit *after* Source because a provider may be needed to act on them, and *before* Topics because that step creates topics and each fires its first check immediately (FR-1.12) — anything asked afterwards lands too late to steer the very check it exists to steer.
 
 - **FR-20.4** *(Shipped)* **Welcome** — what the app actually does: you name topics, it asks an AI with live web search whether anything is genuinely new, and repeats nothing you've already been shown.
 
@@ -33,6 +35,22 @@ See also [6 — AI Providers](6-providers.md), [7 — API Keys and Settings Dial
 - **FR-20.6b** *(Shipped, NEWS-146)* Discovery opens **over** the wizard, and **Escape closes discovery alone**. The Escape ladder had no rung for discovery before this — harmless while it could only open over the page, but with a wizard underneath it closed the wizard and left discovery floating on top of nothing. Tab-trapping needed no change: it reads the last `.dialog-backdrop .dialog` in the DOM, and `#discover-slot` follows `#onboarding-slot`.
 
   The starters are **not** dead code: onboarding runs before a provider is necessarily configured (Source comes first but is skippable), so when no provider would resolve, the step falls back to them and says why. That check mirrors `resolveProvider` rather than asking "is anything available" — an explicitly-chosen provider must itself be usable, or someone who picked OpenAI without a key would be offered a button that cannot work because an unrelated signed-in CLI happens to be present.
+
+- **FR-20.12** *(Shipped, NEWS-383)* **Profiles** — "what are you into?", 48 reader profiles as toggle chips across **three pages of sixteen**, shown one page at a time. Zero or more per page.
+
+  **Each page independently spans all twelve interest facets**, and that is the property the paging depends on rather than a nicety. The obvious build is page 1 = professions, page 2 = hobbies, page 3 = culture; that is wrong here *because pages are individually skippable*, so anyone who stopped after page 1 would have been offered only professions. `profiles.test.ts` asserts the spread, because "the pages are diverse" is exactly the claim that quietly stops being true after two edits.
+
+  The chips name **a kind of person, not a subject** — "Foodie", not "Food". A label that is already a topic gives a topic generator nothing to add.
+
+  **Continue pages through the three, then advances the step**, so the wizard keeps one primary button and its dots keep counting steps. A separate **Skip these** leaves the remaining pages without leaving setup — and saves what is already ticked on the way out, because someone who picked six things on page one and then skipped meant to keep the six.
+
+- **FR-20.13** *(Shipped, NEWS-383)* Selections are stored as **ids, never labels** (`settings.profiles`), so rewording a chip cannot orphan everyone who ticked it. Reopening the guide from Settings **pre-ticks what is already saved** — a returning user shown a blank grid would reasonably conclude their choices were lost.
+
+  Unknown ids are kept in storage and dropped on read (`resolveProfiles`), the same call `categories.ts` makes for an unresolvable slug: an export written by a build with one extra profile must still import, and losing one chip beats losing the import.
+
+  **They are deliberately absent from the JSON topic export** (FR-30.4 excludes settings). That export is a topic list for sharing, and a shared list should not carry "I am a Retiree interested in mental health". The SQLite backup covers them, being a copy of everything.
+
+- **FR-20.14** *(Shipped, NEWS-394)* **Location** — where the user is, as free text in any script, with six continent buttons that fill the same field. See [35 — Location](35-location.md) for why there is no place list and no validation. Skippable; empty keeps every topic global.
 
 - **FR-20.7** *(Shipped)* **Schedule** — the interval, framed by what it costs rather than as a bare dropdown, and pointing at the spending cap in Settings.
 

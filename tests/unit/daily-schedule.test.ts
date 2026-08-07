@@ -25,6 +25,7 @@ const SETTINGS: Settings = {
   effort: '',
   backupDir: '',
   location: '',
+  profiles: [],
   backupPromptNever: false,
   backupPromptSnoozedUntil: '',
   notifyOnNewItems: false,

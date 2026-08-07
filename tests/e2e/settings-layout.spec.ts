@@ -50,15 +50,41 @@ test('the first-run guide walks through setup and is re-openable (NEWS-78)', asy
   await expect(wizard).toBeVisible();
   await expect(page.locator('.dialog:not(.onboarding)')).toHaveCount(0);
 
-  // Welcome → source → topics.
+  // Welcome → source → profiles → location → topics.
   await expect(wizard.locator('h2')).toHaveText('Newsmonger watches topics, not feeds.');
   await wizard.locator('[data-action=onboarding-next]').click();
   await expect(wizard.locator('h2')).toHaveText('Where should the news come from?');
+
+  // Profiles: three pages behind one step, so Continue pages before it advances
+  // (NEWS-383). Walking all three is the point — a regression that advanced the
+  // step on the first press would still reach Topics and pass a looser test.
+  await wizard.locator('[data-action=onboarding-next]').click();
+  await expect(wizard.locator('h2')).toHaveText('What are you into?');
+  await expect(wizard.locator('.chip.profile')).toHaveCount(16);
+  await expect(wizard.locator('.profile-foot')).toContainText('Page 1 of 3');
+
+  // Ticking survives paging away and back — the selection lives across all
+  // three pages, not per page.
+  const firstProfile = wizard.locator('.chip.profile').first();
+  await firstProfile.click();
+  await expect(firstProfile).toHaveAttribute('aria-pressed', 'true');
+  await expect(wizard.locator('.profile-foot')).toContainText('1 chosen');
+
+  await wizard.locator('[data-action=onboarding-next]').click();
+  await expect(wizard.locator('.profile-foot')).toContainText('Page 2 of 3');
+  await expect(wizard.locator('h2')).toHaveText('What are you into?');
+  await expect(wizard.locator('.profile-foot')).toContainText('1 chosen');
+  await wizard.locator('[data-action=onboarding-next]').click();
+  await expect(wizard.locator('.profile-foot')).toContainText('Page 3 of 3');
+  await wizard.locator('[data-action=onboarding-next]').click();
+
+  // Location (NEWS-394, FR-35.9).
+  await expect(wizard.locator('h2')).toHaveText('Where are you?');
   await wizard.locator('[data-action=onboarding-next]').click();
   await expect(wizard.locator('h2')).toHaveText('What should Newsmonger watch?');
 
   // Starter topics toggle, and the count reflects it.
-  const first = wizard.locator('.chip.starter').first();
+  const first = wizard.locator('.starter-topics .chip.starter').first();
   await first.click();
   await expect(first).toHaveAttribute('aria-pressed', 'true');
   await expect(wizard.locator('.note')).toContainText('1 chosen');
@@ -72,6 +98,13 @@ test('the first-run guide walks through setup and is re-openable (NEWS-78)', asy
   await wizard.locator('[data-action=onboarding-skip]').click();
   await expect(wizard).toHaveCount(0);
   await expect(page.locator('.topic')).toHaveCount(before);
+
+  // Leaving the picker *saves* (FR-20.13), so the profile ticked above is now
+  // stored — and a chip can only be unticked on its own page, which this walk
+  // has already passed. Cleared here rather than left for the next test to trip
+  // over: tests in this file share a server, and inheriting a selection is what
+  // made the NEWS-383 test below fail the first time it ran in company.
+  await page.request.patch('/api/settings', { data: { profiles: [] } });
 });
 
 test('the privacy note discloses what leaves the machine (NEWS-91)', async ({ page }) => {
@@ -704,6 +737,11 @@ test('the wordmark follows the pinned theme, not the system one (NEWS-377)', asy
 // The stored value, read back from the server rather than from the input — the
 // setting is what reaches the check prompt, and a client-only value would look
 // identical in the field.
+const storedProfiles = async (page: Page): Promise<string[]> => {
+  const body = (await (await page.request.get('/api/state')).json()) as { settings: { profiles: string[] } };
+  return body.settings.profiles;
+};
+
 const storedLocation = async (page: Page): Promise<string> => {
   const body = (await (await page.request.get('/api/state')).json()) as { settings: { location: string } };
   return body.settings.location;
@@ -753,4 +791,62 @@ test('a location is stored as typed, in any script, and clears back to global (F
     .toBe('');
 
   await closeSettings(page);
+});
+
+test('profile picks persist and are pre-ticked when the guide reopens (FR-20.12–20.13, NEWS-383)', async ({
+  page,
+}) => {
+  // Pre-ticking is the half most likely to rot silently: the picker still looks
+  // right with a blank grid, and the only symptom is a returning user
+  // reasonably concluding their choices were lost.
+  // Established, not inherited. This file shares a server and earlier tests walk
+  // the picker, so starting from "whatever the last test left" would make this
+  // assert someone else's state (NEWS-313's rule, applied within a file).
+  await page.request.patch('/api/settings', { data: { profiles: [] } });
+
+  await page.goto('/');
+  await openSettingsTab(page, 'App');
+  await page.locator('[data-action=rerun-onboarding]').click();
+  const wizard = page.locator('.dialog.onboarding');
+
+  await wizard.locator('[data-action=onboarding-next]').click(); // welcome → source
+  await wizard.locator('[data-action=onboarding-next]').click(); // source → profiles
+  await expect(wizard.locator('h2')).toHaveText('What are you into?');
+
+  await wizard.locator('[data-profile=foodie]').click();
+  await wizard.locator('[data-profile=gamer]').click();
+
+  // "Skip these" leaves the remaining pages *and saves what is ticked* — someone
+  // who picked two things and then skipped meant to keep the two.
+  await wizard.locator('[data-action=profiles-skip]').click();
+  await expect(wizard.locator('h2')).toHaveText('Where are you?');
+
+  await expect
+    .poll(async () => storedProfiles(page))
+    .toEqual(['foodie', 'gamer']);
+
+  await wizard.locator('[data-action=onboarding-skip]').click();
+  await expect(wizard).toHaveCount(0);
+
+  // Reopening pre-ticks them, on the right page, without re-saving anything.
+  await openSettingsTab(page, 'App');
+  await page.locator('[data-action=rerun-onboarding]').click();
+  await wizard.locator('[data-action=onboarding-next]').click();
+  await wizard.locator('[data-action=onboarding-next]').click();
+  await expect(wizard.locator('h2')).toHaveText('What are you into?');
+  await expect(wizard.locator('[data-profile=foodie]')).toHaveAttribute('aria-pressed', 'true');
+  await expect(wizard.locator('[data-profile=gamer]')).toHaveAttribute('aria-pressed', 'true');
+  await expect(wizard.locator('[data-profile=parent]')).toHaveAttribute('aria-pressed', 'false');
+
+  // Unticking one and finishing the pages stores the smaller set — the picker
+  // has to be able to *remove* a profile, not only add.
+  await wizard.locator('[data-profile=foodie]').click();
+  await wizard.locator('[data-action=profiles-skip]').click();
+  await expect.poll(async () => storedProfiles(page)).toEqual(['gamer']);
+
+  await wizard.locator('[data-action=onboarding-skip]').click();
+
+  // Leave the shared server as we found it — this file's later tests, and any
+  // file that runs after it, must not inherit a profile selection (NEWS-313).
+  await page.request.patch('/api/settings', { data: { profiles: [] } });
 });

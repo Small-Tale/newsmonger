@@ -2347,6 +2347,53 @@ h2.eyebrow {
   }
 }
 
+// The profile picker's sixteen chips (NEWS-383).
+//
+// `auto-fill` with a min track rather than a fixed 4×4: the longest label is
+// "Mental health & mindfulness" at 27 characters, and a rigid four-column grid
+// would either truncate it or force every column to its width. Letting the
+// columns find their own count keeps the longest chip whole and still reads as a
+// grid at dialog width.
+.profile-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 8px;
+  margin: 0 0 14px;
+}
+
+.chip.profile {
+  border-color: var(--line);
+  padding: 8px 12px;
+  font-size: 13px;
+  text-align: center;
+  // Wrap rather than ellipsize: a truncated profile is one the user cannot read
+  // well enough to decide about, which defeats the chip.
+  white-space: normal;
+
+  &.on {
+    background: var(--pine-soft);
+    border-color: var(--pine);
+    color: var(--ink);
+    font-weight: 500;
+  }
+}
+
+// Page counter on the left, "Skip these" on the right.
+.profile-foot {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+// The continent quick-fills under the location field (NEWS-394).
+.location-quick {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 10px 0 14px;
+}
+
 .detected {
   list-style: none;
   margin: 0 0 14px;

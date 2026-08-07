@@ -4,6 +4,7 @@ import { delegate, each, effect, mount } from 'kerfjs';
 import type { Effort,ProviderName  } from '../ai/types.js';
 import { PROVIDER_MODELS } from '../ai/types.js';
 import type { NewsItem } from '../db/schemas.js';
+import { PROFILE_PAGE_COUNT } from '../profiles.js';
 import {
   addSuggestedTopic,
   addTopic,
@@ -46,6 +47,7 @@ import {
   updateHighPriorityInterval,
   updateInterval,
   updateLocation,
+  updateProfiles,
   updateProviderSettings,
   updateRetention,
   updateScheduleMode,
@@ -72,6 +74,7 @@ import { filterBarJsx } from './filter-bar.js';
 import { icon } from './icons.js';
 import { correctedModel } from './model-choice.js';
 import { ensureNotificationPermission } from './notifications.js';
+import { nextProfilePage } from './onboarding.js';
 import { onboardingJsx } from './onboarding-view.js';
 import { browserPollDeps, startPolling as startStatePolling } from './poll.js';
 import { trackRailTop } from './rail.js';
@@ -81,7 +84,7 @@ import { syncSelects } from './select-sync.js';
 import { settingsDialogJsx } from './settings.js';
 import { shareItem } from './share.js';
 import { toggleSolo } from './solo.js';
-import type { AppState, DiscoverSource, ToastState } from './stores.js';
+import type { AppState, DiscoverSource, OnboardingStep, ToastState } from './stores.js';
 import {
   appStore,
   FEED_PAGE,
@@ -810,6 +813,49 @@ function openTopicMenuFor(id: string, row: Element): void {
 function closeOnboarding(): void {
   appStore.actions.setOnboarding(null);
   writeOnboardingSeen();
+}
+
+/**
+ * Move to a step, doing whatever that step needs on the way in.
+ *
+ * One place rather than one branch per caller: the profile picker and the
+ * ordinary Continue both arrive here, and a second copy of the source-step
+ * refresh is how one of them would eventually stop doing it.
+ */
+function advanceOnboardingTo(next: OnboardingStep): void {
+  appStore.actions.setOnboarding(next);
+  // Entering the source step, re-read what's actually configured: a key may
+  // have been added in another window since load.
+  if (next === 'source') {
+    void refreshKeys();
+    void refreshProviders();
+  }
+  // Seed the picker from what is already saved, so reopening the guide from
+  // Settings shows previous picks ticked rather than a blank grid (NEWS-383).
+  if (next === 'profiles') {
+    appStore.actions.seedOnboardingProfiles(appStore.state.value.settings.profiles);
+  }
+}
+
+/**
+ * Save the ticked profiles, then leave the picker.
+ *
+ * Saves **before** advancing, and advances regardless of whether the write
+ * succeeded: a failed PATCH here should not trap the user in setup. The value is
+ * a preference, not a precondition for anything later in the flow.
+ */
+async function saveProfilesAndAdvance(): Promise<void> {
+  const { onboardingProfiles } = appStore.state.value;
+  // Bound checked rather than trusted: indexing a readonly tuple past its length
+  // is typed as never-undefined, so the type would not catch a reorder that left
+  // `profiles` last. Same reason the Continue handler checks it explicitly.
+  const at = ONBOARDING_STEPS.indexOf('profiles') + 1;
+  try {
+    await updateProfiles(onboardingProfiles);
+  } finally {
+    if (at >= ONBOARDING_STEPS.length) closeOnboarding();
+    else advanceOnboardingTo(ONBOARDING_STEPS[at]);
+  }
 }
 
 /**
@@ -1883,6 +1929,29 @@ function wireEvents(root: HTMLElement): void {
     if (name !== null) appStore.actions.toggleOnboardingTopic(name);
   });
 
+  void delegate(root, 'click', '[data-profile]', (_e, el) => {
+    const id = el.getAttribute('data-profile');
+    if (id !== null) appStore.actions.toggleOnboardingProfile(id);
+  });
+
+  // Skips the remaining profile *pages*, not the wizard. Saves what is already
+  // ticked on the way out — a user who picked six things on page one and then
+  // skipped meant to keep the six.
+  void delegate(root, 'click', '[data-action=profiles-skip]', () => {
+    void saveProfilesAndAdvance();
+  });
+
+  void delegate(root, 'change', '[data-action=onboarding-location]', (_e, el) => {
+    if (el instanceof HTMLInputElement) void updateLocation(el.value.trim());
+  });
+
+  void delegate(root, 'click', '[data-location-pick]', (_e, el) => {
+    const name = el.getAttribute('data-location-pick');
+    // Re-clicking the chosen continent clears it, so the row is a toggle rather
+    // than a one-way door — there is no other way back to "no location" here.
+    if (name !== null) void updateLocation(appStore.state.value.settings.location === name ? '' : name);
+  });
+
   void delegate(root, 'click', '[data-action=onboarding-skip]', () => {
     closeOnboarding();
   });
@@ -1890,6 +1959,17 @@ function wireEvents(root: HTMLElement): void {
   void delegate(root, 'click', '[data-action=onboarding-next]', () => {
     const current = appStore.state.value.onboarding;
     if (current === null || current === 'auto') return;
+    // The profile picker holds three pages behind one step, so Continue pages
+    // through them before it advances the wizard (NEWS-383).
+    if (current === 'profiles') {
+      const { page, advanceStep } = nextProfilePage(appStore.state.value.onboardingProfilePage, PROFILE_PAGE_COUNT);
+      if (!advanceStep) {
+        appStore.actions.setOnboardingProfilePage(page);
+        return;
+      }
+      void saveProfilesAndAdvance();
+      return;
+    }
     // Past the end means "done" — indexing a readonly tuple past its length is
     // typed as never-undefined, so the bound is checked explicitly.
     const at = ONBOARDING_STEPS.indexOf(current) + 1;
@@ -1910,14 +1990,7 @@ function wireEvents(root: HTMLElement): void {
       })();
       return;
     }
-    const next = ONBOARDING_STEPS[at];
-    appStore.actions.setOnboarding(next);
-    // Entering the source step, re-read what's actually configured: a key may
-    // have been added in another window since load.
-    if (next === 'source') {
-      void refreshKeys();
-      void refreshProviders();
-    }
+    advanceOnboardingTo(ONBOARDING_STEPS[at]);
   });
 
   // --- topic guidance (NEWS-80) --------------------------------------------

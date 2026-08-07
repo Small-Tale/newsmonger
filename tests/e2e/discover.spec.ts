@@ -436,11 +436,25 @@ async function openSetupGuide(page: Page): Promise<void> {
   await expect(page.locator('.dialog.onboarding')).toBeVisible();
 }
 
+/**
+ * Advance to the Topics step, however many steps precede it.
+ *
+ * Presses Continue until the Topics heading appears rather than pressing it a
+ * fixed number of times. These tests are about *discovery inside onboarding* —
+ * they should not fail, or need editing, every time a step is added before
+ * Topics. Two were (NEWS-383, NEWS-394) and this helper is why only it changed.
+ *
+ * Bounded so a wizard that stops advancing fails here, loudly, instead of
+ * hanging until the suite times out somewhere less informative.
+ */
 async function stepToTopics(page: Page): Promise<void> {
   const wizard = page.locator('.dialog.onboarding');
-  await wizard.locator('[data-action=onboarding-next]').click();
-  await wizard.locator('[data-action=onboarding-next]').click();
-  await expect(wizard.locator('h2')).toHaveText('What should Newsmonger watch?');
+  const heading = wizard.locator('h2');
+  for (let press = 0; press < 12; press++) {
+    if ((await heading.textContent()) === 'What should Newsmonger watch?') return;
+    await wizard.locator('[data-action=onboarding-next]').click();
+  }
+  await expect(heading, 'never reached the Topics step').toHaveText('What should Newsmonger watch?');
 }
 
 test('with no usable provider, the Topics step falls back to the starter chips', async ({ page }) => {

@@ -456,6 +456,18 @@ export function updateLocation(location: string): Promise<void> {
   return withRefresh(() => request('/api/settings', { method: 'PATCH', body: JSON.stringify({ location }) }));
 }
 
+/**
+ * Save the ticked reader profiles, by id (NEWS-383).
+ *
+ * Ids, never labels — rewording a chip must not orphan everyone who ticked it.
+ * An empty array is a real value meaning "ticked nothing", not "unset".
+ */
+export function updateProfiles(profiles: readonly string[]): Promise<void> {
+  return withRefresh(() =>
+    request('/api/settings', { method: 'PATCH', body: JSON.stringify({ profiles: [...profiles] }) }),
+  );
+}
+
 /** Sync folders the server can see (NEWS-230, FR-27.5). Empty is a valid answer. */
 export async function fetchBackupLocations(): Promise<BackupLocation[]> {
   const body = await request('/api/backup/locations');

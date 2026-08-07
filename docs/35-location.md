@@ -4,9 +4,7 @@ Some topics are inherently about somewhere. Someone who follows **Concerts** alm
 
 See also [20 — First-Run Onboarding](20-onboarding.md), [18 — Topic Guidance](18-guidance.md), [22 — Topic Categories](22-topic-categories.md).
 
-## Status: partial
-
-The setting and its use in every check are shipped. The onboarding step that asks for it is not — see *Not yet built* at the end.
+## Status: shipped
 
 ### The setting
 
@@ -53,8 +51,10 @@ The setting and its use in every check are shipped. The onboarding step that ask
 - **Unit** (`tests/unit/location-prompt.test.ts`): the instruction appears when a location is set and is absent when it is `''` or whitespace; it carries the ignore-if-global half; a non-ASCII location survives to the prompt unaltered; the value is not appended to the topic name. Settings round-trip through the API with a CJK value and with a 200-character value.
 - **E2E** (`tests/e2e/settings-layout.spec.ts`): the field persists a typed value across a reload, and clearing it stores `''`.
 
-## Not yet built
+## Onboarding
 
-- **FR-35.9** *(Design only)* An **onboarding step** that asks for the location during first run, so it is set before the Topics step creates anything. Designed in NEWS-389 (see `location-picker-wireframes-v2.png` on that ticket) and deferred: the step slots in beside the profile picker from NEWS-383, and building the two separately then reconciling their placement in `ONBOARDING_STEPS` is more work than building them together.
+- **FR-35.9** *(Shipped, NEWS-394)* An **onboarding step** asks for the location during first run, placed before the Topics step so the value exists before any topic is created — each fires its first check immediately (FR-1.12), and a location set afterwards would miss the check it was meant to steer. Skippable like every other step (FR-20.8); skipping keeps every topic global.
 
-  Until then the setting is discoverable only in Settings, which means a first-run user gets global topics until they find it.
+  The step offers **six continent buttons that fill the same free-text field**. They are not a picker over a dataset — there deliberately is none. They exist because "a continent is enough" is a claim the hint text makes and nobody believes until a continent is offered as a real answer. Clicking the chosen one again clears it, since there is no other route back to "no location" from within the step.
+
+  The design this came from (NEWS-389, `location-picker-wireframes-v2.png`) also had a place-search door and a country drill-down. Both went with the gazetteer — see FR-35.2.
