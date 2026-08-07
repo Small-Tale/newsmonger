@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import type { CheckResult } from '../../src/ai/types.js';
 import { CheckRunner } from '../../src/checks.js';
 import { Store } from '../../src/db/store.js';
+import { afterGrace } from '../helpers/grace.js';
 import { asResolver, fakeProvider, instantRetry, noUsage } from '../helpers/provider.js';
 import { tmpDataDir } from '../helpers/tmp.js';
 
@@ -40,7 +41,7 @@ describe('bounded-concurrency sweeps (NEWS-81)', () => {
     store.updateSettings({ checkConcurrency: 3 });
     const { provider, state } = tracking();
 
-    await new CheckRunner(store, asResolver(provider)).checkDue(new Date());
+    await new CheckRunner(store, asResolver(provider)).checkDue(afterGrace());
 
     expect(state.started).toHaveLength(6);
     expect(state.peak).toBe(3);
@@ -51,7 +52,7 @@ describe('bounded-concurrency sweeps (NEWS-81)', () => {
       const store = storeWith(NAMES);
       store.updateSettings({ checkConcurrency: limit });
       const { provider, state } = tracking();
-      await new CheckRunner(store, asResolver(provider)).checkDue(new Date());
+      await new CheckRunner(store, asResolver(provider)).checkDue(afterGrace());
       expect(state.peak, `cap ${String(limit)}`).toBeLessThanOrEqual(limit);
     }
   });
@@ -60,7 +61,7 @@ describe('bounded-concurrency sweeps (NEWS-81)', () => {
     const store = storeWith(NAMES);
     store.updateSettings({ checkConcurrency: 1 });
     const { provider, state } = tracking();
-    await new CheckRunner(store, asResolver(provider)).checkDue(new Date());
+    await new CheckRunner(store, asResolver(provider)).checkDue(afterGrace());
     expect(state.peak).toBe(1);
   });
 
@@ -68,7 +69,7 @@ describe('bounded-concurrency sweeps (NEWS-81)', () => {
     const store = storeWith(['Only one']);
     store.updateSettings({ checkConcurrency: 8 });
     const { provider, state } = tracking();
-    await new CheckRunner(store, asResolver(provider)).checkDue(new Date());
+    await new CheckRunner(store, asResolver(provider)).checkDue(afterGrace());
     expect(state.peak).toBe(1);
   });
 
@@ -81,7 +82,7 @@ describe('bounded-concurrency sweeps (NEWS-81)', () => {
     store.setTopicHighPriority(urgent?.id ?? '', true);
     const { provider, state } = tracking();
 
-    await new CheckRunner(store, asResolver(provider)).checkDue(new Date());
+    await new CheckRunner(store, asResolver(provider)).checkDue(afterGrace());
     expect(state.started[0]).toBe('Urgent');
   });
 
@@ -90,7 +91,7 @@ describe('bounded-concurrency sweeps (NEWS-81)', () => {
     const store = storeWith(NAMES);
     store.updateSettings({ checkConcurrency: 3 });
     const { provider } = tracking();
-    expect(await new CheckRunner(store, asResolver(provider)).checkDue(new Date())).toBe(6);
+    expect(await new CheckRunner(store, asResolver(provider)).checkDue(afterGrace())).toBe(6);
   });
 
   it('keeps every topic’s stories when several finish at once', async () => {
@@ -120,7 +121,7 @@ describe('bounded-concurrency sweeps (NEWS-81)', () => {
     const { provider } = tracking(30);
     const runner = new CheckRunner(store, asResolver(provider));
 
-    const sweep = runner.checkDue(new Date());
+    const sweep = runner.checkDue(afterGrace());
     await new Promise((r) => setTimeout(r, 10));
     expect(runner.checking()).toHaveLength(3);
     await sweep;
@@ -140,7 +141,7 @@ describe('bounded-concurrency sweeps (NEWS-81)', () => {
     // policy would spend 90 s doing it. The retry count is unchanged, so the
     // sweep behaviour under test is the same.
     expect(
-      await new CheckRunner(store, asResolver(provider), undefined, null, null, instantRetry).checkDue(new Date()),
+      await new CheckRunner(store, asResolver(provider), undefined, null, null, instantRetry).checkDue(afterGrace()),
     ).toBe(3);
     const runs = store.listRuns(10);
     expect(runs).toHaveLength(3);

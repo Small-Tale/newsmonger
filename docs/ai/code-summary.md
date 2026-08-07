@@ -28,6 +28,7 @@ src/
   images/             og:image scrape + favicon resolution + local cache; safety.ts holds the SSRF guards
     favicon.ts        originOf (cache key) + extractIconUrl + faviconCandidates (NEWS-169)
   attendance.ts       Attendance: in-memory lastSeenAt + 5 min window; gates attended providers
+topic-holds.ts      TopicHolds: in-memory per-topic 15 s window, re-asserted by the /api/state poll; a sweep skips a topic whose edit/guidance dialog is open (NEWS-366)
   db/
     schemas.ts        zod: Topic, NewsItem, Settings, CheckRun, DataFile; DEFAULT_CHECK_INTERVAL_MS, MAX_GUIDANCE_LENGTH
     store.ts          Store: SQLite (node:sqlite), per-row writes, zod-validated rows, corrupt-db backup+reset, one-time data.json import (NEWS-94)
@@ -194,6 +195,8 @@ Data dir: `--data-dir` flag → `NEWSMONGER_DATA_DIR` → `~/.newsmonger`. Also 
 | A new runtime dependency | just add it to `package.json` `dependencies` — tsup externalizes it and the sidecar script installs it; no list to update |
 | Mock behavior in tests | `src/ai/providers/mock.ts` (topic name containing "fail"/"empty" triggers those paths) |
 | API keys / keychain | `src/keychain.ts` (OS layer) + `src/ai/api-keys.ts` (env→keychain precedence); `NEWSMONGER_FAKE_KEYCHAIN=1` for tests |
+| Why a new topic isn't checked for a minute | `NEW_TOPIC_GRACE_MS` + `inNewTopicGrace` in `src/checks.ts`, applied in `checkDue` (NOT in `isDueUnderSchedule` — a new topic is still *due*). Waivable via the runner's `newTopicGraceMs`, which `instantRetry`/`fastRetry` set to 0. See `docs/34-new-topic-settling.md` |
+| Why a sweep skipped a topic someone was editing | `src/topic-holds.ts` + the `?holding=` param on `GET /api/state`; the client sends `guidanceTopicId ?? renameTopicId` from `refreshState`. Holds lapse (15 s) rather than being released — there is no release endpoint. See `docs/34-new-topic-settling.md` |
 | Foreground/attendance gate | `src/attendance.ts` + `CheckRunner.checkDue`; provider opts in via `attended: true`. **Manual checks (`{manual:true}`) record attendance** so a long sweep isn't deferred (NEWS-44) |
 | Article images / SSRF guards | `src/images/` — `safety.ts` (URL vetting), `ogimage.ts` (extract), `cache.ts` (fetch+store+`pruneImageCache`), route `/api/image/:hash` is **cache-only** |
 | Image cache pruning | `pruneImageCache`/`liveImageHashes` in `src/images/cache.ts`; called at startup (`cli.ts`) + on `DELETE /api/topics/:id` |

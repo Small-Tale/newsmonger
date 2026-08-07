@@ -6,6 +6,7 @@ import type { Backups } from './backup.js';
 import type { CheckRunner } from './checks.js';
 import type { Store } from './db/store.js';
 import type { DiscoveryService } from './discovery.js';
+import type { TopicHolds } from './topic-holds.js';
 import type { ClearUndoBuffer } from './undo.js';
 
 /** Hono environment: per-app dependencies injected by `createApp`. */
@@ -14,6 +15,8 @@ export interface AppEnv {
     store: Store;
     runner: CheckRunner;
     attendance: Attendance;
+    /** Topics with an edit or guidance dialog open, which hold off a scheduled check (NEWS-366). */
+    holds: TopicHolds;
     /** Data directory, for locating the on-disk image cache. */
     dataDir: string;
     /** Vendor-side key check before saving (NEWS-78); null skips it. */

@@ -25,6 +25,7 @@ import { originOf } from './images/favicon.js';
 import type { FaviconFetcher, ImageFetcher } from './images/index.js';
 import { liveImageHashes, pruneImageCache } from './images/index.js';
 import { withThreadIds } from './threads.js';
+import { TopicHolds } from './topic-holds.js';
 
 /**
  * A provider failure that made it through the retry policy, carrying how it was
@@ -146,6 +147,24 @@ export class CheckRunner {
        * subscription is quota spent on nothing. Tests pass 0.
        */
       reissueDelayMs?: number;
+      /**
+       * Topics with an edit or guidance dialog open (NEWS-366). Defaults to a
+       * fresh `TopicHolds`, which holds nothing — so forgetting to wire this up
+       * leaves scheduled checks behaving exactly as they did before.
+       */
+      holds?: TopicHolds;
+      /**
+       * How long a brand-new topic is left alone before its first scheduled
+       * check (NEWS-366), defaulting to `NEW_TOPIC_GRACE_MS`.
+       *
+       * Injectable for the same reason `sleep` is: a test whose subject is the
+       * retry gate or the failure cooldown creates topics and sweeps at once,
+       * and cannot simply sweep a minute later — those gates are measured
+       * against the real clock, so moving the sweep's `now` forward expires the
+       * very window under test. Passing 0 says "this test is not about the
+       * grace" without distorting anything else.
+       */
+      newTopicGraceMs?: number;
     } = {},
   ) {
     this.sleep = opts.sleep ?? ((ms) => new Promise((resolve) => setTimeout(resolve, ms)));
@@ -153,7 +172,12 @@ export class CheckRunner {
     this.fetchFavicon = opts.fetchFavicon ?? null;
     this.backoff = opts.backoff ?? DEFAULT_BACKOFF;
     this.backups = opts.backups ?? null;
+    this.holds = opts.holds ?? new TopicHolds();
+    this.newTopicGraceMs = opts.newTopicGraceMs ?? NEW_TOPIC_GRACE_MS;
   }
+
+  private readonly holds: TopicHolds;
+  private readonly newTopicGraceMs: number;
 
   private readonly sleep: (ms: number) => Promise<void>;
   private readonly reissueDelayMs: number;
@@ -832,6 +856,15 @@ export class CheckRunner {
     const due = this.store
       .listTopics()
       .filter((topic) => isDueUnderSchedule(topic, settings, now))
+      // Two reasons not to run a topic *right now* that are not reasons it is
+      // not due (NEWS-366). Both filtered here rather than inside
+      // `isDueUnderSchedule`, which stays a pure function of the topic and the
+      // settings: a brand-new topic and a topic with its dialog open are both
+      // genuinely due, they are just being given a moment first. Folding either
+      // into the schedule would make it answer "is someone typing" — a question
+      // the countdown derived from it has no business reflecting.
+      .filter((topic) => !inNewTopicGrace(topic, now, this.newTopicGraceMs))
+      .filter((topic) => !this.holds.isHeld(topic.id, now.getTime()))
       .sort(byCheckOrder);
     if (due.length === 0) return 0;
     if (!(await this.mayRunScheduled(now))) {
@@ -905,6 +938,52 @@ export function byCheckOrder(
 export interface Schedulable {
   lastCheckedAt: string | null;
   clearedAt?: string | null;
+  /** Creation time, for the new-topic grace (NEWS-366); absent in callers that predate it. */
+  createdAt?: string;
+}
+
+/**
+ * How long a brand-new topic waits before its first scheduled check (NEWS-366).
+ *
+ * Adding a topic and writing its guidance are two actions, and the scheduler
+ * ticks every minute in between. Without this, a topic added at 12:00:59 is
+ * checked at 12:01:00 — against the topic name alone, before the user has
+ * finished saying what they actually wanted from it. The check is not wrong so
+ * much as premature: it spends a provider call, and it fills the feed with the
+ * broad results the guidance existed to narrow.
+ *
+ * A minute is enough to open the dialog and start typing, which is all this
+ * needs to buy — `TopicHolds` covers the rest of the typing.
+ */
+export const NEW_TOPIC_GRACE_MS = 60_000;
+
+/**
+ * Whether a topic is still inside its post-creation grace.
+ *
+ * Only ever true for a topic that has neither been checked nor cleared:
+ * `scheduleBaseline` is null exactly once in a topic's life, at the start. A
+ * cleared topic reads as never-checked for *display* (NEWS-273) but keeps its
+ * `clearedAt` baseline for *scheduling* (NEWS-291), so it waits a full interval
+ * and never reaches this at all — which is right, since the user who cleared it
+ * has already said what they want and does not need a second minute to say it.
+ *
+ * A missing or unparseable `createdAt` means no grace, matching how
+ * `clearedAt` and `retryAfter` degrade: an absent field restores the behaviour
+ * from before the field existed.
+ */
+export function inNewTopicGrace(topic: Schedulable, now: Date, graceMs: number = NEW_TOPIC_GRACE_MS): boolean {
+  if (graceMs <= 0) return false;
+  if (scheduleBaseline(topic) !== null) return false;
+  if (topic.createdAt === undefined) return false;
+  const created = Date.parse(topic.createdAt);
+  if (!Number.isFinite(created)) return false;
+  const elapsed = now.getTime() - created;
+  // `elapsed >= 0` matters: a `now` *earlier* than the topic's creation means a
+  // clock that has jumped backwards, and "negative elapsed is less than a
+  // minute" would hold such a topic back until the clock caught up — which,
+  // after a large correction, could be days. How long a topic has existed is
+  // unknowable in that state, so this fails open (FR-34.9) and lets it run.
+  return elapsed >= 0 && elapsed < graceMs;
 }
 
 /**

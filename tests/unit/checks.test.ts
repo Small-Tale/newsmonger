@@ -9,6 +9,7 @@ import { BACKUP_FILE,Backups } from '../../src/backup.js';
 import { byCheckOrder, CheckRunner, effectiveInterval, isDue, scheduleBaseline } from '../../src/checks.js';
 import { DataFileSchema } from '../../src/db/schemas.js';
 import { Store } from '../../src/db/store.js';
+import { afterGrace } from '../helpers/grace.js';
 import { asResolver, fakeProvider, noUsage } from '../helpers/provider.js';
 import { tmpDataDir } from '../helpers/tmp.js';
 
@@ -314,7 +315,7 @@ describe('CheckRunner', () => {
     store.setTopicPaused(paused.id, true);
     store.addTopic('Due');
 
-    await runner.checkDue(new Date());
+    await runner.checkDue(afterGrace());
     expect(service.calls.map((c) => c.topicName)).toEqual(['Due']);
   });
 
@@ -391,15 +392,15 @@ describe('CheckRunner', () => {
     store.updateSettings({ checkIntervalMs: HOUR });
     const topic = store.addTopic('Wave');
 
-    await runner.checkDue(new Date());
+    await runner.checkDue(afterGrace());
     expect(service.calls).toHaveLength(1);
 
     store.setTopicPaused(topic.id, true);
-    await runner.checkDue(new Date(Date.now() + 2 * HOUR));
+    await runner.checkDue(afterGrace(2 * HOUR));
     expect(service.calls).toHaveLength(1);
 
     store.setTopicPaused(topic.id, false);
-    await runner.checkDue(new Date(Date.now() + 2 * HOUR));
+    await runner.checkDue(afterGrace(2 * HOUR));
     expect(service.calls).toHaveLength(2);
   });
 });

@@ -20,6 +20,7 @@ import { cacheImageUrl } from './images/index.js';
 import { originGuard } from './origin-guard.js';
 import { registerApi } from './routes/api.js';
 import { registerPages } from './routes/pages.js';
+import { TopicHolds } from './topic-holds.js';
 import type { AppEnv } from './types.js';
 import { ClearUndoBuffer } from './undo.js';
 
@@ -79,6 +80,11 @@ export function createApp(deps: {
   store: Store;
   runner: CheckRunner;
   attendance?: Attendance;
+  /**
+   * Topics with a dialog open (NEWS-366). Same instance the CheckRunner reads,
+   * when the caller passes one; tests that don't care get a standalone tracker.
+   */
+  holds?: TopicHolds;
   dataDir?: string;
   /**
    * Checks a key against its vendor before storing it (NEWS-78). Null disables
@@ -119,6 +125,7 @@ export function createApp(deps: {
   // Same instance the CheckRunner consults, when the caller passes one; tests
   // that don't care get a standalone tracker.
   const attendance = deps.attendance ?? new Attendance();
+  const holds = deps.holds ?? new TopicHolds();
   const undo = deps.undo ?? new ClearUndoBuffer();
   // First, before anything reads a body or touches state (NEWS-86).
   app.use('*', originGuard());
@@ -126,6 +133,7 @@ export function createApp(deps: {
     c.set('store', deps.store);
     c.set('runner', deps.runner);
     c.set('attendance', attendance);
+    c.set('holds', holds);
     c.set('dataDir', deps.dataDir ?? deps.store.dataDir);
     c.set('verifyKey', deps.verifyKey === undefined ? verifyApiKey : deps.verifyKey);
     c.set('discovery', deps.discovery ?? null);

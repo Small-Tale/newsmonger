@@ -15,6 +15,7 @@ import { createFaviconFetcher, createImageFetcher, liveImageHashes, pruneImageCa
 import { openInBrowser } from './routes/api.js';
 import { schedulerTickMs, startScheduler } from './scheduler.js';
 import { createApp, startServer } from './server.js';
+import { TopicHolds } from './topic-holds.js';
 import { appVersion } from './version.js';
 
 async function main(): Promise<void> {
@@ -83,6 +84,9 @@ async function main(): Promise<void> {
   // One tracker, shared: the route records foreground signals and the runner
   // reads them.
   const attendance = new Attendance();
+  // Likewise shared (NEWS-366): the /api/state poll asserts a hold when a topic
+  // dialog is open, and the runner's sweep skips whatever is held.
+  const holds = new TopicHolds();
   // No image fetching under --ai-test: the mock provider's URLs are fake, and
   // a test run must not reach out to the network.
   const fetchImage = options.aiTest ? null : createImageFetcher(options.dataDir);
@@ -126,6 +130,7 @@ async function main(): Promise<void> {
   const runner = new CheckRunner(store, resolve, attendance, fetchImage, options.aiTest ? null : probeLink, {
     fetchFavicon,
     backups,
+    holds,
   });
   // Shares the resolver with the runner so discovery follows the same provider
   // setting, but is its own object: `CheckRunner` is topic-shaped throughout and
@@ -136,6 +141,7 @@ async function main(): Promise<void> {
     runner,
     discovery,
     attendance,
+    holds,
     backups,
     dataDir: options.dataDir,
     // Under --ai-test nothing talks to a vendor, so a live key check would only

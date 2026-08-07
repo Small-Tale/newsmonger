@@ -5,6 +5,7 @@ import { Attendance,ATTENDANCE_WINDOW_MS } from '../../src/attendance.js';
 import { CheckRunner } from '../../src/checks.js';
 import { Store } from '../../src/db/store.js';
 import { createApp } from '../../src/server.js';
+import { afterGrace } from '../helpers/grace.js';
 import { asResolver } from '../helpers/provider.js';
 import { tmpDataDir } from '../helpers/tmp.js';
 
@@ -276,13 +277,16 @@ describe('the /api/foreground route drives the gate', () => {
     const app = createApp({ store, runner, attendance });
     store.addTopic('fusion energy');
 
-    await runner.checkDue(new Date());
+    // Past the new-topic grace (NEWS-366) so the gate under test is attendance
+    // and nothing else. Still well inside the attendance window, which is five
+    // minutes.
+    await runner.checkDue(afterGrace());
     expect(provider.calls).toHaveLength(0);
 
     const res = await app.request('/api/foreground', { method: 'POST' });
     expect(res.status).toBe(200);
 
-    await runner.checkDue(new Date());
+    await runner.checkDue(afterGrace());
     expect(provider.calls).toHaveLength(1);
   });
 

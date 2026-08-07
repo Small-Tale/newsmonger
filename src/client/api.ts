@@ -73,10 +73,28 @@ let feedApplied = 0;
  */
 const threadsInFlight = new Set<string>();
 
+/**
+ * The topic whose edit or guidance dialog is open, for the poll to hold back
+ * (NEWS-366).
+ *
+ * Read from the store at request time rather than pushed on open and close.
+ * Both dialogs can be dismissed several ways — the button, the backdrop, Escape,
+ * a topic being deleted underneath them — and a push model needs every one of
+ * those paths to remember to send a release. Deriving it from the state that
+ * already decides whether the dialog is *rendered* cannot fall out of step with
+ * what is on screen, and closing the tab ends the hold as surely as closing the
+ * dialog does.
+ */
+function heldTopicId(): string | null {
+  const s = appStore.state.value;
+  return s.guidanceTopicId ?? s.renameTopicId;
+}
+
 export async function refreshState(): Promise<void> {
   const seq = ++stateSeq;
   try {
-    const body = await request('/api/state');
+    const held = heldTopicId();
+    const body = await request(held === null ? '/api/state' : `/api/state?holding=${encodeURIComponent(held)}`);
     const state = StateRespSchema.parse(body);
     // Errors are gated by the same check: a stale failure must not raise a
     // banner over state that a newer, successful response already applied.

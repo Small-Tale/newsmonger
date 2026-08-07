@@ -57,8 +57,15 @@ export const INSTANT_BACKOFF: BackoffConfig = {
   jitterRatio: 0,
 };
 
-/** Options that make a `CheckRunner` retry without waiting. */
-export const instantRetry = { backoff: INSTANT_BACKOFF, sleep: () => Promise.resolve() };
+/**
+ * Options that make a `CheckRunner` retry without waiting.
+ *
+ * Also waives the new-topic grace (NEWS-366). These tests add topics and sweep
+ * in the same breath, and their subject is the retry path — the grace would
+ * make the first sweep find nothing, and they cannot sweep a minute later
+ * because the gates they assert on are measured against the real clock.
+ */
+export const instantRetry = { backoff: INSTANT_BACKOFF, sleep: () => Promise.resolve(), newTopicGraceMs: 0 };
 
 /**
  * Real backoff *durations* with no real waiting.
@@ -68,4 +75,4 @@ export const instantRetry = { backoff: INSTANT_BACKOFF, sleep: () => Promise.res
  * the backoff, so a zeroed config produces a gate that has already expired —
  * which looks like the gate not working at all.
  */
-export const fastRetry = { sleep: () => Promise.resolve() };
+export const fastRetry = { sleep: () => Promise.resolve(), newTopicGraceMs: 0 };
