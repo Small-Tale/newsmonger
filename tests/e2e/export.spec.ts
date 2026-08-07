@@ -252,6 +252,19 @@ test('an export goes to the system browser inside Tauri (NEWS-157)', async ({ pa
   // instead of the property would send "/api/export.md?scope=all" and 400.
   expect(opened[0]).toMatch(/^http:\/\/[^/]+\/api\/export\.md\?scope=all$/);
 
+  // **Both** exports, not just the one this test was written for (NEWS-401).
+  // The topics export was added after this test and never joined it, so it
+  // shipped on `data-external` — which passes the raw *attribute*, a relative
+  // path — and was rejected by `/api/open-external`. `openExternalUrl` returns
+  // true regardless, so the click was preventDefaulted and the rejection
+  // swallowed: a dead button, next to a working one, with a passing test between
+  // them. Asserting one control tells you nothing about its sibling.
+  await page.locator('a[href="/api/export-topics.json"]').click();
+  await expect.poll(() => opened.length).toBe(2);
+  expect(opened[1], 'the topics export must also send an absolute URL').toMatch(
+    /^http:\/\/[^/]+\/api\/export-topics\.json$/,
+  );
+
   await closeSettings(page);
 });
 
@@ -288,7 +301,10 @@ test('the topic list downloads, carrying guidance but not check state (FR-30.2, 
 
   await openSettingsTab(page, 'Data');
   const download = page.waitForEvent('download');
-  await page.locator('[data-external]:has-text("Export topics")').click();
+  // Selected by href, not by the external/export hook: which hook this anchor
+  // carries is exactly what NEWS-401 changed, and a selector naming it breaks
+  // whenever that decision is revisited. The URL is the stable thing.
+  await page.locator('a[href="/api/export-topics.json"]').click();
   const file = await download;
   expect(file.suggestedFilename()).toBe('newsmonger-topics.json');
 

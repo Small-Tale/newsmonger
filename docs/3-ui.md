@@ -37,6 +37,14 @@ Two deliberate choices in the wording. Durations **round down** (`23h59m` → "i
 - **FR-3.7** *(Shipped; chooseable since NEWS-334)* The UI supports light and dark colour schemes, plus visible keyboard focus and `prefers-reduced-motion`. Which scheme is shown follows the system by default and can be pinned — see FR-3.74.
 - **FR-3.8** *(Shipped)* In the Tauri webview, source links route through `POST /api/open-external` to open in the system browser (http/https only).
 
+- **FR-3.8a** *(Shipped, NEWS-401)* **Both hooks pass `el.href`, never `getAttribute('href')`.** The route parses what it is handed with `new URL()` and rejects anything not absolute http(s); the attribute is whatever was authored, the property is resolved.
+
+  Getting this wrong is silent, and it was. `openExternalUrl` returns `true` whether or not the call succeeds — there is nothing sensible for a webview to do with the failure — so a rejected URL means the click was `preventDefault`ed *and* the rejection was swallowed. **Export topics…** was authored with a relative href on `data-external` and did nothing at all, with no error, next to a working **Export stories…**.
+
+  `data-export` is for links that download an app route; `data-external` is for outbound links. The distinction matters beyond the href shape — the export hook also defers its dialog teardown by a tick so the anchor is not torn out of the DOM inside its own click handler.
+
+  The simulated-`window.__TAURI__` E2E that covers this had existed since NEWS-157 and asserted the absolute-URL rule in as many words. It covered one of the two exports. **Asserting one control says nothing about its sibling** — it now walks both, and a unit-speed source guard states the pairing rule directly.
+
 ### kerf structural conventions (learned the hard way)
 
 Two rendering rules this UI depends on — regression-tested by the E2E suite:

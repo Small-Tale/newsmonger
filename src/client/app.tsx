@@ -2388,9 +2388,23 @@ function wireEvents(root: HTMLElement): void {
     if (e.target === el) resolveConfirm(false);
   });
 
+  /*
+   * Outbound links, handed to the system browser inside Tauri (FR-3.8).
+   *
+   * `el.href`, **not** `getAttribute('href')` (NEWS-401). The attribute is
+   * whatever was authored; the property is the resolved absolute URL, and
+   * `/api/open-external` parses what it is given with `new URL()` and rejects
+   * anything that is not absolute http(s). Every current user of this hook
+   * authors an absolute URL already, so this changes nothing today — it is here
+   * so that authoring a relative one cannot silently produce a dead control.
+   *
+   * That is not hypothetical: the topics export did exactly that. Because
+   * `openExternalUrl` returns true whether or not the call succeeds, the click
+   * was `preventDefault`ed and the rejection was swallowed, leaving a button
+   * that did nothing with no error to show for it.
+   */
   void delegate(root, 'click', 'a[data-external]', (e, el) => {
-    const url = el.getAttribute('href');
-    if (url !== null && openExternalUrl(url)) e.preventDefault();
+    if (el instanceof HTMLAnchorElement && openExternalUrl(el.href)) e.preventDefault();
   });
 
   /*

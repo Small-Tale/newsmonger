@@ -560,7 +560,7 @@ function settingsPanelJsx(s: AppState): SafeHtml {
             outbound link (FR-3.8). */}
         <h3 class="eyebrow">Topics</h3>
         <div class="io-row">
-          <a class="btn" href="/api/export-topics.json" download data-external="1">
+          <a class="btn" href="/api/export-topics.json" download data-export>
             {icon('download', 15)} Export topics…
           </a>
           {/* A `<label>` wrapping a hidden input, not a button that opens one:
