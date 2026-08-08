@@ -14,6 +14,38 @@ fields reject semver prerelease suffixes.
 
 <!-- Nothing released yet. The first `npm run release` inserts its entry below. -->
 
+## [0.2.0-beta.20] - 2026-08-08
+
+## Features
+
+- Onboarding now asks who you are and where you are: a reader-profile picker (48 profiles across three skippable pages) and a location field, both between the Source and Topics steps.
+- Ticking profiles seeds your feed — the picker maps to a curated table of 240 standing topics (five per profile), with the per-profile depth shrinking as you tick more so ten profiles don't create fifty topics.
+- Location is a global free-text setting (Settings ▸ App ▸ Location) sent with every check; the model applies it only where a topic is inherently about somewhere, so "Local schools" gets local news and "Space exploration" stays global.
+- Topic discovery gained a suggested-topics strip between the free-text box and the section grid, so "what should I watch?" is answered without typing or drilling.
+- An unscoped "surprise me" discovery request is now biased by your ticked profiles, while an explicitly scoped request is left exactly as asked.
+- You can now set a topic's section and subject by hand from the rename dialog — the manual-choice behaviour the app already respected finally has a control.
+- Selected default topics ship with search guidance so ambiguous names ("Marathons", "Mercury") search for the right thing.
+
+## Changes
+
+- The topic taxonomy grew from 11 sections to 20, all with subcategories — Money, Environment, Media, Food & Drink, Travel, Living, Education, Law & Justice, Transport and a catch-all *Other* section for topics the classifier can't place.
+- "Climate science" is no longer offered twice under two names, which previously created two separate topics for one subject.
+- A topic whose stored section no longer exists in the taxonomy is now re-classified instead of being treated as permanently classified while displaying as *Uncategorized*.
+- When you correct a classified topic by hand, the app records what the classifier had said, so misfiling can be measured.
+
+## Bug Fixes
+
+- The setup guide now reappears after you delete `~/.newsmonger` — the dismissal flag is scoped to the install it was dismissed for — and it no longer stays hidden just because a provider CLI happens to be signed in on the machine.
+- "Export topics…" in the desktop app now works instead of failing silently; it was passing a relative URL to the external-link handler, which rejected it with no error shown.
+
+## Documentation and Demo Assets
+
+- The demo and README screenshots are recorded from real news coverage, with real article images and favicons, replacing invented stories that linked to `example.org` and rendered picture-less.
+- Every shipped SVG embeds its images rather than linking a long-dead localhost port, so the animation and stills render correctly in Preview, QuickLook and Finder thumbnails.
+- The hero animation now scrolls the page inside its frame between the feed and sources beats, instead of dissolving or sliding whole frames past each other, and the end card is signed with the real serif wordmark.
+- Screenshots were recaptured on the corrected taxonomy, so section and subject labels no longer disagree with each other or omit the subject.
+- New requirements docs cover Location (35) and profile-derived default topics (36).
+
 ## [0.2.0-beta.19] - 2026-08-07
 
 ## Features
