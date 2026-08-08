@@ -1,4 +1,4 @@
-import { describe } from 'vitest';
+import { describe, it } from 'vitest';
 
 /**
  * A suite that cannot mean anything on Windows, and says why (NEWS-430).
@@ -22,9 +22,29 @@ import { describe } from 'vitest';
  * @param reason - The POSIX-only thing this suite depends on.
  */
 export function describePosixOnly(name: string, reason: string, fn: () => void): void {
-  const skip = process.platform === 'win32';
-  describe(skip ? `${name} [skipped on Windows: ${reason}]` : name, () => {
-    if (skip) return;
-    fn();
-  });
+  register(describe, name, reason, fn);
+}
+
+/** One test that needs POSIX, where its siblings do not. */
+export function itPosixOnly(name: string, reason: string, fn: () => void): void {
+  register(it, name, reason, fn);
+}
+
+/**
+ * `.skip`, **not an early return** — that was the first attempt and vitest
+ * failed it. A suite whose body registers nothing is "No test found in suite",
+ * which is an error, not a skip: the run went from 8 red files to 3, and two of
+ * the three were this helper reporting its own success as a failure.
+ *
+ * `.skip` registers the tests and marks them skipped, so the reason is visible
+ * in the output and the count is honest about what did not run.
+ */
+function register(
+  target: { (name: string, fn: () => void): void; skip: (name: string, fn: () => void) => void },
+  name: string,
+  reason: string,
+  fn: () => void,
+): void {
+  if (process.platform === 'win32') target.skip(`${name} [POSIX only: ${reason}]`, fn);
+  else target(name, fn);
 }

@@ -7,6 +7,8 @@ import { fileURLToPath } from 'node:url';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { z } from 'zod';
 
+import { describePosixOnly } from '../helpers/posix-only.js';
+
 /**
  * The release plumbing is wired and `set-version.mjs` writes every file (NEWS-194).
  *
@@ -882,7 +884,10 @@ describe('the beta smoke install (seen failing on v0.2.0-beta.5)', () => {
   });
 });
 
-describe('the notarization watcher (NEWS-197)', () => {
+describePosixOnly(
+  'the notarization watcher (NEWS-197)',
+  'it runs a `.sh` poller with an `xcrun` shell stub on PATH — Windows has neither',
+  () => {
   const script = path.join(root, 'scripts/notary-watch.sh');
 
   /** Run a subcommand with a stubbed `xcrun` on PATH and a scratch state dir. */
@@ -1035,7 +1040,8 @@ describe('the notarization watcher (NEWS-197)', () => {
   it('rejects an unknown subcommand instead of doing something surprising', () => {
     expect(run(['bogus']).status).toBe(2);
   });
-});
+  },
+);
 
 describe('the release workflows keep their notarization diagnostics (NEWS-197)', () => {
   const read = (rel: string): string => fs.readFileSync(path.join(root, rel), 'utf8');
