@@ -265,11 +265,11 @@ describe('Store.pruneOldRuns (NEWS-103)', () => {
 
     // All 300 survive — under the old 200 cap a third would already be gone.
     expect(store.listRuns(1000)).toHaveLength(300);
-    // 20s rather than the 5s default, for this test alone (NEWS-430). It does
-    // 600 SQLite writes, a prune and a 1000-row read, and the Windows runner is
-    // slow enough that the total crosses five seconds — the only test in the
-    // suite that does. Raising the *global* timeout would buy this one test a
-    // pass at the cost of every genuine hang taking four times as long to
-    // report, so the number goes where the work is.
-  }, 20_000);
+    // No per-test timeout here any more (NEWS-430). This was the first test seen
+    // to cross five seconds on the Windows runner, and it looked like the only
+    // one because it does real work — 600 writes, a prune, a 1000-row read. The
+    // next CI round timed out on two entirely different tests, which is what
+    // showed the runner to be uniformly slow rather than this test to be
+    // exceptional. The timeout is set per-platform in `vitest.config.ts`.
+  });
 });
