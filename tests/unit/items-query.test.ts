@@ -1,11 +1,11 @@
 import { describe, expect, it } from 'vitest';
 
-import { Store } from '../../src/db/store.js';
-import { tmpDataDir } from '../helpers/tmp.js';
+import type { Store } from '../../src/db/store.js';
+import { tmpStore } from '../helpers/tmp.js';
 
 /** A store with `apple`/`banana` topics and a handful of items. */
 function seeded() {
-  const store = new Store(tmpDataDir());
+  const store = tmpStore();
   const apple = store.addTopic('Apple');
   const banana = store.addTopic('Banana');
   // foundAt ascending here; the query returns newest-first.
@@ -92,7 +92,7 @@ describe('Store.queryItems (NEWS-74)', () => {
 describe('category filtering (NEWS-97)', () => {
   /** Two topics in different sections, one uncategorized, one story each. */
   function categorised(): { store: Store; ids: Record<string, string> } {
-    const store = new Store(tmpDataDir());
+    const store = tmpStore();
     const soccer = store.addTopic('Soccer');
     const tennis = store.addTopic('Tennis');
     const sportsOnly = store.addTopic('Skiing');

@@ -6,11 +6,11 @@ import { describe, expect, it, vi } from 'vitest';
 import { createMockProvider } from '../../src/ai/providers/index.js';
 import { CheckRunner } from '../../src/checks.js';
 import { dbPath } from '../../src/db/sqlite.js';
-import { Store } from '../../src/db/store.js';
+import type { Store } from '../../src/db/store.js';
 import { isSetAsideName, listSetAside, recoverSetAside } from '../../src/recover.js';
 import { createApp } from '../../src/server.js';
 import { asResolver } from '../helpers/provider.js';
-import { tmpDataDir } from '../helpers/tmp.js';
+import { tmpDataDir, tmpStore } from '../helpers/tmp.js';
 
 /**
  * Getting back a database that was set aside (NEWS-342).
@@ -24,7 +24,7 @@ import { tmpDataDir } from '../helpers/tmp.js';
 /** A data dir holding a real set-aside database with `topics` in it. */
 function withSetAside(names: string[]): { dir: string; file: string } {
   const dir = tmpDataDir();
-  const seed = new Store(dir);
+  const seed = tmpStore(dir);
   for (const name of names) seed.addTopic(name);
   seed.close();
 
@@ -72,7 +72,7 @@ describe('listSetAside (NEWS-342)', () => {
 
   it('is empty for an ordinary data directory', () => {
     const dir = tmpDataDir();
-    new Store(dir).close();
+    tmpStore(dir).close();
     expect(listSetAside(dir)).toEqual([]);
   });
 
@@ -110,7 +110,7 @@ describe('listSetAside (NEWS-342)', () => {
 describe('recoverSetAside (NEWS-342)', () => {
   it('replaces the live database with the set-aside one', () => {
     const { dir, file } = withSetAside(['Chips', 'Batteries']);
-    const live = new Store(dir);
+    const live = tmpStore(dir);
     live.addTopic('Typed since');
 
     const result = recoverSetAside(live, file);
@@ -124,7 +124,7 @@ describe('recoverSetAside (NEWS-342)', () => {
     // Someone recovering has already lost data once. Whatever they typed in the
     // meantime is not silently the price of getting the rest back.
     const { dir, file } = withSetAside(['Chips']);
-    const live = new Store(dir);
+    const live = tmpStore(dir);
     live.addTopic('Typed since');
 
     const { safetyCopy } = recoverSetAside(live, file);
@@ -137,7 +137,7 @@ describe('recoverSetAside (NEWS-342)', () => {
 
   it('leaves the set-aside file in place, so it can be tried again', () => {
     const { dir, file } = withSetAside(['Chips']);
-    const live = new Store(dir);
+    const live = tmpStore(dir);
 
     recoverSetAside(live, file);
 
@@ -149,7 +149,7 @@ describe('recoverSetAside (NEWS-342)', () => {
 
   it('answers the quarantine notice', () => {
     const dir = tmpDataDir();
-    const seed = new Store(dir);
+    const seed = tmpStore(dir);
     seed.addTopic('Chips');
     seed.close();
     const file = `newsmonger.db.corrupt-${String(Date.now())}`;
@@ -158,7 +158,7 @@ describe('recoverSetAside (NEWS-342)', () => {
     // Provoke a real quarantine so there is a genuine notice to answer.
     fs.writeFileSync(dbPath(dir), Buffer.alloc(fs.statSync(dbPath(dir)).size, 0x41));
     vi.spyOn(console, 'error').mockImplementation(() => undefined);
-    const live = new Store(dir);
+    const live = tmpStore(dir);
     expect(live.getQuarantine()).not.toBeNull();
 
     recoverSetAside(live, file);
@@ -170,7 +170,7 @@ describe('recoverSetAside (NEWS-342)', () => {
 
   it('refuses a name that is not a set-aside database', () => {
     const dir = tmpDataDir();
-    const live = new Store(dir);
+    const live = tmpStore(dir);
     expect(() => recoverSetAside(live, '../../etc/passwd')).toThrow(/not a set-aside database/);
     live.close();
   });
@@ -183,7 +183,7 @@ describe('the recovery API (NEWS-342)', () => {
 
   it('lists candidates with their contents', async () => {
     const { dir, file } = withSetAside(['Chips', 'Batteries']);
-    const res = await appFor(dir, new Store(dir)).request('/api/recover/candidates');
+    const res = await appFor(dir, tmpStore(dir)).request('/api/recover/candidates');
     const body = (await res.json()) as { databases: { file: string; contents: { topics: number } | null }[] };
     expect(body.databases[0]?.file).toBe(file);
     expect(body.databases[0]?.contents?.topics).toBe(2);
@@ -191,7 +191,7 @@ describe('the recovery API (NEWS-342)', () => {
 
   it('recovers through POST /api/recover', async () => {
     const { dir, file } = withSetAside(['Chips', 'Batteries']);
-    const store = new Store(dir);
+    const store = tmpStore(dir);
     const app = appFor(dir, store);
 
     const res = await app.request('/api/recover', {
@@ -207,7 +207,7 @@ describe('the recovery API (NEWS-342)', () => {
 
   it('404s a file that is not there, and one that is not ours', async () => {
     const dir = tmpDataDir();
-    const app = appFor(dir, new Store(dir));
+    const app = appFor(dir, tmpStore(dir));
     for (const file of ['newsmonger.db.corrupt-1', '../../etc/passwd', 'newsmonger.db']) {
       const res = await app.request('/api/recover', {
         method: 'POST',
@@ -220,7 +220,7 @@ describe('the recovery API (NEWS-342)', () => {
 
   it('422s a file it still cannot read, with the reason', async () => {
     const dir = tmpDataDir();
-    const store = new Store(dir);
+    const store = tmpStore(dir);
     store.addTopic('Kept');
     const broken = 'newsmonger.db.corrupt-1000000000000';
     fs.writeFileSync(path.join(dir, broken), Buffer.alloc(4096, 0x41));

@@ -5,13 +5,13 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { createMockProvider } from '../../src/ai/providers/index.js';
 import { CheckRunner } from '../../src/checks.js';
-import { Store } from '../../src/db/store.js';
+import type { Store } from '../../src/db/store.js';
 import { cachedImagePath, imageHash, isValidHash, sniffImageType } from '../../src/images/cache.js';
 import { extractImageUrl } from '../../src/images/ogimage.js';
 import { isBlockedAddress, rejectUnsafeUrl, staticUrlRejection } from '../../src/images/safety.js';
 import { createApp } from '../../src/server.js';
 import { asResolver } from '../helpers/provider.js';
-import { tmpDataDir } from '../helpers/tmp.js';
+import { tmpDataDir, tmpStore } from '../helpers/tmp.js';
 
 describe('SSRF guards', () => {
   // Article and image URLs come from an AI provider, so an untrusted party
@@ -215,7 +215,7 @@ describe('cache addressing', () => {
 
 describe('GET /api/image/:hash', () => {
   function appWith(dataDir: string) {
-    const store = new Store(dataDir);
+    const store = tmpStore(dataDir);
     const runner = new CheckRunner(store, asResolver(createMockProvider()));
     return createApp({ store, runner, dataDir });
   }
@@ -258,7 +258,7 @@ describe('GET /api/image/:hash', () => {
 
 describe('CheckRunner image fetching', () => {
   it('stores the image returned for a story', async () => {
-    const store = new Store(tmpDataDir());
+    const store = tmpStore();
     const topic = store.addTopic('fusion energy');
     const runner = new CheckRunner(store, asResolver(createMockProvider()), undefined, () =>
       Promise.resolve({ hash: 'c'.repeat(32), sourceUrl: 'https://cdn.test/x.jpg' }),
@@ -270,7 +270,7 @@ describe('CheckRunner image fetching', () => {
   });
 
   it('stores null when no image is found', async () => {
-    const store = new Store(tmpDataDir());
+    const store = tmpStore();
     const topic = store.addTopic('fusion energy');
     const runner = new CheckRunner(store, asResolver(createMockProvider()), undefined, () => Promise.resolve(null));
 
@@ -280,7 +280,7 @@ describe('CheckRunner image fetching', () => {
 
   it('still records the story when image fetching throws', async () => {
     // A picture is decoration. Losing one must never cost the story.
-    const store = new Store(tmpDataDir());
+    const store = tmpStore();
     const topic = store.addTopic('fusion energy');
     const runner = new CheckRunner(store, asResolver(createMockProvider()), undefined, () =>
       Promise.reject(new Error('network down')),
@@ -294,7 +294,7 @@ describe('CheckRunner image fetching', () => {
   });
 
   it('fetches no images at all when no fetcher is configured', async () => {
-    const store = new Store(tmpDataDir());
+    const store = tmpStore();
     const topic = store.addTopic('fusion energy');
     await new CheckRunner(store, asResolver(createMockProvider())).checkTopic(topic.id);
     expect(store.listItems().every((i) => i.image === null)).toBe(true);
@@ -315,7 +315,7 @@ describe('repairing a cached image that has gone missing (NEWS-341)', () => {
 
   /** A store holding one story whose image is recorded but absent from disk. */
   function storeWithMissingImage(dir: string): { store: Store; hash: string } {
-    const store = new Store(dir);
+    const store = tmpStore(dir);
     const topic = store.addTopic('Chips');
     const hash = imageHash(IMAGE_URL);
     store.addItems([
@@ -430,7 +430,7 @@ describe('repairing a cached image that has gone missing (NEWS-341)', () => {
 
 describe('Store.imageSourceUrl (NEWS-341)', () => {
   it('finds the URL behind a story lead image', () => {
-    const store = new Store(tmpDataDir());
+    const store = tmpStore();
     const topic = store.addTopic('Chips');
     store.addItems([
       {
@@ -450,7 +450,7 @@ describe('Store.imageSourceUrl (NEWS-341)', () => {
   it('finds a source favicon too, which shares the same cache', () => {
     // A repair that knew about only lead images would leave the icons broken
     // with nothing to explain why.
-    const store = new Store(tmpDataDir());
+    const store = tmpStore();
     const topic = store.addTopic('Chips');
     store.addItems([
       {

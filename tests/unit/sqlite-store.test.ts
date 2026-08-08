@@ -7,8 +7,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { scheduleBaseline } from '../../src/checks.js';
 import { DEFAULT_RETENTION_DAYS } from '../../src/db/schemas.js';
 import { backupUnreadableDb, dbPath, SCHEMA_VERSION } from '../../src/db/sqlite.js';
-import { Store } from '../../src/db/store.js';
-import { tmpDataDir } from '../helpers/tmp.js';
+import { tmpDataDir, tmpStore } from '../helpers/tmp.js';
 
 // Behaviour the SQLite engine introduces (NEWS-94). The rest of the store's
 // contract is covered by the 500+ tests that were already driving it through
@@ -69,7 +68,7 @@ describe('legacy data.json import (NEWS-94)', () => {
   it('imports topics, items, runs and settings on first open', () => {
     const dir = tmpDataDir();
     legacyFile(dir);
-    const store = new Store(dir);
+    const store = tmpStore(dir);
 
     const topic = store.listTopics()[0];
     expect(topic.name).toBe('Tennis');
@@ -98,12 +97,12 @@ describe('legacy data.json import (NEWS-94)', () => {
   it('renames the file so a second open cannot import it again', () => {
     const dir = tmpDataDir();
     legacyFile(dir);
-    new Store(dir);
+    tmpStore(dir);
 
     expect(fs.existsSync(path.join(dir, 'data.json'))).toBe(false);
     expect(fs.readdirSync(dir).filter((f) => f.startsWith('data.json.imported-'))).toHaveLength(1);
 
-    const reopened = new Store(dir);
+    const reopened = tmpStore(dir);
     expect(reopened.listTopics()).toHaveLength(1);
     expect(reopened.listItems()).toHaveLength(1);
   });
@@ -112,11 +111,11 @@ describe('legacy data.json import (NEWS-94)', () => {
     // The dangerous ordering: a database that already has data, and a stray
     // `data.json` beside it. Importing would duplicate or clobber.
     const dir = tmpDataDir();
-    const store = new Store(dir);
+    const store = tmpStore(dir);
     store.addTopic('Existing');
     legacyFile(dir);
 
-    const reopened = new Store(dir);
+    const reopened = tmpStore(dir);
     expect(reopened.listTopics().map((t) => t.name)).toEqual(['Existing']);
     // ...and the file is left alone, not renamed, so nothing is quietly lost.
     expect(fs.existsSync(path.join(dir, 'data.json'))).toBe(true);
@@ -126,11 +125,11 @@ describe('legacy data.json import (NEWS-94)', () => {
     // A store that was opened and configured but never given a topic still has
     // deliberate state. "No topics" is not the same as "empty".
     const dir = tmpDataDir();
-    const store = new Store(dir);
+    const store = tmpStore(dir);
     store.updateSettings({ notifyOnNewItems: true });
     legacyFile(dir);
 
-    const reopened = new Store(dir);
+    const reopened = tmpStore(dir);
     expect(reopened.getSettings().notifyOnNewItems).toBe(true);
     expect(reopened.listTopics()).toEqual([]);
   });
@@ -140,7 +139,7 @@ describe('legacy data.json import (NEWS-94)', () => {
     fs.writeFileSync(path.join(dir, 'data.json'), '{not json');
     vi.spyOn(console, 'error').mockImplementation(() => undefined);
 
-    const store = new Store(dir);
+    const store = tmpStore(dir);
     expect(store.listTopics()).toEqual([]);
     expect(fs.readdirSync(dir).filter((f) => f.includes('data.json.corrupt-'))).toHaveLength(1);
     // Removed under its original name, so the next start doesn't retry it.
@@ -166,7 +165,7 @@ describe('legacy data.json import (NEWS-94)', () => {
       ],
     });
 
-    const store = new Store(dir);
+    const store = tmpStore(dir);
     expect(store.listRuns().map((r) => r.id)).toEqual(['orphan']);
   });
 });
@@ -174,7 +173,7 @@ describe('legacy data.json import (NEWS-94)', () => {
 describe('corrupt database recovery (NEWS-94)', () => {
   it('backs up an unreadable database and starts fresh', () => {
     const dir = tmpDataDir();
-    const store = new Store(dir);
+    const store = tmpStore(dir);
     store.addTopic('Doomed');
     store.close();
 
@@ -185,7 +184,7 @@ describe('corrupt database recovery (NEWS-94)', () => {
     fs.writeFileSync(file, Buffer.alloc(size, 0x41));
     vi.spyOn(console, 'error').mockImplementation(() => undefined);
 
-    const recovered = new Store(dir);
+    const recovered = tmpStore(dir);
     expect(recovered.listTopics()).toEqual([]);
     expect(fs.readdirSync(dir).filter((f) => f.includes('.corrupt-'))).toHaveLength(1);
     // And the recovered store is usable, not just constructible.
@@ -197,7 +196,7 @@ describe('corrupt database recovery (NEWS-94)', () => {
     // A leftover write-ahead log from the corrupt database would be replayed
     // into its replacement, which is how a recovery corrupts the thing it made.
     const dir = tmpDataDir();
-    const store = new Store(dir);
+    const store = tmpStore(dir);
     store.addTopic('Doomed');
     store.close();
 
@@ -206,7 +205,7 @@ describe('corrupt database recovery (NEWS-94)', () => {
     fs.writeFileSync(file, Buffer.alloc(fs.statSync(file).size, 0x41));
     vi.spyOn(console, 'error').mockImplementation(() => undefined);
 
-    const recovered = new Store(dir);
+    const recovered = tmpStore(dir);
     expect(recovered.listTopics()).toEqual([]);
     expect(recovered.addTopic('Fresh').id).toBeTruthy();
   });
@@ -215,7 +214,7 @@ describe('corrupt database recovery (NEWS-94)', () => {
     // The blast radius this change was for: under one JSON file, a settings
     // problem took the topics with it. Here it must not.
     const dir = tmpDataDir();
-    const store = new Store(dir);
+    const store = tmpStore(dir);
     store.addTopic('Kept');
     store.close();
 
@@ -224,7 +223,7 @@ describe('corrupt database recovery (NEWS-94)', () => {
     db.close();
     vi.spyOn(console, 'error').mockImplementation(() => undefined);
 
-    const reopened = new Store(dir);
+    const reopened = tmpStore(dir);
     expect(reopened.listTopics().map((t) => t.name)).toEqual(['Kept']);
     expect(reopened.getSettings().itemRetentionDays).toBe(DEFAULT_RETENTION_DAYS);
   });
@@ -236,7 +235,7 @@ describe('storage engine guarantees (NEWS-94)', () => {
     // bookmark used to re-serialize every topic, story and run. Measured as
     // bytes written, which is the thing that actually grew with the data.
     const dir = tmpDataDir();
-    const store = new Store(dir);
+    const store = tmpStore(dir);
     const topic = store.addTopic('Bulk');
     store.addItems(
       Array.from({ length: 400 }, (_, i) => ({
@@ -268,7 +267,7 @@ describe('storage engine guarantees (NEWS-94)', () => {
 
   it('deletes a topic and everything filed under it, in one transaction', () => {
     const dir = tmpDataDir();
-    const store = new Store(dir);
+    const store = tmpStore(dir);
     const doomed = store.addTopic('Doomed');
     const kept = store.addTopic('Kept');
     for (const t of [doomed, kept]) {
@@ -296,7 +295,7 @@ describe('storage engine guarantees (NEWS-94)', () => {
     // The code check produces the message the API surfaces; the unique index is
     // the backstop for any future writer that forgets to make it.
     const dir = tmpDataDir();
-    const store = new Store(dir);
+    const store = tmpStore(dir);
     store.addTopic('Tennis');
     expect(() => store.addTopic('TENNIS')).toThrow(/already exists/);
     store.close();
@@ -315,7 +314,7 @@ describe('storage engine guarantees (NEWS-94)', () => {
     // typing in a search box. Under the old in-memory `includes` they had no
     // special meaning at all, and that is the behaviour being preserved.
     const dir = tmpDataDir();
-    const store = new Store(dir);
+    const store = tmpStore(dir);
     const topic = store.addTopic('Markets');
     store.addItems([
       {
@@ -351,7 +350,7 @@ describe('storage engine guarantees (NEWS-94)', () => {
     // this search would return nothing. A filter that narrows as you type is
     // exactly where someone types the middle of a word.
     const dir = tmpDataDir();
-    const store = new Store(dir);
+    const store = tmpStore(dir);
     const topic = store.addTopic('Federal Reserve');
     store.addItems([
       {
@@ -375,7 +374,7 @@ describe('storage engine guarantees (NEWS-94)', () => {
     // writes. That ordering is the only way an orphan can exist, so it is the
     // one worth testing.
     const dir = tmpDataDir();
-    const store = new Store(dir);
+    const store = tmpStore(dir);
     const doomed = store.addTopic('Fleeting');
     const kept = store.addTopic('Kept');
     const inFlight = store.startRun(doomed.id);
@@ -428,7 +427,7 @@ describe('storage engine guarantees (NEWS-94)', () => {
 
   it('sweeps nothing when every topic is present', () => {
     const dir = tmpDataDir();
-    const store = new Store(dir);
+    const store = tmpStore(dir);
     const topic = store.addTopic('Intact');
     store.addItems([
       {
@@ -453,7 +452,7 @@ describe('storage engine guarantees (NEWS-94)', () => {
     // but there is no topic left to keep it under, and a flagged orphan would go
     // on feeding a prompt for a topic that no longer exists.
     const dir = tmpDataDir();
-    const store = new Store(dir);
+    const store = tmpStore(dir);
     const doomed = store.addTopic('Fleeting');
     const [saved, flagged] = store.addItems([
       {
@@ -482,14 +481,14 @@ describe('storage engine guarantees (NEWS-94)', () => {
     db.prepare('DELETE FROM topics WHERE id = ?').run(doomed.id);
     db.close();
 
-    const reopened = new Store(dir);
+    const reopened = tmpStore(dir);
     expect(reopened.pruneOrphans()).toEqual({ items: 2, runs: 0 });
     expect(reopened.listItems()).toEqual([]);
   });
 
   it('is idempotent — a second sweep finds nothing', () => {
     const dir = tmpDataDir();
-    const store = new Store(dir);
+    const store = tmpStore(dir);
     const doomed = store.addTopic('Fleeting');
     store.deleteTopic(doomed.id);
     store.addItems([
@@ -511,7 +510,7 @@ describe('storage engine guarantees (NEWS-94)', () => {
     // No foreign keys, deliberately: a check can outlive its topic. The story
     // should still be readable rather than vanish or fail to insert.
     const dir = tmpDataDir();
-    const store = new Store(dir);
+    const store = tmpStore(dir);
     const topic = store.addTopic('Fleeting');
     store.deleteTopic(topic.id);
 
@@ -534,7 +533,7 @@ describe('storage engine guarantees (NEWS-94)', () => {
 
 describe('topic categories in the store (NEWS-97)', () => {
   it('defaults a new topic to uncategorized', () => {
-    const store = new Store(tmpDataDir());
+    const store = tmpStore();
     const topic = store.addTopic('Skiing');
     expect(topic.category).toBeNull();
     expect(topic.subcategory).toBeNull();
@@ -545,12 +544,12 @@ describe('topic categories in the store (NEWS-97)', () => {
 
   it('round-trips a category through storage', () => {
     const dir = tmpDataDir();
-    const store = new Store(dir);
+    const store = tmpStore(dir);
     const topic = store.addTopic('Premier League');
     store.setTopicCategory(topic.id, 'sports', 'soccer', 'manual');
     store.close();
 
-    const reopened = new Store(dir);
+    const reopened = tmpStore(dir);
     const reloaded = reopened.getTopic(topic.id);
     expect(reloaded?.category).toBe('sports');
     expect(reloaded?.subcategory).toBe('soccer');
@@ -561,12 +560,12 @@ describe('topic categories in the store (NEWS-97)', () => {
     // The `sports`/null shape that renders as "Other" — it has to survive a
     // round-trip as null rather than as an empty string.
     const dir = tmpDataDir();
-    const store = new Store(dir);
+    const store = tmpStore(dir);
     const topic = store.addTopic('Skiing');
     store.setTopicCategory(topic.id, 'sports', null, 'auto');
     store.close();
 
-    expect(new Store(dir).getTopic(topic.id)?.subcategory).toBeNull();
+    expect(tmpStore(dir).getTopic(topic.id)?.subcategory).toBeNull();
   });
 
   it('accepts a slug the taxonomy does not have', () => {
@@ -574,14 +573,14 @@ describe('topic categories in the store (NEWS-97)', () => {
     // resolves today may not tomorrow. The store must not be the one place that
     // can't survive an ordinary edit — unresolvable slugs render as
     // Uncategorized rather than failing a load.
-    const store = new Store(tmpDataDir());
+    const store = tmpStore();
     const topic = store.addTopic('Weather');
     expect(() => store.setTopicCategory(topic.id, 'weather', 'forecasts', 'auto')).not.toThrow();
     expect(store.getTopic(topic.id)?.category).toBe('weather');
   });
 
   it('clears a category back to null', () => {
-    const store = new Store(tmpDataDir());
+    const store = tmpStore();
     const topic = store.addTopic('Ambiguous');
     store.setTopicCategory(topic.id, 'sports', 'soccer', 'manual');
     store.setTopicCategory(topic.id, null, null, 'auto');
@@ -590,7 +589,7 @@ describe('topic categories in the store (NEWS-97)', () => {
   });
 
   it('throws for a topic that is gone', () => {
-    const store = new Store(tmpDataDir());
+    const store = tmpStore();
     expect(() => store.setTopicCategory('nope', 'sports', null, 'auto')).toThrow(/no such topic/);
   });
 });
@@ -638,7 +637,7 @@ describe('schema migration v1 → v2 (NEWS-97)', () => {
     const dir = tmpDataDir();
     v1Database(dir);
 
-    const store = new Store(dir);
+    const store = tmpStore(dir);
     const topic = store.getTopic('t1');
     // Everything the v1 row held is intact...
     expect(topic?.name).toBe('Tennis');
@@ -664,7 +663,7 @@ describe('schema migration v1 → v2 (NEWS-97)', () => {
     const dir = tmpDataDir();
     v1Database(dir);
 
-    const topic = new Store(dir).getTopic('t1');
+    const topic = tmpStore(dir).getTopic('t1');
     expect(topic).toBeDefined();
     expect(scheduleBaseline({ lastCheckedAt: topic?.lastCheckedAt ?? null, clearedAt: topic?.clearedAt ?? null })).toBe(
       '2026-07-02T00:00:00.000Z',
@@ -675,7 +674,7 @@ describe('schema migration v1 → v2 (NEWS-97)', () => {
     const dir = tmpDataDir();
     v1Database(dir);
 
-    const store = new Store(dir);
+    const store = tmpStore(dir);
     const run = store.listRuns().find((r) => r.id === 'r1');
     // The v1 row's own fields survive the widening...
     expect(run?.provider).toBe('anthropic');
@@ -691,7 +690,7 @@ describe('schema migration v1 → v2 (NEWS-97)', () => {
   it('leaves a migrated database writable and at the new version', () => {
     const dir = tmpDataDir();
     v1Database(dir);
-    const store = new Store(dir);
+    const store = tmpStore(dir);
 
     store.setTopicCategory('t1', 'sports', 'tennis', 'manual');
     expect(store.getTopic('t1')?.subcategory).toBe('tennis');
@@ -707,14 +706,14 @@ describe('schema migration v1 → v2 (NEWS-97)', () => {
     // to advance would make the app unopenable on the next start.
     const dir = tmpDataDir();
     v1Database(dir);
-    new Store(dir).close();
-    expect(() => new Store(dir)).not.toThrow();
-    expect(new Store(dir).getTopic('t1')?.name).toBe('Tennis');
+    tmpStore(dir).close();
+    expect(() => tmpStore(dir)).not.toThrow();
+    expect(tmpStore(dir).getTopic('t1')?.name).toBe('Tennis');
   });
 
   it('creates a fresh database at the current version with no migration', () => {
     const dir = tmpDataDir();
-    const store = new Store(dir);
+    const store = tmpStore(dir);
     store.addTopic('Fresh');
     store.close();
 
@@ -764,7 +763,7 @@ describe('schema migration v2 → v3 (NEWS-110)', () => {
     const dir = tmpDataDir();
     v2Database(dir);
 
-    const store = new Store(dir);
+    const store = tmpStore(dir);
     const topic = store.getTopic('t1');
     // The v2 data survives...
     expect(topic?.name).toBe('Tennis');
@@ -802,7 +801,7 @@ describe('schema migration v2 → v3 (NEWS-110)', () => {
     db.prepare(`INSERT INTO topics (id, name, created_at) VALUES ('t1', 'Ancient', '2026-01-01T00:00:00.000Z')`).run();
     db.close();
 
-    const store = new Store(dir);
+    const store = tmpStore(dir);
     const topic = store.getTopic('t1');
     expect(topic?.name).toBe('Ancient');
     // From v1→v2...
@@ -834,22 +833,22 @@ describe('a schema ahead of its own user_version (NEWS-335)', () => {
 
   it('opens a database whose columns are current but whose stamp says v4', () => {
     const dir = tmpDataDir();
-    const store = new Store(dir);
+    const store = tmpStore(dir);
     store.addTopic('Stranded');
     store.close();
     strandedAt(dir, 4);
 
-    const reopened = new Store(dir);
+    const reopened = tmpStore(dir);
     expect(reopened.listTopics().map((t) => t.name)).toEqual(['Stranded']);
     reopened.close();
   });
 
   it('re-stamps the healed database so the repair happens once', () => {
     const dir = tmpDataDir();
-    new Store(dir).close();
+    tmpStore(dir).close();
     strandedAt(dir, 4);
 
-    new Store(dir).close();
+    tmpStore(dir).close();
     const check = new DatabaseSync(dbPath(dir));
     expect((check.prepare('PRAGMA user_version').get() as { user_version: number }).user_version).toBe(SCHEMA_VERSION);
     check.close();
@@ -861,7 +860,7 @@ describe('a schema ahead of its own user_version (NEWS-335)', () => {
     // that column — re-running the backfill would turn every thread into a
     // thread of one. Healing must not cost data to do it.
     const dir = tmpDataDir();
-    const store = new Store(dir);
+    const store = tmpStore(dir);
     const topic = store.addTopic('Threaded');
     store.addItems([
       { topicId: topic.id, title: 'First report', summary: 'a', sources: [], dedupeKey: 'k1', foundAt: '2026-07-02T00:00:00.000Z' },
@@ -876,7 +875,7 @@ describe('a schema ahead of its own user_version (NEWS-335)', () => {
     grouped.exec('PRAGMA user_version = 4');
     grouped.close();
 
-    new Store(dir).close();
+    tmpStore(dir).close();
     const check = new DatabaseSync(dbPath(dir));
     const threads = (check.prepare(`SELECT DISTINCT thread_id FROM items`).all() as { thread_id: string }[]).map(
       (r) => r.thread_id,
@@ -906,10 +905,10 @@ describe('a failed schema step is all-or-nothing (NEWS-335, NEWS-336)', () => {
 
   it('rolls the half-applied migration back rather than stranding the version', () => {
     const dir = tmpDataDir();
-    new Store(dir).close();
+    tmpStore(dir).close();
     unmigratable(dir);
 
-    expect(() => new Store(dir)).toThrow();
+    expect(() => tmpStore(dir)).toThrow();
 
     const check = new DatabaseSync(dbPath(dir));
     // Still v5, and migration 5's column is gone with the rolled-back transaction.
@@ -924,10 +923,10 @@ describe('a failed schema step is all-or-nothing (NEWS-335, NEWS-336)', () => {
     // schema code failing. Quarantining it here is what made a fixable bug
     // present as total data loss.
     const dir = tmpDataDir();
-    new Store(dir).close();
+    tmpStore(dir).close();
     unmigratable(dir);
 
-    expect(() => new Store(dir)).toThrow(/cannot open the database/i);
+    expect(() => tmpStore(dir)).toThrow(/cannot open the database/i);
     expect(fs.readdirSync(dir).filter((f) => f.includes('.corrupt-'))).toHaveLength(0);
 
     const check = new DatabaseSync(dbPath(dir));
@@ -945,7 +944,7 @@ describe('rescuing a database keeps its write-ahead log (NEWS-337)', () => {
   // never unlinked unread.
   it('carries a surviving -wal into the backup set instead of deleting it', () => {
     const dir = tmpDataDir();
-    const store = new Store(dir);
+    const store = tmpStore(dir);
     store.addTopic('Doomed');
     store.close();
 
@@ -964,7 +963,7 @@ describe('rescuing a database keeps its write-ahead log (NEWS-337)', () => {
     // The main file lags the log until a checkpoint folds it in; copying it
     // alone is how a rescue copy ends up older than the thing it rescued.
     const dir = tmpDataDir();
-    const store = new Store(dir);
+    const store = tmpStore(dir);
     store.addTopic('Kept');
     store.close();
 
@@ -978,7 +977,7 @@ describe('rescuing a database keeps its write-ahead log (NEWS-337)', () => {
 describe('the install id (NEWS-423)', () => {
   it('is stable across reads and across reopening the same database', () => {
     const dir = tmpDataDir();
-    const store = new Store(dir);
+    const store = tmpStore(dir);
     const first = store.installId();
     expect(first).not.toBe('');
     expect(store.installId()).toBe(first);
@@ -986,14 +985,14 @@ describe('the install id (NEWS-423)', () => {
 
     // Reopening is what a restart is, and the id has to survive it — otherwise
     // every launch would look like a fresh install and re-open the setup guide.
-    const reopened = new Store(dir);
+    const reopened = tmpStore(dir);
     expect(reopened.installId()).toBe(first);
     reopened.close();
   });
 
   it('is different for a different data directory', () => {
-    const a = new Store(tmpDataDir());
-    const b = new Store(tmpDataDir());
+    const a = tmpStore();
+    const b = tmpStore();
     expect(a.installId()).not.toBe(b.installId());
     a.close();
     b.close();
@@ -1002,14 +1001,14 @@ describe('the install id (NEWS-423)', () => {
   it('changes when the data directory is deleted and remade — the whole point', () => {
     // The reported gesture: delete `~/.newsmonger` and expect to start over.
     const dir = tmpDataDir();
-    const before = new Store(dir);
+    const before = tmpStore(dir);
     const oldId = before.installId();
     before.close();
 
     fs.rmSync(dir, { recursive: true, force: true });
     fs.mkdirSync(dir, { recursive: true });
 
-    const after = new Store(dir);
+    const after = tmpStore(dir);
     expect(after.installId()).not.toBe(oldId);
     after.close();
   });
@@ -1018,7 +1017,7 @@ describe('the install id (NEWS-423)', () => {
     // It lives in `meta` rather than in settings precisely so a backup restore —
     // which replaces settings wholesale — cannot import another machine's
     // identity and re-suppress the guide on a fresh install.
-    const store = new Store(tmpDataDir());
+    const store = tmpStore();
     const id = store.installId();
     store.updateSettings({ theme: 'dark' });
     expect(store.installId()).toBe(id);

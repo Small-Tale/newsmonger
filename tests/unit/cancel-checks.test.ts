@@ -3,10 +3,9 @@ import { describe, expect, it } from 'vitest';
 import { createMockProvider } from '../../src/ai/providers/mock.js';
 import type { CheckResult, NewsProvider } from '../../src/ai/types.js';
 import { CheckRunner } from '../../src/checks.js';
-import { Store } from '../../src/db/store.js';
 import { createApp } from '../../src/server.js';
 import { asResolver } from '../helpers/provider.js';
-import { tmpDataDir } from '../helpers/tmp.js';
+import { tmpStore } from '../helpers/tmp.js';
 
 /**
  * Cancelling work that was issued under settings the user has since changed
@@ -41,7 +40,7 @@ function hangingProvider() {
 }
 
 function setup(effort = '') {
-  const store = new Store(tmpDataDir());
+  const store = tmpStore();
   const hang = hangingProvider();
   // `reissueDelayMs: 0` so the coalescing window does not make these tests wait;
   // production uses 750ms.

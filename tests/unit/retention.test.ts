@@ -6,9 +6,10 @@ import { describe, expect, it } from 'vitest';
 import { createMockProvider } from '../../src/ai/providers/index.js';
 import { CheckRunner } from '../../src/checks.js';
 import { DEFAULT_RETENTION_DAYS } from '../../src/db/schemas.js';
-import { MAX_RUNS_KEPT, RUN_RETENTION_DAYS, Store } from '../../src/db/store.js';
+import type { Store } from '../../src/db/store.js';
+import { MAX_RUNS_KEPT, RUN_RETENTION_DAYS } from '../../src/db/store.js';
 import { asResolver } from '../helpers/provider.js';
-import { tmpDataDir } from '../helpers/tmp.js';
+import { tmpStore } from '../helpers/tmp.js';
 
 const DAY = 24 * 60 * 60 * 1000;
 const NOW = new Date('2026-07-27T12:00:00.000Z');
@@ -19,7 +20,7 @@ function daysAgo(days: number): string {
 
 /** A store with one topic and stories at the given ages, in days. */
 function storeWith(ages: number[], flags: { saved?: boolean; offTopic?: boolean }[] = []) {
-  const store = new Store(tmpDataDir());
+  const store = tmpStore();
   const topic = store.addTopic('Fusion');
   const items = store.addItems(
     ages.map((age, i) => ({
@@ -86,7 +87,7 @@ describe('Store.pruneOldItems (NEWS-87)', () => {
   it('persists the prune — it is not just an in-memory filter', () => {
     const { store } = storeWith([400, 1]);
     store.pruneOldItems(NOW);
-    expect(new Store(store.dataDir).listItems()).toHaveLength(1);
+    expect(tmpStore(store.dataDir).listItems()).toHaveLength(1);
   });
 
   it('writes nothing when no story is due (NEWS-94)', () => {
@@ -109,7 +110,7 @@ describe('Store.pruneOldItems (NEWS-87)', () => {
   });
 
   it('loads a pre-NEWS-87 data file and applies the default window', () => {
-    const store = new Store(tmpDataDir());
+    const store = tmpStore();
     expect(store.getSettings().itemRetentionDays).toBe(DEFAULT_RETENTION_DAYS);
   });
 });
@@ -196,12 +197,12 @@ describe('Store.pruneOldRuns (NEWS-103)', () => {
   }
 
   it('drops runs older than the retention window and keeps the rest', () => {
-    const store = new Store(tmpDataDir());
+    const store = tmpStore();
     store.close();
     // 10 runs, 100 days apart: the oldest four fall outside 400 days.
     seedRuns(store, 10, 100);
 
-    const reopened = new Store(store.dataDir);
+    const reopened = tmpStore(store.dataDir);
     expect(reopened.listRuns(50)).toHaveLength(10);
     expect(reopened.pruneOldRuns(NOW)).toBe(6);
     expect(reopened.listRuns(50)).toHaveLength(4);
@@ -218,17 +219,17 @@ describe('Store.pruneOldRuns (NEWS-103)', () => {
   it('keeps a full year of history, which the old 200-run cap did not', () => {
     // The point of the change: 365 daily runs used to be truncated to 200, so a
     // monthly spend total could silently cover part of a month.
-    const store = new Store(tmpDataDir());
+    const store = tmpStore();
     store.close();
     seedRuns(store, 365, 1);
 
-    const reopened = new Store(store.dataDir);
+    const reopened = tmpStore(store.dataDir);
     expect(reopened.pruneOldRuns(NOW)).toBe(0);
     expect(reopened.listRuns(1000)).toHaveLength(365);
   });
 
   it('is a no-op when nothing is due', () => {
-    const store = new Store(tmpDataDir());
+    const store = tmpStore();
     const topic = store.addTopic('Fresh');
     store.startRun(topic.id);
     expect(store.pruneOldRuns(NOW)).toBe(0);
@@ -236,12 +237,12 @@ describe('Store.pruneOldRuns (NEWS-103)', () => {
   });
 
   it('enforces the count backstop, oldest first', () => {
-    const store = new Store(tmpDataDir());
+    const store = tmpStore();
     store.close();
     // All same-day, so only the count limit can bind.
     seedRuns(store, MAX_RUNS_KEPT + 5);
 
-    const reopened = new Store(store.dataDir);
+    const reopened = tmpStore(store.dataDir);
     expect(reopened.pruneOldRuns(NOW)).toBe(5);
     const kept = reopened.listRuns(MAX_RUNS_KEPT + 10);
     expect(kept).toHaveLength(MAX_RUNS_KEPT);
@@ -255,7 +256,7 @@ describe('Store.pruneOldRuns (NEWS-103)', () => {
     // The behaviour the ticket was about. It used to assert this through the
     // spend total; spend is gone (NEWS-119), so it asserts the retained runs
     // directly — which is what the cap actually governs.
-    const store = new Store(tmpDataDir());
+    const store = tmpStore();
     const topic = store.addTopic('Busy');
     for (let i = 0; i < 300; i++) {
       const run = store.startRun(topic.id);

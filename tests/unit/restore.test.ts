@@ -6,10 +6,9 @@ import { describe, expect, it } from 'vitest';
 import { createMockProvider } from '../../src/ai/providers/mock.js';
 import { buildBackup, readBackup, restoreBackup, writeBackup } from '../../src/backup.js';
 import { CheckRunner } from '../../src/checks.js';
-import { Store } from '../../src/db/store.js';
 import { createApp } from '../../src/server.js';
 import { asResolver } from '../helpers/provider.js';
-import { tmpDataDir } from '../helpers/tmp.js';
+import { tmpDataDir, tmpStore } from '../helpers/tmp.js';
 
 /**
  * Restoring from a backup folder (NEWS-252).
@@ -22,7 +21,7 @@ import { tmpDataDir } from '../helpers/tmp.js';
  */
 function seeded() {
   const dir = tmpDataDir();
-  const store = new Store(dir);
+  const store = tmpStore(dir);
   const runner = new CheckRunner(store, asResolver(createMockProvider()));
   return { dir, store, runner, app: createApp({ store, runner }) };
 }
@@ -210,7 +209,7 @@ describe('the restore routes (NEWS-252)', () => {
     // A check finishing mid-restore would write stories belonging to the old
     // data into the new — neither snapshot, and it would look like it worked.
     const dir = tmpDataDir();
-    const store = new Store(dir);
+    const store = tmpStore(dir);
     let release = (): void => undefined;
     const provider = createMockProvider();
     const runner = new CheckRunner(

@@ -2,14 +2,13 @@ import { describe, expect, it } from 'vitest';
 
 import { createMockProvider } from '../../src/ai/providers/index.js';
 import { CheckRunner } from '../../src/checks.js';
-import { Store } from '../../src/db/store.js';
 import { hostAllowed, isLoopbackHostname, originAllowed } from '../../src/origin-guard.js';
 import { createApp } from '../../src/server.js';
 import { asResolver } from '../helpers/provider.js';
-import { tmpDataDir } from '../helpers/tmp.js';
+import { tmpStore } from '../helpers/tmp.js';
 
 function makeApp() {
-  const store = new Store(tmpDataDir());
+  const store = tmpStore();
   const runner = new CheckRunner(store, asResolver(createMockProvider()));
   return { app: createApp({ store, runner }), store };
 }

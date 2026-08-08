@@ -8,9 +8,9 @@ import {
   retryAfterMs,
 } from '../../src/ai/retry.js';
 import { CheckRunner } from '../../src/checks.js';
-import { Store } from '../../src/db/store.js';
+import type { Store } from '../../src/db/store.js';
 import { asResolver, fakeProvider, fastRetry, instantRetry, noUsage } from '../helpers/provider.js';
-import { tmpDataDir } from '../helpers/tmp.js';
+import { tmpStore } from '../helpers/tmp.js';
 
 // Retry and rate-limit handling (NEWS-109).
 
@@ -129,7 +129,7 @@ describe('retryAfterMs', () => {
 
 describe('CheckRunner retry behaviour (NEWS-109)', () => {
   function storeWithTopic(name = 'Fusion'): { store: Store; topicId: string } {
-    const store = new Store(tmpDataDir());
+    const store = tmpStore();
     return { store, topicId: store.addTopic(name).id };
   }
 
@@ -223,7 +223,7 @@ describe('CheckRunner retry behaviour (NEWS-109)', () => {
   it('pauses scheduled checks for every topic after a rate limit', async () => {
     // The heart of "deal with rate limiting": throttling is account-wide, so a
     // sweep must not answer one 429 by making twenty more requests.
-    const store = new Store(tmpDataDir());
+    const store = tmpStore();
     for (const name of ['A', 'B', 'C']) store.addTopic(name);
     let calls = 0;
     const limited = fakeProvider(() => {
@@ -246,7 +246,7 @@ describe('CheckRunner retry behaviour (NEWS-109)', () => {
   it('lets a manual check through the gate', async () => {
     // The user asked, and one request is how you find out whether the window
     // has reopened. Only *scheduled* work is paused.
-    const store = new Store(tmpDataDir());
+    const store = tmpStore();
     const topicId = store.addTopic('Fusion').id;
     let calls = 0;
     const limited = fakeProvider(() => {
@@ -263,7 +263,7 @@ describe('CheckRunner retry behaviour (NEWS-109)', () => {
   });
 
   it('resumes scheduled checks once the window has passed', async () => {
-    const store = new Store(tmpDataDir());
+    const store = tmpStore();
     store.addTopic('Fusion');
     let fail = true;
     const provider = fakeProvider(() =>
@@ -285,7 +285,7 @@ describe('CheckRunner retry behaviour (NEWS-109)', () => {
 
 describe('per-topic failure cooldown (NEWS-110)', () => {
   function storeWithTopics(names: string[]): Store {
-    const store = new Store(tmpDataDir());
+    const store = tmpStore();
     for (const n of names) store.addTopic(n);
     return store;
   }

@@ -2,12 +2,11 @@ import { describe, expect, it } from 'vitest';
 
 import { createMockProvider } from '../../src/ai/providers/index.js';
 import { CheckRunner } from '../../src/checks.js';
-import type { ClearedItems } from '../../src/db/store.js';
-import { Store } from '../../src/db/store.js';
+import type { ClearedItems, Store  } from '../../src/db/store.js';
 import { createApp } from '../../src/server.js';
 import { ClearUndoBuffer, UNDO_TTL_MS } from '../../src/undo.js';
 import { asResolver } from '../helpers/provider.js';
-import { tmpDataDir } from '../helpers/tmp.js';
+import { tmpStore } from '../helpers/tmp.js';
 
 function snapshot(n: number): ClearedItems {
   return {
@@ -94,7 +93,7 @@ describe('ClearUndoBuffer (NEWS-145)', () => {
 
 describe('restoring a cleared topic', () => {
   function app() {
-    const store = new Store(tmpDataDir());
+    const store = tmpStore();
     const undo = new ClearUndoBuffer();
     const runner = new CheckRunner(store, asResolver(createMockProvider()));
     return { store, undo, app: createApp({ store, runner, undo }) };

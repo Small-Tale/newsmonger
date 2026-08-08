@@ -3,10 +3,10 @@ import { DatabaseSync } from 'node:sqlite';
 import { describe, expect, it } from 'vitest';
 
 import { dbPath, SCHEMA_VERSION } from '../../src/db/sqlite.js';
-import { Store } from '../../src/db/store.js';
+import type { Store } from '../../src/db/store.js';
 import type { ThreadInput } from '../../src/threads.js';
 import { planThreadIds, THREAD_MAX_GAP_MS, threadIdFor, withThreadIds } from '../../src/threads.js';
-import { tmpDataDir } from '../helpers/tmp.js';
+import { tmpDataDir, tmpStore } from '../helpers/tmp.js';
 
 // Story threads (NEWS-280). Two layers here: the pure similarity module, and the
 // store's persistence + backfill on top of it.
@@ -312,7 +312,7 @@ describe('threads in the store (NEWS-280)', () => {
   }
 
   it('round-trips a thread id, defaulting to the story\'s own id', () => {
-    const store = new Store(tmpDataDir());
+    const store = tmpStore();
     const topic = store.addTopic(TOPIC);
     const [item] = store.addItems([
       { topicId: topic.id, title: 'Lone story', summary: 's', sources: [], dedupeKey: 'k1', foundAt: at(0) },
@@ -330,7 +330,7 @@ describe('threads in the store (NEWS-280)', () => {
   });
 
   it('reads a thread back in chronological order, and a lone story as itself', () => {
-    const store = new Store(tmpDataDir());
+    const store = tmpStore();
     const topic = store.addTopic(TOPIC);
     seed(store, topic.id, [
       'Riverside Dam collapse floods three towns',
@@ -356,7 +356,7 @@ describe('threads in the store (NEWS-280)', () => {
   });
 
   it('leaves flagged stories out of a thread, except when asked about one', () => {
-    const store = new Store(tmpDataDir());
+    const store = tmpStore();
     const topic = store.addTopic(TOPIC);
     seed(store, topic.id, ['Riverside Dam collapse floods three towns', 'Rescue teams reach Riverside Dam flood zone']);
     store.backfillThreads();
@@ -376,7 +376,7 @@ describe('threads in the store (NEWS-280)', () => {
   });
 
   it('backfills existing rows, and is idempotent when run again', () => {
-    const store = new Store(tmpDataDir());
+    const store = tmpStore();
     const topic = store.addTopic(TOPIC);
     seed(store, topic.id, [
       'Riverside Dam collapse floods three towns',
@@ -399,21 +399,21 @@ describe('threads in the store (NEWS-280)', () => {
 
   it('survives a close and reopen with the same threads', () => {
     const dir = tmpDataDir();
-    const store = new Store(dir);
+    const store = tmpStore(dir);
     const topic = store.addTopic(TOPIC);
     seed(store, topic.id, ['Riverside Dam collapse floods three towns', 'Rescue teams reach Riverside Dam flood zone']);
     store.backfillThreads();
     const before = new Map(store.listItems(topic.id).map((i) => [i.id, i.threadId]));
     store.close();
 
-    const reopened = new Store(dir);
+    const reopened = tmpStore(dir);
     expect(new Map(reopened.listItems(topic.id).map((i) => [i.id, i.threadId]))).toEqual(before);
     expect(reopened.backfillThreads()).toBe(0);
     reopened.close();
   });
 
   it('threads each topic separately', () => {
-    const store = new Store(tmpDataDir());
+    const store = tmpStore();
     const one = store.addTopic('Flooding');
     const two = store.addTopic('Infrastructure');
     seed(store, one.id, ['Riverside Dam collapse floods three towns']);
@@ -431,7 +431,7 @@ describe('threads in the store (NEWS-280)', () => {
   // --- Adversarial ----------------------------------------------------------
 
   it('a topic emptied and refilled threads the new stories, not the ghosts of the old', () => {
-    const store = new Store(tmpDataDir());
+    const store = tmpStore();
     const topic = store.addTopic(TOPIC);
     seed(store, topic.id, ['Riverside Dam collapse floods three towns', 'Rescue teams reach Riverside Dam flood zone']);
     store.backfillThreads();
@@ -451,7 +451,7 @@ describe('threads in the store (NEWS-280)', () => {
   });
 
   it('an undo restores the thread ids it took, not fresh ones', () => {
-    const store = new Store(tmpDataDir());
+    const store = tmpStore();
     const topic = store.addTopic(TOPIC);
     seed(store, topic.id, ['Riverside Dam collapse floods three towns', 'Rescue teams reach Riverside Dam flood zone']);
     store.backfillThreads();
@@ -464,7 +464,7 @@ describe('threads in the store (NEWS-280)', () => {
   });
 
   it('a mid-history story arriving late is threaded by the next backfill', () => {
-    const store = new Store(tmpDataDir());
+    const store = tmpStore();
     const topic = store.addTopic(TOPIC);
     seed(store, topic.id, ['Riverside Dam collapse floods three towns']);
     store.backfillThreads();
@@ -526,7 +526,7 @@ describe('threads in the store (NEWS-280)', () => {
     `);
     db.close();
 
-    const store = new Store(dir);
+    const store = tmpStore(dir);
     // The stories are still there, each a thread of one to begin with...
     expect(store.listItems('t1').map((i) => i.threadId)).toEqual(['i1', 'i2']);
     // ...and the backfill groups them, as startup would.
@@ -590,7 +590,7 @@ describe('threads in the store (NEWS-280)', () => {
     `);
     db.close();
 
-    const store = new Store(dir);
+    const store = tmpStore(dir);
     const topic = store.getTopic('t1');
     expect(topic?.name).toBe('Flooding');
     expect(topic?.lastCheckedAt, 'its real check time survives').toBe('2026-07-02T00:00:00.000Z');
@@ -606,12 +606,12 @@ describe('threads in the store (NEWS-280)', () => {
 
     // And opening again must not re-run it — the duplicate-column throw.
     expect(() => {
-      new Store(dir).close();
+      tmpStore(dir).close();
     }).not.toThrow();
   });
 
   it('backfills stories whose topic was deleted without throwing', () => {
-    const store = new Store(tmpDataDir());
+    const store = tmpStore();
     const topic = store.addTopic(TOPIC);
     seed(store, topic.id, ['Riverside Dam collapse floods three towns', 'Rescue teams reach Riverside Dam flood zone']);
     store.deleteTopic(topic.id);

@@ -5,10 +5,9 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { createMockProvider } from '../../src/ai/providers/mock.js';
 import { CheckRunner } from '../../src/checks.js';
 import { POLL_INTERVAL_MS } from '../../src/client/poll.js';
-import { Store } from '../../src/db/store.js';
 import { createApp, startServer } from '../../src/server.js';
 import { asResolver } from '../helpers/provider.js';
-import { tmpDataDir } from '../helpers/tmp.js';
+import { tmpStore } from '../helpers/tmp.js';
 
 /**
  * The socket-churn bug (NEWS-246).
@@ -32,7 +31,7 @@ afterEach(() => {
 });
 
 async function start() {
-  const store = new Store(tmpDataDir());
+  const store = tmpStore();
   const runner = new CheckRunner(store, asResolver(createMockProvider()));
   // Port 0 — the OS picks a free one, so these never collide with a dev server
   // or with each other.

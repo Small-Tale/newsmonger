@@ -4,9 +4,8 @@ import { buildUserPrompt, searchingSystemPrompt } from '../../src/ai/prompt.js';
 import { createMockProvider } from '../../src/ai/providers/index.js';
 import { Attendance } from '../../src/attendance.js';
 import { CheckRunner } from '../../src/checks.js';
-import { Store } from '../../src/db/store.js';
 import { fakeProvider, instantRetry } from '../helpers/provider.js';
-import { tmpDataDir } from '../helpers/tmp.js';
+import { tmpStore } from '../helpers/tmp.js';
 
 const HOUR = 3_600_000;
 const DAY = 24 * HOUR;
@@ -94,7 +93,7 @@ describe('coveredThroughAt survives failures', () => {
     // Regression test for the original bug: one failure moved lastCheckedAt to
     // now, and the prompt asked from there — silently discarding days of
     // pending news.
-    const store = new Store(tmpDataDir());
+    const store = tmpStore();
     const topic = store.addTopic('fusion energy');
     const fiveDaysAgo = new Date(Date.now() - 5 * DAY);
     store.markTopicChecked(topic.id, fiveDaysAgo);
@@ -118,7 +117,7 @@ describe('coveredThroughAt survives failures', () => {
   it('a fatal failure still advances the attempt clock (NEWS-110)', async () => {
     // Nothing will change until a human fixes the key, so a short cooldown
     // would just be a shorter wait for the same certain failure.
-    const store = new Store(tmpDataDir());
+    const store = tmpStore();
     const topic = store.addTopic('fusion energy');
     const fiveDaysAgo = new Date(Date.now() - 5 * DAY);
     store.markTopicChecked(topic.id, fiveDaysAgo);
@@ -141,7 +140,7 @@ describe('coveredThroughAt survives failures', () => {
     // throttling into a full interval — up to a day — of missed news, which is
     // the failure NEWS-109 exists to prevent. The global gate is what stops the
     // topic being retried in a hot loop.
-    const store = new Store(tmpDataDir());
+    const store = tmpStore();
     const topic = store.addTopic('fusion energy');
     const fiveDaysAgo = new Date(Date.now() - 5 * DAY);
     store.markTopicChecked(topic.id, fiveDaysAgo);
@@ -158,7 +157,7 @@ describe('coveredThroughAt survives failures', () => {
   });
 
   it('the next successful check asks from the original covered point', async () => {
-    const store = new Store(tmpDataDir());
+    const store = tmpStore();
     const topic = store.addTopic('fusion energy');
     const fiveDaysAgo = new Date(Date.now() - 5 * DAY);
     store.markTopicChecked(topic.id, fiveDaysAgo);
@@ -175,7 +174,7 @@ describe('coveredThroughAt survives failures', () => {
 
   it('survives a run of consecutive failures', async () => {
     // Three failures in a row must not compound into three lost windows.
-    const store = new Store(tmpDataDir());
+    const store = tmpStore();
     const topic = store.addTopic('fusion energy');
     const start = new Date(Date.now() - 5 * DAY);
     store.markTopicChecked(topic.id, start);
@@ -191,7 +190,7 @@ describe('coveredThroughAt survives failures', () => {
   });
 
   it('a successful check advances both clocks', async () => {
-    const store = new Store(tmpDataDir());
+    const store = tmpStore();
     const topic = store.addTopic('fusion energy');
     const start = new Date(Date.now() - 5 * DAY);
     store.markTopicChecked(topic.id, start);
@@ -205,7 +204,7 @@ describe('coveredThroughAt survives failures', () => {
   });
 
   it('a first successful check sets both from null', async () => {
-    const store = new Store(tmpDataDir());
+    const store = tmpStore();
     const topic = store.addTopic('fusion energy');
     expect(store.getTopic(topic.id)?.coveredThroughAt).toBeNull();
 
@@ -219,7 +218,7 @@ describe('coveredThroughAt survives failures', () => {
   it('an attendance deferral advances neither clock', async () => {
     // A deferred check is not an attempt at all — the window must be intact
     // when the user finally opens the app.
-    const store = new Store(tmpDataDir());
+    const store = tmpStore();
     const topic = store.addTopic('fusion energy');
     const start = new Date(Date.now() - 5 * DAY);
     store.markTopicChecked(topic.id, start);
@@ -242,7 +241,7 @@ describe('coveredThroughAt survives failures', () => {
   it('a failure while away still preserves the window until the user returns', async () => {
     // Compound sequence: away → deferred → user returns → check fails →
     // check succeeds. The original window must survive all of it.
-    const store = new Store(tmpDataDir());
+    const store = tmpStore();
     const topic = store.addTopic('fusion energy');
     const start = new Date(Date.now() - 6 * DAY);
     store.markTopicChecked(topic.id, start);

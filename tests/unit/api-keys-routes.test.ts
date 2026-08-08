@@ -3,14 +3,13 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { createMockProvider } from '../../src/ai/providers/index.js';
 import { KeysRespSchema } from '../../src/api/schemas.js';
 import { CheckRunner } from '../../src/checks.js';
-import { Store } from '../../src/db/store.js';
 import { __resetKeychainForTests } from '../../src/keychain.js';
 import { createApp } from '../../src/server.js';
 import { asResolver } from '../helpers/provider.js';
-import { tmpDataDir } from '../helpers/tmp.js';
+import { tmpStore } from '../helpers/tmp.js';
 
 function makeApp() {
-  const store = new Store(tmpDataDir());
+  const store = tmpStore();
   const runner = new CheckRunner(store, asResolver(createMockProvider()));
   // No vendor check: these tests are about the keychain path, and a real probe
   // would hit the network. Verification has its own tests (`key-verify`).

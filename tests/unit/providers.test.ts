@@ -5,10 +5,9 @@ import { AUTO_ORDER, resolveProvider } from '../../src/ai/providers/index.js';
 import { createMockProvider } from '../../src/ai/providers/mock.js';
 import type { ConcreteProviderName, NewsProvider } from '../../src/ai/types.js';
 import { CheckRunner } from '../../src/checks.js';
-import { Store } from '../../src/db/store.js';
 import { createApp } from '../../src/server.js';
 import { asResolver, fakeProvider, noUsage  } from '../helpers/provider.js';
-import { tmpDataDir } from '../helpers/tmp.js';
+import { tmpStore } from '../helpers/tmp.js';
 
 function factoriesWith(available: Partial<Record<ConcreteProviderName, boolean>>) {
   const make = (name: ConcreteProviderName): NewsProvider => fakeProvider(() => Promise.resolve(noUsage([])), { name });
@@ -214,7 +213,7 @@ describe('GET /api/models (NEWS-248)', () => {
    * `gpt-5.6-sol`. The picker now asks the provider.
    */
   function appWith(provider: Partial<NewsProvider>) {
-    const store = new Store(tmpDataDir());
+    const store = tmpStore();
     const base = createMockProvider();
     const runner = new CheckRunner(store, asResolver({ ...base, ...provider }));
     return createApp({ store, runner });
@@ -247,7 +246,7 @@ describe('GET /api/models (NEWS-248)', () => {
   });
 
   it('answers empty when no provider can even be resolved', async () => {
-    const store = new Store(tmpDataDir());
+    const store = tmpStore();
     const runner = new CheckRunner(store, () => Promise.reject(new Error('nothing configured')));
     const res = await createApp({ store, runner }).request('/api/models');
     expect(res.status).toBe(200);
@@ -272,7 +271,7 @@ describe('GET /api/models (NEWS-248)', () => {
   });
 
   it('answers null when it could not ask at all (NEWS-254)', async () => {
-    const store = new Store(tmpDataDir());
+    const store = tmpStore();
     const runner = new CheckRunner(store, () => Promise.reject(new Error('nothing configured')));
     const res = await createApp({ store, runner }).request('/api/models');
     expect(await res.json()).toMatchObject({ effortLevels: null });

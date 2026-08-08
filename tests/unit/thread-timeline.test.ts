@@ -9,11 +9,11 @@ import { dayKeyOf, dayLabel } from '../../src/client/dates.js';
 import type { ThreadPane } from '../../src/client/stores.js';
 import { appStore } from '../../src/client/stores.js';
 import { showAllLabel, THREAD_ROW_CAP, threadFetchNeeded, threadRowDate, visibleThreadRows } from '../../src/client/thread-view.js';
-import { Store } from '../../src/db/store.js';
+import type { Store } from '../../src/db/store.js';
 import { createApp } from '../../src/server.js';
 import { planThreadIds } from '../../src/threads.js';
 import { asResolver } from '../helpers/provider.js';
-import { tmpDataDir } from '../helpers/tmp.js';
+import { tmpStore } from '../helpers/tmp.js';
 
 // The thread timeline in the expanded story pane (NEWS-282): the store read that
 // shapes it, the route that serves it, the client cache in front of that route,
@@ -31,7 +31,7 @@ function at(offsetDays: number): string {
  * in one topic — the two cases a pane has to tell apart.
  */
 function seeded() {
-  const store = new Store(tmpDataDir());
+  const store = tmpStore();
   const topic = store.addTopic('Riverside');
   const add = (title: string, day: number, threadOf?: string) =>
     store.addItems([
@@ -87,7 +87,7 @@ describe('Store.threadSummaries (NEWS-282)', () => {
     // a `found_at` second, so the tie-break decides the reading order of most
     // timelines — and `id` is a UUID, which sorts meaninglessly. The README
     // still showed it: six instalments of one story, ordered 1st, 5th, 6th, 4th.
-    const store = new Store(tmpDataDir());
+    const store = tmpStore();
     const topic = store.addTopic('Offshore wind');
     const titles = ['Cable fault', 'Repair estimate', 'Inquiry opens', 'Repair ship', 'Full output', 'Findings'];
     const same = at(0);
@@ -242,7 +242,7 @@ describe('GET /api/items/:id/thread (NEWS-282)', () => {
   });
 
   it('sends an empty summary map when nothing is threaded', async () => {
-    const store = new Store(tmpDataDir());
+    const store = tmpStore();
     const topic = store.addTopic('Ferries');
     store.addItems([
       {

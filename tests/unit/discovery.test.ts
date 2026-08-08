@@ -6,11 +6,10 @@ import type { SuggestRequest, SuggestResult } from '../../src/ai/types.js';
 import { DiscoverRespSchema, DiscoverUsageRespSchema, MAX_TUNE_ROUNDS } from '../../src/api/schemas.js';
 import { CheckRunner } from '../../src/checks.js';
 import { TopicSchema } from '../../src/db/schemas.js';
-import { Store } from '../../src/db/store.js';
 import { DiscoveryService } from '../../src/discovery.js';
 import { createApp } from '../../src/server.js';
 import { asResolver, fakeProvider } from '../helpers/provider.js';
-import { tmpDataDir } from '../helpers/tmp.js';
+import { tmpStore } from '../helpers/tmp.js';
 
 /**
  * The server half of topic discovery (NEWS-125, `docs/24-topic-discovery.md`).
@@ -19,7 +18,7 @@ import { tmpDataDir } from '../helpers/tmp.js';
  */
 
 function makeApp(opts: { now?: () => number; ttlMs?: number } = {}) {
-  const store = new Store(tmpDataDir());
+  const store = tmpStore();
   const service = createMockProvider();
   const runner = new CheckRunner(store, asResolver(service));
   const discovery = new DiscoveryService(store, asResolver(service), opts);
@@ -185,7 +184,7 @@ describe('classification validation (FR-24.13)', () => {
     });
 
   const classify = async (category: string | null, subcategory: string | null) => {
-    const store = new Store(tmpDataDir());
+    const store = tmpStore();
     const service = new DiscoveryService(store, () => Promise.resolve(withClassification(category, subcategory)));
     const { suggestions } = await service.suggest({ kind: 'describe', query: 'x' });
     return suggestions[0].classification;
@@ -332,7 +331,7 @@ describe('cost recording (FR-24.14)', () => {
   });
 
   it('records a provider that could not be resolved at all', async () => {
-    const store = new Store(tmpDataDir());
+    const store = tmpStore();
     const service = new DiscoveryService(store, () => Promise.reject(new Error('No API key is configured')));
 
     await expect(service.suggest({ kind: 'describe', query: 'x' })).rejects.toThrow(/No API key/);
@@ -345,7 +344,7 @@ describe('cost recording (FR-24.14)', () => {
 
 describe('when discovery is not wired up', () => {
   it('says so rather than crashing', async () => {
-    const store = new Store(tmpDataDir());
+    const store = tmpStore();
     const runner = new CheckRunner(store, asResolver(createMockProvider()));
     const app = createApp({ store, runner });
 

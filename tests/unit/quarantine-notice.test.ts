@@ -6,10 +6,10 @@ import { describe, expect, it, vi } from 'vitest';
 import { createMockProvider } from '../../src/ai/providers/index.js';
 import { CheckRunner } from '../../src/checks.js';
 import { dbPath } from '../../src/db/sqlite.js';
-import { Store } from '../../src/db/store.js';
+import type { Store } from '../../src/db/store.js';
 import { createApp } from '../../src/server.js';
 import { asResolver } from '../helpers/provider.js';
-import { tmpDataDir } from '../helpers/tmp.js';
+import { tmpDataDir, tmpStore } from '../helpers/tmp.js';
 
 /**
  * Telling the user their database was set aside (NEWS-340).
@@ -31,13 +31,13 @@ function quarantine(dir: string): Store {
   const file = dbPath(dir);
   fs.writeFileSync(file, Buffer.alloc(fs.statSync(file).size, 0x41));
   vi.spyOn(console, 'error').mockImplementation(() => undefined);
-  return new Store(dir);
+  return tmpStore(dir);
 }
 
 describe('Store quarantine notice (NEWS-340)', () => {
   it('records the backup path and when it happened', () => {
     const dir = tmpDataDir();
-    const first = new Store(dir);
+    const first = tmpStore(dir);
     first.addTopic('Doomed');
     first.close();
 
@@ -56,12 +56,12 @@ describe('Store quarantine notice (NEWS-340)', () => {
 
   it('is absent on an ordinary start', () => {
     const dir = tmpDataDir();
-    const store = new Store(dir);
+    const store = tmpStore(dir);
     expect(store.getQuarantine()).toBeNull();
     store.close();
 
     // And on a perfectly normal *reopen*, which is the common case by far.
-    const again = new Store(dir);
+    const again = tmpStore(dir);
     expect(again.getQuarantine()).toBeNull();
     again.close();
   });
@@ -70,23 +70,23 @@ describe('Store quarantine notice (NEWS-340)', () => {
     // Held in memory it would be gone by the time anyone looked. The launch
     // where the data disappears is rarely the launch where it is noticed.
     const dir = tmpDataDir();
-    new Store(dir).close();
+    tmpStore(dir).close();
     quarantine(dir).close();
 
-    const later = new Store(dir);
+    const later = tmpStore(dir);
     expect(later.getQuarantine()).not.toBeNull();
     later.close();
   });
 
   it('stays dismissed once dismissed', () => {
     const dir = tmpDataDir();
-    new Store(dir).close();
+    tmpStore(dir).close();
     const recovered = quarantine(dir);
     recovered.dismissQuarantine();
     expect(recovered.getQuarantine()).toBeNull();
     recovered.close();
 
-    const later = new Store(dir);
+    const later = tmpStore(dir);
     expect(later.getQuarantine()).toBeNull();
     later.close();
   });
@@ -94,7 +94,7 @@ describe('Store quarantine notice (NEWS-340)', () => {
   it('dismissing leaves the backup file exactly where it is', () => {
     // Dismissing says "I have read this", never "delete that copy".
     const dir = tmpDataDir();
-    new Store(dir).close();
+    tmpStore(dir).close();
     const recovered = quarantine(dir);
     const backup = recovered.getQuarantine()?.backupPath ?? '';
 
@@ -106,7 +106,7 @@ describe('Store quarantine notice (NEWS-340)', () => {
 
   it('dismissing twice is not an error', () => {
     const dir = tmpDataDir();
-    new Store(dir).close();
+    tmpStore(dir).close();
     const recovered = quarantine(dir);
     recovered.dismissQuarantine();
     expect(() => {
@@ -119,14 +119,14 @@ describe('Store quarantine notice (NEWS-340)', () => {
     // This row is the thing that reports a storage problem. It must not become
     // a second storage problem.
     const dir = tmpDataDir();
-    const store = new Store(dir);
+    const store = tmpStore(dir);
     store.close();
 
     const raw = new DatabaseSync(dbPath(dir));
     raw.prepare(`INSERT INTO meta (key, value) VALUES ('quarantine', '{"nope":1}')`).run();
     raw.close();
 
-    const reopened = new Store(dir);
+    const reopened = tmpStore(dir);
     expect(reopened.getQuarantine()).toBeNull();
     reopened.close();
   });
@@ -139,7 +139,7 @@ describe('the quarantine notice through the API (NEWS-340)', () => {
 
   it('rides along on /api/state so the poll picks it up', async () => {
     const dir = tmpDataDir();
-    new Store(dir).close();
+    tmpStore(dir).close();
     const store = quarantine(dir);
 
     const res = await appFor(dir, store).request('/api/state');
@@ -151,7 +151,7 @@ describe('the quarantine notice through the API (NEWS-340)', () => {
     // The client parses the whole response with zod; a missing key would be a
     // parse failure that blanks every other thing on the page.
     const dir = tmpDataDir();
-    const res = await appFor(dir, new Store(dir)).request('/api/state');
+    const res = await appFor(dir, tmpStore(dir)).request('/api/state');
     const body = (await res.json()) as Record<string, unknown>;
     expect(body).toHaveProperty('quarantine');
     expect(body['quarantine']).toBeNull();
@@ -159,7 +159,7 @@ describe('the quarantine notice through the API (NEWS-340)', () => {
 
   it('POST /api/quarantine/dismiss clears it for good', async () => {
     const dir = tmpDataDir();
-    new Store(dir).close();
+    tmpStore(dir).close();
     const store = quarantine(dir);
     const app = appFor(dir, store);
 
@@ -171,7 +171,7 @@ describe('the quarantine notice through the API (NEWS-340)', () => {
 
   it('dismissing when there is nothing to dismiss is still fine', async () => {
     const dir = tmpDataDir();
-    const app = appFor(dir, new Store(dir));
+    const app = appFor(dir, tmpStore(dir));
     expect((await app.request('/api/quarantine/dismiss', { method: 'POST' })).status).toBe(200);
   });
 });

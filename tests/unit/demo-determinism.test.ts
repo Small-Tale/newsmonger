@@ -8,11 +8,10 @@ import { AUTO_ORDER, KEYED_PROVIDERS, PROVIDER_NAMES } from '../../src/ai/types.
 import { KeysRespSchema, ProvidersRespSchema } from '../../src/api/schemas.js';
 import { CheckRunner } from '../../src/checks.js';
 import { sourceStatus } from '../../src/client/source-status.js';
-import { Store } from '../../src/db/store.js';
 import { createApp } from '../../src/server.js';
 import type { AppEnv } from '../../src/types.js';
 import { asResolver } from '../helpers/provider.js';
-import { tmpDataDir } from '../helpers/tmp.js';
+import { tmpStore } from '../helpers/tmp.js';
 
 /**
  * `--demo` must photograph the app, not the machine holding the camera (NEWS-315).
@@ -38,7 +37,7 @@ import { tmpDataDir } from '../helpers/tmp.js';
  */
 
 function demoApp() {
-  const store = new Store(tmpDataDir());
+  const store = tmpStore();
   const runner = new CheckRunner(store, asResolver(createMockProvider()));
   return createApp({ store, runner, probe: demoProbeProviders, demoKeys: demoKeysResponse() });
 }
@@ -126,7 +125,7 @@ describe('the demo server answers the same on any machine (NEWS-315)', () => {
     // them would tell a user with a working key that they have none. It is also
     // what proves the two tests above are measuring something — the environment
     // really does change this response.
-    const store = new Store(tmpDataDir());
+    const store = tmpStore();
     const app = createApp({ store, runner: new CheckRunner(store, asResolver(createMockProvider())) });
     const keys = await get(app, '/api/keys', KeysRespSchema);
     const configured = await withEnvKey(() => get(app, '/api/keys', KeysRespSchema));

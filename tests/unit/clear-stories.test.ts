@@ -2,10 +2,10 @@ import { describe, expect, it } from 'vitest';
 
 import { createMockProvider } from '../../src/ai/providers/mock.js';
 import { CheckRunner } from '../../src/checks.js';
-import { Store } from '../../src/db/store.js';
+import type { Store } from '../../src/db/store.js';
 import { createApp } from '../../src/server.js';
 import { asResolver } from '../helpers/provider.js';
-import { tmpDataDir } from '../helpers/tmp.js';
+import { tmpStore } from '../helpers/tmp.js';
 
 /**
  * Clearing every story, keeping everything else (NEWS-255).
@@ -15,7 +15,7 @@ import { tmpDataDir } from '../helpers/tmp.js';
  * specification, so most of these tests are about what **survives**.
  */
 function seeded() {
-  const store = new Store(tmpDataDir());
+  const store = tmpStore();
   const runner = new CheckRunner(store, asResolver(createMockProvider()));
   const app = createApp({ store, runner });
   const topic = (name: string) => {
@@ -141,7 +141,7 @@ describe('POST /api/items/clear (NEWS-255)', () => {
    * the check rather than by deferring to it.
    */
   it('stops a running check and clears, rather than refusing', async () => {
-    const store = new Store(tmpDataDir());
+    const store = tmpStore();
     const { provider, release } = heldProvider();
     const runner = new CheckRunner(store, asResolver(provider as never));
     const app = createApp({ store, runner });
@@ -164,7 +164,7 @@ describe('POST /api/items/clear (NEWS-255)', () => {
     // not enough: between the provider returning and the write there are three
     // awaits (link verification, images, favicons), so a check already past the
     // provider would complete and **refill the feed the user just cleared**.
-    const store = new Store(tmpDataDir());
+    const store = tmpStore();
     const { provider, release } = heldProvider();
     const runner = new CheckRunner(store, asResolver(provider as never));
     const app = createApp({ store, runner });
@@ -186,7 +186,7 @@ describe('POST /api/items/clear (NEWS-255)', () => {
     // `cancelStaleChecks` (NEWS-257) coalesces manual reissues behind a timer. A
     // clear arriving inside that window would otherwise be undone by the reissue
     // firing straight afterwards — and spend quota doing it.
-    const store = new Store(tmpDataDir());
+    const store = tmpStore();
     const { provider, release } = heldProvider();
     // Positional deps before the options bag — my first attempt passed the bag as
     // `attendance` and the reissue crashed on `attendance.record`.
@@ -215,7 +215,7 @@ describe('POST /api/items/clear (NEWS-255)', () => {
     //
     // Written because removing that check broke no test: it was a path I had added
     // and not covered.
-    const store = new Store(tmpDataDir());
+    const store = tmpStore();
     let started = 0;
     // An array, not a `let`: TypeScript narrows a `let` assigned only inside a
     // callback to its initial value, so `release?.()` typed as `never` and failed
@@ -326,7 +326,7 @@ describe('clearing resets a topic to its initial state (NEWS-291)', () => {
     // belongs to "what we have seen" will fail this the moment a clear forgets it,
     // which is the property that makes it worth writing this way rather than as
     // four separate `toBeNull()`s.
-    const store = new Store(tmpDataDir());
+    const store = tmpStore();
     const used = usedTopic(store);
     store.clearAllItems(CLEARED_AT);
     const fresh = store.addTopic('Brand New');
@@ -334,7 +334,7 @@ describe('clearing resets a topic to its initial state (NEWS-291)', () => {
   });
 
   it('nulls lastCheckedAt — the field every "checked N ago" surface reads', () => {
-    const store = new Store(tmpDataDir());
+    const store = tmpStore();
     const t = usedTopic(store);
     expect(store.getTopic(t.id)?.lastCheckedAt).not.toBeNull();
     store.clearAllItems(CLEARED_AT);
@@ -346,7 +346,7 @@ describe('clearing resets a topic to its initial state (NEWS-291)', () => {
     // reset topic would hold back a check nobody has asked for yet — and the
     // cooldown outranks the schedule, so it would have been the *real* reason the
     // topic was not due, hiding whether the baseline works at all.
-    const store = new Store(tmpDataDir());
+    const store = tmpStore();
     const t = usedTopic(store);
     expect(store.getTopic(t.id)?.consecutiveFailures).toBe(1);
     store.clearAllItems(CLEARED_AT);
@@ -355,7 +355,7 @@ describe('clearing resets a topic to its initial state (NEWS-291)', () => {
   });
 
   it('records when the clear happened, as the scheduling baseline', () => {
-    const store = new Store(tmpDataDir());
+    const store = tmpStore();
     const t = usedTopic(store);
     store.clearAllItems(CLEARED_AT);
     expect(store.getTopic(t.id)?.clearedAt).toBe(CLEARED_AT.toISOString());
@@ -365,7 +365,7 @@ describe('clearing resets a topic to its initial state (NEWS-291)', () => {
     // Verified rather than assumed: "which stories have we already seen" has no
     // separate ledger, so there is nothing a clear could miss. If a future change
     // caches those keys anywhere else, this is what notices.
-    const store = new Store(tmpDataDir());
+    const store = tmpStore();
     const t = usedTopic(store);
     expect(store.dedupeKeysForTopic(t.id).size).toBe(1);
     store.clearAllItems(CLEARED_AT);
@@ -373,7 +373,7 @@ describe('clearing resets a topic to its initial state (NEWS-291)', () => {
   });
 
   it('drops the off-topic examples the prompt was carrying', () => {
-    const store = new Store(tmpDataDir());
+    const store = tmpStore();
     const t = usedTopic(store);
     const item = store.listItems()[0];
     store.setItemOffTopic(item.id, true);
@@ -386,7 +386,7 @@ describe('clearing resets a topic to its initial state (NEWS-291)', () => {
     // A clear discards *findings*, not the user's settings for the topic.
     // Re-classifying would also spend a model call to relearn something already
     // known, and would discard a manual classification (FR-22.7).
-    const store = new Store(tmpDataDir());
+    const store = tmpStore();
     const t = usedTopic(store);
     store.setTopicPaused(t.id, true);
     store.setTopicCategory(t.id, 'science', 'energy', 'manual');
@@ -408,7 +408,7 @@ describe('clearing resets a topic to its initial state (NEWS-291)', () => {
   it('applies the same reset to the per-topic clear', () => {
     // `clearItemsForTopic` (the rename path, NEWS-139) and `clearAllItems` are
     // separate implementations on purpose — so they are held to the same reset.
-    const store = new Store(tmpDataDir());
+    const store = tmpStore();
     const t = usedTopic(store);
     store.clearItemsForTopic(t.id, CLEARED_AT);
     expect(checkState(store, t.id)).toEqual({
@@ -421,7 +421,7 @@ describe('clearing resets a topic to its initial state (NEWS-291)', () => {
   });
 
   it('leaves other topics alone when only one is cleared', () => {
-    const store = new Store(tmpDataDir());
+    const store = tmpStore();
     const a = usedTopic(store, 'Fusion');
     const b = usedTopic(store, 'Rome');
     store.clearItemsForTopic(a.id, CLEARED_AT);
@@ -441,7 +441,7 @@ describe('clearing resets a topic to its initial state (NEWS-291)', () => {
  */
 describe('the scheduler after a clear (NEWS-291)', () => {
   function runnerSetup() {
-    const store = new Store(tmpDataDir());
+    const store = tmpStore();
     const provider = createMockProvider();
     const runner = new CheckRunner(store, asResolver(provider));
     const app = createApp({ store, runner });
@@ -501,7 +501,7 @@ describe('the scheduler after a clear (NEWS-291)', () => {
  */
 describe('clear sequences (NEWS-291)', () => {
   it('clear → tick → clear again: still nothing checked, baseline moves forward', async () => {
-    const store = new Store(tmpDataDir());
+    const store = tmpStore();
     const provider = createMockProvider();
     const runner = new CheckRunner(store, asResolver(provider));
     const app = createApp({ store, runner });
@@ -525,7 +525,7 @@ describe('clear sequences (NEWS-291)', () => {
   });
 
   it('clear → check → clear: the second clear resets the check the first made possible', async () => {
-    const store = new Store(tmpDataDir());
+    const store = tmpStore();
     const runner = new CheckRunner(store, asResolver(createMockProvider()));
     const app = createApp({ store, runner });
     store.updateSettings({ checkIntervalMs: HOUR, highPriorityIntervalMs: HOUR });
@@ -544,7 +544,7 @@ describe('clear sequences (NEWS-291)', () => {
   it('clear → add a topic: the new topic is still due immediately', async () => {
     // A clear must not make the *app* quiet, only the topics it reset. Adding a
     // topic is the one flow that expects an immediate check (FR-1.12).
-    const store = new Store(tmpDataDir());
+    const store = tmpStore();
     const runner = new CheckRunner(store, asResolver(createMockProvider()));
     const app = createApp({ store, runner });
     store.updateSettings({ checkIntervalMs: HOUR, highPriorityIntervalMs: HOUR });
@@ -559,7 +559,7 @@ describe('clear sequences (NEWS-291)', () => {
   });
 
   it('clear one topic → clear a different one: each keeps its own baseline', () => {
-    const store = new Store(tmpDataDir());
+    const store = tmpStore();
     const a = usedTopic(store, 'Fusion');
     const b = usedTopic(store, 'Rome');
     const first = new Date('2026-08-01T00:00:00.000Z');
@@ -577,7 +577,7 @@ describe('clear sequences (NEWS-291)', () => {
     // used to run the failure bookkeeping on its way out, so stopping a check
     // gave the topic a streak of 1 and a two-minute cooldown — arriving a
     // microtask *after* the reset, and so quietly undoing it.
-    const store = new Store(tmpDataDir());
+    const store = tmpStore();
     const { provider, release } = heldProvider();
     const runner = new CheckRunner(store, asResolver(provider as never));
     const app = createApp({ store, runner });
@@ -602,7 +602,7 @@ describe('clear sequences (NEWS-291)', () => {
     // The same fix seen from the settings-change side, where the comment already
     // claimed the topic was "left untouched so it stays due" — the cooldown meant
     // it was not.
-    const store = new Store(tmpDataDir());
+    const store = tmpStore();
     const { provider, release } = heldProvider();
     const runner = new CheckRunner(store, asResolver(provider as never), undefined, null, null, {
       reissueDelayMs: 10_000,
@@ -626,7 +626,7 @@ describe('clear sequences (NEWS-291)', () => {
 
 describe('deleting every topic (FR-31.1, NEWS-328)', () => {
   it('takes the topics, their stories and their runs', async () => {
-    const store = new Store(tmpDataDir());
+    const store = tmpStore();
     const runner = new CheckRunner(store, asResolver(createMockProvider()));
     const a = store.addTopic('Alpha');
     store.addTopic('Beta');
@@ -647,7 +647,7 @@ describe('deleting every topic (FR-31.1, NEWS-328)', () => {
     // "Delete all topics" is exactly the phrase that raises the fear it means
     // the whole app. It does not: the provider you configured and the schedule
     // you chose are still yours.
-    const store = new Store(tmpDataDir());
+    const store = tmpStore();
     store.addTopic('Alpha');
     store.updateSettings({ provider: 'openai', checkConcurrency: 4 });
 
@@ -658,11 +658,11 @@ describe('deleting every topic (FR-31.1, NEWS-328)', () => {
   });
 
   it('answers zero on an install with no topics rather than failing', () => {
-    expect(new Store(tmpDataDir()).deleteAllTopics()).toBe(0);
+    expect(tmpStore().deleteAllTopics()).toBe(0);
   });
 
   it('is reported through the route, with the checks it stopped', async () => {
-    const store = new Store(tmpDataDir());
+    const store = tmpStore();
     const runner = new CheckRunner(store, asResolver(createMockProvider()));
     const app = createApp({ store, runner });
     store.addTopic('Alpha');

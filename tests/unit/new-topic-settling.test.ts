@@ -3,11 +3,11 @@ import { describe, expect, it } from 'vitest';
 import { createMockProvider } from '../../src/ai/providers/index.js';
 import { CheckRunner, inNewTopicGrace, isDueUnderSchedule, NEW_TOPIC_GRACE_MS } from '../../src/checks.js';
 import type { Settings } from '../../src/db/schemas.js';
-import { Store } from '../../src/db/store.js';
+import type { Store } from '../../src/db/store.js';
 import { createApp } from '../../src/server.js';
 import { TOPIC_HOLD_WINDOW_MS, TopicHolds } from '../../src/topic-holds.js';
 import { asResolver } from '../helpers/provider.js';
-import { tmpDataDir } from '../helpers/tmp.js';
+import { tmpStore } from '../helpers/tmp.js';
 
 /**
  * The new-topic settling rules (NEWS-366).
@@ -161,7 +161,7 @@ describe('a sweep skips held topics (FR-34.4, FR-34.7, FR-34.8)', () => {
    * the holds are the only thing gating this sweep.
    */
   const setup = (holds: TopicHolds) => {
-    const store = new Store(tmpDataDir());
+    const store = tmpStore();
     const provider = createMockProvider();
     const runner = new CheckRunner(store, asResolver(provider), undefined, null, null, { holds });
     return { store, provider, runner };
@@ -271,7 +271,7 @@ describe('the two rules cover each other (FR-34.1 + FR-34.4)', () => {
 
 describe('the /api/state hold parameter (FR-34.5, FR-34.6)', () => {
   const appWith = (holds: TopicHolds) => {
-    const store = new Store(tmpDataDir());
+    const store = tmpStore();
     const runner = new CheckRunner(store, asResolver(createMockProvider()), undefined, null, null, { holds });
     return { store, app: createApp({ store, runner, holds }) };
   };

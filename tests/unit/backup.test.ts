@@ -5,12 +5,12 @@ import { describe, expect, it } from 'vitest';
 
 import { BACKUP_FILE, Backups, buildBackup, MIN_BACKUP_INTERVAL_MS, writeBackup } from '../../src/backup.js';
 import { DataFileSchema } from '../../src/db/schemas.js';
-import { Store } from '../../src/db/store.js';
-import { tmpDataDir } from '../helpers/tmp.js';
+import type { Store } from '../../src/db/store.js';
+import { tmpDataDir, tmpStore } from '../helpers/tmp.js';
 
 function seeded(): { store: Store; dir: string } {
   const dir = tmpDataDir();
-  const store = new Store(dir);
+  const store = tmpStore(dir);
   const topic = store.addTopic('Comets');
   store.addItems([
     {
@@ -54,7 +54,7 @@ describe('buildBackup', () => {
     // store should come up with the same content.
     const restoreDir = tmpDataDir();
     fs.writeFileSync(path.join(restoreDir, 'data.json'), fs.readFileSync(at));
-    const restored = new Store(restoreDir);
+    const restored = tmpStore(restoreDir);
     expect(restored.listTopics().map((t) => t.name)).toEqual(['Comets']);
     expect(restored.listItems()).toHaveLength(1);
     expect(restored.getSettings().checkIntervalMs).toBe(90 * 60 * 1000);

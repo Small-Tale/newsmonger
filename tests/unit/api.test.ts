@@ -9,13 +9,12 @@ import { BackupLocationsRespSchema, BackupRespSchema, ItemsRespSchema, Providers
 import { Attendance } from '../../src/attendance.js';
 import { BACKUP_FILE,Backups } from '../../src/backup.js';
 import { CheckRunner } from '../../src/checks.js';
-import { Store } from '../../src/db/store.js';
 import { createApp } from '../../src/server.js';
 import { asResolver } from '../helpers/provider.js';
-import { tmpDataDir } from '../helpers/tmp.js';
+import { tmpStore } from '../helpers/tmp.js';
 
 function makeApp() {
-  const store = new Store(tmpDataDir());
+  const store = tmpStore();
   const service = createMockProvider();
   const runner = new CheckRunner(store, asResolver(service));
   const app = createApp({ store, runner });
@@ -109,7 +108,7 @@ describe('API', () => {
     // The initial check is manual — the user is plainly present — so it must run
     // even for an attended provider with no prior foreground signal, and leave
     // attendance fresh (like the Check-now buttons, NEWS-44).
-    const store = new Store(tmpDataDir());
+    const store = tmpStore();
     const attendance = new Attendance();
     const service = createMockProvider({ attended: true });
     const runner = new CheckRunner(store, asResolver(service), attendance);
@@ -559,7 +558,7 @@ describe('POST /api/backup (NEWS-192)', () => {
   });
 
   it('400s while no folder has been chosen, then writes one', async () => {
-    const store = new Store(tmpDataDir());
+    const store = tmpStore();
     const runner = new CheckRunner(store, asResolver(createMockProvider()));
     const backups = new Backups(store, () => store.getSettings().backupDir);
     const app = createApp({ store, runner, backups });
@@ -585,7 +584,7 @@ describe('POST /api/backup (NEWS-192)', () => {
   });
 
   it('500s when the destination cannot be written', async () => {
-    const store = new Store(tmpDataDir());
+    const store = tmpStore();
     const runner = new CheckRunner(store, asResolver(createMockProvider()));
     const blocked = path.join(store.dataDir, 'not-a-folder');
     fs.writeFileSync(blocked, 'x');
@@ -624,7 +623,7 @@ describe('GET /api/backup/locations (NEWS-230)', () => {
 
 describe('the backup prompt settings survive a round trip (NEWS-230)', () => {
   it('stores both dismissal forms and reloads them', async () => {
-    const store = new Store(tmpDataDir());
+    const store = tmpStore();
     const runner = new CheckRunner(store, asResolver(createMockProvider()));
     const app = createApp({ store, runner });
 
@@ -640,7 +639,7 @@ describe('the backup prompt settings survive a round trip (NEWS-230)', () => {
     expect(res.status).toBe(200);
 
     // Through a fresh Store, so this is the persisted value and not a cache.
-    const reloaded = new Store(store.dataDir);
+    const reloaded = tmpStore(store.dataDir);
     expect(reloaded.getSettings().backupPromptSnoozedUntil).toBe(until);
     expect(reloaded.getSettings().backupPromptNever).toBe(true);
     reloaded.close();

@@ -5,9 +5,8 @@ import type { FoundNewsItem } from '../../src/ai/types.js';
 import type { LinkProbe } from '../../src/ai/verify-links.js';
 import { verifyItemLinks } from '../../src/ai/verify-links.js';
 import { CheckRunner } from '../../src/checks.js';
-import { Store } from '../../src/db/store.js';
 import { asResolver } from '../helpers/provider.js';
-import { tmpDataDir } from '../helpers/tmp.js';
+import { tmpStore } from '../helpers/tmp.js';
 
 function story(title: string, urls: string[]): FoundNewsItem {
   return {
@@ -104,7 +103,7 @@ describe('verifyItemLinks (NEWS-83)', () => {
 
 describe('CheckRunner link verification (NEWS-83)', () => {
   function runnerWith(probe: LinkProbe | null) {
-    const store = new Store(tmpDataDir());
+    const store = tmpStore();
     const service = createMockProvider();
     return { store, runner: new CheckRunner(store, asResolver(service), undefined, null, probe) };
   }
@@ -140,7 +139,7 @@ describe('CheckRunner link verification (NEWS-83)', () => {
     // Verification runs *before* dedup on purpose. If a dropped story still
     // claimed its key, the real version of the same story would be filtered
     // out as a duplicate on the next check and never appear at all.
-    const store = new Store(tmpDataDir());
+    const store = tmpStore();
     const service = createMockProvider();
     const topic = store.addTopic('Fusion');
 

@@ -8,10 +8,9 @@ import type { CheckResult } from '../../src/ai/types.js';
 import { BACKUP_FILE,Backups } from '../../src/backup.js';
 import { byCheckOrder, CheckRunner, effectiveInterval, isDue, scheduleBaseline } from '../../src/checks.js';
 import { DataFileSchema } from '../../src/db/schemas.js';
-import { Store } from '../../src/db/store.js';
 import { afterGrace } from '../helpers/grace.js';
 import { asResolver, fakeProvider, noUsage } from '../helpers/provider.js';
-import { tmpDataDir } from '../helpers/tmp.js';
+import { tmpStore } from '../helpers/tmp.js';
 
 
 const HOUR = 3_600_000;
@@ -144,7 +143,7 @@ describe('effectiveInterval (NEWS-56)', () => {
 
 describe('CheckRunner', () => {
   it('adds found items and records a succeeded run', async () => {
-    const store = new Store(tmpDataDir());
+    const store = tmpStore();
     const runner = new CheckRunner(store, asResolver(createMockProvider()));
     const topic = store.addTopic('Fusion');
 
@@ -162,7 +161,7 @@ describe('CheckRunner', () => {
    * from before it — the whole point is that a snapshot is current.
    */
   it('writes a backup after a successful check, once per hour (NEWS-192)', async () => {
-    const store = new Store(tmpDataDir());
+    const store = tmpStore();
     const dest = path.join(store.dataDir, 'backups');
     store.updateSettings({ backupDir: dest });
     let now = Date.now();
@@ -193,7 +192,7 @@ describe('CheckRunner', () => {
 
   /** A backup that cannot be written must not fail the check that triggered it. */
   it('survives a broken backup destination (NEWS-192)', async () => {
-    const store = new Store(tmpDataDir());
+    const store = tmpStore();
     const blocked = path.join(store.dataDir, 'not-a-folder');
     fs.writeFileSync(blocked, 'x');
     store.updateSettings({ backupDir: blocked });
@@ -213,7 +212,7 @@ describe('CheckRunner', () => {
   });
 
   it('deduplicates on a second check (same stories found again)', async () => {
-    const store = new Store(tmpDataDir());
+    const store = tmpStore();
     const runner = new CheckRunner(store, asResolver(createMockProvider()));
     const topic = store.addTopic('Fusion');
 
@@ -224,7 +223,7 @@ describe('CheckRunner', () => {
   });
 
   it('passes known items and last-checked to the service', async () => {
-    const store = new Store(tmpDataDir());
+    const store = tmpStore();
     const service = createMockProvider();
     const runner = new CheckRunner(store, asResolver(service));
     const topic = store.addTopic('Fusion');
@@ -239,7 +238,7 @@ describe('CheckRunner', () => {
   });
 
   it('records a failed run with the error, and still advances lastCheckedAt', async () => {
-    const store = new Store(tmpDataDir());
+    const store = tmpStore();
     const runner = new CheckRunner(store, asResolver(createMockProvider()));
     const topic = store.addTopic('this will fail');
 
@@ -252,13 +251,13 @@ describe('CheckRunner', () => {
   });
 
   it('returns null for unknown topics', async () => {
-    const store = new Store(tmpDataDir());
+    const store = tmpStore();
     const runner = new CheckRunner(store, asResolver(createMockProvider()));
     expect(await runner.checkTopic('nope')).toBeNull();
   });
 
   it('ignores a second concurrent check for the same topic', async () => {
-    const store = new Store(tmpDataDir());
+    const store = tmpStore();
     let release: (result: CheckResult) => void = () => undefined;
     let callCount = 0;
     const blocking = fakeProvider(() => {
@@ -282,7 +281,7 @@ describe('CheckRunner', () => {
   });
 
   it('drops results when the topic was deleted mid-check', async () => {
-    const store = new Store(tmpDataDir());
+    const store = tmpStore();
     let release: (result: CheckResult) => void = () => undefined;
     const blocking = fakeProvider(
       () =>
@@ -304,7 +303,7 @@ describe('CheckRunner', () => {
   });
 
   it('checkDue only checks due, unpaused topics', async () => {
-    const store = new Store(tmpDataDir());
+    const store = tmpStore();
     const service = createMockProvider();
     const runner = new CheckRunner(store, asResolver(service));
     store.updateSettings({ checkIntervalMs: HOUR });
@@ -320,7 +319,7 @@ describe('CheckRunner', () => {
   });
 
   it('checkDue services topics most-overdue-first, high-priority ahead (NEWS-58)', async () => {
-    const store = new Store(tmpDataDir());
+    const store = tmpStore();
     const service = createMockProvider();
     const runner = new CheckRunner(store, asResolver(service));
     store.updateSettings({ checkIntervalMs: HOUR });
@@ -341,7 +340,7 @@ describe('CheckRunner', () => {
   });
 
   it('checkDue runs a high-priority topic on the shorter interval (NEWS-56)', async () => {
-    const store = new Store(tmpDataDir());
+    const store = tmpStore();
     const service = createMockProvider();
     const runner = new CheckRunner(store, asResolver(service));
     // Default 1 day, high-priority 1 hour.
@@ -366,7 +365,7 @@ describe('CheckRunner', () => {
   });
 
   it('checkAll checks every unpaused topic regardless of due time', async () => {
-    const store = new Store(tmpDataDir());
+    const store = tmpStore();
     const service = createMockProvider();
     const runner = new CheckRunner(store, asResolver(service));
 
@@ -386,7 +385,7 @@ describe('CheckRunner', () => {
 
 
   it('pause -> unpause sequence: checks resume after unpausing', async () => {
-    const store = new Store(tmpDataDir());
+    const store = tmpStore();
     const service = createMockProvider();
     const runner = new CheckRunner(store, asResolver(service));
     store.updateSettings({ checkIntervalMs: HOUR });

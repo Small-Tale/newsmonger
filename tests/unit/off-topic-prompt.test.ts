@@ -3,9 +3,8 @@ import { describe, expect, it } from 'vitest';
 import { buildUserPrompt } from '../../src/ai/prompt.js';
 import { createMockProvider } from '../../src/ai/providers/index.js';
 import { CheckRunner } from '../../src/checks.js';
-import { Store } from '../../src/db/store.js';
 import { asResolver } from '../helpers/provider.js';
-import { tmpDataDir } from '../helpers/tmp.js';
+import { tmpStore } from '../helpers/tmp.js';
 
 describe('buildUserPrompt off-topic examples (NEWS-61)', () => {
   it('omits the section when there are no flagged titles', () => {
@@ -24,7 +23,7 @@ describe('buildUserPrompt off-topic examples (NEWS-61)', () => {
 
 describe('CheckRunner feeds flagged titles to the provider (NEWS-61)', () => {
   it('passes a topic’s off-topic titles into checkTopic', async () => {
-    const store = new Store(tmpDataDir());
+    const store = tmpStore();
     const service = createMockProvider();
     const runner = new CheckRunner(store, asResolver(service));
     const topic = store.addTopic('Apple');
@@ -40,7 +39,7 @@ describe('CheckRunner feeds flagged titles to the provider (NEWS-61)', () => {
   });
 
   it('passes an empty list when nothing is flagged', async () => {
-    const store = new Store(tmpDataDir());
+    const store = tmpStore();
     const service = createMockProvider();
     const runner = new CheckRunner(store, asResolver(service));
     const topic = store.addTopic('Apple');

@@ -4,6 +4,8 @@ import path from 'node:path';
 
 import { afterEach } from 'vitest';
 
+import { Store } from '../../src/db/store.js';
+
 const created: string[] = [];
 
 /** Create a temporary data directory, cleaned up after each test. */
@@ -12,6 +14,31 @@ export function tmpDataDir(): string {
   created.push(dir);
   return dir;
 }
+
+/**
+ * A `Store` that gets closed after the test, on a directory that gets removed
+ * (NEWS-431).
+ *
+ * Use this instead of `new Store(tmpDataDir())`. The difference only shows on
+ * Windows: an open SQLite handle makes the directory unremovable there, where
+ * POSIX is happy to unlink a file somebody still holds. 46 of 126 test files
+ * failed a release that way — every one of them having passed its assertions —
+ * because none of them closed the store they opened.
+ *
+ * `dir` is optional so the two shapes in the suite both fit: a fresh directory,
+ * or an existing one being **reopened**, which is how the persistence tests
+ * check that what was written comes back.
+ *
+ * `tests/unit/store-cleanup.test.ts` keeps `new Store(` out of the unit suite,
+ * so this cannot be bypassed by habit.
+ */
+export function tmpStore(dir: string = tmpDataDir()): Store {
+  const store = new Store(dir);
+  stores.push(store);
+  return store;
+}
+
+const stores: Store[] = [];
 
 /**
  * Remove the directories the test made, tolerating a still-open database.
@@ -25,34 +52,39 @@ export function tmpDataDir(): string {
  *
  * `force: true` does not cover this. It suppresses `ENOENT` only.
  *
- * **One attempt, no retries** — and that is a correction. The first fix passed
- * `maxRetries: 5, retryDelay: 50`, reasoning about a handle in the process of
- * closing. That is not the case here: the handles are open for good, so every
- * directory paid the full 250ms budget before giving up, in a hook that runs
- * after *every* test. Four suites then timed out at 5000ms on the Windows runner
- * — a fresh set of failures, caused by the fix for the previous set.
+ * **Strict again as of NEWS-431**: `tmpStore()` closes every store the test
+ * opened, so nothing holds a handle and the removal has no reason to fail. An
+ * error here is now information rather than noise — it means a handle survived,
+ * which is the thing this hook could not previously distinguish from the normal
+ * case.
  *
- * `EBUSY` / `EPERM` means a handle is still open, and retrying cannot change
- * that. The right response is to leave the directory: it is under `os.tmpdir()`,
- * the OS reclaims it, and failing here would report a test as broken when what
- * it actually did was decline to call `close()`.
+ * Two earlier versions are worth remembering, because both looked right:
  *
- * Any other error still throws. A cleanup hook that swallows everything is how a
- * helper stops being able to tell "nothing to remove" from "removal is broken".
+ *   - `force: true` alone. It suppresses `ENOENT` only, not the `EBUSY` Windows
+ *     raises for an open file — 46 of 126 files failed a release that way.
+ *   - `maxRetries: 5, retryDelay: 50`, reasoning about a handle mid-close. The
+ *     handles were open for good, so every directory paid the full 250ms before
+ *     giving up, in a hook that runs after *every* test, and four suites then
+ *     timed out at 5000ms. Retrying cannot change an open handle.
  *
- * This is not covering for a product defect — `Store.close()` exists and the CLI
- * calls it. It is test hygiene that only one platform can see, which is why the
- * Windows unit run (NEWS-419) is the thing that found it.
+ * The fix for both was to stop leaving handles open, not to negotiate with the
+ * filesystem about them.
  */
 afterEach(() => {
+  // Stores first: the directory cannot go while a handle on it is open.
+  while (stores.length > 0) {
+    const store = stores.pop();
+    try {
+      store?.close();
+    } catch {
+      // Already closed. Several tests close explicitly — to reopen the same
+      // directory, or to assert on what closing does — and a double close is
+      // their success, not a failure worth reporting.
+    }
+  }
   while (created.length > 0) {
     const dir = created.pop();
     if (dir === undefined) continue;
-    try {
-      fs.rmSync(dir, { recursive: true, force: true });
-    } catch (err) {
-      const code = (err as NodeJS.ErrnoException).code;
-      if (code !== 'EBUSY' && code !== 'EPERM') throw err;
-    }
+    fs.rmSync(dir, { recursive: true, force: true });
   }
 });

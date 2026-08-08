@@ -3,11 +3,10 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { createMockProvider } from '../../src/ai/providers/index.js';
 import type { KeyVerdict, KeyVerifier } from '../../src/ai/verify-key.js';
 import { CheckRunner } from '../../src/checks.js';
-import { Store } from '../../src/db/store.js';
 import { __resetKeychainForTests } from '../../src/keychain.js';
 import { createApp } from '../../src/server.js';
 import { asResolver } from '../helpers/provider.js';
-import { tmpDataDir } from '../helpers/tmp.js';
+import { tmpStore } from '../helpers/tmp.js';
 
 /** Record what the route asked, and answer with a scripted verdict. */
 function stubVerifier(verdict: KeyVerdict): KeyVerifier & { calls: { provider: string; key: string }[] } {
@@ -20,7 +19,7 @@ function stubVerifier(verdict: KeyVerdict): KeyVerifier & { calls: { provider: s
 }
 
 function makeApp(verifyKey: KeyVerifier | null) {
-  const store = new Store(tmpDataDir());
+  const store = tmpStore();
   const runner = new CheckRunner(store, asResolver(createMockProvider()));
   return createApp({ store, runner, verifyKey });
 }

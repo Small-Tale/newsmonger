@@ -2,13 +2,12 @@ import { describe, expect, it } from 'vitest';
 
 import { createMockProvider } from '../../src/ai/providers/index.js';
 import { CheckRunner } from '../../src/checks.js';
-import { Store } from '../../src/db/store.js';
 import { createApp } from '../../src/server.js';
 import { asResolver } from '../helpers/provider.js';
-import { tmpDataDir } from '../helpers/tmp.js';
+import { tmpStore } from '../helpers/tmp.js';
 
 function seededStore() {
-  const store = new Store(tmpDataDir());
+  const store = tmpStore();
   const topic = store.addTopic('fusion');
   const [item] = store.addItems([
     { topicId: topic.id, title: 't', summary: 's', sources: [], dedupeKey: 'k', foundAt: '2026-07-24T00:00:00.000Z' },
@@ -34,7 +33,7 @@ describe('Store.setItemSaved', () => {
     const { store, itemId } = seededStore();
     store.setItemSaved(itemId, true);
     // A fresh Store over the same dir reads the flag back.
-    const reopened = new Store(store.dataDir);
+    const reopened = tmpStore(store.dataDir);
     expect(reopened.listItems()[0]?.saved).toBe(true);
   });
 
@@ -54,7 +53,7 @@ describe('Store.setItemSaved', () => {
 
 describe('PATCH /api/items/:id', () => {
   function makeApp() {
-    const store = new Store(tmpDataDir());
+    const store = tmpStore();
     const topic = store.addTopic('fusion');
     const [item] = store.addItems([
       { topicId: topic.id, title: 't', summary: 's', sources: [], dedupeKey: 'k', foundAt: '2026-07-24T00:00:00.000Z' },

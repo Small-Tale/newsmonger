@@ -5,11 +5,10 @@ import { describe, expect, it } from 'vitest';
 
 import { createMockProvider } from '../../src/ai/providers/index.js';
 import { CheckRunner } from '../../src/checks.js';
-import { Store } from '../../src/db/store.js';
 import { cachedImagePath, imagesDir, liveImageHashes, pruneImageCache } from '../../src/images/cache.js';
 import { createApp } from '../../src/server.js';
 import { asResolver } from '../helpers/provider.js';
-import { tmpDataDir } from '../helpers/tmp.js';
+import { tmpDataDir, tmpStore } from '../helpers/tmp.js';
 
 const hash = (n: number): string => n.toString(16).padStart(32, '0');
 
@@ -118,7 +117,7 @@ describe('pruneImageCache', () => {
 describe('DELETE /api/topics prunes the cache', () => {
   it("drops a deleted topic's images but keeps another topic's shared image", async () => {
     const dir = tmpDataDir();
-    const store = new Store(dir);
+    const store = tmpStore(dir);
     const keep = store.addTopic('keep');
     const drop = store.addTopic('drop');
 
@@ -203,7 +202,7 @@ describe('an empty mark set never sweeps a populated cache (NEWS-341)', () => {
     // The transition, not the states either side of it — a store with stories
     // and images, replaced by an empty store pointed at the same data dir.
     const dir = tmpDataDir();
-    const store = new Store(dir);
+    const store = tmpStore(dir);
     const topic = store.addTopic('Chips');
     store.addItems([
       {
@@ -221,7 +220,7 @@ describe('an empty mark set never sweeps a populated cache (NEWS-341)', () => {
 
     // The database is replaced — quarantined and started fresh.
     fs.rmSync(path.join(dir, 'newsmonger.db'), { force: true });
-    const fresh = new Store(dir);
+    const fresh = tmpStore(dir);
     expect(fresh.listItems()).toEqual([]);
 
     pruneImageCache(dir, liveImageHashes(fresh.listItems()));

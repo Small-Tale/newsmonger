@@ -3,8 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { parseNewsResult } from '../../src/ai/prompt.js';
 import { stripMarkup } from '../../src/ai/sanitize.js';
 import { NewsItemSchema } from '../../src/db/schemas.js';
-import { Store } from '../../src/db/store.js';
-import { tmpDataDir } from '../helpers/tmp.js';
+import { tmpDataDir, tmpStore } from '../helpers/tmp.js';
 
 describe('stripMarkup', () => {
   it('removes citation tags but keeps the sentence inside them', () => {
@@ -151,7 +150,7 @@ describe('an existing data file is cleaned when the store loads it', () => {
       }),
     );
 
-    const store = new Store(dir);
+    const store = tmpStore(dir);
     expect(store.listItems()[0]?.summary).toBe('Entry list out. She is No. 29.');
 
     // The markup doesn't linger in storage either: the import parses through

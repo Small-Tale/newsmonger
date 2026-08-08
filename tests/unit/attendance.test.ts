@@ -3,11 +3,10 @@ import { describe, expect, it } from 'vitest';
 import { createMockProvider } from '../../src/ai/providers/index.js';
 import { Attendance,ATTENDANCE_WINDOW_MS } from '../../src/attendance.js';
 import { CheckRunner } from '../../src/checks.js';
-import { Store } from '../../src/db/store.js';
 import { createApp } from '../../src/server.js';
 import { afterGrace } from '../helpers/grace.js';
 import { asResolver } from '../helpers/provider.js';
-import { tmpDataDir } from '../helpers/tmp.js';
+import { tmpStore } from '../helpers/tmp.js';
 
 const T0 = Date.parse('2026-07-24T12:00:00.000Z');
 
@@ -51,7 +50,7 @@ describe('Attendance', () => {
 
 /** A runner whose provider is subscription-backed, so the gate applies. */
 function attendedSetup() {
-  const store = new Store(tmpDataDir());
+  const store = tmpStore();
   const attendance = new Attendance();
   const provider = createMockProvider({ attended: true });
   const runner = new CheckRunner(store, asResolver(provider), attendance);
@@ -217,7 +216,7 @@ describe('manual checks record attendance (NEWS-44)', () => {
 
 describe('unattended (API-key) providers are unaffected', () => {
   it('scheduled checks run with no foreground signal at all', async () => {
-    const store = new Store(tmpDataDir());
+    const store = tmpStore();
     const provider = createMockProvider(); // attended: false, like anthropic/openai
     const runner = new CheckRunner(store, asResolver(provider), new Attendance());
     store.addTopic('fusion energy');
@@ -242,7 +241,7 @@ describe('unattended (API-key) providers are unaffected', () => {
 
 describe('the manual check routes record attendance (NEWS-44)', () => {
   it('POST /api/check (all) records attendance', async () => {
-    const store = new Store(tmpDataDir());
+    const store = tmpStore();
     const attendance = new Attendance();
     const runner = new CheckRunner(store, asResolver(createMockProvider({ attended: true })), attendance);
     const app = createApp({ store, runner, attendance });
@@ -254,7 +253,7 @@ describe('the manual check routes record attendance (NEWS-44)', () => {
   });
 
   it('POST /api/check {topicId} records attendance', async () => {
-    const store = new Store(tmpDataDir());
+    const store = tmpStore();
     const attendance = new Attendance();
     const runner = new CheckRunner(store, asResolver(createMockProvider({ attended: true })), attendance);
     const app = createApp({ store, runner, attendance });
@@ -270,7 +269,7 @@ describe('the /api/foreground route drives the gate', () => {
   it('a heartbeat unblocks a scheduled check', async () => {
     // Wiring test: the route and the runner must share one Attendance, or the
     // client could report foreground all day and nothing would ever run.
-    const store = new Store(tmpDataDir());
+    const store = tmpStore();
     const attendance = new Attendance();
     const provider = createMockProvider({ attended: true });
     const runner = new CheckRunner(store, asResolver(provider), attendance);
@@ -291,7 +290,7 @@ describe('the /api/foreground route drives the gate', () => {
   });
 
   it('records the moment it was called', async () => {
-    const store = new Store(tmpDataDir());
+    const store = tmpStore();
     const attendance = new Attendance();
     const runner = new CheckRunner(store, asResolver(createMockProvider()), attendance);
     const app = createApp({ store, runner, attendance });
@@ -307,7 +306,7 @@ describe('gate does not swallow provider-resolution failures', () => {
     // The gate resolves the provider to read `attended`. A resolution failure
     // must fall through to the normal per-topic error recording, not be
     // mistaken for "defer quietly".
-    const store = new Store(tmpDataDir());
+    const store = tmpStore();
     const runner = new CheckRunner(
       store,
       () => Promise.reject(new Error('No AI provider has an API key')),

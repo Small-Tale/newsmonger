@@ -4,9 +4,9 @@ import { buildUserPrompt, NEWS_JSON_SCHEMA, parseNewsResult } from '../../src/ai
 import { createMockProvider } from '../../src/ai/providers/index.js';
 import { BUILTIN_CATEGORIES, categoryLabel } from '../../src/categories.js';
 import { CheckRunner } from '../../src/checks.js';
-import { Store } from '../../src/db/store.js';
+import type { Store } from '../../src/db/store.js';
 import { asResolver, fakeProvider } from '../helpers/provider.js';
-import { tmpDataDir } from '../helpers/tmp.js';
+import { tmpStore } from '../helpers/tmp.js';
 
 // Automatic topic classification (NEWS-97, FR-22.8). The model's answer is
 // untrusted input: an unresolvable slug renders exactly like never having been
@@ -14,13 +14,13 @@ import { tmpDataDir } from '../helpers/tmp.js';
 // what gets *rejected*.
 
 function runnerWith(): { store: Store; runner: CheckRunner } {
-  const store = new Store(tmpDataDir());
+  const store = tmpStore();
   return { store, runner: new CheckRunner(store, asResolver(createMockProvider())) };
 }
 
 describe('the classification request', () => {
   it('is only made for a topic that still needs one', async () => {
-    const store = new Store(tmpDataDir());
+    const store = tmpStore();
     const provider = createMockProvider();
     const runner = new CheckRunner(store, asResolver(provider));
     const topic = store.addTopic('Soccer transfers');
@@ -35,7 +35,7 @@ describe('the classification request', () => {
   });
 
   it('is not made for a topic the user categorised by hand', async () => {
-    const store = new Store(tmpDataDir());
+    const store = tmpStore();
     const provider = createMockProvider();
     const runner = new CheckRunner(store, asResolver(provider));
     const topic = store.addTopic('Ambiguous');
@@ -48,7 +48,7 @@ describe('the classification request', () => {
   });
 
   it('offers the live taxonomy, not a hard-coded list', async () => {
-    const store = new Store(tmpDataDir());
+    const store = tmpStore();
     const provider = createMockProvider();
     const runner = new CheckRunner(store, asResolver(provider));
     await runner.checkTopic(store.addTopic('Anything').id);
@@ -87,7 +87,7 @@ describe('the classification request', () => {
    * nothing here can answer that.
    */
   it('keeps the classifier option list inside its measured budget (NEWS-397)', async () => {
-    const store = new Store(tmpDataDir());
+    const store = tmpStore();
     const provider = createMockProvider();
     const runner = new CheckRunner(store, asResolver(provider));
     await runner.checkTopic(store.addTopic('Anything').id);
@@ -114,7 +114,7 @@ describe('the classification request', () => {
 describe('the explicit fallback section (NEWS-405)', () => {
   /** The options as the runner actually sends them, not a hand-built copy. */
   async function optionsSent() {
-    const store = new Store(tmpDataDir());
+    const store = tmpStore();
     const provider = createMockProvider();
     const runner = new CheckRunner(store, asResolver(provider));
     await runner.checkTopic(store.addTopic('Anything').id);
@@ -151,7 +151,7 @@ describe('the explicit fallback section (NEWS-405)', () => {
     // an internal predicate: a topic with a resolved section is not asked again,
     // so the option list is paid once instead of on every check for the life of
     // the topic.
-    const store = new Store(tmpDataDir());
+    const store = tmpStore();
     const provider = createMockProvider();
     const runner = new CheckRunner(store, asResolver(provider));
     const topic = store.addTopic('Anything');
@@ -191,7 +191,7 @@ describe('a stored slug that stops resolving (NEWS-410)', () => {
     // the topic was never asked about again — while `categoryLabel` rendered it
     // as *Uncategorized*. It looked unclassified and was treated as classified,
     // permanently, with nothing to say so.
-    const store = new Store(tmpDataDir());
+    const store = tmpStore();
     const topic = store.addTopic('Orphaned');
     store.setTopicCategory(topic.id, 'a-section-that-was-deleted', null, 'auto');
 
@@ -206,7 +206,7 @@ describe('a stored slug that stops resolving (NEWS-410)', () => {
     const retired = BUILTIN_CATEGORIES.flatMap((c) => c.subcategories.filter((sub) => sub.retired).map(() => c.slug));
     expect(retired.length, 'this test needs at least one retired row to be meaningful').toBeGreaterThan(0);
 
-    const store = new Store(tmpDataDir());
+    const store = tmpStore();
     const topic = store.addTopic('Retired but labelled');
     // A *live* section holding a retired subcategory: the section resolves, so
     // the topic is classified and must stay that way.
@@ -219,7 +219,7 @@ describe('a stored slug that stops resolving (NEWS-410)', () => {
     // `categorySource: 'manual'` is a promise (FR-22.7), and it has to survive
     // the new clause — otherwise a user who hand-filed a topic into a section
     // that later disappeared would find the app quietly overruling them.
-    const store = new Store(tmpDataDir());
+    const store = tmpStore();
     const topic = store.addTopic('Hand filed');
     store.setTopicCategory(topic.id, 'a-section-that-was-deleted', null, 'manual');
 
@@ -230,7 +230,7 @@ describe('a stored slug that stops resolving (NEWS-410)', () => {
     // classified → taxonomy moves under it → asked again → re-placed → quiet.
     // The sequence is the point: each state on its own looks fine, and the bug
     // lived only in the move between them.
-    const store = new Store(tmpDataDir());
+    const store = tmpStore();
     const provider = createMockProvider();
     const runner = new CheckRunner(store, asResolver(provider));
     const topic = store.addTopic('Soccer transfers');
@@ -290,7 +290,7 @@ describe('applying the model’s answer', () => {
   it('re-asks on the next check after a rejected answer', async () => {
     // The consequence of dropping rather than storing: the topic stays eligible,
     // so a later check can do better.
-    const store = new Store(tmpDataDir());
+    const store = tmpStore();
     const provider = createMockProvider();
     const runner = new CheckRunner(store, asResolver(provider));
     const topic = store.addTopic('Bogus subject');
@@ -304,7 +304,7 @@ describe('applying the model’s answer', () => {
     // The category is still a good answer, and Sports-with-no-subcategory is a
     // valid state (FR-22.6) — so a mismatched sub is dropped on its own rather
     // than discarding the whole classification.
-    const store = new Store(tmpDataDir());
+    const store = tmpStore();
     const runner = new CheckRunner(
       store,
       asResolver(
@@ -321,7 +321,7 @@ describe('applying the model’s answer', () => {
   });
 
   it('drops a subcategory the taxonomy does not have at all', async () => {
-    const store = new Store(tmpDataDir());
+    const store = tmpStore();
     const runner = new CheckRunner(
       store,
       asResolver(
@@ -347,7 +347,7 @@ describe('applying the model’s answer', () => {
   it('never overwrites a manual choice made while the check was in flight', async () => {
     // A check takes minutes. Re-reading the topic after it returns, rather than
     // trusting the copy taken before, is what makes this safe.
-    const store = new Store(tmpDataDir());
+    const store = tmpStore();
     const provider = createMockProvider();
     const runner = new CheckRunner(store, asResolver(provider));
     const topic = store.addTopic('Soccer transfers');

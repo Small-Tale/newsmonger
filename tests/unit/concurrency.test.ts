@@ -2,10 +2,9 @@ import { describe, expect, it } from 'vitest';
 
 import type { CheckResult } from '../../src/ai/types.js';
 import { CheckRunner } from '../../src/checks.js';
-import { Store } from '../../src/db/store.js';
 import { afterGrace } from '../helpers/grace.js';
 import { asResolver, fakeProvider, instantRetry, noUsage } from '../helpers/provider.js';
-import { tmpDataDir } from '../helpers/tmp.js';
+import { tmpStore } from '../helpers/tmp.js';
 
 /**
  * A provider that records concurrency and finishes after `delayMs`, so a sweep
@@ -28,7 +27,7 @@ function tracking(delayMs = 5) {
 }
 
 function storeWith(names: string[]) {
-  const store = new Store(tmpDataDir());
+  const store = tmpStore();
   for (const name of names) store.addTopic(name);
   return store;
 }
@@ -150,10 +149,10 @@ describe('bounded-concurrency sweeps (NEWS-81)', () => {
   });
 
   it('clamps a stored value outside the allowed range rather than refusing to load', () => {
-    const store = new Store(tmpDataDir());
+    const store = tmpStore();
     store.updateSettings({ checkConcurrency: 3 });
     expect(store.getSettings().checkConcurrency).toBe(3);
     // Default for a file that predates the setting.
-    expect(new Store(tmpDataDir()).getSettings().checkConcurrency).toBe(3);
+    expect(tmpStore().getSettings().checkConcurrency).toBe(3);
   });
 });

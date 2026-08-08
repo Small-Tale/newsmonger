@@ -3,12 +3,11 @@ import { describe, expect, it } from 'vitest';
 import { createMockProvider } from '../../src/ai/providers/index.js';
 import { CheckRunner } from '../../src/checks.js';
 import type { NewsItem, Topic } from '../../src/db/schemas.js';
-import { Store } from '../../src/db/store.js';
 import type { ExportInput } from '../../src/export.js';
 import { escapeXml, toAtom, toJson, toMarkdown, topicsToJson } from '../../src/export.js';
 import { createApp } from '../../src/server.js';
 import { asResolver } from '../helpers/provider.js';
-import { tmpDataDir } from '../helpers/tmp.js';
+import { tmpStore } from '../helpers/tmp.js';
 
 const NOW = new Date('2026-07-27T12:00:00.000Z');
 
@@ -169,7 +168,7 @@ describe('toAtom (NEWS-85)', () => {
 
 describe('the export routes (NEWS-85)', () => {
   async function seeded() {
-    const store = new Store(tmpDataDir());
+    const store = tmpStore();
     const runner = new CheckRunner(store, asResolver(createMockProvider()));
     const t = store.addTopic('Fusion');
     await runner.checkTopic(t.id);
@@ -316,7 +315,7 @@ describe('topicsToJson — the shareable topic list (FR-30.2, NEWS-317)', () => 
 
   /** A store with one real topic in it, and the app in front of it. */
   function served() {
-    const store = new Store(tmpDataDir());
+    const store = tmpStore();
     const app = createApp({ store, runner: new CheckRunner(store, asResolver(createMockProvider())) });
     return { app, store };
   }
@@ -351,7 +350,7 @@ describe('topicsToJson — the shareable topic list (FR-30.2, NEWS-317)', () => 
 
 describe('importing a topic list (FR-30.5–30.9, NEWS-318)', () => {
   function served() {
-    const store = new Store(tmpDataDir());
+    const store = tmpStore();
     const app = createApp({ store, runner: new CheckRunner(store, asResolver(createMockProvider())) });
     return { app, store };
   }
@@ -516,7 +515,7 @@ describe('importing a topic list (FR-30.5–30.9, NEWS-318)', () => {
 
 describe('importing exported stories (FR-30.10–30.14, NEWS-319)', () => {
   async function checked() {
-    const store = new Store(tmpDataDir());
+    const store = tmpStore();
     const runner = new CheckRunner(store, asResolver(createMockProvider()));
     const t = store.addTopic('Fusion');
     await runner.checkTopic(t.id);
@@ -537,7 +536,7 @@ describe('importing exported stories (FR-30.10–30.14, NEWS-319)', () => {
     source.store.setItemSaved(source.store.listItems()[0].id, true);
     const archive = await (await source.app.request('/api/export.json?scope=all')).text();
 
-    const target = new Store(tmpDataDir());
+    const target = tmpStore();
     const app = createApp({ store: target, runner: new CheckRunner(target, asResolver(createMockProvider())) });
     const resp = (await (await post(app, archive)).json()) as {
       added: number;
@@ -561,7 +560,7 @@ describe('importing exported stories (FR-30.10–30.14, NEWS-319)', () => {
     source.store.setItemSaved(first.id, true);
     const archive = await (await source.app.request('/api/export.json?scope=all')).text();
 
-    const target = new Store(tmpDataDir());
+    const target = tmpStore();
     const app = createApp({ store: target, runner: new CheckRunner(target, asResolver(createMockProvider())) });
     await post(app, archive);
 
@@ -592,7 +591,7 @@ describe('importing exported stories (FR-30.10–30.14, NEWS-319)', () => {
     // deriving one from the URL — the same rule a check uses.
     const source = await checked();
     const archive = await (await source.app.request('/api/export.json?scope=all')).text();
-    const target = new Store(tmpDataDir());
+    const target = tmpStore();
     const app = createApp({ store: target, runner: new CheckRunner(target, asResolver(createMockProvider())) });
 
     await post(app, archive);
@@ -609,7 +608,7 @@ describe('importing exported stories (FR-30.10–30.14, NEWS-319)', () => {
     const source = await checked();
     const archive = await (await source.app.request('/api/export.json?scope=all')).text();
 
-    const target = new Store(tmpDataDir());
+    const target = tmpStore();
     const runner = new CheckRunner(target, asResolver(createMockProvider()));
     const app = createApp({ store: target, runner });
     await post(app, archive);
@@ -629,7 +628,7 @@ describe('importing exported stories (FR-30.10–30.14, NEWS-319)', () => {
     const archive = await (await source.app.request('/api/export.json?scope=all')).text();
 
     // Same name, different case — the topic rule is case-insensitive.
-    const target = new Store(tmpDataDir());
+    const target = tmpStore();
     target.addTopic('fusion');
     const app = createApp({ store: target, runner: new CheckRunner(target, asResolver(createMockProvider())) });
     const resp = (await (await post(app, archive)).json()) as { added: number; topicsCreated: string[] };
@@ -644,9 +643,9 @@ describe('importing exported stories (FR-30.10–30.14, NEWS-319)', () => {
     // threading feature being broken. `backfillThreads` is deterministic and
     // idempotent, so reusing it gives an import the threading a check would
     // have produced.
-    const store = new Store(tmpDataDir());
+    const store = tmpStore();
     const app = createApp({ store, runner: new CheckRunner(store, asResolver(createMockProvider())) });
-    const source = new Store(tmpDataDir());
+    const source = tmpStore();
     const t = source.addTopic('Dam Thread Probe');
     await new CheckRunner(source, asResolver(createMockProvider())).checkTopic(t.id);
     const archive = await (
@@ -662,7 +661,7 @@ describe('importing exported stories (FR-30.10–30.14, NEWS-319)', () => {
   });
 
   it('refuses an unreadable file whole, naming the field', async () => {
-    const store = new Store(tmpDataDir());
+    const store = tmpStore();
     const app = createApp({ store, runner: new CheckRunner(store, asResolver(createMockProvider())) });
     store.addTopic('Existing');
 
@@ -677,7 +676,7 @@ describe('importing exported stories (FR-30.10–30.14, NEWS-319)', () => {
     // The export writes `topic: null` when the story's topic was deleted before
     // the file was made. There is nowhere to put it, and inventing a topic would
     // be worse than declining it.
-    const store = new Store(tmpDataDir());
+    const store = tmpStore();
     const app = createApp({ store, runner: new CheckRunner(store, asResolver(createMockProvider())) });
     const resp = (await (
       await post(

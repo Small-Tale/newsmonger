@@ -1,10 +1,9 @@
 import { describe, expect, it } from 'vitest';
 
 import { NewsSourceSchema } from '../../src/db/schemas.js';
-import { Store } from '../../src/db/store.js';
 import { extractIconUrl, faviconCandidates, originOf } from '../../src/images/favicon.js';
 import { liveImageHashes } from '../../src/images/index.js';
-import { tmpDataDir } from '../helpers/tmp.js';
+import { tmpDataDir, tmpStore } from '../helpers/tmp.js';
 
 /**
  * Finding a source's favicon (NEWS-169).
@@ -172,7 +171,7 @@ describe('a favicon survives storage (NEWS-169)', () => {
     // is an assumption about the storage shape, and this is what makes it a
     // checked one rather than a hopeful one.
     const dir = tmpDataDir();
-    const store = new Store(dir);
+    const store = tmpStore(dir);
     const topic = store.addTopic('Space');
     store.addItems([
       {
@@ -193,7 +192,7 @@ describe('a favicon survives storage (NEWS-169)', () => {
       },
     ]);
 
-    const reloaded = new Store(dir).listItems();
+    const reloaded = tmpStore(dir).listItems();
     expect(reloaded[0].sources[0].favicon).toEqual({
       hash: 'a'.repeat(32),
       sourceUrl: 'https://ex.com/favicon.ico',

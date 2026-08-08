@@ -6,10 +6,9 @@ import { buildUserPrompt } from '../../src/ai/prompt.js';
 import { createMockProvider } from '../../src/ai/providers/index.js';
 import { CheckRunner } from '../../src/checks.js';
 import { MAX_GUIDANCE_LENGTH } from '../../src/db/schemas.js';
-import { Store } from '../../src/db/store.js';
 import { createApp } from '../../src/server.js';
 import { asResolver } from '../helpers/provider.js';
-import { tmpDataDir } from '../helpers/tmp.js';
+import { tmpDataDir, tmpStore } from '../helpers/tmp.js';
 
 const GUIDANCE = 'Regulatory and safety news only — not stock price moves.';
 
@@ -59,16 +58,16 @@ describe('buildUserPrompt guidance (NEWS-80)', () => {
 
 describe('Store guidance (NEWS-80)', () => {
   it('defaults to empty and round-trips through the data file', () => {
-    const store = new Store(tmpDataDir());
+    const store = tmpStore();
     const topic = store.addTopic('Tesla');
     expect(topic.guidance).toBe('');
 
     store.setTopicGuidance(topic.id, GUIDANCE);
-    expect(new Store(store.dataDir).getTopic(topic.id)?.guidance).toBe(GUIDANCE);
+    expect(tmpStore(store.dataDir).getTopic(topic.id)?.guidance).toBe(GUIDANCE);
   });
 
   it('trims, so whitespace-only input clears rather than half-sets', () => {
-    const store = new Store(tmpDataDir());
+    const store = tmpStore();
     const topic = store.addTopic('Tesla');
     store.setTopicGuidance(topic.id, `  ${GUIDANCE}  `);
     expect(store.getTopic(topic.id)?.guidance).toBe(GUIDANCE);
@@ -78,13 +77,13 @@ describe('Store guidance (NEWS-80)', () => {
   });
 
   it('caps overlong guidance instead of rejecting it', () => {
-    const store = new Store(tmpDataDir());
+    const store = tmpStore();
     const topic = store.addTopic('Tesla');
     store.setTopicGuidance(topic.id, 'x'.repeat(MAX_GUIDANCE_LENGTH + 500));
     expect(store.getTopic(topic.id)?.guidance).toHaveLength(MAX_GUIDANCE_LENGTH);
     // And the capped value must survive a reload — a data file the schema
     // rejects gets backed up and reset, which would lose every topic.
-    expect(new Store(store.dataDir).getTopic(topic.id)?.guidance).toHaveLength(MAX_GUIDANCE_LENGTH);
+    expect(tmpStore(store.dataDir).getTopic(topic.id)?.guidance).toHaveLength(MAX_GUIDANCE_LENGTH);
   });
 
   it('loads a pre-NEWS-80 topic that has no guidance field at all', () => {
@@ -104,7 +103,7 @@ describe('Store guidance (NEWS-80)', () => {
       }),
     );
 
-    const reloaded = new Store(dir);
+    const reloaded = tmpStore(dir);
     expect(reloaded.getTopic('t1')?.guidance).toBe('');
     expect(reloaded.listTopics()).toHaveLength(1);
   });
@@ -112,7 +111,7 @@ describe('Store guidance (NEWS-80)', () => {
 
 describe('CheckRunner passes guidance to the provider (NEWS-80)', () => {
   it('sends the topic’s guidance with the check', async () => {
-    const store = new Store(tmpDataDir());
+    const store = tmpStore();
     const service = createMockProvider();
     const runner = new CheckRunner(store, asResolver(service));
     const topic = store.addTopic('Tesla');
@@ -124,7 +123,7 @@ describe('CheckRunner passes guidance to the provider (NEWS-80)', () => {
   });
 
   it('sends empty guidance for a topic that has none', async () => {
-    const store = new Store(tmpDataDir());
+    const store = tmpStore();
     const service = createMockProvider();
     const runner = new CheckRunner(store, asResolver(service));
     const topic = store.addTopic('Tesla');
@@ -136,7 +135,7 @@ describe('CheckRunner passes guidance to the provider (NEWS-80)', () => {
   it('picks up an edit made between checks', async () => {
     // The transition that matters: guidance added after a topic has already
     // been checked must apply to the *next* check, not only to new topics.
-    const store = new Store(tmpDataDir());
+    const store = tmpStore();
     const service = createMockProvider();
     const runner = new CheckRunner(store, asResolver(service));
     const topic = store.addTopic('Tesla');
@@ -153,7 +152,7 @@ describe('CheckRunner passes guidance to the provider (NEWS-80)', () => {
 
 describe('PATCH /api/topics/:id guidance (NEWS-80)', () => {
   function makeApp() {
-    const store = new Store(tmpDataDir());
+    const store = tmpStore();
     const runner = new CheckRunner(store, asResolver(createMockProvider()));
     return { app: createApp({ store, runner }), store };
   }
@@ -225,7 +224,7 @@ describe('the prompt sends only what the privacy note discloses (NEWS-91)', () =
   });
 
   it('scopes the already-reported list to the one topic being checked', async () => {
-    const store = new Store(tmpDataDir());
+    const store = tmpStore();
     const service = createMockProvider();
     const runner = new CheckRunner(store, asResolver(service));
     const tesla = store.addTopic('Tesla');

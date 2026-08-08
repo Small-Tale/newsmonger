@@ -3,9 +3,8 @@ import { describe, expect, it } from 'vitest';
 import { createMockProvider } from '../../src/ai/providers/index.js';
 import { CheckRunner, isDueDaily, isDueUnderSchedule, lastSlotBefore } from '../../src/checks.js';
 import type { Settings } from '../../src/db/schemas.js';
-import { Store } from '../../src/db/store.js';
 import { asResolver } from '../helpers/provider.js';
-import { tmpDataDir } from '../helpers/tmp.js';
+import { tmpStore } from '../helpers/tmp.js';
 
 /** A local-time Date, so tests read the way the feature is specified. */
 function local(y: number, m: number, d: number, h: number, min = 0): Date {
@@ -131,7 +130,7 @@ describe('isDueUnderSchedule (NEWS-84)', () => {
 
 describe('the daily schedule end to end (NEWS-84)', () => {
   it('runs a sweep once per slot, not once per tick', async () => {
-    const store = new Store(tmpDataDir());
+    const store = tmpStore();
     const service = createMockProvider();
     const runner = new CheckRunner(store, asResolver(service));
     store.updateSettings({ scheduleMode: 'daily', dailyTimes: ['08:00'] });
@@ -167,14 +166,14 @@ describe('the daily schedule end to end (NEWS-84)', () => {
   });
 
   it('sorts and de-duplicates the time list on save', () => {
-    const store = new Store(tmpDataDir());
+    const store = tmpStore();
     store.updateSettings({ dailyTimes: ['18:00', '08:00', '08:00'] });
     expect(store.getSettings().dailyTimes).toEqual(['08:00', '18:00']);
   });
 
   it('defaults a pre-NEWS-84 data file to interval mode', () => {
     // Existing installs must not silently switch to a twice-daily schedule.
-    const store = new Store(tmpDataDir());
+    const store = tmpStore();
     expect(store.getSettings().scheduleMode).toBe('interval');
   });
 });
