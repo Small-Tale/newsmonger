@@ -1,3 +1,7 @@
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+
 /**
  * SVG compositing for the demo hero (NEWS-212).
  *
@@ -132,6 +136,38 @@ function lowerThird(text: string): string {
 }
 
 /** A closing card in the same window rect, so the loop lands somewhere deliberate. */
+/**
+ * The real wordmark, inlined into the end card (NEWS-426).
+ *
+ * The card used to set "Newsmonger" as bold `SANS` text, which is not the app's
+ * name as the app draws it: the wordmark is a serif lockup with the accent on
+ * *monger*, and it is the first thing on screen in every other frame of this
+ * animation. The end card was the one place the product signed off with a
+ * different signature.
+ *
+ * Inlined as paths rather than referenced. An `<image href>` at a file path
+ * would not resolve once the SVG is committed, which is the NEWS-376 trap; the
+ * paths make the card self-contained with no fetch at all.
+ *
+ * **The dark variant**, because this card is `#161b22`. Ids are stripped: the
+ * asset carries `wordmark-dark`, `News` and `monger.`, and an id is a document
+ * -wide name in an SVG that already holds six captured frames.
+ */
+/** The asset's own viewBox width; `top` is its top edge after scaling. */
+const WORDMARK_W = 480;
+const WORDMARK_SCALE = 0.875;
+
+function wordmark(cx: number, top: number): string {
+  const file = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../assets/wordmark-dark.svg');
+  const raw = fs.readFileSync(file, 'utf8');
+  // Everything inside the outer `<svg>`, which is what can be transformed.
+  const inner = /<svg[^>]*>([\s\S]*)<\/svg>/.exec(raw)?.[1];
+  if (inner === undefined) throw new Error(`end card: could not read ${file}`);
+  const body = inner.replace(/\s(?:id|xlink:href)="[^"]*"/g, '').replace(/<title>[\s\S]*?<\/title>/g, '');
+  const x = cx - (WORDMARK_W * WORDMARK_SCALE) / 2;
+  return `<g transform="translate(${String(x)} ${String(top)}) scale(${String(WORDMARK_SCALE)})">${body}</g>`;
+}
+
 export function endCard(tagline: string): string {
   const cx = MARGIN_X + CARD_W / 2;
   const cy = MARGIN_TOP + CARD_H / 2;
@@ -139,8 +175,7 @@ export function endCard(tagline: string): string {
     `<rect x="${MARGIN_X}" y="${MARGIN_TOP}" width="${CARD_W}" height="${CARD_H}" rx="14" ry="14" fill="#161b22"/>` +
     `<rect x="${MARGIN_X + 0.5}" y="${MARGIN_TOP + 0.5}" width="${CARD_W - 1}" height="${CARD_H - 1}" ` +
     `rx="13.5" ry="13.5" fill="none" stroke="#ffffff" stroke-opacity="0.10"/>` +
-    `<text x="${cx}" y="${cy - 10}" text-anchor="middle" font-family="${SANS}" font-size="58" ` +
-    `font-weight="700" fill="#e8edf4">Newsmonger</text>` +
+    wordmark(cx, cy - 74) +
     `<text x="${cx}" y="${cy + 40}" text-anchor="middle" font-family="${SANS}" font-size="24" ` +
     `fill="${ACCENT}">${esc(tagline)}</text>`
   );
