@@ -14,6 +14,12 @@ fields reject semver prerelease suffixes.
 
 <!-- Nothing released yet. The first `npm run release` inserts its entry below. -->
 
+## [0.2.0-beta.21] - 2026-08-08
+
+## Other Changes
+
+- Let temp-dir cleanup survive a database Windows will not unlink (NEWS-429) (`361ba58`)
+
 ## [0.2.0-beta.20] - 2026-08-08
 
 ## Features
