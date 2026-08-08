@@ -39,6 +39,7 @@ import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import type { Browser, Page } from '@playwright/test';
+import type { IntraFrameAnimation } from 'domotion-svg';
 import {
   captureElementTree,
   clearEmbeddedFonts,
@@ -81,16 +82,43 @@ interface Beat {
    * sweeping across the window, precisely because the geometry underneath does
    * not move.
    *
-   * **The feed → stories handover uses a scroll** (NEWS-425). Those two frames
-   * are the *same page at two scroll positions*, and crossfading them dissolves
-   * one copy of the text through the other: both are legible at once, offset by
-   * a few hundred pixels, which reads as a rendering fault rather than as a
-   * transition. `scroll` keeps both frames visible and moves them, which is what
-   * the reader is actually being shown — the page travelling far enough to bring
-   * the source links into view.
+   * **The feed → stories handover is a `cut`** (NEWS-428). It was a crossfade
+   * between two captures at different scroll positions, which dissolved one copy
+   * of the text through the other — both legible at once, a few hundred pixels
+   * apart, reading as a rendering fault. NEWS-425 made it a `scroll` transition,
+   * which was still wrong: that slides two whole captured frames past each
+   * other, chrome and sidebar included, so it is a slideshow push rather than a
+   * page scrolling.
+   *
+   * The scroll now happens *inside* the second beat, as an intra-frame
+   * animation (see `animations` below), so both beats are captured at the same
+   * scroll position and there is nothing to dissolve between them.
    */
-  transition?: { type: 'crossfade' | 'wipe' | 'scroll'; duration: number; easing?: string };
+  transition?: { type: 'crossfade' | 'wipe' | 'cut'; duration: number; easing?: string };
+  /**
+   * Animations that run **while this frame is held**, on elements marked with
+   * `data-domotion-anim` in the DOM before capture (NEWS-428).
+   *
+   * This is how the feed actually scrolls. A frame *transition* — `scroll`,
+   * `push-up` — slides two whole captured frames past each other, chrome and
+   * sidebar included, which is a slideshow push and not a page scrolling. An
+   * intra-frame `translateY` on `#feed` moves the story column alone, while the
+   * sticky topics rail and the window chrome stay exactly where they are, which
+   * is what a reader scrolling this app actually sees.
+   */
+  animations?: IntraFrameAnimation[];
 }
+
+/**
+ * How far the feed travels in the scrolling beat, and the id tying the marked
+ * DOM element to the animation that moves it (NEWS-428).
+ *
+ * 680px is 85% of the 800px capture height — the distance the old two-capture
+ * version jumped, kept so the same source links end up on screen.
+ */
+const FEED_SCROLL_ID = 'feed-scroll';
+const RAIL_STICK_ID = 'rail-stick';
+const FEED_SCROLL_PX = 680;
 
 const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
 
@@ -217,7 +245,13 @@ async function main(): Promise<void> {
       });
     };
 
-    const grab = async (title: string, caption: string, durationMs: number, name: string): Promise<void> => {
+    const grab = async (
+      title: string,
+      caption: string,
+      durationMs: number,
+      name: string,
+      animations?: IntraFrameAnimation[],
+    ): Promise<void> => {
       await debugShot(name);
       const tree = await captureElementTree(page, undefined, {
         x: 0,
@@ -241,7 +275,7 @@ async function main(): Promise<void> {
       // Do not "optimise" this down without re-measuring; the intuition is
       // backwards here.
       await resizeEmbeddedImages(tree, { hiDPIFactor: 2 });
-      beats.push({ tree, title, caption, durationMs });
+      beats.push({ tree, title, caption, durationMs, animations });
     };
 
     // Onboarding would cover the first beat with a modal.
@@ -279,23 +313,85 @@ async function main(): Promise<void> {
     await sleep(600);
 
     await grab('Newsmonger', 'Follow topics, not feeds', 3200, 'feed');
-    // Hand over to the next beat by scrolling, not dissolving (NEWS-425). The
-    // next frame is this same page pushed down 85% of a viewport, and a
-    // crossfade between two scroll positions of the same text is unreadable —
-    // two legible copies overlapping. Slower than the 450ms default because
-    // this one is meant to be *followed* rather than got through: the whole
-    // point of the beat is that the summaries carry links to the sources.
-    beats[beats.length - 1].transition = { type: 'scroll', duration: 1100, easing: 'ease-in-out' };
+    // Cut, not crossfade (NEWS-428). The next beat is captured at the *same*
+    // scroll position — the movement happens inside it — so a crossfade would
+    // dissolve a frame into its own twin and read as a stall.
+    beats[beats.length - 1].transition = { type: 'cut', duration: 0 };
 
-    // Scroll the feed rather than `scrollIntoView` on the first card — that was a
-    // no-op, because the card was already on screen, and the beat came out
-    // byte-identical to the one before it. A frame that shows nothing new is worse
-    // than no frame: it reads as the animation having stalled.
-    await page.evaluate(() => {
-      window.scrollTo({ top: window.innerHeight * 0.85, behavior: 'instant' as ScrollBehavior });
-    });
-    await sleep(600);
-    await grab('Newsmonger', 'Summaries with links to the sources', 3200, 'stories');
+    // **The feed scrolls for real here** (NEWS-428), rather than this being a
+    // second static capture that the previous frame slides away to reveal.
+    //
+    // Marking `#feed` and animating its `translateY` moves the story column
+    // alone: the topics rail is `position: sticky` and the window chrome is
+    // drawn by us, so both stay put while the stories travel underneath — which
+    // is what someone scrolling this app actually sees. A frame transition
+    // cannot express that, because it moves whole captured frames.
+    //
+    // Captured at scroll top, because the animation is what does the scrolling.
+    // The tree has to carry the content that comes into view, which is why the
+    // capture rect stays the full window and the reveal is a transform rather
+    // than a second grab.
+    // **The header travels with the feed, and that is not optional.** Marking
+    // `#feed` alone left the app header where it was, so the rising stories
+    // painted straight over "Search stories" and "Check all now" — the feed
+    // covering the chrome rather than scrolling under it.
+    //
+    // A real window scroll in this app moves everything except the topics rail,
+    // which is the only `position: sticky` region in the shell. So the marked
+    // set is *the grid's non-sticky areas* — header, filters, banners, feed —
+    // and `.topics-panel` is deliberately left out. Deriving it from the grid
+    // rather than naming the feed alone is what keeps it honest: `#filter-slot`
+    // has no `position` either, and leaving it behind stranded the section pills
+    // in mid-air while the masthead above them slid away.
+    //
+    // Passed in, not closed over: this callback is serialised and runs in the
+    // browser, where a Node-side constant does not exist.
+    //
+    // The rail is marked too, with its **own** id, because `sticky` is motion —
+    // it rises with the page until it reaches its `top` offset and only then
+    // parks. Left unmarked it sat at its resting position while everything above
+    // it slid away, opening a blank band where the masthead had been. The travel
+    // is measured rather than guessed: its distance to its own sticky `top`,
+    // capped by how far the page actually scrolls.
+    const railTravel = await page.evaluate(
+      ([feedId, railId]: string[]) => {
+        for (const sel of ['.app-header', '#filter-slot', '#banners', '#feed']) {
+          document.querySelector(sel)?.setAttribute('data-domotion-anim', feedId);
+        }
+        const rail = document.querySelector('#topics-panel');
+        if (rail === null) return 0;
+        rail.setAttribute('data-domotion-anim', railId);
+        const stickyTop = Number.parseFloat(getComputedStyle(rail).top) || 0;
+        return Math.max(0, rail.getBoundingClientRect().top - stickyTop);
+      },
+      [FEED_SCROLL_ID, RAIL_STICK_ID],
+    );
+    await sleep(300);
+    await grab('Newsmonger', 'Summaries with links to the sources', 3600, 'stories', [
+      {
+        animId: FEED_SCROLL_ID,
+        property: 'translateY',
+        from: '0px',
+        to: `-${String(FEED_SCROLL_PX)}px`,
+        duration: 2000,
+        // Held still for a beat first, so the reader reads a headline before the
+        // page moves under them; the motion is the point, not the destination.
+        delay: 700,
+        easing: 'ease-in-out',
+      },
+      {
+        animId: RAIL_STICK_ID,
+        property: 'translateY',
+        from: '0px',
+        to: `-${String(Math.min(railTravel, FEED_SCROLL_PX))}px`,
+        // Proportionally shorter than the feed's, so the rail arrives at its
+        // sticky offset partway through and stays there — which is what sticky
+        // does — rather than drifting for the whole scroll.
+        duration: Math.round(2000 * Math.min(1, railTravel / FEED_SCROLL_PX)),
+        delay: 700,
+        easing: 'ease-in',
+      },
+    ]);
 
     // Topic discovery.
     await page.click('[data-action=open-discover]');
@@ -363,6 +459,7 @@ async function main(): Promise<void> {
       svgContent,
       duration: b.durationMs,
       transition: b.transition ?? { type: 'crossfade' as const, duration: 450 },
+      ...(b.animations === undefined ? {} : { animations: b.animations }),
     };
   });
 
