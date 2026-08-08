@@ -73,13 +73,23 @@ interface Beat {
    * How this beat hands over to the **next** one. Defaults to the crossfade
    * every other beat uses.
    *
-   * Per-beat since NEWS-263, for one beat: the theme switch. A crossfade
-   * between two frames of the same layout in different colours just looks like
-   * a slow dim — the eye reads it as one picture changing brightness. A wipe
-   * reads as what it is, the new theme sweeping across the window, precisely
-   * because the geometry underneath does not move.
+   * Per-beat since NEWS-263, for two beats now.
+   *
+   * **The theme switch** uses a wipe. A crossfade between two frames of the same
+   * layout in different colours just looks like a slow dim — the eye reads it as
+   * one picture changing brightness. A wipe reads as what it is, the new theme
+   * sweeping across the window, precisely because the geometry underneath does
+   * not move.
+   *
+   * **The feed → stories handover uses a scroll** (NEWS-425). Those two frames
+   * are the *same page at two scroll positions*, and crossfading them dissolves
+   * one copy of the text through the other: both are legible at once, offset by
+   * a few hundred pixels, which reads as a rendering fault rather than as a
+   * transition. `scroll` keeps both frames visible and moves them, which is what
+   * the reader is actually being shown — the page travelling far enough to bring
+   * the source links into view.
    */
-  transition?: { type: 'crossfade' | 'wipe'; duration: number; easing?: string };
+  transition?: { type: 'crossfade' | 'wipe' | 'scroll'; duration: number; easing?: string };
 }
 
 const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
@@ -269,6 +279,13 @@ async function main(): Promise<void> {
     await sleep(600);
 
     await grab('Newsmonger', 'Follow topics, not feeds', 3200, 'feed');
+    // Hand over to the next beat by scrolling, not dissolving (NEWS-425). The
+    // next frame is this same page pushed down 85% of a viewport, and a
+    // crossfade between two scroll positions of the same text is unreadable —
+    // two legible copies overlapping. Slower than the 450ms default because
+    // this one is meant to be *followed* rather than got through: the whole
+    // point of the beat is that the summaries carry links to the sources.
+    beats[beats.length - 1].transition = { type: 'scroll', duration: 1100, easing: 'ease-in-out' };
 
     // Scroll the feed rather than `scrollIntoView` on the first card — that was a
     // no-op, because the card was already on screen, and the beat came out
