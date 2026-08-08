@@ -14,6 +14,21 @@ fields reject semver prerelease suffixes.
 
 <!-- Nothing released yet. The first `npm run release` inserts its entry below. -->
 
+## [0.2.0-beta.22] - 2026-08-08
+
+## Bug Fixes
+
+- Fixed the release-assets helper's `download-section` command silently doing nothing on Windows — its entry-point check compared a hand-built `file://` string against `import.meta.url`, which never matched there, so it produced no output and no error on a bad invocation.
+
+## Testing
+
+- Windows unit runs get a 30s test/hook timeout instead of the 5s/10s used elsewhere, so a uniformly slow runner stops producing a different set of spurious timeouts each round.
+- Temp-dir cleanup no longer retries a removal that cannot succeed, removing a 250 ms per-test penalty on Windows that was itself timing suites out.
+- Suites whose subject is POSIX itself (execute bits, `#!` scripts, `:`-separated `PATH`, bash stubs) are now explicitly skipped on Windows with a stated reason, rather than failing or registering an empty suite.
+- The recorded-CLI-session replay and the release-script executability check now handle Windows path separators and NTFS permissions instead of asserting POSIX behavior.
+- A new tree-wide guard rejects hand-built `file://${…}` URLs, catching the same class of path-vs-URL confusion as the existing `.pathname` rule.
+- TypeScript, TSX and Markdown files are normalized to LF via `.gitattributes`, and `.bin`/`.png`/`.svgz` are marked binary so no checkout can corrupt them.
+
 ## [0.2.0-beta.21] - 2026-08-08
 
 ## Other Changes
