@@ -110,6 +110,24 @@ function codeOf(file: string): string {
 }
 
 describe('Windows portability conventions', () => {
+  it('never builds a file: URL by concatenation (NEWS-430)', () => {
+    // The mirror image of the `.pathname` rule below: that one turns a URL into
+    // a path by hand, this one turns a path into a URL by hand. Both assume the
+    // two are the same kind of string, and both are correct on POSIX by luck.
+    //
+    // `scripts/release/release-assets.mjs` compared `import.meta.url` against
+    // `` `file://${process.argv[1]}` `` to decide whether it was the entry
+    // point. On Windows `argv[1]` is `C:\path\to\x.mjs` while `import.meta.url`
+    // is `file:///C:/path/to/x.mjs` — different separators, an extra slash, a
+    // drive letter — so it never matched and the CLI body silently did nothing:
+    // no output, and no non-zero exit on a bad invocation. It only ever ran on
+    // ubuntu, which is why the release workflow never noticed.
+    //
+    // `pathToFileURL()` is the conversion that knows about all three.
+    const offenders = sourceFiles().filter((f) => /['"`]file:\/\/\$\{/.test(codeOf(f)));
+    expect(offenders.map((f) => path.relative(root, f))).toEqual([]);
+  });
+
   it('never turns a file: URL into a path with .pathname (NEWS-355)', () => {
     // `new URL(import.meta.url).pathname` keeps the leading slash and the
     // percent-encoding, so on Windows it is not a path at all. `fileURLToPath`

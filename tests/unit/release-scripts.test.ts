@@ -80,7 +80,16 @@ describe('the release scripts are wired up (NEWS-194)', () => {
       // The POSIX owner-execute bit. `npm run …` invokes these via `bash`, so a
       // missing bit is harmless there — but it makes `./scripts/release.sh` fail
       // confusingly, and git tracks the bit, so set it once and hold it.
-      expect((fs.statSync(full).mode & 0o100) !== 0, `${rel} should be executable`).toBe(true);
+      //
+      // **Existence is checked everywhere; the bit only where it exists**
+      // (NEWS-430). NTFS has no execute bit, so Node reports a permission mode
+      // git never stored, and asserting on it there tests the filesystem rather
+      // than the repository. Skipping the assertion rather than the test keeps
+      // the half that does mean something on Windows: that the file is present
+      // and the npm script points at it.
+      if (process.platform !== 'win32') {
+        expect((fs.statSync(full).mode & 0o100) !== 0, `${rel} should be executable`).toBe(true);
+      }
     },
   );
 

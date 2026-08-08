@@ -15,10 +15,35 @@
 # right fix is for these files to *be* LF everywhere, so the question stops
 # coming up. Scoped to the files where it matters rather than a blanket
 # `* text=auto eol=lf`, which would renormalize the whole tree in one commit.
+#
+# **`.ts` / `.tsx` / `.md` joined the list in NEWS-430, and the scoping is why
+# they were missing.** The rule above was written when only bash and Node
+# scripts ran on Windows. NEWS-419 then put the *unit suite* there, and several
+# of those tests read source and prose as text:
+#
+#   - `sandboxable.test.ts` strips comments before scanning, with
+#     `.split('\n')` and `/^\s*(?:\/\/|#|\s\*)\s.*$/`. In a JS regex `.` does not
+#     match `\r`, so on a CRLF line `.*$` never reaches the end, the comment is
+#     not stripped, and the guard flagged a `npx tsx` that only existed inside
+#     an explanation of the rule.
+#   - `npm-package.test.ts` matches fenced blocks in README.md against `\n`.
+#
+# Both are the same shape as the `\`-vs-`/` defect NEWS-419 fixed: a POSIX
+# assumption that is invisible on the machine that writes it.
 
 *.sh    text eol=lf
 *.mjs   text eol=lf
+*.ts    text eol=lf
+*.tsx   text eol=lf
+*.md    text eol=lf
 Cargo.toml  text eol=lf
 Cargo.lock  text eol=lf
 *.json  text eol=lf
 *.yml   text eol=lf
+
+# Never touched: these are binary and a text conversion would corrupt them.
+# `text=auto` would usually detect that, but the demo recording's images carry a
+# `.bin` extension precisely because the app's cache does not name types.
+*.bin   binary
+*.png   binary
+*.svgz  binary

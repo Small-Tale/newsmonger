@@ -67,7 +67,13 @@ describe('a recorded successful check, replayed through the real provider', () =
     expect(sent).toContain('tools.web_search=true');
     expect(sent, 'the flag the CLI removed must never come back').not.toContain('--search');
     // Same shape as the transcript, ignoring the per-run temp paths it replaced.
-    expect(sent.filter((a) => !a.includes('/'))).toEqual(session.argv.filter((a) => !a.includes('/')));
+    //
+    // Both separators (NEWS-430): the recording was made on macOS, so its paths
+    // carry `/`, while the argv built on Windows carries `\`. Filtering on `/`
+    // alone left the two live temp paths in and compared 8 arguments against 6.
+    const withoutPaths = (argv: readonly string[]): string[] =>
+      argv.filter((a) => !a.includes('/') && !a.includes('\\'));
+    expect(withoutPaths(sent)).toEqual(withoutPaths(session.argv));
   });
 
   it('carries the configured effort as a config override', async () => {

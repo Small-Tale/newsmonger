@@ -25,6 +25,8 @@
 // Each rule rewrites the whole filename so the result uses dash separators
 // throughout (`Newsmonger-<version>-macOS-Apple-Silicon.dmg`) rather than the
 // mixed `Newsmonger_<version>_aarch64.dmg` Tauri emits.
+import { pathToFileURL } from 'node:url';
+
 const RENAME_RULES = [
   { pattern: /^Newsmonger_(.+?)_aarch64\.dmg$/, replacement: 'Newsmonger-$1-macOS-Apple-Silicon.dmg' },
   { pattern: /^Newsmonger_(.+?)_x64\.dmg$/, replacement: 'Newsmonger-$1-macOS-Intel.dmg' },
@@ -124,7 +126,17 @@ export function downloadSection(version, repo, tag) {
 
 // CLI entry: `node release-assets.mjs download-section <version> <repo> <tag>`
 // prints the markdown block. Used by the release workflow's notes step.
-const invokedDirectly = process.argv[1] && import.meta.url === `file://${process.argv[1]}`;
+// `pathToFileURL`, never a hand-built `file://` string (NEWS-430). On Windows
+// `process.argv[1]` is `C:\path\to\file.mjs` while `import.meta.url` is
+// `file:///C:/path/to/file.mjs` — different separators, an extra slash, a drive
+// letter — so the concatenation never matched and this module's CLI body
+// silently did nothing: no output, and no non-zero exit on a bad invocation.
+// The workflow that calls it runs on ubuntu, which is why it worked in practice
+// and why only the Windows unit run (NEWS-419) ever saw it.
+//
+// Same family as the `.pathname` misuse `windows-portability.test.ts` scans for:
+// a URL and a path treated as the same kind of string.
+const invokedDirectly = process.argv[1] !== undefined && import.meta.url === pathToFileURL(process.argv[1]).href;
 if (invokedDirectly) {
   const [command, ...rest] = process.argv.slice(2);
   if (command === 'download-section') {

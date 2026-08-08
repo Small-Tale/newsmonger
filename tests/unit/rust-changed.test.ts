@@ -7,6 +7,8 @@ import { fileURLToPath } from 'node:url';
 import { afterEach, describe, expect, it } from 'vitest';
 import { z } from 'zod';
 
+import { describePosixOnly } from '../helpers/posix-only.js';
+
 /**
  * The Rust gates skip only when they provably cannot fail (NEWS-294).
  *
@@ -111,7 +113,7 @@ function run(script: string, git: GitState, env: Record<string, string> = {}, st
       stdio: 'pipe',
       env: {
         ...process.env,
-        PATH: `${bin}:${process.env['PATH'] ?? ''}`,
+        PATH: `${bin}${path.delimiter}${process.env['PATH'] ?? ''}`,
         STUB_STATUS: git.status ?? '',
         STUB_UPSTREAM: git.upstream ?? '',
         STUB_DIFF: git.diff ?? '',
@@ -142,7 +144,10 @@ function readLog(file: string): string[] {
 
 const changed = (git: GitState): RunResult => run('scripts/rust-changed.sh', git);
 
-describe('rust-changed.sh decides from the diff (NEWS-294)', () => {
+describePosixOnly(
+  'rust-changed.sh decides from the diff (NEWS-294)',
+  'the harness puts a `#!/usr/bin/env bash` git stub on PATH and runs a `.sh` gate — neither is a thing Windows can execute',
+  () => {
   it('says yes when a Rust source file is modified', () => {
     const { status, output } = changed({ status: ' M src-tauri/src/lib.rs\n' });
     expect(status, 'exit 0 means "run the gates"').toBe(0);
@@ -220,9 +225,13 @@ describe('rust-changed.sh decides from the diff (NEWS-294)', () => {
     expect(status).toBe(1);
     expect(output).toContain('no upstream');
   });
-});
+  },
+);
 
-describe('gates-rust.sh acts on that decision (NEWS-294)', () => {
+describePosixOnly(
+  'gates-rust.sh acts on that decision (NEWS-294)',
+  'same bash-stub harness as above, plus a stubbed `cargo` shell script',
+  () => {
   const gates = (git: GitState, env: Record<string, string> = {}): RunResult =>
     run('scripts/gates-rust.sh', git, env, true);
 
@@ -304,7 +313,8 @@ describe('gates-rust.sh acts on that decision (NEWS-294)', () => {
     expect(output).toContain('RUST_GATES=skip');
     expect(cargo).toEqual([]);
   });
-});
+  },
+);
 
 describe('the fast inner loop is documented and bounded (NEWS-294)', () => {
   const read = (rel: string): string => fs.readFileSync(path.join(root, rel), 'utf8');

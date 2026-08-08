@@ -1,9 +1,10 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
-import { describe, expect, it } from 'vitest';
+import { expect, it } from 'vitest';
 
 import { cliSearchPath, resolveCliBinary } from '../../src/ai/providers/cli-path.js';
+import { describePosixOnly } from '../helpers/posix-only.js';
 import { tmpDataDir } from '../helpers/tmp.js';
 
 /**
@@ -28,7 +29,11 @@ function homeWith(dir: string, name: string): { home: string; full: string } {
   return { home, full };
 }
 
-describe('resolveCliBinary (NEWS-240)', () => {
+describePosixOnly(
+  'resolveCliBinary (NEWS-240)',
+  'these cases simulate a POSIX platform against a real filesystem — `chmod 0o644` does not ' +
+    'remove executability on NTFS, and a `C:\\…` PATH splits at the drive colon under a `:` separator',
+  () => {
   it('finds a binary in ~/.local/bin when PATH is the launchd minimum', () => {
     // The exact failing case: the real install location, and the PATH a
     // Finder-launched app actually gets.
@@ -108,4 +113,5 @@ describe('resolveCliBinary (NEWS-240)', () => {
     fs.chmodSync(exe, 0o755);
     expect(resolveCliBinary('claude', home, 'win32', `C:\\nope;${dir}`)).toBe(exe);
   });
-});
+  },
+);
