@@ -25,12 +25,17 @@ export function tmpDataDir(): string {
  *
  * `force: true` does not cover this. It suppresses `ENOENT` only.
  *
- * The retries are the fix for the *racy* half — a handle in the process of
- * closing — and they are what Node added `maxRetries` for. `EBUSY` / `EPERM`
- * surviving all of them means a handle is genuinely still open, and the right
- * response is to leave the directory: it is under `os.tmpdir()`, the OS reclaims
- * it, and failing here would report a test as broken when what it actually did
- * was decline to call `close()`.
+ * **One attempt, no retries** — and that is a correction. The first fix passed
+ * `maxRetries: 5, retryDelay: 50`, reasoning about a handle in the process of
+ * closing. That is not the case here: the handles are open for good, so every
+ * directory paid the full 250ms budget before giving up, in a hook that runs
+ * after *every* test. Four suites then timed out at 5000ms on the Windows runner
+ * — a fresh set of failures, caused by the fix for the previous set.
+ *
+ * `EBUSY` / `EPERM` means a handle is still open, and retrying cannot change
+ * that. The right response is to leave the directory: it is under `os.tmpdir()`,
+ * the OS reclaims it, and failing here would report a test as broken when what
+ * it actually did was decline to call `close()`.
  *
  * Any other error still throws. A cleanup hook that swallows everything is how a
  * helper stops being able to tell "nothing to remove" from "removal is broken".
@@ -44,7 +49,7 @@ afterEach(() => {
     const dir = created.pop();
     if (dir === undefined) continue;
     try {
-      fs.rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 });
+      fs.rmSync(dir, { recursive: true, force: true });
     } catch (err) {
       const code = (err as NodeJS.ErrnoException).code;
       if (code !== 'EBUSY' && code !== 'EPERM') throw err;
