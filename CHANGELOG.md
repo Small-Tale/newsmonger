@@ -14,6 +14,14 @@ fields reject semver prerelease suffixes.
 
 <!-- Nothing released yet. The first `npm run release` inserts its entry below. -->
 
+## [0.2.0-beta.24] - 2026-08-10
+
+## Features
+- The feed panel now shows a helpful empty state instead of a blank void. With no topics, it presents a welcome hero explaining what the app does, a button to reopen the setup guide, a "Discover topics" button, and a row of popular topics you can add with one click. With topics but no stories yet, it reassures you and offers a "Check all now" button to run a check immediately.
+
+## UX
+- The first-run setup guide is now reachable directly from the main feed's empty state, not just through Settings.
+
 ## [0.2.0-beta.23] - 2026-08-09
 
 ## Bug Fixes
