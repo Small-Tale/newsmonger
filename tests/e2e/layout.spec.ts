@@ -660,3 +660,63 @@ test('an expanded card’s pane fills the height its grid row hands it (NEWS-378
 
   for (const id of seeded) await page.request.delete(`/api/topics/${encodeURIComponent(id)}`);
 });
+
+// A filter bar wider than the window scrolls itself, not the page (NEWS-432).
+//
+// The bar is a horizontally scrollable row on purpose — wrapping would change
+// its height as you select and shift the whole feed down — but that only works
+// if the grid track above it is allowed to be narrower than its contents. It was
+// not, below 860px: the shell said `grid-template-columns: 1fr`, which is
+// `minmax(auto, 1fr)`, and an `auto` minimum refuses to shrink below
+// min-content. The row's min-content is every section laid out in a line, so the
+// track grew to 1822px and the whole window scrolled sideways.
+//
+// Measured here rather than scanned in the stylesheet because a bare `1fr` is
+// correct in plenty of other grids; what is wrong is the *result*. Asserting the
+// document does not scroll catches the class however it is caused next time.
+test('a filter bar wider than the window scrolls itself, not the page (NEWS-432)', async ({ page }) => {
+  await resetSharedState(workerBaseURL());
+
+  // Enough populated sections to overflow any sane window. Set directly rather
+  // than waiting for the classifier: this is a layout test, and what it needs is
+  // the pills, not the route that produces them.
+  const sections = [
+    'world', 'politics', 'business', 'money', 'technology', 'science', 'environment',
+    'health', 'sports', 'entertainment', 'media', 'culture', 'food-drink', 'travel',
+    'style', 'living', 'education', 'law-justice', 'society', 'transport',
+  ];
+  const ids: string[] = [];
+  for (const slug of sections) {
+    const created = await page.request.post('/api/topics', { data: { name: `Wide ${slug}` } });
+    const { id } = (await created.json()) as { id: string };
+    ids.push(id);
+    await page.request.patch(`/api/topics/${encodeURIComponent(id)}`, { data: { category: slug } });
+  }
+
+  try {
+    for (const width of [1400, 900, 600, 420]) {
+      await page.setViewportSize({ width, height: 900 });
+      await page.goto('/');
+      await page.waitForSelector('.filter-row-top .filter-pill');
+
+      const m = await page.evaluate(() => {
+        const doc = document.documentElement;
+        const row = document.querySelector('.filter-row-top');
+        return {
+          pageOverflow: doc.scrollWidth - doc.clientWidth,
+          rowScroll: row === null ? 0 : row.scrollWidth,
+          rowClient: row === null ? 0 : row.clientWidth,
+        };
+      });
+
+      // A pixel of slack for sub-pixel rounding; the bug overflowed by 1200+.
+      expect(m.pageOverflow, `the page must not scroll sideways at ${String(width)}px`).toBeLessThanOrEqual(1);
+      // And the bar really is wider than the window — otherwise the assertion
+      // above passes trivially against a bar that never needed to scroll.
+      expect(m.rowScroll, `the bar should overflow its own box at ${String(width)}px`).toBeGreaterThan(m.rowClient);
+    }
+  } finally {
+    await page.setViewportSize({ width: 1280, height: 1000 });
+    for (const id of ids) await page.request.delete(`/api/topics/${encodeURIComponent(id)}`);
+  }
+});

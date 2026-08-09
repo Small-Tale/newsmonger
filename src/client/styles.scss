@@ -1400,7 +1400,18 @@ h2.eyebrow {
 
 @media (max-width: 860px) {
   .shell {
-    grid-template-columns: 1fr;
+    // `minmax(0, 1fr)`, never a bare `1fr` (NEWS-432). `1fr` is shorthand for
+    // `minmax(auto, 1fr)`, and an `auto` minimum refuses to shrink the track
+    // below its content's min-content width. The filter bar is a horizontally
+    // scrollable row (`.filter-row`), so its min-content is *every section laid
+    // out in a line* — 1822px with the twenty sections NEWS-388 made possible.
+    // The track grew to fit it and the whole window scrolled sideways, which is
+    // the one thing `overflow-x: auto` on the row exists to prevent.
+    //
+    // Both other shell layouts already say `minmax(0, 1fr)`; this one was
+    // written as `1fr` and lost the guard, which only shows once a row inside it
+    // is wider than the viewport.
+    grid-template-columns: minmax(0, 1fr);
     grid-template-areas:
       'header'
       'filters'
