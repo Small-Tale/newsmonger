@@ -14,6 +14,12 @@ fields reject semver prerelease suffixes.
 
 <!-- Nothing released yet. The first `npm run release` inserts its entry below. -->
 
+## [0.2.0-beta.23] - 2026-08-09
+
+## Bug Fixes
+
+- The section filter bar now scrolls on its own below 860px instead of pushing the whole page sideways — with many populated sections, narrow windows no longer scroll horizontally.
+
 ## [0.2.0-beta.22] - 2026-08-08
 
 ## Bug Fixes
