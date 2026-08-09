@@ -1396,6 +1396,86 @@ h2.eyebrow {
   max-width: 44ch;
 }
 
+// The main-content empty state (NEWS-433). Centred in the feed panel rather than
+// left-aligned like `.empty`, because it *is* the content here — the panel is
+// otherwise a bare void — and a centred column reads as intentional where a
+// stray top-left paragraph reads as a page that failed to load.
+.feed-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 14px;
+  // Off the very top: the feed has no masthead of its own, so anchoring the hero
+  // a little down the panel keeps it from crowding the header rule above it.
+  margin: min(9vh, 90px) auto 0;
+  max-width: 460px;
+  padding: 0 20px;
+
+  h2 {
+    margin: 0;
+    font-size: 22px;
+    letter-spacing: -0.01em;
+  }
+}
+
+// A soft ringed disc, the same pine wash the app uses for a selected pill. Big
+// enough to give the column a focal point without an illustration the app does
+// not otherwise carry.
+.feed-empty-badge {
+  display: grid;
+  place-items: center;
+  width: 62px;
+  height: 62px;
+  border-radius: 999px;
+  background: var(--pine-soft);
+  color: var(--pine);
+  margin-bottom: 2px;
+}
+
+.feed-empty-lead {
+  margin: 0;
+  color: var(--ink-soft);
+  font-size: 14.5px;
+  line-height: 1.55;
+}
+
+.feed-empty-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 10px;
+  margin-top: 4px;
+
+  // The icon-and-label buttons match the sidebar's discover/privacy pattern.
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+  }
+}
+
+// Popular topics, one click to add. The whole point of showing these to someone
+// who skipped setup: a feed with something in it beats an argument for why they
+// should have completed the wizard.
+.feed-empty-suggest {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  margin-top: 18px;
+  padding-top: 22px;
+  border-top: 1px solid var(--line);
+  width: 100%;
+}
+
+.feed-empty-chips {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+}
+
 // ------------------------------------------------------------ responsive ---
 
 @media (max-width: 860px) {

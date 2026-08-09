@@ -16,7 +16,7 @@ See also [6 — AI Providers](6-providers.md), [7 — API Keys and Settings Dial
 
 - **FR-20.2** *(Shipped)* The decision waits for **both** `/api/state` and `/api/providers` to answer. The provider list starts empty, so acting before the probe returns would flash the wizard at every existing user on every reload — the client holds an explicit `'auto'` (undecided) state rather than treating "not yet loaded" as "nothing available".
 
-- **FR-20.3** *(Shipped)* Dismissal is remembered per device (`localStorage`, alongside the other view preferences — it records what *this* browser has shown, not anything about the data). After that only **Settings → "Show the setup guide again"** reopens it.
+- **FR-20.3** *(Shipped)* Dismissal is remembered per device (`localStorage`, alongside the other view preferences — it records what *this* browser has shown, not anything about the data). After that, **Settings → "Show the setup guide again"** reopens it — and since NEWS-433 so does the **main-content empty state** when there are no topics (FR-3.6), which is where someone who took the wizard's Skip actually is.
 
   **The flag names the install it was dismissed for** (NEWS-423), rather than being a bare `'1'`. `GET /api/state` reports an `installId` — minted once per database, stored in `meta` — and a dismissal records that id. A stored id that does not match the running one reads as unseen.
 

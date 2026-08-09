@@ -91,6 +91,7 @@ import {
   FEED_PAGE,
   ONBOARDING_STEPS,
   readOnboardingSeen,
+  STARTER_TOPICS,
   TOPIC_SORT_LABELS,
   TOPIC_SORTS,
   writeOnboardingSeen,
@@ -215,8 +216,87 @@ function resolveConfirm(ok: boolean): void {
   resolve?.(ok);
 }
 
+/**
+ * What fills the feed panel when there is nothing to show (NEWS-433).
+ *
+ * The feed used to render *nothing at all* here — a bare dark panel beside a
+ * sidebar that carried the only message. Someone who skipped setup landed on a
+ * screen that looked broken and gave them no way back in.
+ *
+ * Four shapes, and the split matters:
+ *  - **No topics** — the welcome hero: what the app does, the setup guide (which
+ *    was otherwise reachable only through Settings), and a row of popular topics
+ *    as one-click adds. This is the "I skipped setup, now what?" case the ticket
+ *    is about, so it does the most.
+ *  - **Topics but no stories** — reassurance that a check will fill the panel,
+ *    the button to run one now, and the setup guide still within reach.
+ *  - **A sub-filter that matched nothing** (search / saved / review) — the plain
+ *    line it always had. A hero here would shout at a routine empty result and
+ *    bury the one fact that matters (nothing matched *this* filter).
+ *
+ * Every action here is already wired at the root: `rerun-onboarding`,
+ * `check-all`, `open-discover`, and `data-foryou-topic` (a plain `addTopic`).
+ */
+function feedEmptyStateJsx(s: AppState, reviewMode: boolean, searching: boolean): SafeHtml {
+  if (reviewMode) return <p class="empty">No flagged stories for these topics.</p>;
+  if (searching) return <p class="empty">No stories match your search.</p>;
+  if (s.savedFilter) {
+    return <p class="empty">No saved stories yet. Use the bookmark button on a story to keep it here.</p>;
+  }
 
+  const setupGuide = (
+    <button class="btn subtle" type="button" data-action="rerun-onboarding">
+      {icon('guidance', 15)} Show the setup guide
+    </button>
+  );
 
+  if (s.topics.length > 0) {
+    return (
+      <div class="feed-empty">
+        <div class="feed-empty-badge">{icon('bell', 26)}</div>
+        <h2>No stories yet</h2>
+        <p class="feed-empty-lead">
+          Your topics are set. The next scheduled check lands new stories here — only what is genuinely new,
+          never a repeat. You can also check now to look right away.
+        </p>
+        <div class="feed-empty-actions">
+          <button class="btn primary" type="button" data-action="check-all">
+            Check all now
+          </button>
+          {setupGuide}
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div class="feed-empty">
+      <div class="feed-empty-badge">{icon('search', 26)}</div>
+      <h2>Nothing to watch yet</h2>
+      <p class="feed-empty-lead">
+        Name a topic and Newsmonger keeps up with it for you — asking an AI with live web search, on your
+        schedule, and showing only what has genuinely changed. Add one from the sidebar, or start from the
+        setup guide.
+      </p>
+      <div class="feed-empty-actions">
+        {setupGuide}
+        <button class="btn subtle" type="button" data-action="open-discover">
+          {icon('grid', 15)} Discover topics
+        </button>
+      </div>
+      <div class="feed-empty-suggest">
+        <span class="eyebrow">Popular topics</span>
+        <div class="feed-empty-chips">
+          {STARTER_TOPICS.map((name) => (
+            <button class="chip starter" type="button" data-foryou-topic={name}>
+              {name}
+            </button>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
 
 
 function appJsx(): SafeHtml {
@@ -685,17 +765,7 @@ function appJsx(): SafeHtml {
           showAll: s.threadShowAll,
         })}
         <div class="empty-slot">
-          {s.loaded && feedItems.length === 0 && reviewMode ? (
-            <p class="empty">No flagged stories for these topics.</p>
-          ) : s.loaded && feedItems.length === 0 && searching ? (
-            <p class="empty">No stories match your search.</p>
-          ) : s.loaded && feedItems.length === 0 && s.savedFilter ? (
-            <p class="empty">No saved stories yet. Use the bookmark button on a story to keep it here.</p>
-          ) : s.loaded && feedItems.length === 0 && s.topics.length > 0 ? (
-            <p class="empty">No stories yet. Check now, or let the next scheduled check run — only genuinely new news lands here.</p>
-          ) : (
-            ''
-          )}
+          {s.loaded && feedItems.length === 0 ? feedEmptyStateJsx(s, reviewMode, searching) : ''}
         </div>
         {/* Always-present slot so the button appearing can't shift a keyed list
             above it (kerf KF-377). */}
