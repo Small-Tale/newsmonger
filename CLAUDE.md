@@ -41,20 +41,31 @@ Topic-based news tracker. The user enters topics; on a configurable interval (de
 
 **Anything that runs longer than a couple of minutes goes through [pueue](https://github.com/Nukesor/pueue), not a bare background shell.** The archetype is `npm run test:all` (~4 min), but the rule covers any gate, build, capture or suite — anything you would otherwise start and then poll.
 
-**Every `pueue` invocation needs `dangerouslyDisableSandbox: true`.** The client talks to the daemon over a unix socket at `~/Library/Application Support/pueue/`, and a command sandbox refuses it — `Operation not permitted (os error 1)`. This is the same class as the `tsx` CLI rule above, and it is not worth re-testing: `pueue status` fails sandboxed even once the config exists. Start the daemon once per machine with `(pueued -d >/dev/null 2>&1 &)` — also unsandboxed, since it cannot create its config dir otherwise.
+**Every `pueue` or `pueue-wait-cond` invocation needs `dangerouslyDisableSandbox: true`.** Both clients talk to the daemon over a unix socket at `~/Library/Application Support/pueue/`, and a command sandbox refuses it — `Operation not permitted (os error 1)`. This is the same class as the `tsx` CLI rule above, and it is not worth re-testing: `pueue status` fails sandboxed even once the config exists. Start the daemon once per machine with `(pueued -d >/dev/null 2>&1 &)` — also unsandboxed, since it cannot create its config dir otherwise.
 
 **Redirect its output and detach it, exactly as written.** A bare `pueued -d` from a tool call leaves the calling shell hung forever: the daemon inherits that shell's stdout, never closes it, and the pipeline never sees EOF. Worse, stopping that hung shell **kills the daemon with it** — it is reparented to init but stays in the shell's process group, so a group signal reaches it. `PPID 1` looks like safety and is not.
 
-**Wait on the exit code, never on a string in the log.** This is the whole reason for the rule. A `until grep -q "phase summary" out.log; do sleep 5; done` loop once spun for **43 minutes** waiting for a sentinel that `| tail -12` had already truncated out of the file — the condition could never match, and nothing said so. `pueue` reports `Success` or `Failed (7)` from the process itself, so there is no sentinel to get wrong and no truncation to be defeated by.
+**Wait with `pueue-wait-cond`, with an explicit timeout.** Plain `pueue wait` has no timeout, so a missing task or stuck process can hold a session forever. The installed [`pueue-wait-cond`](https://www.npmjs.com/package/pueue-wait-cond) wraps pueue's task status with bounded waits and shell/script conditions. Use `--fail-on-error` when completion must mean success. Use `--until` to stop waiting successfully when an alternate condition becomes true, or `--while` to fail the wait when a required condition stops being true; always single-quote inline conditions so the calling shell does not expand `$PUEUE_WAIT_*` first. An `--until` condition ends the wait — it does **not** stop the queued task, so kill it explicitly if that is the intended outcome.
+
+**The task exit code remains the source of truth.** Do not replace it with a log sentinel. A hand-written `until grep -q "phase summary" out.log; do sleep 5; done` loop once spun for **43 minutes** waiting for a sentinel that `| tail -12` had already truncated out of the file — the condition could never match, and nothing said so. `pueue-wait-cond --fail-on-error` reads pueue's `Success` / `Failed (7)` result directly, while still bounding the wait.
 
 ```bash
 ID=$(pueue add -p -l news-gate -- npm run test:all)   # -p prints the id, -l labels it
-pueue wait "$ID"                                       # blocks; prints the terminal status
+pueue-wait-cond "$ID" --timeout 10m --fail-on-error    # bounded; non-zero if the task fails
 pueue log "$ID" -l 40                                  # tail; -f for the whole thing
+
+# Wait for completion, but stop early once a service is healthy. The task keeps running.
+pueue-wait-cond "$ID" --timeout 5m --fail-on-error \
+  --until 'curl -sf http://localhost:4187/healthz >/dev/null'
+
+# Give up if a prerequisite disappears while the task runs.
+pueue-wait-cond "$ID" --timeout 10m --fail-on-error \
+  --while 'test -f /tmp/newsmonger-release.lock'
 ```
 
 - **`pueue add` inherits the current directory** (`-w` overrides), so a task sees the repo it was queued from.
 - **`--after <id>`** chains without a round trip — queue the gate `--after` the build and let the daemon sequence them.
+- **`pueue-wait-cond` durations** are seconds by default and accept `ms`, `s`, `m`, or `h`; its condition subprocesses have their own 30-second default ceiling (`--condition-timeout` overrides it). Use `--json` when a script needs a stable result instead of human progress output.
 - **`pueue follow <id>`** is `tail -f`; **`pueue kill <id>`** stops one; **`pueue clean`** clears finished tasks.
 - **`pueue status "label %= news-"`** lists by label prefix, and `status` takes a small query language (`columns=`, filters, `order_by`, `limit`). Label tasks per session so a listing is legible when several are in flight.
 - Tasks **outlive the session**, which is the point — but it also means a forgotten one keeps running. Check `pueue status` before assuming the queue is empty.
