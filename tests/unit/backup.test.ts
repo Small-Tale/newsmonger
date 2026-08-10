@@ -150,12 +150,19 @@ describe('Backups', () => {
     expect(backups.maybeWrite()).toBeNull();
     expect(fs.statSync(at).mtimeMs).toBe(before);
 
-    // Once the file is old enough, it writes again.
-    const stale = new Backups(
+    // Anchor the simulated clock to the timestamp the production code reads.
+    // On Windows a freshly-written file's mtime can sit slightly ahead of a
+    // separate Date.now() sample, so advancing that different clock by one
+    // interval does not reliably make the file stale.
+    const boundary = new Backups(
       store,
       () => dest,
-      () => Date.now() + MIN_BACKUP_INTERVAL_MS + 1,
+      () => before + MIN_BACKUP_INTERVAL_MS - 1,
     );
+    expect(boundary.maybeWrite()).toBeNull();
+
+    // Once the file is old enough, it writes again.
+    const stale = new Backups(store, () => dest, () => before + MIN_BACKUP_INTERVAL_MS);
     expect(stale.maybeWrite()).not.toBeNull();
     store.close();
   });
