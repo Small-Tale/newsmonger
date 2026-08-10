@@ -14,6 +14,11 @@ fields reject semver prerelease suffixes.
 
 <!-- Nothing released yet. The first `npm run release` inserts its entry below. -->
 
+## [0.3.0] - 2026-08-10
+
+
+Initial release
+
 ## [0.2.0-beta.24] - 2026-08-10
 
 ## Features

@@ -1,6 +1,6 @@
 {
   "name": "newsmonger",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Topic-based news tracker: enter topics, and on a configurable interval the app asks Claude (with web search) for new developments, deduplicating against previously seen stories.",
   "type": "module",
   "license": "MIT",
