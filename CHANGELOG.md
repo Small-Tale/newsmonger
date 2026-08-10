@@ -14,6 +14,13 @@ fields reject semver prerelease suffixes.
 
 <!-- Nothing released yet. The first `npm run release` inserts its entry below. -->
 
+## [0.4.0-beta.1] - 2026-08-10
+
+## Bug Fixes
+
+- Desktop auto-update now retries once on a transient network failure before giving up, so a single dropped DNS/TLS/proxy request no longer fails an update check.
+- The Settings → "Check for updates" result now includes the underlying reason when a check fails (e.g. "Could not check for updates: offline") instead of a generic message.
+
 ## [0.3.0] - 2026-08-10
 
 
