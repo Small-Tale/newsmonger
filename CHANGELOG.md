@@ -14,6 +14,20 @@ fields reject semver prerelease suffixes.
 
 <!-- Nothing released yet. The first `npm run release` inserts its entry below. -->
 
+## [0.4.0] - 2026-08-10
+
+
+
+- v0.4.0 (`eb8a721`)
+- Use bounded conditional waits for pueue tasks (NEWS-450) (`c0d457e`)
+- Make the backup interval test use one clock (NEWS-449) (`d8c709e`)
+- v0.4.0 (`baaa2a5`)
+- Updated hotsheet settings (`6d0683c`)
+- Authorize updater bridge commands (NEWS-447) (`31dca07`)
+- v0.4.0 (`5f88142`)
+- Make updater failures survivable and diagnosable (NEWS-446) (`e06d01c`)
+- Add a cost function and measure the real per-check spend (NEWS-435) (`42d640c`)
+
 ## [0.4.0-beta.3] - 2026-08-10
 
 ## Other Changes
