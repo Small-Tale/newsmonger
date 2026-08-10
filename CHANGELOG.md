@@ -14,6 +14,13 @@ fields reject semver prerelease suffixes.
 
 <!-- Nothing released yet. The first `npm run release` inserts its entry below. -->
 
+## [0.4.0-beta.3] - 2026-08-10
+
+## Other Changes
+
+- Use bounded conditional waits for pueue tasks (NEWS-450) (`c0d457e`)
+- Make the backup interval test use one clock (NEWS-449) (`d8c709e`)
+
 ## [0.4.0-beta.2] - 2026-08-10
 
 ## Other Changes
