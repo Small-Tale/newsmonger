@@ -14,6 +14,11 @@ test.beforeAll(async () => {
 });
 
 const NAMES = ['Alpha Topic', 'Bravo Topic', 'Charlie Topic', 'Delta Topic'];
+// Creating a topic is two requests from the user's point of view: the POST,
+// then withRefresh's /api/state read before the row can render. On the loaded
+// Windows release runner those took 4.979s + 1.189s (NEWS-451), so the default
+// 5s assertion timeout could expire between two successful responses.
+const TOPIC_CREATE_TIMEOUT_MS = 15_000;
 const row = (page: Parameters<typeof topicAction>[0], name: string) =>
   page.locator('.topic', { hasText: name });
 
@@ -22,7 +27,7 @@ test('set up topics for the selection tests', async ({ page }) => {
   for (const name of NAMES) {
     await page.fill('.add-topic input', name);
     await page.press('.add-topic input', 'Enter');
-    await expect(row(page, name)).toBeVisible();
+    await expect(row(page, name)).toBeVisible({ timeout: TOPIC_CREATE_TIMEOUT_MS });
   }
 });
 
