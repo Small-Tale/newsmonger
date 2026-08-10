@@ -4,11 +4,9 @@
   "terminals": [
     {
       "id": "claude",
-      "name": "Claude",
       "command": "{{aiCommand}}",
-      "lazy": true,
-      "theme": "github-dark",
-      "fontSize": 17
+      "name": "AI",
+      "lazy": true
     }
   ],
   "auto_context": [
@@ -130,5 +128,6 @@
       "color": "#14b8a6",
       "id": "df38a36a-03b1-40bf-8d10-9081a39da0a3"
     }
-  ]
+  ],
+  "ai_tool_enabled:codex": "true"
 }
