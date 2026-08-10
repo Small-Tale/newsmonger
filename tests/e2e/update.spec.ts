@@ -199,5 +199,5 @@ test('a failed check from Settings says so instead of nothing (NEWS-89)', async 
   await openSettingsTab(page, 'App');
   await page.locator('[data-action=check-updates]').click();
 
-  await expect(page.locator('.update-check-note')).toHaveText('Could not check for updates.');
+  await expect(page.locator('.update-check-note')).toHaveText('Could not check for updates: offline');
 });

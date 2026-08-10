@@ -100,6 +100,7 @@ import { getTauriInvoke, openExternalUrl } from './tauri.js';
 import type { TopicRow } from './topic-sort.js';
 import { isHeading, sortTopics, topicRowCacheKey, topicRows } from './topic-sort.js';
 import { contextMenuJsx, topicRowJsx } from './topics-view.js';
+import { updateCheckFailure } from './update.js';
 
 
 /** How long a toast stays up before it fades out on its own. */
@@ -2830,8 +2831,8 @@ async function requestUpdateCheck(): Promise<string> {
       return `Update available: v${version}`;
     }
     return 'Newsmonger is up to date.';
-  } catch {
-    return 'Could not check for updates.';
+  } catch (error) {
+    return updateCheckFailure(error);
   }
 }
 

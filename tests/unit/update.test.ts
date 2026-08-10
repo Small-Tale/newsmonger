@@ -18,6 +18,7 @@ import { z } from 'zod';
 
 import { appStore } from '../../src/client/stores.js';
 import { getTauriInvoke, isTauri } from '../../src/client/tauri.js';
+import { updateCheckFailure } from '../../src/client/update.js';
 
 /** Reset just the update slice, leaving the rest of the store alone. */
 beforeEach(() => {
@@ -152,6 +153,20 @@ describe('update state', () => {
 });
 
 describe('settings update check', () => {
+  it('keeps the native reason when a manual check fails', () => {
+    expect(updateCheckFailure('error sending request for url')).toBe(
+      'Could not check for updates: error sending request for url',
+    );
+    expect(updateCheckFailure(new Error('the platform was not found'))).toBe(
+      'Could not check for updates: the platform was not found',
+    );
+  });
+
+  it('falls back safely when the rejection carries no readable reason', () => {
+    expect(updateCheckFailure(undefined)).toBe('Could not check for updates.');
+    expect(updateCheckFailure('   ')).toBe('Could not check for updates.');
+  });
+
   it('clears the previous result when a new check starts', () => {
     // Otherwise "up to date" from a minute ago sits under a spinning button and
     // reads as the answer to the check now running.

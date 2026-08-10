@@ -30,6 +30,27 @@ struct ServerPid(Mutex<Option<u32>>);
 /// same shape glassbox uses.
 struct PendingUpdate(Mutex<Option<String>>);
 
+/// Check the configured endpoint, retrying one transient failure (NEWS-446).
+///
+/// GitHub's release endpoint redirects to short-lived asset storage, so a
+/// momentary DNS/TLS/proxy failure can happen at more than one hop. A manual
+/// check should not fail on the first dropped request. If both attempts fail,
+/// preserve both errors: the client now shows this detail in Settings instead
+/// of replacing every native failure with one generic sentence.
+#[cfg(not(debug_assertions))]
+async fn available_update(app: &AppHandle) -> Result<Option<tauri_plugin_updater::Update>, String> {
+    use tauri_plugin_updater::UpdaterExt;
+
+    let updater = app.updater().map_err(|e| format!("{e}"))?;
+    match updater.check().await {
+        Ok(update) => Ok(update),
+        Err(first) => updater
+            .check()
+            .await
+            .map_err(|second| format!("{second} (first attempt: {first})")),
+    }
+}
+
 /// The version of a pending update, or `None`. Read by the client to decide
 /// whether to show the update banner.
 #[tauri::command]
@@ -46,9 +67,7 @@ fn get_pending_update(app: AppHandle) -> Option<String> {
 async fn check_for_update(app: AppHandle) -> Result<Option<String>, String> {
     #[cfg(not(debug_assertions))]
     {
-        use tauri_plugin_updater::UpdaterExt;
-        let updater = app.updater().map_err(|e| format!("{e}"))?;
-        let update = updater.check().await.map_err(|e| format!("{e}"))?;
+        let update = available_update(&app).await?;
         if let Some(update) = update {
             *app.state::<PendingUpdate>().0.lock().unwrap() = Some(update.version.clone());
             return Ok(Some(update.version));
@@ -70,10 +89,8 @@ async fn check_for_update(app: AppHandle) -> Result<Option<String>, String> {
 async fn install_update(app: AppHandle) -> Result<(), String> {
     #[cfg(not(debug_assertions))]
     {
-        use tauri_plugin_updater::UpdaterExt;
         *app.state::<PendingUpdate>().0.lock().unwrap() = None;
-        let updater = app.updater().map_err(|e| format!("{e}"))?;
-        let update = updater.check().await.map_err(|e| format!("{e}"))?;
+        let update = available_update(&app).await?;
         if let Some(update) = update {
             update
                 .download_and_install(|_, _| {}, || {})
@@ -182,11 +199,7 @@ pub fn run() {
             tauri::async_runtime::spawn(async move {
                 #[cfg(not(debug_assertions))]
                 {
-                    use tauri_plugin_updater::UpdaterExt;
-                    let Ok(updater) = handle.updater() else {
-                        return;
-                    };
-                    let Ok(Some(update)) = updater.check().await else {
+                    let Ok(Some(update)) = available_update(&handle).await else {
                         return;
                     };
                     *handle.state::<PendingUpdate>().0.lock().unwrap() = Some(update.version);
