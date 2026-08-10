@@ -14,6 +14,13 @@ fields reject semver prerelease suffixes.
 
 <!-- Nothing released yet. The first `npm run release` inserts its entry below. -->
 
+## [0.4.0-beta.2] - 2026-08-10
+
+## Other Changes
+
+- Updated hotsheet settings (`6d0683c`)
+- Authorize updater bridge commands (NEWS-447) (`31dca07`)
+
 ## [0.4.0-beta.1] - 2026-08-10
 
 ## Bug Fixes
