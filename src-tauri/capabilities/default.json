@@ -15,6 +15,9 @@
     "core:default",
     "notification:default",
     "updater:default",
-    "process:default"
+    "process:default",
+    "allow-get-pending-update",
+    "allow-check-for-update",
+    "allow-install-update"
   ]
 }

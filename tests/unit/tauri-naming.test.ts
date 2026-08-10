@@ -169,8 +169,43 @@ describe('the capability reaches the origin the window actually loads (NEWS-40)'
 
   it('keeps the permissions the client actually calls', () => {
     const perms = capability()['permissions'] as string[];
-    for (const p of ['core:default', 'notification:default', 'updater:default', 'process:default']) {
+    for (const p of [
+      'core:default',
+      'notification:default',
+      'updater:default',
+      'process:default',
+      'allow-get-pending-update',
+      'allow-check-for-update',
+      'allow-install-update',
+    ]) {
       expect(perms).toContain(p);
     }
+  });
+
+  it('generates and grants ACL permissions for every custom command (NEWS-447)', () => {
+    const build = fs.readFileSync(path.join(tauriDir, 'build.rs'), 'utf8');
+    const handler = fs.readFileSync(path.join(tauriDir, 'src/lib.rs'), 'utf8');
+    const manifestCommands = /const COMMANDS[^=]*=\s*&\[([^\]]*)\]/.exec(build)?.[1] ?? '';
+    const generated = new Set(
+      [...manifestCommands.matchAll(/"([a-z][a-z0-9_]*)"/g)].map((match) => match[1]),
+    );
+    const granted = new Set(
+      (capability()['permissions'] as string[])
+        .filter((permission) => permission.startsWith('allow-'))
+        .map((permission) => permission.slice('allow-'.length).replaceAll('-', '_')),
+    );
+    const commands = /tauri::generate_handler!\[([\s\S]*?)\]/
+      .exec(handler)?.[1]
+      .split(',')
+      .map((command) => command.trim())
+      .filter(Boolean) ?? [];
+
+    expect(commands, 'invoke handler should expose updater commands').not.toHaveLength(0);
+    expect(generated, 'build.rs must generate application-command permissions').toEqual(
+      new Set(commands),
+    );
+    expect(granted, 'the loopback capability must grant every generated command').toEqual(
+      new Set(commands),
+    );
   });
 });
