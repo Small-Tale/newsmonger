@@ -21,6 +21,7 @@ src/
   backup.ts           Backups/writeBackup/buildBackup — snapshot to the user's backupDir in DataFileSchema shape, temp+rename, 1/hour (NEWS-192)
   undo.ts             ClearUndoBuffer: in-memory, per-topic, TTL'd snapshot of a cleared topic's stories + covered window (NEWS-145)
   threads.ts          story threads (NEWS-280): planThreadIds/threadIdFor/withThreadIds — pure local similarity (content tokens minus the topic's own words, capitalized entities, shared host as tie-break only, 30-day recency). **Not dedup** — see docs/29-story-threads.md
+  pulse.ts            deterministic topic/category archive analysis (NEWS-453): 7/30/90-day local buckets, source concentration, cadence, active threads + rail sparklines; no model calls
   scheduler.ts        startScheduler: 60s tick + 3s startup sweep, non-overlapping; drains an overrun cycle (NEWS-57)
   checks.ts           CheckRunner (checkTopic/checkDue/checkAll, in-flight guard) + cancelStaleChecks() on a settings change (NEWS-257) / cancelAllChecks() on a story clear (NEWS-271, also stops the sweep queue via cancelEpoch and discards results arriving post-abort) + isDue()/isDueDaily()/isDueUnderSchedule()/lastSlotBefore() (NEWS-84) + effectiveInterval() + byCheckOrder() (most-overdue-first, NEWS-58). No budget logic — NEWS-119 removed it
   types.ts            Hono AppEnv (store, runner injected)
@@ -54,13 +55,14 @@ topic-holds.ts      TopicHolds: in-memory per-topic 15 s window, re-asserted by 
   api/
     schemas.ts        zod request schemas + StateResp (shared client/server)
   routes/
-    api.ts            /api/discover + /api/discover/usage (NEWS-125), /api/state (topics/settings/runs/checking + latestItemIds + flaggedByTopic + todayByTopic/newestItemAtByTopic for the sidebar badge + newest sort, NEWS-242/241; NO items), /api/items (paginated feed: filter+sort+cursor + `threads` = per-story thread shape, NEWS-282), /api/items/:id/thread (one story's whole thread, oldest first; 404 on an unknown id — NEWS-282), /api/providers, /api/topics, /api/items/:id (save/flag), /api/settings, /api/backup + /api/backup/locations (NEWS-192, NEWS-230), /api/keys, /api/foreground, /api/check, /api/open-external, /api/export.md, /api/export.json, /api/export-topics.json + /api/import-topics (the shareable topic list, NEWS-317/318), /api/import-stories (NEWS-319), /api/topics/clear (delete every topic, NEWS-328), /feed.xml, /healthz
+    api.ts            /api/discover + /api/discover/usage (NEWS-125), /api/state (topics/settings/runs/checking + latestItemIds + flaggedByTopic + todayByTopic/newestItemAtByTopic for the sidebar badge + newest sort, NEWS-242/241; NO items), /api/items (paginated feed: filter+sort+cursor + `threads` = per-story thread shape, NEWS-282), /api/items/:id/thread (one story's whole thread, oldest first; 404 on an unknown id — NEWS-282), /api/pulse/topics + /api/pulse (deterministic rail/topic/taxonomy analytics, NEWS-453), /api/providers, /api/topics, /api/items/:id (save/flag), /api/settings, /api/backup + /api/backup/locations (NEWS-192, NEWS-230), /api/keys, /api/foreground, /api/check, /api/open-external, /api/export.md, /api/export.json, /api/export-topics.json + /api/import-topics (the shareable topic list, NEWS-317/318), /api/import-stories (NEWS-319), /api/topics/clear (delete every topic, NEWS-328), /feed.xml, /healthz
     pages.tsx         GET / — SSR shell
   components/
     layout.tsx        HTML shell
   client/
     app.tsx           kerf UI: mount + **every `delegate()`**; header/banners/settings dialog/topics/onboarding + the top-level shell. Views are being split out by *view* (NEWS-297) — handlers stay here, because two delegates matching one gesture both run (NEWS-126)
     filter-bar.tsx    the section filter bar under the masthead — filters the *feed* by taxonomy, despite rendering above the rail (NEWS-297)
+    pulse-view.tsx    rail sparkline primitive, compact Solo/category summaries, and the accessible topic-pulse drill-down + table fallback (NEWS-453)
     dialogs.tsx       the dialogs whose markup owns no state: export, privacy, guidance, rename, the backup offer (NEWS-297). `confirmDialogJsx` is **not** here — it reads with `confirm()`, whose promise is the mechanism
     key-row.tsx       `keyRowJsx` — one provider's API-key row, shared by Settings → Source *and* onboarding's Source step (NEWS-297)
     onboarding-view.tsx the first-run wizard's markup (NEWS-297); the step machine stays in `onboarding.ts` + the store

@@ -21,6 +21,7 @@ import {
   fetchBackupLocations,
   importStories,
   importTopics,
+  loadPulseDetail,
   loadThread,
   recoverSetAside,
   refreshBackupPreview,
@@ -28,6 +29,7 @@ import {
   refreshKeys,
   refreshModels,
   refreshProviders,
+  refreshPulseSurfaces,
   refreshSetAside,
   refreshState,
   renameTopic,
@@ -78,6 +80,7 @@ import { ensureNotificationPermission } from './notifications.js';
 import { nextProfilePage, shouldOpenOnboarding } from './onboarding.js';
 import { onboardingJsx } from './onboarding-view.js';
 import { browserPollDeps, startPolling as startStatePolling } from './poll.js';
+import { compactTopicPulseJsx, pulseDialogJsx } from './pulse-view.js';
 import { trackRailTop } from './rail.js';
 import { activeBehindWarnings } from './schedule.js';
 import { itemMatchesQuery } from './search.js';
@@ -451,6 +454,7 @@ function appJsx(): SafeHtml {
           : renameDialogJsx(renameTarget, s.renameItemCount, s.renameCategory, s.renameSubcategory)}
       </div>
       <div id="privacy-slot">{s.privacyOpen ? privacyDialogJsx(s) : ''}</div>
+      <div id="pulse-slot">{s.pulseDetailOpen ? pulseDialogJsx(s.pulseDetail, s.pulseLoading, s.pulseDays) : ''}</div>
       <div id="export-slot">{s.export !== null ? exportDialogJsx(s.export, sortTopics(s.topics, s.topicSort, s.newestItemAtByTopic)) : ''}</div>
       <div id="discover-slot">{s.discover !== null ? discoverDialogJsx(s.discover) : ''}</div>
       {/* Always present because it is a **live region**: assistive technology
@@ -481,7 +485,7 @@ function appJsx(): SafeHtml {
 
       {/* Section navigation sits directly under the masthead, as a newspaper's
           does — above the banners and above the sidebar+feed area (FR-22.10). */}
-      <div id="filter-slot">{filterBarJsx(s.categoryFilter, s.topics)}</div>
+      <div id="filter-slot">{filterBarJsx(s.categoryFilter, s.topics, s.categoryPulse)}</div>
 
       {/* Banners appear in response to background events (a failed check, a
           a failing topic), so they have to announce rather than wait to be found —
@@ -692,6 +696,7 @@ function appJsx(): SafeHtml {
                   // the comparison reads as impossible to the linter while being
                   // exactly the question. Same trap as NEWS-264.
                   Object.hasOwn(s.newestItemAtByTopic, row.id),
+                  s.pulseSparklines[row.id],
                 )
               ),
             {
@@ -708,6 +713,7 @@ function appJsx(): SafeHtml {
                   checking: s.checking,
                   todayByTopic: s.todayByTopic,
                   newestItemAtByTopic: s.newestItemAtByTopic,
+                  pulseSparklines: s.pulseSparklines,
                 }),
               // A stable list identity (kerf 3.x). Unkeyed lists are identified by
               // their position among a render's `each()` calls, so a conditional
@@ -760,6 +766,7 @@ function appJsx(): SafeHtml {
       </section>
 
       <section id="feed" class="feed">
+        <div class="compact-pulse-slot">{solo.size === 1 && s.topicPulse !== null ? compactTopicPulseJsx(s.topicPulse) : ''}</div>
         {feedJsx(feedItems, topicNames, feedVariant, s.expandedItemId, {
           summaries: s.threads,
           panes: s.threadPanes,
@@ -1054,6 +1061,7 @@ function runTopicAction(action: string, ids: string[]): void {
     case 'solo':
       appStore.actions.setSolo(toggleSolo(soloTopicIds, targets.map((t) => t.id)));
       void refreshFeed();
+      void refreshPulseSurfaces();
       break;
     case 'guidance': {
       // Single-target only; the menu item is disabled for a multi-selection.
@@ -2201,6 +2209,7 @@ function wireEvents(root: HTMLElement): void {
     // belongs to a different parent and would match nothing.
     appStore.actions.setCategoryFilter(slug === '' ? null : { category: slug, subcategory: null });
     void refreshFeed();
+    void refreshPulseSurfaces();
   });
 
   void delegate(root, 'click', '[data-filter-subcategory]', (_e, el) => {
@@ -2209,6 +2218,7 @@ function wireEvents(root: HTMLElement): void {
     const slug = el.getAttribute('data-filter-subcategory') ?? '';
     appStore.actions.setCategoryFilter({ category: current.category, subcategory: slug === '' ? null : slug });
     void refreshFeed();
+    void refreshPulseSurfaces();
   });
 
   // Double-click toggles solo (NEWS-95) — the one topic action common enough to
@@ -2321,6 +2331,35 @@ function wireEvents(root: HTMLElement): void {
   void delegate(root, 'click', '[data-action=clear-solo]', () => {
     appStore.actions.setSolo([]);
     void refreshFeed();
+    void refreshPulseSurfaces();
+  });
+  void delegate(root, 'click', '[data-action=exit-solo-pulse]', () => {
+    appStore.actions.setSolo([]);
+    void refreshFeed();
+    void refreshPulseSurfaces();
+  });
+
+  // --- Topic/category pulse (NEWS-453) ------------------------------------
+
+  void delegate(root, 'click', '[data-open-pulse-kind]', (_e, el) => {
+    const kind = el.getAttribute('data-open-pulse-kind');
+    const id = el.getAttribute('data-open-pulse-id');
+    if ((kind !== 'topic' && kind !== 'category') || id === null) return;
+    const subcategory = el.getAttribute('data-open-pulse-subcategory');
+    void loadPulseDetail({ kind, id, subcategory: subcategory === '' ? null : subcategory }, 30);
+  });
+  void delegate(root, 'click', '[data-action=close-pulse]', (e, el) => {
+    if (e.target === el || el.classList.contains('icon')) appStore.actions.closePulse();
+  });
+  void delegate(root, 'click', '[data-pulse-days]', (_e, el) => {
+    const raw = Number(el.getAttribute('data-pulse-days'));
+    if (raw !== 7 && raw !== 30 && raw !== 90) return;
+    const pulse = appStore.state.value.pulseDetail;
+    if (pulse === null) return;
+    void loadPulseDetail(
+      { kind: pulse.scope.kind, id: pulse.scope.id, subcategory: pulse.scope.subcategory },
+      raw,
+    );
   });
 
   // --- Expandable story card (NEWS-281) ---
@@ -2601,6 +2640,10 @@ function wireGlobalKeysAndDismiss(): void {
       // Innermost first: a dialog opened over another closes alone.
       if (s.guidanceTopicId !== null) {
         appStore.actions.closeGuidance();
+        return;
+      }
+      if (s.pulseDetailOpen) {
+        appStore.actions.closePulse();
         return;
       }
       if (s.privacyOpen) {

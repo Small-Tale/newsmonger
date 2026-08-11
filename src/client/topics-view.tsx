@@ -28,6 +28,7 @@ import { relativeTime } from './dates.js';
 import { dialCountdownMs, dialRemaining, formatCountdown } from './dial.js';
 import { icon } from './icons.js';
 import { menuStyle } from './menu-position.js';
+import { sparklineJsx } from './pulse-view.js';
 import { isAllSoloed } from './solo.js';
 import type { AppState } from './stores.js';
 import { appStore } from './stores.js';
@@ -99,6 +100,8 @@ export function topicRowJsx(
   todayCount: number,
   /** Whether this topic holds any stories at all (NEWS-273). */
   hasStories: boolean,
+  /** Seven local-day story counts for the rail activity sparkline (NEWS-453). */
+  pulse: readonly number[] | undefined,
 ): SafeHtml {
   const classes = [
     'topic',
@@ -195,6 +198,15 @@ export function topicRowJsx(
           )}
         </div>
       </div>
+      <span class="topic-sparkline-slot">
+        {pulse === undefined
+          ? ''
+          : sparklineJsx(
+              pulse,
+              `${topic.name}: ${String(pulse.reduce((sum, count) => sum + count, 0))} stories in the last 7 days`,
+              'topic-sparkline',
+            )}
+      </span>
     </li>
   );
 }

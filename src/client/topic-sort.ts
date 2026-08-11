@@ -145,6 +145,7 @@ export interface RowRenderState {
    * something the memo key has to include.
    */
   newestItemAtByTopic: Record<string, string | undefined>;
+  pulseSparklines?: Record<string, readonly number[] | undefined>;
 }
 
 /**
@@ -173,7 +174,7 @@ export interface RowRenderState {
  */
 export function topicRowCacheKey(row: TopicRow, state: RowRenderState): string {
   if (isHeading(row)) return row.label;
-  const { selected, solo, checking, todayByTopic, newestItemAtByTopic } = state;
+  const { selected, solo, checking, todayByTopic, newestItemAtByTopic, pulseSparklines = {} } = state;
   return [
     row.id, // identity first — without it, same-state rows collide
     String(row.category),
@@ -190,5 +191,6 @@ export function topicRowCacheKey(row: TopicRow, state: RowRenderState): string {
     // keying on the value itself would churn the memo on every new story
     // (NEWS-273).
     String(newestItemAtByTopic[row.id] !== undefined),
+    (pulseSparklines[row.id] ?? []).join(','),
   ].join('|');
 }

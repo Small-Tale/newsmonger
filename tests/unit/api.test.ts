@@ -5,7 +5,15 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 
 import { createMockProvider } from '../../src/ai/providers/index.js';
-import { BackupLocationsRespSchema, BackupRespSchema, ItemsRespSchema, ProvidersRespSchema, StateRespSchema } from '../../src/api/schemas.js';
+import {
+  BackupLocationsRespSchema,
+  BackupRespSchema,
+  ItemsRespSchema,
+  ProvidersRespSchema,
+  PulseRespSchema,
+  StateRespSchema,
+  TopicSparklineRespSchema,
+} from '../../src/api/schemas.js';
 import { Attendance } from '../../src/attendance.js';
 import { BACKUP_FILE,Backups } from '../../src/backup.js';
 import { CheckRunner } from '../../src/checks.js';
@@ -69,6 +77,30 @@ describe('API', () => {
     const state = StateRespSchema.parse(await json(res));
     expect(state.topics).toEqual([]);
     expect(state.checking).toEqual([]);
+  });
+
+  it('serves validated topic sparklines and pulse drill-downs (NEWS-453)', async () => {
+    const { app, store } = makeApp();
+    const topic = store.addTopic('Energy pulse', { category: 'environment', subcategory: 'energy' });
+    await app.request('/api/check', { method: 'POST', body: JSON.stringify({ topicId: topic.id }) });
+    await waitForIdle(app);
+
+    const sparklines = TopicSparklineRespSchema.parse(await json(await app.request('/api/pulse/topics')));
+    expect(sparklines.byTopic[topic.id]).toHaveLength(7);
+    expect(sparklines.byTopic[topic.id].reduce((sum, value) => sum + value, 0)).toBe(2);
+
+    const topicPulse = PulseRespSchema.parse(await json(await app.request(`/api/pulse?topic=${topic.id}&days=30`)));
+    expect(topicPulse).toMatchObject({ storyCount: 2, days: 30, scope: { kind: 'topic', id: topic.id } });
+
+    const categoryPulse = PulseRespSchema.parse(
+      await json(await app.request('/api/pulse?category=environment&subcategory=energy&days=7')),
+    );
+    expect(categoryPulse).toMatchObject({ storyCount: 2, days: 7, scope: { kind: 'category', id: 'environment' } });
+
+    expect((await app.request('/api/pulse?days=14&topic=nope')).status).toBe(400);
+    expect((await app.request('/api/pulse?topic=nope')).status).toBe(404);
+    expect((await app.request('/api/pulse?category=nope')).status).toBe(404);
+    expect((await app.request('/api/pulse')).status).toBe(400);
   });
 
   it('creates topics and rejects invalid or duplicate ones', async () => {

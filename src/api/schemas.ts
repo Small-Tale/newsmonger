@@ -378,6 +378,63 @@ export const StateRespSchema = z.object({
 });
 export type StateResp = z.infer<typeof StateRespSchema>;
 
+/** One local-calendar day in a topic/category pulse (NEWS-453). */
+export const PulsePointSchema = z.object({
+  date: z.string(),
+  stories: z.number().int().nonnegative(),
+  updates: z.number().int().nonnegative(),
+});
+
+/** The small, always-cheap shape used by topic-row sparklines (NEWS-453). */
+export const TopicSparklineRespSchema = z.object({
+  byTopic: z.record(z.string(), z.array(z.number().int().nonnegative()).length(7)),
+});
+export type TopicSparklineResp = z.infer<typeof TopicSparklineRespSchema>;
+
+const PulseSourceSchema = z.object({
+  label: z.string(),
+  count: z.number().int().positive(),
+  share: z.number().min(0).max(1),
+});
+
+const PulseThreadSchema = z.object({
+  id: z.string(),
+  title: z.string(),
+  updates: z.number().int().nonnegative(),
+  startedAt: z.string(),
+  latestAt: z.string(),
+});
+
+/** Deterministic archive analysis for one topic or taxonomy selection (NEWS-453). */
+export const PulseRespSchema = z.object({
+  scope: z.object({
+    kind: z.enum(['topic', 'category']),
+    id: z.string(),
+    subcategory: z.string().nullable(),
+    label: z.string(),
+  }),
+  days: z.union([z.literal(7), z.literal(30), z.literal(90)]),
+  storyCount: z.number().int().nonnegative(),
+  previousStoryCount: z.number().int().nonnegative(),
+  trendPercent: z.number().nullable(),
+  activeThreads: z.number().int().nonnegative(),
+  distinctOutlets: z.number().int().nonnegative(),
+  sourcedStories: z.number().int().nonnegative(),
+  topSourceShare: z.number().min(0).max(1).nullable(),
+  smallSample: z.boolean(),
+  series: z.array(PulsePointSchema),
+  cadence: z.object({
+    averageDays: z.number().nullable(),
+    longestQuietDays: z.number().int().nonnegative(),
+    mostActiveDate: z.string().nullable(),
+    mostActiveCount: z.number().int().nonnegative(),
+  }),
+  sources: z.array(PulseSourceSchema),
+  otherSourceCount: z.number().int().nonnegative(),
+  threads: z.array(PulseThreadSchema),
+});
+export type PulseResp = z.infer<typeof PulseRespSchema>;
+
 /**
  * Where one story sits in its thread (NEWS-282), for the collapsed card's badge
  * (NEWS-283).
@@ -554,4 +611,3 @@ export const KeysRespSchema = z.object({
   keychainLabel: z.string(),
 });
 export type KeysResp = z.infer<typeof KeysRespSchema>;
-

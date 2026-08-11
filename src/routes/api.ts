@@ -33,10 +33,18 @@ import {
 } from '../api/schemas.js';
 import { readBackup, restoreBackup } from '../backup.js';
 import { normalizeBackupDir, suggestedBackupLocations } from '../backup-locations.js';
+import {
+  BUILTIN_CATEGORIES,
+  categoryLabel,
+  NO_SUBCATEGORY_FILTER,
+  UNCATEGORIZED_FILTER,
+  UNCATEGORIZED_LABEL,
+} from '../categories.js';
 import type { Store } from '../db/store.js';
 import { toAtom, toJson, toMarkdown, topicsToJson } from '../export.js';
 import { cachedImagePath, isValidHash, liveImageHashes, pruneImageCache, sniffImageType } from '../images/index.js';
 import { isKeychainAvailable, keychainLabel } from '../keychain.js';
+import { analyzePulse, type PulseDays,topicSparklines } from '../pulse.js';
 import { isSetAsideName, listSetAside, recoverSetAside } from '../recover.js';
 import type { AppEnv } from '../types.js';
 import { appVersion } from '../version.js';
@@ -155,6 +163,48 @@ export function registerApi(app: Hono<AppEnv>): void {
       installId: store.installId(),
     };
     return c.json(state);
+  });
+
+  // Seven tiny buckets per topic for the Watching rail (NEWS-453). Kept out of
+  // `/api/state`: that endpoint is the four-second heartbeat, while archive
+  // analysis only needs refreshing when the pulse surface is visible.
+  app.get('/api/pulse/topics', (c) => {
+    const store = c.get('store');
+    return c.json(topicSparklines(store.listItems(), store.listTopics()));
+  });
+
+  // Deterministic topic/category analysis (NEWS-453). One endpoint serves the
+  // compact Solo pulse, taxonomy rollup, and full drill-down so the three
+  // surfaces cannot disagree about a denominator.
+  app.get('/api/pulse', (c) => {
+    const rawDays = Number.parseInt(c.req.query('days') ?? '30', 10);
+    if (rawDays !== 7 && rawDays !== 30 && rawDays !== 90) return c.json({ error: 'days must be 7, 30, or 90' }, 400);
+    const days: PulseDays = rawDays;
+    const store = c.get('store');
+    const topics = store.listTopics();
+    const items = store.listItems();
+    const topicId = c.req.query('topic');
+    if (topicId !== undefined) {
+      const topic = topics.find((candidate) => candidate.id === topicId);
+      if (topic === undefined) return c.json({ error: 'no such topic' }, 404);
+      return c.json(analyzePulse(items, topics, { kind: 'topic', id: topic.id, label: topic.name }, days));
+    }
+    const category = c.req.query('category');
+    if (category === undefined || category === '') return c.json({ error: 'topic or category is required' }, 400);
+    const subcategory = c.req.query('subcategory') ?? null;
+    const knownCategory = BUILTIN_CATEGORIES.find((candidate) => candidate.slug === category);
+    if (category !== UNCATEGORIZED_FILTER && knownCategory === undefined) return c.json({ error: 'no such category' }, 404);
+    const label =
+      category === UNCATEGORIZED_FILTER
+        ? UNCATEGORIZED_LABEL
+        : subcategory === NO_SUBCATEGORY_FILTER
+          ? `${knownCategory?.label ?? category} · Other`
+        : categoryLabel(
+            BUILTIN_CATEGORIES,
+            category,
+            subcategory === NO_SUBCATEGORY_FILTER ? null : subcategory,
+          );
+    return c.json(analyzePulse(items, topics, { kind: 'category', id: category, subcategory, label }, days));
   });
 
   /**

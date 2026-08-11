@@ -23,6 +23,7 @@
 
 import type { SafeHtml } from 'kerfjs';
 
+import type { PulseResp } from '../api/schemas.js';
 import {
   BUILTIN_CATEGORIES,
   findCategory,
@@ -34,6 +35,7 @@ import {
   visibleSubcategories,
 } from '../categories.js';
 import type { Topic } from '../db/schemas.js';
+import { categoryPulseJsx } from './pulse-view.js';
 import type { AppState } from './stores.js';
 
 /**
@@ -48,7 +50,11 @@ import type { AppState } from './stores.js';
  * every one of their subcategories in one bar would be a wall rather than
  * navigation.
  */
-export function filterBarJsx(selected: AppState['categoryFilter'], topics: readonly Topic[]): SafeHtml {
+export function filterBarJsx(
+  selected: AppState['categoryFilter'],
+  topics: readonly Topic[],
+  pulse: PulseResp | null = null,
+): SafeHtml {
   // Only sections something is filed under (NEWS-114) — a pill for a section
   // nobody watches can only ever produce an empty feed.
   const table = visibleCategories(BUILTIN_CATEGORIES, topics, selected?.category ?? null);
@@ -128,6 +134,9 @@ export function filterBarJsx(selected: AppState['categoryFilter'], topics: reado
               }),
             ]}
       </div>
+      {/* Stable even when no section is active: this sits above the keyed topic
+          list, so the same structural rule as the sub-row applies. */}
+      <div class="category-pulse-slot">{selected !== null && pulse !== null ? categoryPulseJsx(pulse) : ''}</div>
     </nav>
   );
 }

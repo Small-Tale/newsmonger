@@ -1,5 +1,14 @@
 import type { Effort,ProviderName} from '../ai/types.js';
-import type { BackupPreview, DiscoverReq, DiscoverResp, ImportStoriesResp, ImportTopicsResp, RecoverResp, TopicSuggestion } from '../api/schemas.js';
+import type {
+  BackupPreview,
+  DiscoverReq,
+  DiscoverResp,
+  ImportStoriesResp,
+  ImportTopicsResp,
+  PulseResp,
+  RecoverResp,
+  TopicSuggestion,
+} from '../api/schemas.js';
 import {
   BackupLocationsRespSchema,
   BackupPreviewRespSchema,
@@ -13,11 +22,13 @@ import {
   KeysRespSchema,
   ModelsRespSchema,
   ProvidersRespSchema,
+  PulseRespSchema,
   RecoverRespSchema,
   RestoreRespSchema,
   SetAsideRespSchema,
   StateRespSchema,
   ThreadRespSchema,
+  TopicSparklineRespSchema,
 } from '../api/schemas.js';
 import type { BackupLocation } from '../backup-locations.js';
 import { guidanceForTopic } from '../profile-topics.js';
@@ -63,6 +74,9 @@ let stateSeq = 0;
 let stateApplied = 0;
 let feedSeq = 0;
 let feedApplied = 0;
+let pulseSeq = 0;
+let pulseApplied = 0;
+let pulseArchiveKey = '';
 
 /**
  * Thread ids with a request out (NEWS-293).
@@ -106,6 +120,14 @@ export async function refreshState(): Promise<void> {
     // Inside the guard deliberately — it diffs against the last state it saw, so
     // feeding it a stale one would mis-report what's new.
     noteState(state);
+    const nextPulseKey = JSON.stringify([
+      state.latestItemIds,
+      state.topics.map((topic) => [topic.id, topic.category, topic.subcategory]),
+    ]);
+    if (nextPulseKey !== pulseArchiveKey) {
+      pulseArchiveKey = nextPulseKey;
+      void refreshPulseSurfaces();
+    }
   } catch (err) {
     if (seq < stateApplied) return;
     stateApplied = seq;
@@ -116,6 +138,62 @@ export async function refreshState(): Promise<void> {
     // `refreshFeed` has its own guard, and skipping it here would drop the feed
     // refresh that `withRefresh` is relying on.
     await refreshFeed();
+  }
+}
+
+function pulsePath(scope: { kind: 'topic' | 'category'; id: string; subcategory?: string | null }, days: 7 | 30 | 90): string {
+  const params = new URLSearchParams({ days: String(days) });
+  if (scope.kind === 'topic') params.set('topic', scope.id);
+  else {
+    params.set('category', scope.id);
+    if (scope.subcategory !== undefined && scope.subcategory !== null) params.set('subcategory', scope.subcategory);
+  }
+  return `/api/pulse?${params.toString()}`;
+}
+
+/** Refresh the rail and the two compact pulse surfaces (NEWS-453). */
+export async function refreshPulseSurfaces(): Promise<void> {
+  const seq = ++pulseSeq;
+  const state = appStore.state.value;
+  const topicId = state.soloTopicIds.length === 1 ? state.soloTopicIds[0] : undefined;
+  const category = state.categoryFilter;
+  try {
+    const [sparklines, topicPulse, categoryPulse] = await Promise.all([
+      request('/api/pulse/topics').then((body) => TopicSparklineRespSchema.parse(body)),
+      topicId === undefined
+        ? Promise.resolve(null)
+        : request(pulsePath({ kind: 'topic', id: topicId }, 30)).then((body) => PulseRespSchema.parse(body)),
+      category === null
+        ? Promise.resolve(null)
+        : request(
+            pulsePath(
+              { kind: 'category', id: category.category, subcategory: category.subcategory },
+              30,
+            ),
+          ).then((body) => PulseRespSchema.parse(body)),
+    ]);
+    if (seq < pulseApplied) return;
+    pulseApplied = seq;
+    appStore.actions.setPulseSparklines(sparklines.byTopic);
+    appStore.actions.setPulseSummaries(topicPulse, categoryPulse);
+  } catch {
+    // These are supplemental reading aids. A failed refresh leaves the last
+    // good pulse in place; the feed and its four-second state poll stay healthy.
+  }
+}
+
+/** Open or change the full pulse drill-down (NEWS-453). */
+export async function loadPulseDetail(
+  scope: { kind: 'topic' | 'category'; id: string; subcategory?: string | null },
+  days: 7 | 30 | 90,
+): Promise<void> {
+  appStore.actions.openPulse();
+  try {
+    const pulse: PulseResp = PulseRespSchema.parse(await request(pulsePath(scope, days)));
+    appStore.actions.setPulseDetail(pulse);
+  } catch (err) {
+    appStore.actions.setPulseLoading(false);
+    appStore.actions.setError(err instanceof Error ? err.message : String(err));
   }
 }
 
@@ -775,9 +853,12 @@ export function setItemSaved(id: string, saved: boolean): Promise<void> {
 }
 
 export function setItemOffTopic(id: string, offTopic: boolean): Promise<void> {
-  return withRefresh(() =>
-    request(`/api/items/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify({ offTopic }) }),
-  );
+  return (async () => {
+    await withRefresh(() =>
+      request(`/api/items/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify({ offTopic }) }),
+    );
+    await refreshPulseSurfaces();
+  })();
 }
 
 export function startCheck(topicId?: string): Promise<void> {

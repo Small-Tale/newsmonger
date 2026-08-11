@@ -6,6 +6,7 @@ import type {
   ItemsResp,
   KeysResp,
   ProviderInfo,
+  PulseResp,
   SetAsideDatabase,
   StateResp,
   ThreadSummary,
@@ -235,6 +236,17 @@ export interface AppState {
   todayByTopic: Record<string, number>;
   /** Newest story's `foundAt` per topic, for the most-recent sort (NEWS-241). */
   newestItemAtByTopic: Record<string, string>;
+  /** Seven daily story counts per topic, used only for the rail sparklines. */
+  pulseSparklines: Record<string, number[] | undefined>;
+  /** Thirty-day compact summary for the one soloed topic, if there is one. */
+  topicPulse: PulseResp | null;
+  /** Thirty-day compact summary for the active taxonomy filter. */
+  categoryPulse: PulseResp | null;
+  /** Full drill-down dialog; null means closed. */
+  pulseDetail: PulseResp | null;
+  pulseDetailOpen: boolean;
+  pulseLoading: boolean;
+  pulseDays: 7 | 30 | 90;
   settings: StateResp['settings'];
   runs: StateResp['runs'];
   checking: string[];
@@ -669,6 +681,13 @@ export const appStore = defineStore({
     flaggedByTopic: {},
     todayByTopic: {},
     newestItemAtByTopic: {},
+    pulseSparklines: {},
+    topicPulse: null,
+    categoryPulse: null,
+    pulseDetail: null,
+    pulseDetailOpen: false,
+    pulseLoading: false,
+    pulseDays: 30,
     settings: {
       checkIntervalMs: 24 * 60 * 60 * 1000,
       highPriorityIntervalMs: 24 * 60 * 60 * 1000,
@@ -859,10 +878,10 @@ export const appStore = defineStore({
     // story (NEWS-281) — the pane belongs to the list being read, and one left
     // open behind a filter change is state with nothing on screen to close it.
     setSolo: (soloTopicIds: string[]) => {
-      set({ ...get(), soloTopicIds, feedLimit: FEED_PAGE, expandedItemId: null });
+      set({ ...get(), soloTopicIds, feedLimit: FEED_PAGE, expandedItemId: null, topicPulse: null });
     },
     setCategoryFilter: (categoryFilter: AppState['categoryFilter']) => {
-      set({ ...get(), categoryFilter, feedLimit: FEED_PAGE, expandedItemId: null });
+      set({ ...get(), categoryFilter, feedLimit: FEED_PAGE, expandedItemId: null, categoryPulse: null });
     },
     setSavedFilter: (savedFilter: boolean) => {
       set({ ...get(), savedFilter, feedLimit: FEED_PAGE, expandedItemId: null });
@@ -915,6 +934,24 @@ export const appStore = defineStore({
     },
     setFeed: (feed: { items: NewsItem[]; total: number; threads: Record<string, ThreadSummary> }) => {
       set({ ...get(), feedItems: feed.items, feedTotal: feed.total, threads: feed.threads });
+    },
+    setPulseSparklines: (pulseSparklines: AppState['pulseSparklines']) => {
+      set({ ...get(), pulseSparklines });
+    },
+    setPulseSummaries: (topicPulse: PulseResp | null, categoryPulse: PulseResp | null) => {
+      set({ ...get(), topicPulse, categoryPulse });
+    },
+    openPulse: () => {
+      set({ ...get(), pulseDetailOpen: true, pulseLoading: true });
+    },
+    setPulseDetail: (pulseDetail: PulseResp) => {
+      set({ ...get(), pulseDetail, pulseDetailOpen: true, pulseLoading: false, pulseDays: pulseDetail.days });
+    },
+    setPulseLoading: (pulseLoading: boolean) => {
+      set({ ...get(), pulseLoading });
+    },
+    closePulse: () => {
+      set({ ...get(), pulseDetailOpen: false, pulseLoading: false });
     },
     /** Record what the thread route said (or that it is still being asked). */
     setThreadPane: (id: string, pane: ThreadPane) => {
