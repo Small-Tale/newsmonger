@@ -23,6 +23,8 @@ test('solo reveals a compact deterministic pulse and a full 7/30/90-day drill-do
   await expect(compact).toBeVisible();
   await expect(compact).toContainText('30-day pulse');
   await expect(compact).toContainText('2 stories');
+  await expect(compact).toContainText('news.example.com');
+  await expect(compact).not.toContainText('top source');
   await expect(compact).toContainText('Small sample');
   await expect(page.locator('.banner.solo')).toBeVisible();
 
@@ -31,6 +33,7 @@ test('solo reveals a compact deterministic pulse and a full 7/30/90-day drill-do
   await expect(dialog).toBeVisible();
   await expect(dialog.locator('#pulse-dialog-title')).toHaveText(TOPIC);
   await expect(dialog.locator('.pulse-stat-grid')).toContainText('2');
+  await expect(dialog.locator('.pulse-stat-grid')).toContainText('news.example.com');
   await expect(dialog.locator('[data-pulse-days="30"]')).toHaveClass(/active/);
   await expect(dialog).toContainText('No AI analysis');
 

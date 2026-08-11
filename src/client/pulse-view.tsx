@@ -45,6 +45,10 @@ function sourceShare(pulse: PulseResp): string {
   return pulse.topSourceShare === null ? '—' : `${String(Math.round(pulse.topSourceShare * 100))}%`;
 }
 
+function topSourceLabel(pulse: PulseResp): string {
+  return pulse.sources[0]?.label ?? 'Top source';
+}
+
 function pulseScopeAttrs(pulse: PulseResp): Record<string, string> {
   return {
     'data-open-pulse-kind': pulse.scope.kind,
@@ -71,7 +75,7 @@ export function compactTopicPulseJsx(pulse: PulseResp): SafeHtml {
             {metric(String(pulse.storyCount), pulse.storyCount === 1 ? 'story' : 'stories')}
             {metric(String(pulse.activeThreads), pulse.activeThreads === 1 ? 'active thread' : 'active threads')}
             {metric(String(pulse.distinctOutlets), pulse.distinctOutlets === 1 ? 'outlet' : 'outlets')}
-            {metric(sourceShare(pulse), 'top source')}
+            {metric(sourceShare(pulse), topSourceLabel(pulse))}
           </div>
           <div class="compact-pulse-trend">
             {sparklineJsx(pulse.series.map((point) => point.stories), `${trendText(pulse)}; daily story volume`)}
@@ -144,7 +148,7 @@ export function pulseDialogJsx(pulse: PulseResp | null, loading: boolean, days: 
                 <div><strong>{String(pulse.storyCount)}</strong><span>stories</span></div>
                 <div><strong>{String(pulse.activeThreads)}</strong><span>active threads</span></div>
                 <div><strong>{String(pulse.distinctOutlets)}</strong><span>distinct outlets</span></div>
-                <div><strong>{sourceShare(pulse)}</strong><span>top source share</span></div>
+                <div><strong>{sourceShare(pulse)}</strong><span>{topSourceLabel(pulse)}</span></div>
               </div>
               <p class={`pulse-sample${pulse.smallSample ? ' warn' : ''}`}>
                 {pulse.smallSample ? 'Small sample — trends may shift quickly. ' : ''}{trendText(pulse)}.

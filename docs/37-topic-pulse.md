@@ -7,7 +7,7 @@ Related: [Topics and scheduling](1-topics-and-scheduling.md), [UI](3-ui.md), [To
 ## Requirements
 
 - **FR-37.1** *(Shipped, NEWS-453)* Every watched topic shows a seven-local-day activity sparkline in the Watching rail. All topic sparklines use the same seven-bucket shape; an accessible label states the exact story count for the period.
-- **FR-37.2** *(Shipped, NEWS-453)* Exactly one soloed topic shows a compact 30-day pulse above its feed: story count, active-thread count, distinct primary outlets, top-primary-source share, daily volume, comparison with the previous 30 days, and a small-sample warning below ten stories.
+- **FR-37.2** *(Shipped, NEWS-453; clarified NEWS-459)* Exactly one soloed topic shows a compact 30-day pulse above its feed: story count, active-thread count, distinct primary outlets, the named top primary source with its share, daily volume, comparison with the previous 30 days, and a small-sample warning below ten stories. A percentage must never be labeled only as "top source" without naming that source.
 - **FR-37.3** *(Shipped, NEWS-453)* Solo keeps the existing generic mode banner for its announcement and exit. Exactly one soloed topic additionally gets the compact pulse; multiple soloed topics do not silently combine into one analysis.
 - **FR-37.4** *(Shipped, NEWS-453)* The compact pulse is a reading aid, not a dashboard takeover. It leaves the story feed visible and provides one explicit **Explore topic pulse** action into the detailed view.
 - **FR-37.5** *(Shipped, NEWS-453)* An active top-level category or subcategory filter shows a restrained rollup under the taxonomy bar: stored-story volume, change from the previous equivalent period, and a sparkline. Opening it uses the same detailed view as a topic.
