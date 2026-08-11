@@ -16,6 +16,7 @@ import type {
   RecoverResp,
   SetAsideResp,
   StateResp,
+  ThreadBriefResp,
   ThreadResp,
 } from '../api/schemas.js';
 import {
@@ -40,6 +41,7 @@ import {
   UNCATEGORIZED_FILTER,
   UNCATEGORIZED_LABEL,
 } from '../categories.js';
+import type { ProviderResolver } from '../checks.js';
 import type { Store } from '../db/store.js';
 import { toAtom, toJson, toMarkdown, topicsToJson } from '../export.js';
 import { cachedImagePath, isValidHash, liveImageHashes, pruneImageCache, sniffImageType } from '../images/index.js';
@@ -127,7 +129,9 @@ async function repairCachedImage(
   }
 }
 
-export function registerApi(app: Hono<AppEnv>): void {
+const briefCaches = new WeakMap<Store, Map<string, ThreadBriefResp>>();
+
+export function registerApi(app: Hono<AppEnv>, resolveProvider?: ProviderResolver): void {
   app.get('/api/state', (c) => {
     const store = c.get('store');
     const runner = c.get('runner');
@@ -312,6 +316,32 @@ export function registerApi(app: Hono<AppEnv>): void {
     if (items.length === 0) return c.json({ error: 'unknown story' }, 404);
     const resp: ThreadResp = { items };
     return c.json(resp);
+  });
+
+  app.post('/api/items/:id/thread-brief', async (c) => {
+    const store = c.get('store');
+    const items = store.threadForItem(c.req.param('id'));
+    if (items.length === 0) return c.json({ error: 'unknown story' }, 404);
+    if (items.length < 2) return c.json({ error: 'a brief needs at least two stories' }, 400);
+    if (resolveProvider === undefined) return c.json({ error: 'thread analysis is not configured' }, 503);
+    const fingerprint = items.map((item) => `${item.id}:${item.title}:${item.summary}`).join('\n');
+    let cache = briefCaches.get(store);
+    if (cache === undefined) {
+      cache = new Map();
+      briefCaches.set(store, cache);
+    }
+    const cached = cache.get(fingerprint);
+    if (cached !== undefined) return c.json(cached);
+    try {
+      const provider = await resolveProvider();
+      if (provider.analyzeThread === undefined) return c.json({ error: 'the active provider cannot analyze threads' }, 503);
+      const result = await provider.analyzeThread(items);
+      const resp: ThreadBriefResp = { ...result, generatedAt: new Date().toISOString(), storyCount: items.length };
+      cache.set(fingerprint, resp);
+      return c.json(resp);
+    } catch (err) {
+      return c.json({ error: err instanceof Error ? err.message : String(err) }, 502);
+    }
   });
 
   // Providers + availability, for the settings picker. Probing is cheap today

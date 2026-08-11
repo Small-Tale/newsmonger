@@ -2707,6 +2707,35 @@ h2.eyebrow {
   margin-top: 9px;
 }
 
+.thread-brief-button { margin-top: 12px; }
+
+.thread-brief {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+
+  > header { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+  h4, h5 { margin: 0; }
+  .uncertainty { border: 1px solid var(--line); border-radius: 999px; padding: 2px 7px; color: var(--ink-soft); font: 10px var(--mono); text-transform: capitalize; }
+}
+
+.thread-brief-section {
+  margin-top: 12px;
+  h5 { font: 600 12px var(--sans); }
+  ul { margin: 5px 0 0; padding-left: 18px; }
+  li + li { margin-top: 7px; }
+  p { margin: 5px 0 0; color: var(--ink-soft); }
+}
+
+.thread-brief-sources {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+  margin-top: 3px;
+  a { color: var(--pine); }
+  small { color: var(--ink-soft); }
+}
+
 // The disclosure marker points down when closed, up when open. Driven off
 // `aria-expanded` rather than a second class, so the visual state cannot
 // disagree with the state screen readers are told.

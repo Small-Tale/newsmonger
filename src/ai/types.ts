@@ -1,4 +1,8 @@
 /** A news story returned by a news service, before deduplication. */
+import type { ThreadBriefInput, ThreadBriefResult } from './thread-brief.js';
+
+export type { ThreadBriefInput, ThreadBriefResult } from './thread-brief.js';
+
 export interface FoundNewsItem {
   title: string;
   summary: string;
@@ -221,6 +225,8 @@ export interface NewsService {
    * into the UI that FR-24 never describes. Every provider implements it.
    */
   suggestTopics(request: SuggestRequest): Promise<SuggestResult>;
+  /** Analyze only the supplied stored stories; this call performs no web search. */
+  analyzeThread?(items: ThreadBriefInput[]): Promise<ThreadBriefResult>;
 }
 
 /**

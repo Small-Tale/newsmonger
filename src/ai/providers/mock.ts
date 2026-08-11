@@ -6,6 +6,7 @@ import type {
   NewsProvider,
   SuggestRequest,
   SuggestResult,
+  ThreadBriefInput,
   TokenUsage,
   TopicClassification,
   TopicContext,
@@ -226,6 +227,16 @@ export function createMockProvider(
       if (seed.includes('fail')) return Promise.reject(new Error('mock suggestion failure'));
       if (seed.includes('empty')) return Promise.resolve({ suggestions: [], usage });
       return Promise.resolve({ suggestions: mockSuggestions(request), usage });
+    },
+    analyzeThread(items: ThreadBriefInput[]) {
+      const latest = items.at(-1);
+      const first = items[0];
+      return Promise.resolve({
+        changed: latest === undefined ? [] : [{ text: `Latest update: ${latest.title}`, sourceIds: [latest.id], support: 'unclear' as const }],
+        consistent: latest === undefined ? [] : [{ text: 'Reports consistently describe the same developing event.', sourceIds: [first.id, latest.id], support: 'independent' as const }],
+        unknown: latest === undefined ? [] : [{ text: 'The final outcome remains unknown.', sourceIds: [latest.id], support: 'unclear' as const }],
+        uncertainty: 'medium' as const,
+      });
     },
     checkTopic(
       topicName: string,

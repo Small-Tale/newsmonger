@@ -12,6 +12,7 @@ import {
   ProvidersRespSchema,
   PulseRespSchema,
   StateRespSchema,
+  ThreadBriefRespSchema,
   TopicSparklineRespSchema,
 } from '../../src/api/schemas.js';
 import { Attendance } from '../../src/attendance.js';
@@ -25,7 +26,7 @@ function makeApp() {
   const store = tmpStore();
   const service = createMockProvider();
   const runner = new CheckRunner(store, asResolver(service));
-  const app = createApp({ store, runner });
+  const app = createApp({ store, runner, resolveProvider: asResolver(service) });
   return { app, store, service, runner };
 }
 
@@ -101,6 +102,32 @@ describe('API', () => {
     expect((await app.request('/api/pulse?topic=nope')).status).toBe(404);
     expect((await app.request('/api/pulse?category=nope')).status).toBe(404);
     expect((await app.request('/api/pulse')).status).toBe(400);
+  });
+
+  it('generates and caches an evidence-linked thread brief, then invalidates it on growth (NEWS-454)', async () => {
+    const { app, store, service } = makeApp();
+    const topic = store.addTopic('brief thread');
+    await app.request('/api/check', { method: 'POST', body: JSON.stringify({ topicId: topic.id }) });
+    await waitForIdle(app);
+    const first = store.listItems(topic.id)[0];
+    expect(first).toBeDefined();
+    let calls = 0;
+    const analyze = service.analyzeThread?.bind(service);
+    if (analyze === undefined) throw new Error('mock provider must analyze threads');
+    service.analyzeThread = async (items) => { calls += 1; return analyze(items); };
+
+    const path = `/api/items/${encodeURIComponent(first.id)}/thread-brief`;
+    const brief = ThreadBriefRespSchema.parse(await json(await app.request(path, { method: 'POST' })));
+    expect(brief.storyCount).toBe(2);
+    expect(brief.changed[0]?.sourceIds).toHaveLength(1);
+    ThreadBriefRespSchema.parse(await json(await app.request(path, { method: 'POST' })));
+    expect(calls).toBe(1);
+
+    await app.request('/api/check', { method: 'POST', body: JSON.stringify({ topicId: topic.id }) });
+    await waitForIdle(app);
+    const grown = ThreadBriefRespSchema.parse(await json(await app.request(path, { method: 'POST' })));
+    expect(grown.storyCount).toBe(4);
+    expect(calls).toBe(2);
   });
 
   it('creates topics and rejects invalid or duplicate ones', async () => {

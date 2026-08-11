@@ -32,6 +32,7 @@ import type {
   NewsProvider,
   SuggestRequest,
   SuggestResult,
+  ThreadBriefInput,
   TokenUsage,
   TopicClassification,
   TopicContext,
@@ -181,6 +182,15 @@ export function createDemoProvider(): NewsProvider {
           guidance: '',
           classification: classify(t.name, request.categoryOptions ?? []),
         })),
+      });
+    },
+    analyzeThread(items: ThreadBriefInput[]) {
+      const latest = items.at(-1);
+      return Promise.resolve({
+        changed: latest === undefined ? [] : [{ text: latest.summary, sourceIds: [latest.id], support: 'unclear' as const }],
+        consistent: [],
+        unknown: [],
+        uncertainty: 'medium' as const,
       });
     },
 
