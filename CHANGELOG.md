@@ -14,6 +14,21 @@ fields reject semver prerelease suffixes.
 
 <!-- Nothing released yet. The first `npm run release` inserts its entry below. -->
 
+## [0.5.0] - 2026-08-11
+
+
+
+- Make the retention regression deterministic on Windows (NEWS-466) (`a57025c`)
+- Simplify the topic pulse action (NEWS-465) (`ba37b82`)
+- Revert "Add evidence-linked thread briefs (NEWS-454)" (`927e2cb`)
+- Suspend taxonomy filters during Solo (NEWS-464) (`0120ca7`)
+- Add evidence-linked thread briefs (NEWS-454) (`7bd07db`)
+- Investigate a unified attention reader (NEWS-456) (`5ff85ca`)
+- Refine taxonomy pulse rollup (NEWS-457) (`38671f2`)
+- Transfer single-topic solo on click (NEWS-458) (`72f674d`)
+- Name the leading outlet in pulse stats (NEWS-459) (`9e04247`)
+- Add deterministic topic pulse analysis (NEWS-453) (`590d058`)
+
 ## [0.5.0-beta.2] - 2026-08-11
 
 ## Other Changes
