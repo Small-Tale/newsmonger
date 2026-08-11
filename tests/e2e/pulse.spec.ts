@@ -26,6 +26,8 @@ test('solo reveals a compact deterministic pulse and a full 7/30/90-day drill-do
   await expect(compact).toContainText('news.example.com');
   await expect(compact).not.toContainText('top source');
   await expect(compact).toContainText('Small sample');
+  await expect(compact.locator('[data-open-pulse-kind]')).toHaveText('Explore topic pulse');
+  await expect(compact.locator('[data-open-pulse-kind] svg')).toHaveCount(0);
   await expect(page.locator('.banner.solo')).toBeVisible();
 
   await compact.locator('[data-open-pulse-kind]').click();

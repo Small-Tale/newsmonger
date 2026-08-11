@@ -84,7 +84,7 @@ export function compactTopicPulseJsx(pulse: PulseResp): SafeHtml {
           <small>Calculated from stored stories{pulse.smallSample ? ' · Small sample' : ''}</small>
         </div>
         <button class="btn primary" type="button" {...pulseScopeAttrs(pulse)}>
-          Explore topic pulse {icon('chevron', 15)}
+          Explore topic pulse
         </button>
       </div>
     </section>
