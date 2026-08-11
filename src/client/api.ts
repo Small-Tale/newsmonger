@@ -35,6 +35,7 @@ import type { BackupLocation } from '../backup-locations.js';
 import { guidanceForTopic } from '../profile-topics.js';
 import { noteState } from './notifications.js';
 import { appStore } from './stores.js';
+import { effectiveCategoryFilter } from './view-filters.js';
 
 async function request(path: string, init?: RequestInit): Promise<unknown> {
   const res = await fetch(path, {
@@ -157,7 +158,7 @@ export async function refreshPulseSurfaces(): Promise<void> {
   const seq = ++pulseSeq;
   const state = appStore.state.value;
   const topicId = state.soloTopicIds.length === 1 ? state.soloTopicIds[0] : undefined;
-  const category = state.categoryFilter;
+  const category = effectiveCategoryFilter(state.categoryFilter, state.soloTopicIds);
   try {
     const [sparklines, topicPulse, categoryPulse] = await Promise.all([
       request('/api/pulse/topics').then((body) => TopicSparklineRespSchema.parse(body)),
@@ -234,9 +235,10 @@ export async function refreshFeed(): Promise<void> {
     if (q !== '') params.set('q', q);
     // Resolved server-side (NEWS-97): the client holds one page, so filtering
     // here would miss matches deeper in history — the NEWS-74 bug.
-    if (s.categoryFilter !== null) {
-      params.set('category', s.categoryFilter.category);
-      if (s.categoryFilter.subcategory !== null) params.set('subcategory', s.categoryFilter.subcategory);
+    const category = effectiveCategoryFilter(s.categoryFilter, s.soloTopicIds);
+    if (category !== null) {
+      params.set('category', category.category);
+      if (category.subcategory !== null) params.set('subcategory', category.subcategory);
     }
   }
   const seq = ++feedSeq;

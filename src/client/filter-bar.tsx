@@ -54,6 +54,7 @@ export function filterBarJsx(
   selected: AppState['categoryFilter'],
   topics: readonly Topic[],
   pulse: PulseResp | null = null,
+  soloActive = false,
 ): SafeHtml {
   // Only sections something is filed under (NEWS-114) — a pill for a section
   // nobody watches can only ever produce an empty feed.
@@ -64,13 +65,14 @@ export function filterBarJsx(
       ? []
       : visibleSubcategories(BUILTIN_CATEGORIES, current.slug, topics, selected?.subcategory ?? null);
   return (
-    <nav class="filter-bar" aria-label="Filter by section">
+    <nav class={`filter-bar${soloActive ? ' solo-disabled' : ''}`} aria-label="Filter by section" aria-disabled={soloActive ? 'true' : undefined}>
       <div class="filter-row filter-row-top">
         <button
           class={`filter-pill${selected === null ? ' active' : ''}`}
           type="button"
           data-filter-category=""
           aria-pressed={selected === null ? 'true' : 'false'}
+          disabled={soloActive ? true : undefined}
         >
           All
         </button>
@@ -80,6 +82,7 @@ export function filterBarJsx(
             type="button"
             data-filter-category={category.slug}
             aria-pressed={selected?.category === category.slug ? 'true' : 'false'}
+            disabled={soloActive ? true : undefined}
           >
             {category.label}
           </button>
@@ -93,6 +96,7 @@ export function filterBarJsx(
             type="button"
             data-filter-category={UNCATEGORIZED_FILTER}
             aria-pressed={selected?.category === UNCATEGORIZED_FILTER ? 'true' : 'false'}
+            disabled={soloActive ? true : undefined}
           >
             {UNCATEGORIZED_LABEL}
           </button>
@@ -104,7 +108,7 @@ export function filterBarJsx(
           and a row that comes and going would be a conditional sibling
           (docs/3-ui.md). It also keeps the bar's height from jumping. */}
       <div class="filter-row filter-row-sub">
-        {subs.length === 0
+        {soloActive || subs.length === 0
           ? ''
           : [
               <button
@@ -136,7 +140,7 @@ export function filterBarJsx(
       </div>
       {/* Stable even when no section is active: this sits above the keyed topic
           list, so the same structural rule as the sub-row applies. */}
-      <div class="category-pulse-slot">{selected !== null && pulse !== null ? categoryPulseJsx(pulse) : ''}</div>
+      <div class="category-pulse-slot">{!soloActive && selected !== null && pulse !== null ? categoryPulseJsx(pulse) : ''}</div>
     </nav>
   );
 }

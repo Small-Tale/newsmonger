@@ -126,6 +126,31 @@ test('selecting a section reveals its subsections (FR-22.10)', async ({ page }) 
   );
 });
 
+test('Solo temporarily disables and ignores taxonomy without forgetting it (NEWS-464)', async ({ page }) => {
+  await page.goto('/');
+  await page.locator('[data-filter-category=sports]').click();
+  await page.locator('[data-filter-subcategory=soccer]').click();
+  await expect(page.locator('[data-filter-subcategory=soccer]')).toHaveClass(/active/);
+
+  const fashion = page.locator('.topic', { hasText: 'Fashion week' });
+  await topicAction(page, fashion, 'solo');
+  await expect(page.locator('.filter-bar')).toHaveAttribute('aria-disabled', 'true');
+  expect(await page.locator('[data-filter-category]').evaluateAll((buttons) => buttons.every((button) => button.hasAttribute('disabled')))).toBe(true);
+  await expect(page.locator('.filter-subpill')).toHaveCount(0);
+  await expect(page.locator('.category-pulse')).toHaveCount(0);
+  await expect.poll(async () => new Set(await page.locator('.item .item-topic').allTextContents())).toEqual(
+    new Set(['Fashion week']),
+  );
+
+  await page.locator('[data-action=clear-solo]').click();
+  await expect(page.locator('.filter-bar')).not.toHaveAttribute('aria-disabled', 'true');
+  await expect(page.locator('[data-filter-category=sports]')).toHaveClass(/active/);
+  await expect(page.locator('[data-filter-subcategory=soccer]')).toHaveClass(/active/);
+  await expect.poll(async () => new Set(await page.locator('.item .item-topic').allTextContents())).toEqual(
+    new Set(['Soccer transfers']),
+  );
+});
+
 test('the Uncategorized pill selects topics with no section', async ({ page }) => {
   await page.goto('/');
   await page.locator('[data-filter-category=uncategorized]').click();

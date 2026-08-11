@@ -149,6 +149,10 @@ body {
 // italic subsections — are distinct enough to be structure without being fenced.
 .filter-bar {
   margin-bottom: 14px;
+
+  &.solo-disabled .filter-row-top {
+    opacity: 0.45;
+  }
 }
 
 .category-pulse-slot:empty {

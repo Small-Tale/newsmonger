@@ -486,7 +486,7 @@ function appJsx(): SafeHtml {
 
       {/* Section navigation sits directly under the masthead, as a newspaper's
           does — above the banners and above the sidebar+feed area (FR-22.10). */}
-      <div id="filter-slot">{filterBarJsx(s.categoryFilter, s.topics, s.categoryPulse)}</div>
+      <div id="filter-slot">{filterBarJsx(s.categoryFilter, s.topics, s.categoryPulse, s.soloTopicIds.length > 0)}</div>
 
       {/* Banners appear in response to background events (a failed check, a
           a failing topic), so they have to announce rather than wait to be found —
@@ -2222,6 +2222,7 @@ function wireEvents(root: HTMLElement): void {
   // --- section filter bar (NEWS-97) ----------------------------------------
 
   void delegate(root, 'click', '[data-filter-category]', (_e, el) => {
+    if (appStore.state.value.soloTopicIds.length > 0) return;
     const slug = el.getAttribute('data-filter-category') ?? '';
     // Selecting a category always resets the sub-row: the previous subcategory
     // belongs to a different parent and would match nothing.
@@ -2231,6 +2232,7 @@ function wireEvents(root: HTMLElement): void {
   });
 
   void delegate(root, 'click', '[data-filter-subcategory]', (_e, el) => {
+    if (appStore.state.value.soloTopicIds.length > 0) return;
     const current = appStore.state.value.categoryFilter;
     if (current === null) return;
     const slug = el.getAttribute('data-filter-subcategory') ?? '';
