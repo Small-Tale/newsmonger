@@ -66,27 +66,6 @@ test('two outlets covering one subject land in the same thread', async ({ page }
   await page.request.delete(`/api/topics/${encodeURIComponent(topicId)}`);
 });
 
-test('generates an evidence-linked brief on demand (NEWS-454)', async ({ page }) => {
-  await page.goto('/');
-  const topicId = await addTopic(page, 'evidence brief thread');
-  await expect.poll(async () => (await items(page, topicId)).length, { timeout: 20_000 }).toBe(2);
-  await page.reload();
-  const card = page.locator('.item', { has: page.locator('.item-topic', { hasText: 'evidence brief thread' }) }).first();
-  await expect(card).toBeVisible();
-  await card.locator('[data-expand-item]').click();
-  await expect(card.locator('[data-generate-thread-brief]')).toBeVisible();
-  await card.locator('[data-generate-thread-brief]').click();
-  const brief = card.locator('.thread-brief');
-  await expect(brief).toBeVisible();
-  await expect(brief).toContainText('What changed');
-  await expect(brief).toContainText('Consistent across reports');
-  await expect(brief).toContainText('Disputed or unknown');
-  await expect(brief).toContainText('medium uncertainty');
-  await expect(brief.locator('a')).not.toHaveCount(0);
-  await expect(brief.locator('a').first()).toHaveAttribute('href', /^https?:\/\//);
-  await page.request.delete(`/api/topics/${encodeURIComponent(topicId)}`);
-});
-
 test('the expanded pane shows the story so far, capped, with a way to see all of it (NEWS-282)', async ({ page }) => {
   await page.goto('/');
   // Added through the UI, because this test is about what the card shows. The

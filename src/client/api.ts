@@ -27,7 +27,6 @@ import {
   RestoreRespSchema,
   SetAsideRespSchema,
   StateRespSchema,
-  ThreadBriefRespSchema,
   ThreadRespSchema,
   TopicSparklineRespSchema,
 } from '../api/schemas.js';
@@ -330,16 +329,6 @@ export async function loadThread(id: string): Promise<void> {
     });
   } finally {
     threadsInFlight.delete(id);
-  }
-}
-
-export async function generateThreadBrief(id: string): Promise<void> {
-  appStore.actions.setThreadBrief(id, { status: 'loading' });
-  try {
-    const value = ThreadBriefRespSchema.parse(await request(`/api/items/${encodeURIComponent(id)}/thread-brief`, { method: 'POST' }));
-    appStore.actions.setThreadBrief(id, { status: 'ready', value });
-  } catch (err) {
-    appStore.actions.setThreadBrief(id, { status: 'error', message: err instanceof Error ? err.message : String(err) });
   }
 }
 

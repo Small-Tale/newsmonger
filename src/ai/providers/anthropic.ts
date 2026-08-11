@@ -4,7 +4,6 @@ import { resolveApiKey } from '../api-keys.js';
 import { rankModels } from '../model-list.js';
 import { buildUserPrompt, parseNewsResult, searchingSystemPrompt } from '../prompt.js';
 import { buildSuggestPrompt, parseSuggestResult, suggestSystemPrompt } from '../suggest-prompt.js';
-import { buildThreadBriefPrompt, parseThreadBriefResult, threadBriefSystemPrompt } from '../thread-brief.js';
 import type {
   CheckResult,
   Effort,
@@ -12,7 +11,6 @@ import type {
   NewsProvider,
   SuggestRequest,
   SuggestResult,
-  ThreadBriefInput,
   TokenUsage,
   TopicContext,
 } from '../types.js';
@@ -72,7 +70,6 @@ const CHECK_RUN: RunOptions = { maxSearches: 8, maxTokens: 16000 };
  * check's for the same reason: nothing here writes paragraphs.
  */
 const DISCOVER_RUN: RunOptions = { maxSearches: 3, maxTokens: 4000 };
-const THREAD_BRIEF_RUN: RunOptions = { maxSearches: 0, maxTokens: 4000 };
 
 /** Map the SDK's usage block onto our provider-neutral shape (NEWS-79). */
 function readUsage(usage: Anthropic.Usage): TokenUsage {
@@ -268,10 +265,6 @@ export function createAnthropicProvider(config: {
         DISCOVER_RUN,
       );
       return { suggestions: parseSuggestResult(text), usage };
-    },
-    async analyzeThread(items: ThreadBriefInput[]) {
-      const { text } = await runner.run(threadBriefSystemPrompt(), buildThreadBriefPrompt(items), model, THREAD_BRIEF_RUN);
-      return parseThreadBriefResult(text, new Set(items.map((item) => item.id)));
     },
   };
 }

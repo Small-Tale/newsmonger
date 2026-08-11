@@ -19,7 +19,6 @@ import {
   dismissBackupPrompt,
   dismissQuarantine,
   fetchBackupLocations,
-  generateThreadBrief,
   importStories,
   importTopics,
   loadPulseDetail,
@@ -2436,11 +2435,6 @@ function wireEvents(root: HTMLElement): void {
     const id = el.getAttribute('data-retry-thread');
     if (id === null) return;
     void loadThread(id);
-  });
-
-  void delegate(root, 'click', '[data-generate-thread-brief]', (_e, el) => {
-    const id = el.getAttribute('data-generate-thread-brief');
-    if (id !== null) void generateThreadBrief(id);
   });
 
   void delegate(root, 'click', '[data-action=show-all-thread]', () => {

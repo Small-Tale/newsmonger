@@ -13,7 +13,7 @@ import { verifyApiKey } from './ai/verify-key.js';
 import type { KeysResp } from './api/schemas.js';
 import { Attendance } from './attendance.js';
 import type { Backups } from './backup.js';
-import type { CheckRunner, ProviderResolver  } from './checks.js';
+import type { CheckRunner } from './checks.js';
 import type { Store } from './db/store.js';
 import type { DiscoveryService } from './discovery.js';
 import { cacheImageUrl } from './images/index.js';
@@ -120,8 +120,6 @@ export function createApp(deps: {
    * to the real downloader; tests pass a fake, and `null` turns repair off.
    */
   refetchImage?: ((imageUrl: string, dataDir: string) => Promise<unknown>) | null;
-  /** Active provider resolver for on-demand thread analysis (NEWS-454). */
-  resolveProvider?: ProviderResolver;
 }): Hono<AppEnv> {
   const app = new Hono<AppEnv>();
   // Same instance the CheckRunner consults, when the caller passes one; tests
@@ -162,7 +160,7 @@ export function createApp(deps: {
     return c.body(fs.readFileSync(full), 200, { 'Content-Type': type });
   });
 
-  registerApi(app, deps.resolveProvider);
+  registerApi(app);
   registerPages(app);
   return app;
 }

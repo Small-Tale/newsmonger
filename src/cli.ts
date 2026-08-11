@@ -181,7 +181,6 @@ async function main(): Promise<void> {
     // provider availability, and a canned answer would assert nothing.
     probe: options.demo ? demoProbeProviders : undefined,
     demoKeys: options.demo ? demoKeysResponse() : undefined,
-    resolveProvider: resolve,
   });
 
   const server = await startServer(app, {

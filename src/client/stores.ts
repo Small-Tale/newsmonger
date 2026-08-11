@@ -9,7 +9,6 @@ import type {
   PulseResp,
   SetAsideDatabase,
   StateResp,
-  ThreadBriefResp,
   ThreadSummary,
   TopicSuggestion,
 } from '../api/schemas.js';
@@ -31,12 +30,7 @@ type NewsItem = ItemsResp['items'][number];
 export type ThreadPane =
   | { status: 'loading' }
   | { status: 'error'; message: string }
-  | { status: 'ready'; items: NewsItem[]; size: number; brief?: ThreadBriefState };
-
-export type ThreadBriefState =
-  | { status: 'loading' }
-  | { status: 'error'; message: string }
-  | { status: 'ready'; value: ThreadBriefResp };
+  | { status: 'ready'; items: NewsItem[]; size: number };
 
 /** How many stories the feed reveals per "Show more" page (NEWS-62). */
 export const FEED_PAGE = 100;
@@ -963,12 +957,6 @@ export const appStore = defineStore({
     setThreadPane: (id: string, pane: ThreadPane) => {
       const s = get();
       set({ ...s, threadPanes: { ...s.threadPanes, [id]: pane } });
-    },
-    setThreadBrief: (id: string, brief: ThreadBriefState) => {
-      const s = get();
-      const pane = s.threadPanes[id];
-      if (pane?.status !== 'ready') return;
-      set({ ...s, threadPanes: { ...s.threadPanes, [id]: { ...pane, brief } } });
     },
     /** Lift the row cap on the open pane (NEWS-282). */
     showAllThread: () => {

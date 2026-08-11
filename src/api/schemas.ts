@@ -478,21 +478,6 @@ export type ItemsResp = z.infer<typeof ItemsRespSchema>;
 export const ThreadRespSchema = z.object({ items: z.array(NewsItemSchema) });
 export type ThreadResp = z.infer<typeof ThreadRespSchema>;
 
-const ThreadBriefClaimSchema = z.object({
-  text: z.string(),
-  sourceIds: z.array(z.string()).min(1),
-  support: z.enum(['independent', 'repeated', 'unclear']),
-});
-export const ThreadBriefRespSchema = z.object({
-  changed: z.array(ThreadBriefClaimSchema),
-  consistent: z.array(ThreadBriefClaimSchema),
-  unknown: z.array(ThreadBriefClaimSchema),
-  uncertainty: z.enum(['low', 'medium', 'high']),
-  generatedAt: z.string(),
-  storyCount: z.number().int().min(2),
-});
-export type ThreadBriefResp = z.infer<typeof ThreadBriefRespSchema>;
-
 export const ProviderInfoSchema = z.object({
   name: z.enum(PROVIDER_NAMES),
   label: z.string(),

@@ -2,7 +2,6 @@ import { spawn } from 'node:child_process';
 
 import { buildUserPrompt, NEWS_JSON_SCHEMA, parseNewsResult, searchingSystemPrompt } from '../prompt.js';
 import { buildSuggestPrompt, parseSuggestResult, SUGGEST_JSON_SCHEMA, suggestSystemPrompt } from '../suggest-prompt.js';
-import { buildThreadBriefPrompt, parseThreadBriefResult, THREAD_BRIEF_JSON_SCHEMA, threadBriefSystemPrompt } from '../thread-brief.js';
 import type {
   CheckResult,
   ConcreteProviderName,
@@ -11,7 +10,6 @@ import type {
   NewsProvider,
   SuggestRequest,
   SuggestResult,
-  ThreadBriefInput,
   TopicContext,
 } from '../types.js';
 import { DISCOVERY_MODELS, PROVIDER_EFFORT_LEVELS } from '../types.js';
@@ -280,10 +278,6 @@ export function createClaudeCliProvider(
         // cheap model because it is a suggestion list, not a news lookup.
       );
       return { suggestions: parseSuggestResult(text), usage: null };
-    },
-    async analyzeThread(items: ThreadBriefInput[]) {
-      const text = await runner.run(threadBriefSystemPrompt(), buildThreadBriefPrompt(items), model !== '' ? model : undefined, THREAD_BRIEF_JSON_SCHEMA);
-      return parseThreadBriefResult(text, new Set(items.map((item) => item.id)));
     },
   };
 }

@@ -137,47 +137,6 @@ function threadRowJsx(entry: NewsItem, current: boolean): SafeHtml {
   );
 }
 
-function threadBriefJsx(pane: Extract<ThreadPane, { status: 'ready' }>, itemId: string): SafeHtml {
-  const brief = pane.brief;
-  if (brief === undefined) {
-    return <button class="btn thread-brief-button" type="button" data-generate-thread-brief={itemId}>Generate thread brief</button>;
-  }
-  if (brief.status === 'loading') return <p class="item-pane-note">Analyzing the stored reports…</p>;
-  if (brief.status === 'error') {
-    return <p class="item-pane-note error"><span>Couldn't generate the brief: {brief.message}</span><button class="btn link" type="button" data-generate-thread-brief={itemId}>Try again</button></p>;
-  }
-  const storyById = new Map(pane.items.map((entry) => [entry.id, entry]));
-  const section = (title: string, claims: typeof brief.value.changed): SafeHtml => (
-    <section class="thread-brief-section">
-      <h5>{title}</h5>
-      {claims.length === 0 ? <p>Nothing supported by the stored reports.</p> : (
-        <ul>{claims.map((claim) => (
-          <li>
-            <span>{claim.text}</span>
-            <span class="thread-brief-sources">
-              {claim.sourceIds.map((id, index) => {
-                const story = storyById.get(id);
-                const source = story?.sources.at(0);
-                return source === undefined ? '' : <a href={source.url} target="_blank" rel="noopener noreferrer" data-external="1">Source {String(index + 1)}</a>;
-              })}
-              <small>{claim.support === 'independent' ? 'Independent reports' : claim.support === 'repeated' ? 'Repeated coverage' : 'Independence unclear'}</small>
-            </span>
-          </li>
-        ))}</ul>
-      )}
-    </section>
-  );
-  return (
-    <div class="thread-brief">
-      <header><h4>Thread brief</h4><span class={`uncertainty ${brief.value.uncertainty}`}>{brief.value.uncertainty} uncertainty</span></header>
-      {section('What changed', brief.value.changed)}
-      {section('Consistent across reports', brief.value.consistent)}
-      {section('Disputed or unknown', brief.value.unknown)}
-      <small>Generated {new Date(brief.value.generatedAt).toLocaleString()} from {String(brief.value.storyCount)} stored stories.</small>
-    </div>
-  );
-}
-
 /**
  * The expanded card's pane: how this story's subject developed (NEWS-282).
  *
@@ -232,7 +191,6 @@ function threadPaneJsx(item: NewsItem, threads: FeedThreads): SafeHtml {
           ''
         )}
       </div>
-      {threadBriefJsx(pane, item.id)}
     </div>
   );
 }

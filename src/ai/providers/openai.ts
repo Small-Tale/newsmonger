@@ -4,7 +4,6 @@ import { resolveApiKey } from '../api-keys.js';
 import { rankModels } from '../model-list.js';
 import { buildUserPrompt, parseNewsResult, searchingSystemPrompt } from '../prompt.js';
 import { buildSuggestPrompt, parseSuggestResult, suggestSystemPrompt } from '../suggest-prompt.js';
-import { buildThreadBriefPrompt, parseThreadBriefResult, threadBriefSystemPrompt } from '../thread-brief.js';
 import type {
   CheckResult,
   Effort,
@@ -12,7 +11,6 @@ import type {
   NewsProvider,
   SuggestRequest,
   SuggestResult,
-  ThreadBriefInput,
   TokenUsage,
   TopicContext,
 } from '../types.js';
@@ -229,10 +227,6 @@ export function createOpenAIProvider(config: {
     async suggestTopics(request: SuggestRequest): Promise<SuggestResult> {
       const { text, usage } = await runner.run(suggestSystemPrompt(), buildSuggestPrompt(request), discoveryModel);
       return { suggestions: parseSuggestResult(text), usage };
-    },
-    async analyzeThread(items: ThreadBriefInput[]) {
-      const { text } = await runner.run(threadBriefSystemPrompt(), buildThreadBriefPrompt(items), model);
-      return parseThreadBriefResult(text, new Set(items.map((item) => item.id)));
     },
   };
 }
