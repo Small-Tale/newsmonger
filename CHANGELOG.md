@@ -14,6 +14,12 @@ fields reject semver prerelease suffixes.
 
 <!-- Nothing released yet. The first `npm run release` inserts its entry below. -->
 
+## [0.5.0-beta.2] - 2026-08-11
+
+## Other Changes
+
+- Make the retention regression deterministic on Windows (NEWS-466) (`a57025c`)
+
 ## [0.5.0-beta.1] - 2026-08-11
 
 ## Other Changes
