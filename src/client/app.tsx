@@ -87,7 +87,7 @@ import { itemMatchesQuery } from './search.js';
 import { syncSelects } from './select-sync.js';
 import { settingsDialogJsx } from './settings.js';
 import { shareItem } from './share.js';
-import { toggleSolo } from './solo.js';
+import { toggleSolo, transferSingleSolo } from './solo.js';
 import type { AppState, DiscoverSource, OnboardingStep, ToastState } from './stores.js';
 import {
   appStore,
@@ -811,6 +811,9 @@ function appJsx(): SafeHtml {
 
 /** Anchor for shift-range selection — the last row clicked without shift. */
 let anchorId: string | null = null;
+
+/** Preserve double-click's additive toggle when its first click transferred solo. */
+let clickSoloTransfer: { id: string; prior: string[] } | null = null;
 
 function selectTopic(id: string, mods: { toggle: boolean; range: boolean }): void {
   const { topics, selectedTopicIds, topicSort } = appStore.state.value;
@@ -2198,7 +2201,21 @@ function wireEvents(root: HTMLElement): void {
     if (id === null || !(e instanceof MouseEvent)) return;
     // Cmd on macOS, Ctrl elsewhere — reading both is simpler and more forgiving
     // than sniffing the platform, and no OS uses them for conflicting meanings.
-    selectTopic(id, { toggle: e.metaKey || e.ctrlKey, range: e.shiftKey });
+    const toggle = e.metaKey || e.ctrlKey;
+    const range = e.shiftKey;
+    selectTopic(id, { toggle, range });
+    if (!toggle && !range && e.detail === 1) {
+      const prior = appStore.state.value.soloTopicIds;
+      const next = transferSingleSolo(prior, id);
+      clickSoloTransfer = next.length === 1 && next[0] === id && prior[0] !== id
+        ? { id, prior: [...prior] }
+        : null;
+      if (next[0] !== prior[0]) {
+        appStore.actions.setSolo(next);
+        void refreshFeed();
+        void refreshPulseSurfaces();
+      }
+    }
   });
 
   // --- section filter bar (NEWS-97) ----------------------------------------
@@ -2236,7 +2253,15 @@ function wireEvents(root: HTMLElement): void {
   void delegate(root, 'dblclick', '[data-topic-row]', (e, el) => {
     const id = el.getAttribute('data-topic-row');
     if (id === null || !(e instanceof MouseEvent)) return;
-    runTopicAction('solo', [id]);
+    const transferred = clickSoloTransfer?.id === id ? clickSoloTransfer : null;
+    clickSoloTransfer = null;
+    if (transferred === null) {
+      runTopicAction('solo', [id]);
+    } else {
+      appStore.actions.setSolo(toggleSolo(transferred.prior, [id]));
+      void refreshFeed();
+      void refreshPulseSurfaces();
+    }
   });
 
   // Keyboard equivalents for the row (NEWS-90). The context menu is the only

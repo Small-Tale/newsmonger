@@ -222,6 +222,17 @@ test('solo is additive and Show all clears it', async ({ page }) => {
   await expect(page.locator('.topic.solo-dimmed')).toHaveCount(0);
 });
 
+test('a plain click transfers a one-topic solo to the clicked topic (NEWS-458)', async ({ page }) => {
+  await page.goto('/');
+  await topicAction(page, row(page, 'Alpha Topic'), 'solo');
+  await expect(row(page, 'Alpha Topic')).toHaveClass(/soloed/);
+
+  await row(page, 'Bravo Topic').click();
+  await expect(row(page, 'Bravo Topic')).toHaveClass(/soloed/);
+  await expect(row(page, 'Alpha Topic')).not.toHaveClass(/soloed/);
+  await expect(page.locator('.topic.soloed')).toHaveCount(1);
+});
+
 test('double-clicking a topic toggles solo (NEWS-95)', async ({ page }) => {
   await page.goto('/');
   await expect(page.locator('.banner.solo')).toHaveCount(0);

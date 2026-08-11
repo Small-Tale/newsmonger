@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { isAllSoloed, toggleSolo } from '../../src/client/solo.js';
+import { isAllSoloed, toggleSolo, transferSingleSolo } from '../../src/client/solo.js';
 
 // Solo-set arithmetic (NEWS-29, NEWS-95). Two gestures reach this — the
 // right-click menu and a double-click on a topic row — so the behaviour is
@@ -98,5 +98,24 @@ describe('isAllSoloed', () => {
       const removes = toggleSolo(current, ids).length < current.length;
       expect(isAllSoloed(current, ids)).toBe(removes);
     }
+  });
+});
+
+describe('transferSingleSolo', () => {
+  it('moves a one-topic solo to a different plainly clicked topic', () => {
+    expect(transferSingleSolo(['a'], 'b')).toEqual(['b']);
+  });
+
+  it('does not disturb the same topic, an empty solo, or a multi-topic solo', () => {
+    expect(transferSingleSolo(['a'], 'a')).toEqual(['a']);
+    expect(transferSingleSolo([], 'b')).toEqual([]);
+    expect(transferSingleSolo(['a', 'b'], 'c')).toEqual(['a', 'b']);
+  });
+
+  it('supports the click-to-click transition sequence without widening the filter', () => {
+    let solo = transferSingleSolo(['a'], 'b');
+    expect(solo).toEqual(['b']);
+    solo = transferSingleSolo(solo, 'c');
+    expect(solo).toEqual(['c']);
   });
 });

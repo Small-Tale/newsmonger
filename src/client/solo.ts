@@ -34,6 +34,15 @@ export function toggleSolo(current: readonly string[], ids: readonly string[]): 
 }
 
 /**
+ * Transfer a one-topic solo when the reader plainly clicks a different topic.
+ * Multi-topic solos remain additive and modified/range clicks remain selection
+ * gestures, so neither is silently collapsed.
+ */
+export function transferSingleSolo(current: readonly string[], id: string): string[] {
+  return current.length === 1 && current[0] !== id ? [id] : [...current];
+}
+
+/**
  * Whether the menu should read "Unsolo" rather than "Solo" for `ids` — true
  * only when every target is already soloed, mirroring {@link toggleSolo} so the
  * label always names what the click will actually do.
