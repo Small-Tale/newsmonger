@@ -257,20 +257,16 @@ describe('Store.pruneOldRuns (NEWS-103)', () => {
     // spend total; spend is gone (NEWS-119), so it asserts the retained runs
     // directly — which is what the cap actually governs.
     const store = tmpStore();
-    const topic = store.addTopic('Busy');
-    for (let i = 0; i < 300; i++) {
-      const run = store.startRun(topic.id);
-      store.finishRun(run.id, { status: 'succeeded', newItems: 0, model: 'claude-opus-4-8' });
-    }
-    store.pruneOldRuns(NOW);
+    store.close();
+    seedRuns(store, 300);
+
+    const reopened = tmpStore(store.dataDir);
+    reopened.pruneOldRuns(NOW);
 
     // All 300 survive — under the old 200 cap a third would already be gone.
-    expect(store.listRuns(1000)).toHaveLength(300);
-    // No per-test timeout here any more (NEWS-430). This was the first test seen
-    // to cross five seconds on the Windows runner, and it looked like the only
-    // one because it does real work — 600 writes, a prune, a 1000-row read. The
-    // next CI round timed out on two entirely different tests, which is what
-    // showed the runner to be uniformly slow rather than this test to be
-    // exceptional. The timeout is set per-platform in `vitest.config.ts`.
+    expect(reopened.listRuns(1000)).toHaveLength(300);
+    // This is a retention test, not a write-throughput test. Seeding in one
+    // transaction keeps the 300-row regression while avoiding 600 autocommits
+    // whose duration depends on the Windows runner's filesystem (NEWS-466).
   });
 });
