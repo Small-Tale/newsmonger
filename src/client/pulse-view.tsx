@@ -36,7 +36,7 @@ function metric(value: string, label: string): SafeHtml {
 }
 
 function trendText(pulse: PulseResp): string {
-  if (pulse.trendPercent === null) return 'No comparable stories in the previous period';
+  if (pulse.trendPercent === null) return pulse.storyCount === 0 ? 'No activity' : 'New activity';
   if (pulse.trendPercent === 0) return 'Even with the previous period';
   return `${pulse.trendPercent > 0 ? '+' : ''}${String(pulse.trendPercent)}% vs previous ${String(pulse.days)} days`;
 }
@@ -96,8 +96,10 @@ export function categoryPulseJsx(pulse: PulseResp): SafeHtml {
   return (
     <button class="category-pulse" type="button" {...pulseScopeAttrs(pulse)}>
       <span class="category-pulse-label">{pulse.scope.label}</span>
-      <span>{String(pulse.storyCount)} stories · last 30 days</span>
-      <span>{trendText(pulse)}</span>
+      <span class="category-pulse-count">{String(pulse.storyCount)} stories</span>
+      <span class="category-pulse-separator" aria-hidden="true">·</span>
+      <span class="category-pulse-window">last 30 days</span>
+      <span class="category-pulse-trend">{trendText(pulse)}</span>
       {sparklineJsx(pulse.series.map((point) => point.stories), `${pulse.scope.label}: ${trendText(pulse)}`)}
       <span class="category-pulse-open">Explore {icon('chevron', 13)}</span>
     </button>

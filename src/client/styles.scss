@@ -156,7 +156,7 @@ body {
 }
 
 .category-pulse {
-  width: min(100%, 820px);
+  width: 100%;
   display: flex;
   align-items: center;
   gap: 12px;
@@ -179,6 +179,12 @@ body {
     color: var(--pine);
     font-family: var(--sans);
     font-weight: 600;
+  }
+
+  .category-pulse-count,
+  .category-pulse-window,
+  .category-pulse-trend {
+    white-space: nowrap;
   }
 
   .sparkline {

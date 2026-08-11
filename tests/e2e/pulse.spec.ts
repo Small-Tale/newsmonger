@@ -58,7 +58,15 @@ test('category rollup opens the same drill-down and the compact hierarchy fits a
   const rollup = page.locator('.category-pulse');
   await expect(rollup).toBeVisible();
   await expect(rollup).toContainText('Environment');
-  await expect(rollup).toContainText('2 stories · last 30 days');
+  await expect(rollup.locator('.category-pulse-count')).toHaveText('2 stories');
+  await expect(rollup.locator('.category-pulse-window')).toHaveText('last 30 days');
+  await expect(rollup).toContainText('New activity');
+  await expect(rollup).not.toContainText('No comparable stories');
+  const unusedWidth = await rollup.evaluate((element) => {
+    const parent = element.parentElement;
+    return parent === null ? Number.POSITIVE_INFINITY : parent.getBoundingClientRect().width - element.getBoundingClientRect().width;
+  });
+  expect(Math.abs(unusedWidth)).toBeLessThanOrEqual(1);
   await rollup.click();
   await expect(page.locator('.pulse-dialog #pulse-dialog-title')).toContainText('Environment');
   await page.keyboard.press('Escape');
