@@ -60,7 +60,7 @@
     "@hono/node-server": "^2.0.5",
     "hono": "^4.12.25",
     "kerfjs": "^4.1.0",
-    "openai": "^6.49.0",
+    "openai": "^7.8.0",
     "zod": "^4.4.3"
   },
   "devDependencies": {
